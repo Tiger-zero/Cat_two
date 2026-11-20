@@ -13,7 +13,7 @@ docker compose logs -f cat-two
 
 在浏览器打开服务器的 5230 端口，按页面提示创建管理员账号。SQLite 数据和本地附件保存在 Compose 管理的 `cat_two_data` 卷中，容器内的挂载路径为 `/var/opt/memos`。升级前请备份这个卷。镜像更新后可以运行 `docker compose pull` 和 `docker compose up -d`。
 
-在 GitHub Actions 中打开 **Cat_two Container**，选择 `main` 并运行工作流。通过启动验证后，工作流会将镜像发布到 `ghcr.io/tiger-zero/cat_two`，标签为 `latest` 和 `sha-<完整提交 SHA>`。如果 GHCR 包是私有的，请先用有读取权限的账号登录 GHCR，再拉取镜像。
+在 GitHub Actions 中打开 **Cat_two Container**，选择 `main` 和 `dockerhub` 并运行工作流。它使用仓库的 `DOCKERHUB_USERNAME` 和 `DOCKERHUB_TOKEN` Secrets 登录 Docker Hub。通过启动验证后，工作流会将 AMD64 和 ARM64 镜像发布到 `docker.io/tiger2896/cat_two`，标签为 `latest` 和 `sha-<完整提交 SHA>`。也可在推送到 `main` 的最新提交消息中加上 `[publish dockerhub]` 来触发发布。手动选择 `ghcr` 时，目标为 `ghcr.io/tiger-zero/cat_two`。
 
 也可以在单独的干净检出目录里构建本地镜像。前端发布命令会生成嵌入 Go 程序的静态文件。
 

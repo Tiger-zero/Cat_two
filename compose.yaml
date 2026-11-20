@@ -1,6 +1,6 @@
 services:
   cat-two:
-    image: ${CAT_TWO_IMAGE:-ghcr.io/tiger-zero/cat_two:latest}
+    image: ${CAT_TWO_IMAGE:-docker.io/tiger2896/cat_two:latest}
     restart: unless-stopped
     environment:
       MEMOS_DRIVER: sqlite
