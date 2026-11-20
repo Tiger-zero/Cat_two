@@ -18,7 +18,6 @@ import { useView } from "@/contexts/ViewContext";
 import useCurrentUser from "@/hooks/useCurrentUser";
 import useMediaQuery from "@/hooks/useMediaQuery";
 import { cn } from "@/lib/utils";
-import { ROUTES, resolveCollectionRoute } from "@/router/routes";
 import { InstanceAccessMode } from "@/types/proto/api/instance_service_pb";
 import { buildAuthRoute, shouldGatePrivateInstance } from "@/utils/auth-redirect";
 import { useTranslate } from "@/utils/i18n";
@@ -55,9 +54,7 @@ const RootLayoutContent = () => {
   const { removeFilter } = useMemoFilterContext();
   const { fullWidth, maxColumns } = useView();
   const { pathname } = location;
-  // The map fills the viewport and scrolls inside itself, so the document must not.
-  const fullBleed = resolveCollectionRoute(pathname).pathname.toLowerCase() === ROUTES.MAP;
-  const limitShell = !fullBleed && !fullWidth && maxColumns !== 0;
+  const limitShell = !fullWidth && maxColumns !== 0;
   const prevPathnameRef = useRef<string | undefined>(undefined);
   const shellRef = useRef<HTMLDivElement>(null);
   const { width: sidebarWidth, minWidth, maxWidth, setWidth: setSidebarWidth } = useSidebarWidth();
@@ -73,13 +70,11 @@ const RootLayoutContent = () => {
     prevPathnameRef.current = pathname;
   }, [pathname, searchParams, removeFilter]);
 
-  // Anonymous visitors to private instances may only reach share links. Treat an
-  // unspecified mode as private so a partial or older response cannot expose content.
+  // Treat an unspecified mode as private so a partial or older response cannot expose content.
   if (
     shouldGatePrivateInstance({
       isPrivateInstance: profile.accessMode !== InstanceAccessMode.PUBLIC,
       isAuthenticated: !!currentUser,
-      pathname,
     })
   ) {
     const redirect = `${pathname}${location.search}${location.hash}`;
@@ -89,11 +84,7 @@ const RootLayoutContent = () => {
   return (
     <div
       ref={shellRef}
-      className={cn(
-        "mx-auto flex w-full bg-mu-canvas",
-        limitShell && (maxColumns === 1 ? "max-w-5xl" : "max-w-7xl"),
-        fullBleed ? "h-dvh overflow-hidden" : "min-h-full",
-      )}
+      className={cn("mx-auto flex min-h-full w-full bg-mu-canvas", limitShell && (maxColumns === 1 ? "max-w-5xl" : "max-w-7xl"))}
       style={{ [SIDEBAR_WIDTH_VAR]: `${sidebarWidth}px` } as CSSProperties}
     >
       {md && (
@@ -109,7 +100,7 @@ const RootLayoutContent = () => {
         </div>
       )}
       <MobileAppSidebar />
-      <main className={cn("flex min-w-0 flex-1 flex-col items-center", fullBleed ? "h-full min-h-0" : "min-h-full")}>
+      <main className="flex min-h-full min-w-0 flex-1 flex-col items-center">
         <MobileAppHeader />
         {profile.demo && <DemoBanner />}
         <Outlet />

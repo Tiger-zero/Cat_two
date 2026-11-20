@@ -21,17 +21,7 @@ const MemoShareImageDialog = lazyWithReload(() => import("../MemoActionMenu/Memo
 const PreviewImageDialog = lazyWithReload(() => import("../PreviewImageDialog"));
 
 const MemoView = forwardRef<MemoViewHandle, MemoViewProps>((props, ref) => {
-  const {
-    memo: memoData,
-    className,
-    parentPage: parentPageProp,
-    compact,
-    timeDisplay,
-    showCreator,
-    showVisibility,
-    showPinned,
-    showSpace,
-  } = props;
+  const { memo: memoData, className, parentPage: parentPageProp, compact, timeDisplay, showCreator, showPinned, showSpace } = props;
   const cardRef = useRef<HTMLDivElement>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [cardWidth, setCardWidth] = useState(0);
@@ -188,7 +178,7 @@ const MemoView = forwardRef<MemoViewHandle, MemoViewProps>((props, ref) => {
     >
       {/* The pinned mark steps aside while the memo is edited in place. */}
       {showPinned && memoData.pinned && !isEditing && <MemoPinnedMark />}
-      <MemoHeader timeDisplay={timeDisplay} showCreator={showCreator} showVisibility={showVisibility} showSpace={showSpace} />
+      <MemoHeader timeDisplay={timeDisplay} showCreator={showCreator} showSpace={showSpace} />
 
       <MemoBody compact={compact} showCreator={showCreator} />
 

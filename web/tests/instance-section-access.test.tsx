@@ -2,10 +2,9 @@ import { create } from "@bufbuild/protobuf";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import InstanceSection from "@/components/Settings/InstanceSection";
-import { type ConfigurationStatus, ConfigurationStatusSchema, InstanceAccessMode } from "@/types/proto/api/instance_service_pb";
+import { type ConfigurationStatus, ConfigurationStatusSchema, InstanceSetting_Key } from "@/types/proto/api/instance_service_pb";
 
 const instance = vi.hoisted(() => ({
-  accessSetting: { accessMode: 1 },
   generalSetting: {
     additionalScript: "",
     additionalStyle: "",
@@ -50,25 +49,25 @@ vi.mock("@/utils/i18n", () => ({
 
 describe("<InstanceSection> access setting", () => {
   beforeEach(() => {
-    instance.accessSetting.accessMode = InstanceAccessMode.PRIVATE;
     listIdentityProviders.mockResolvedValue({ identityProviders: [] });
     instance.fetchSetting.mockReset().mockResolvedValue(undefined);
     instance.updateSetting.mockReset().mockResolvedValue(undefined);
     configuration.status = undefined;
   });
 
-  it("saves public access through the dedicated ACCESS setting", async () => {
+  it("keeps sign-up settings editable without exposing public memo access", async () => {
     render(<InstanceSection />);
 
+    expect(screen.queryByText("setting.instance.allow-public-access")).not.toBeInTheDocument();
     fireEvent.click(screen.getAllByRole("checkbox")[0]);
     fireEvent.click(screen.getByRole("button", { name: "common.save" }));
 
     await waitFor(() => expect(instance.updateSetting).toHaveBeenCalledTimes(1));
     const setting = instance.updateSetting.mock.calls[0][0];
-    expect(setting.name).toBe("instance/settings/ACCESS");
-    expect(setting.value.case).toBe("accessSetting");
-    expect(setting.value.value.accessMode).toBe(InstanceAccessMode.PUBLIC);
-    expect(instance.fetchSetting).not.toHaveBeenCalled();
+    expect(setting.name).toBe("instance/settings/GENERAL");
+    expect(setting.value.case).toBe("generalSetting");
+    expect(setting.value.value.disallowUserRegistration).toBe(true);
+    expect(instance.fetchSetting).toHaveBeenCalledWith(InstanceSetting_Key.GENERAL);
   });
 
   it("orders general settings before access policies and custom code", () => {
@@ -101,9 +100,11 @@ describe("<InstanceSection> access setting", () => {
     render(<InstanceSection />);
 
     const checkboxes = screen.getAllByRole("checkbox");
-    expect(checkboxes[0]).not.toHaveAttribute("aria-disabled");
     // Base UI checkboxes are spans that report being disabled through ARIA.
-    expect(checkboxes[1]).toHaveAttribute("aria-disabled", "true");
+    expect(checkboxes).toHaveLength(4);
+    for (const checkbox of checkboxes) {
+      expect(checkbox).toHaveAttribute("aria-disabled", "true");
+    }
     expect(screen.getByRole("button", { name: "common.edit" })).toBeDisabled();
     expect(screen.getByPlaceholderText("setting.system.additional-style-placeholder")).not.toBeDisabled();
     expect(screen.getByPlaceholderText("setting.system.additional-script-placeholder")).toBeDisabled();

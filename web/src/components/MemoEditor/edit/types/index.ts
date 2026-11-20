@@ -1,7 +1,6 @@
 // MemoEditor type exports
 
 export type {
-  AudienceMenuProps,
   AudioRecorderPanelProps,
   EditorContentProps,
   EditorMetadataProps,
@@ -14,4 +13,3 @@ export type {
   InsertMenuProps,
 } from "./components";
 export type { EditorController } from "./editorController";
-export type { LocationState } from "./insertMenu";

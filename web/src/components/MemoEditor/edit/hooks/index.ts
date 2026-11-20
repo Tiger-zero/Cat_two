@@ -10,6 +10,5 @@ export { pairAppleLivePhotoFiles, toLocalFiles, useFileUpload } from "./useFileU
 export { useFocusMode } from "./useFocusMode";
 export { splitInlineLocalFiles, useInlineImageUpload } from "./useInlineImageUpload";
 export { useLinkMemo } from "./useLinkMemo";
-export { useLocation } from "./useLocation";
 export { useMemoInit } from "./useMemoInit";
 export { useMemoSave } from "./useMemoSave";

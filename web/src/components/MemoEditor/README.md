@@ -41,7 +41,7 @@ Code blocks use lazy-loaded `@pierre/highlights` tokens as editor decorations, w
 
 ### State
 
-A reducer (`edit/state/reducer.ts`) drives an external store; consumers subscribe to one slice via `useEditorSelector`, so typing re-renders only what reads `content`. `state.content` is the document as Markdown and the single source of truth. UI flags (focus mode, loading, pending inline images), metadata (visibility, Space, attachments, relations, location), timestamps, local files awaiting upload, the shared order of saved attachments and new files (`attachmentOrder`) and accepted suggestions live beside it.
+A reducer (`edit/state/reducer.ts`) drives an external store; consumers subscribe to one slice via `useEditorSelector`, so typing re-renders only what reads `content`. `state.content` is the document as Markdown and the single source of truth. UI flags (focus mode, loading, pending inline images), metadata (Space, attachments, relations), timestamps, local files awaiting upload, the shared order of saved attachments and new files (`attachmentOrder`) and accepted suggestions live beside it.
 
 ### The editor contract
 
@@ -98,9 +98,9 @@ Focus mode is a sheet narrower than the page (`max-w-3xl`): its header, text and
 
 The session's code is a chunk of its own, loaded when a memo is first edited or composed, and renders without suspending once loaded. A host that knows an editor is coming calls `preloadMemoEditing()`: the router loads it with the Home page for a signed-in user, so the composer renders with the page, and the comment section loads it while the pointer is on its button. Until it is loaded a new draft shows a still of the empty composer, the same frame, placeholder line and toolbar height, so nothing moves when the session takes its place.
 
-### Destination and visibility
+### Space placement
 
-`AudienceMenu` is one dropdown for a memo's visibility and, where allowed, its Space. New top-level memos and edits of top-level memos the user can manage offer the Space row; a draft seed's `space` fixes a new memo's placement; comments never offer it because their Space is their parent's. An edit that changes the Space sends `space` and `visibility` together so the server validates the move as one transition.
+`SpaceMenu` organizes personal memos in Spaces. It appears when a top-level memo can move and the user has a Space to choose or clear. A draft seed's `space` fixes a new memo's placement. Comments inherit their parent's Space. The editor sends private visibility when creating or moving a memo.
 
 ## Directory structure
 

@@ -173,7 +173,7 @@ describe("SpaceSwitcher", () => {
   it("returns from another creator to the selected Space Home without closing the menu", () => {
     state.selectedSpaceName = "spaces/product";
     state.selectedSpace = state.spaces[0];
-    const router = renderAt("/spaces/product/map?creator=alice");
+    const router = renderAt("/spaces/product/calendar?creator=alice");
     openSwitcher();
     fireEvent.click(screen.getByRole("link", { name: "Back to common.home" }));
     expect(router.state.location.pathname).toBe("/spaces/product");

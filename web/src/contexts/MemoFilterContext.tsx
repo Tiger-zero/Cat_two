@@ -4,7 +4,6 @@ import { useLocation, useSearchParams } from "react-router-dom";
 
 export type FilterFactor =
   | "tagSearch"
-  | "visibility"
   | "source"
   | "contentSearch"
   | "celSearch"
@@ -13,7 +12,6 @@ export type FilterFactor =
   | "property.hasLink"
   | "property.hasTaskList"
   | "property.hasCode"
-  | "property.hasLocation"
   | "property.hasAttachments"
   | "property.hasImage";
 
@@ -27,14 +25,17 @@ export const getMemoFilterKey = (filter: MemoFilter): string => `${filter.factor
 export const parseFilterQuery = (query: string | null): MemoFilter[] => {
   if (!query) return [];
   try {
-    return query.split(",").map((filterStr) => {
+    return query.split(",").flatMap((filterStr) => {
       const separatorIndex = filterStr.indexOf(":");
       const factor = separatorIndex === -1 ? filterStr : filterStr.slice(0, separatorIndex);
+      if (factor === "property.hasLocation" || factor === "visibility") return [];
       const value = separatorIndex === -1 ? "" : filterStr.slice(separatorIndex + 1);
-      return {
-        factor: factor as FilterFactor,
-        value: decodeURIComponent(value || ""),
-      };
+      return [
+        {
+          factor: factor as FilterFactor,
+          value: decodeURIComponent(value || ""),
+        },
+      ];
     });
   } catch {
     return [];

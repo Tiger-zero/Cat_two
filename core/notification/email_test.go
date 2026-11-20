@@ -27,13 +27,20 @@ func TestEmailMemoReadCreatorLifecycle(t *testing.T) {
 		UID: "email-memo-creator-lifecycle", CreatorID: creator.ID, Content: "memo", Visibility: store.Protected,
 	})
 	require.NoError(t, err)
+	readable, err := dispatcher.listMemosByID(ctx, []int32{memo.ID}, creator.ID)
+	require.NoError(t, err)
+	require.Contains(t, readable, memo.ID)
+
+	readable, err = dispatcher.listMemosByID(ctx, []int32{memo.ID}, viewer.ID)
+	require.NoError(t, err)
+	require.NotContains(t, readable, memo.ID, "legacy protected notes are private to their authors")
+
 	archived := store.Archived
 	_, err = st.UpdateUser(ctx, &store.UpdateUser{ID: creator.ID, RowStatus: &archived})
 	require.NoError(t, err)
-
-	readable, err := dispatcher.listMemosByID(ctx, []int32{memo.ID}, viewer.ID)
+	readable, err = dispatcher.listMemosByID(ctx, []int32{memo.ID}, creator.ID)
 	require.NoError(t, err)
-	require.Contains(t, readable, memo.ID, "archiving the creator must not narrow an active PROTECTED memo")
+	require.NotContains(t, readable, memo.ID, "an archived account cannot receive note emails")
 
 	_, err = st.GetDriver().GetDB().ExecContext(ctx,
 		fmt.Sprintf("UPDATE memo SET creator_id = 2147483000 WHERE id = %d", memo.ID))

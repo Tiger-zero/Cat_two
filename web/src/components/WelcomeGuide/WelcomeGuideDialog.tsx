@@ -4,9 +4,7 @@ import {
   CodeXmlIcon,
   HashIcon,
   ListChecksIcon,
-  LockIcon,
   type LucideIcon,
-  MapIcon,
   MessageSquareIcon,
   PaperclipIcon,
   PenLineIcon,
@@ -83,7 +81,6 @@ const WelcomeGuideDialog = ({ open, onOpenChange }: Props) => {
         { icon: CalendarDaysIcon, label: t("common.calendar"), text: t("welcome.calendar-text") },
         { icon: HashIcon, label: t("common.tags"), text: t("welcome.tags-text") },
         { icon: ListChecksIcon, label: t("common.views"), text: t("welcome.views-text") },
-        { icon: MapIcon, label: t("common.map"), text: t("welcome.map-text") },
       ],
     },
     {
@@ -92,7 +89,6 @@ const WelcomeGuideDialog = ({ open, onOpenChange }: Props) => {
       sub: t("welcome.share-sub"),
       header: <ShareHeader />,
       rows: [
-        { icon: LockIcon, label: t("common.visibility"), text: t("welcome.visibility-text") },
         { icon: UsersIcon, label: t("space.spaces"), text: t("welcome.spaces-text") },
         { icon: MessageSquareIcon, label: t("welcome.comments"), text: t("welcome.comments-text") },
       ],

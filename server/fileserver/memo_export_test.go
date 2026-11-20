@@ -3,6 +3,7 @@ package fileserver
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"io"
@@ -68,12 +69,12 @@ func (f *memoExportFixture) request(ctx context.Context, t *testing.T, method, u
 	return recorder
 }
 
-func TestServeMemoExport_AdminStreamsAnotherUsersArchive(t *testing.T) {
+func TestServeMemoExport_StreamsOwnArchive(t *testing.T) {
 	ctx := context.Background()
 	f, cleanup := newMemoExportFixture(ctx, t)
 	defer cleanup()
 
-	recorder := f.request(ctx, t, http.MethodGet, f.member.Username, f.admin)
+	recorder := f.request(ctx, t, http.MethodGet, f.member.Username, f.member)
 	require.Equal(t, http.StatusOK, recorder.Code)
 	require.Equal(t, memoexport.MediaType, recorder.Header().Get("Content-Type"))
 	require.Regexp(t, `^attachment; filename=memos-export-export-member-\d{8}T\d{6}Z\.zip$`, recorder.Header().Get("Content-Disposition"))
@@ -95,18 +96,18 @@ func TestServeMemoExport_AdminStreamsAnotherUsersArchive(t *testing.T) {
 	require.Equal(t, "export-admin", ownArchive.Manifest.Scope.User.Username)
 }
 
-func TestServeMemoExport_RefusesMembersAndAnonymous(t *testing.T) {
+func TestServeMemoExport_RefusesOtherUsersAndAnonymous(t *testing.T) {
 	ctx := context.Background()
 	f, cleanup := newMemoExportFixture(ctx, t)
 	defer cleanup()
 
-	require.Equal(t, http.StatusForbidden, f.request(ctx, t, http.MethodGet, f.member.Username, f.member).Code)
 	require.Equal(t, http.StatusForbidden, f.request(ctx, t, http.MethodGet, f.admin.Username, f.member).Code)
 	require.Equal(t, http.StatusUnauthorized, f.request(ctx, t, http.MethodGet, f.member.Username, nil).Code)
-	require.Equal(t, http.StatusNotFound, f.request(ctx, t, http.MethodGet, "nobody", f.admin).Code)
+	require.Equal(t, http.StatusForbidden, f.request(ctx, t, http.MethodGet, "nobody", f.admin).Code)
 
 	// The error envelope is JSON; nothing of the archive leaks.
-	forbidden := f.request(ctx, t, http.MethodGet, f.member.Username, f.member)
+	forbidden := f.request(ctx, t, http.MethodGet, f.member.Username, f.admin)
+	require.Equal(t, http.StatusForbidden, forbidden.Code)
 	require.Equal(t, "application/json", forbidden.Header().Get("Content-Type"))
 	require.Contains(t, forbidden.Body.String(), "forbidden access")
 }
@@ -146,32 +147,63 @@ func TestServeMemoExport_SelectedMemos(t *testing.T) {
 	require.Equal(t, 1, archive.Manifest.Counts.Memos)
 }
 
+func TestServeMemoExport_OmitsLegacyForeignCommentParent(t *testing.T) {
+	ctx := context.Background()
+	svc, fs, cleanup := newSharedProfileTestServices(ctx, t)
+	defer cleanup()
+	fs.MemoExporter = svc
+	owner, err := svc.Store.CreateUser(ctx, &store.User{Username: "comment-owner", Role: store.RoleUser, Email: "comment-owner@example.com"})
+	require.NoError(t, err)
+	other, err := svc.Store.CreateUser(ctx, &store.User{Username: "former-author", Role: store.RoleUser, Email: "former-author@example.com"})
+	require.NoError(t, err)
+	comment, err := svc.Store.CreateMemo(ctx, &store.Memo{UID: "legacy-comment", CreatorID: owner.ID, Content: "my comment", Visibility: store.Private})
+	require.NoError(t, err)
+	parent, err := svc.Store.CreateMemo(ctx, &store.Memo{UID: "legacy-parent", CreatorID: other.ID, Content: "someone else's memo", Visibility: store.Public})
+	require.NoError(t, err)
+	db, err := sql.Open("sqlite", svc.Profile.DSN)
+	require.NoError(t, err)
+	defer db.Close()
+	_, err = db.ExecContext(ctx, "INSERT INTO memo_relation (memo_id, related_memo_id, type) VALUES (?, ?, ?)", comment.ID, parent.ID, store.MemoRelationComment)
+	require.NoError(t, err)
+
+	mux := http.NewServeMux()
+	fs.RegisterRoutes(mux, http.HandlerFunc(httphandler.NotFound))
+	f := &memoExportFixture{svc: svc, fs: fs, stores: svc.Store, mux: mux}
+	recorder := f.request(ctx, t, http.MethodGet, owner.Username, owner)
+	require.Equal(t, http.StatusOK, recorder.Code)
+	archive, err := memoexport.Read(bytes.NewReader(recorder.Body.Bytes()), int64(recorder.Body.Len()))
+	require.NoError(t, err)
+	require.Len(t, archive.Memos, 1)
+	require.Equal(t, comment.UID, archive.Memos[0].UID)
+	require.Empty(t, archive.Memos[0].Parent)
+}
+
 func TestServeMemoExport_HeadPreflightChecksWithoutExporting(t *testing.T) {
 	ctx := context.Background()
 	f, cleanup := newMemoExportFixture(ctx, t)
 	defer cleanup()
 
-	head := f.request(ctx, t, http.MethodHead, f.member.Username, f.admin)
+	head := f.request(ctx, t, http.MethodHead, f.member.Username, f.member)
 	require.Equal(t, http.StatusOK, head.Code)
 	require.Equal(t, memoexport.MediaType, head.Header().Get("Content-Type"))
 	require.Regexp(t, `^attachment; filename=memos-export-export-member-`, head.Header().Get("Content-Disposition"))
 	require.Zero(t, head.Body.Len())
 
-	require.Equal(t, http.StatusForbidden, f.request(ctx, t, http.MethodHead, f.member.Username, f.member).Code)
+	require.Equal(t, http.StatusForbidden, f.request(ctx, t, http.MethodHead, f.member.Username, f.admin).Code)
 	require.Equal(t, http.StatusUnauthorized, f.request(ctx, t, http.MethodHead, f.member.Username, nil).Code)
 
 	// A preflight charges nothing: the full hourly budget is still available.
 	budget := ratelimit.DefaultPolicy()[ratelimit.ScopeArchiveUser].Limit
 	for range budget {
-		require.Equal(t, http.StatusOK, f.request(ctx, t, http.MethodHead, f.member.Username, f.admin).Code)
+		require.Equal(t, http.StatusOK, f.request(ctx, t, http.MethodHead, f.member.Username, f.member).Code)
 	}
 	for range budget {
-		require.Equal(t, http.StatusOK, f.request(ctx, t, http.MethodGet, f.member.Username, f.admin).Code)
+		require.Equal(t, http.StatusOK, f.request(ctx, t, http.MethodGet, f.member.Username, f.member).Code)
 	}
-	exhausted := f.request(ctx, t, http.MethodGet, f.member.Username, f.admin)
+	exhausted := f.request(ctx, t, http.MethodGet, f.member.Username, f.member)
 	require.Equal(t, http.StatusTooManyRequests, exhausted.Code)
 	require.NotEmpty(t, exhausted.Header().Get("Retry-After"))
-	require.Equal(t, http.StatusTooManyRequests, f.request(ctx, t, http.MethodHead, f.member.Username, f.admin).Code)
+	require.Equal(t, http.StatusTooManyRequests, f.request(ctx, t, http.MethodHead, f.member.Username, f.member).Code)
 }
 
 // stubExporter stands in for the API service. It parks inside WriteMemoExport
@@ -205,23 +237,23 @@ func TestServeMemoExport_OneExportAtATime(t *testing.T) {
 	exporter := &stubExporter{started: make(chan struct{}), release: make(chan struct{})}
 	f.fs.MemoExporter = exporter
 	running := make(chan *httptest.ResponseRecorder, 1)
-	go func() { running <- f.request(ctx, t, http.MethodGet, f.member.Username, f.admin) }()
+	go func() { running <- f.request(ctx, t, http.MethodGet, f.member.Username, f.member) }()
 	<-exporter.started
 
 	// The lock spans the whole export: while one streams, another is refused.
-	busy := f.request(ctx, t, http.MethodGet, f.member.Username, f.admin)
+	busy := f.request(ctx, t, http.MethodGet, f.member.Username, f.member)
 	require.Equal(t, http.StatusTooManyRequests, busy.Code)
 	require.Contains(t, busy.Body.String(), "another export is running")
-	require.Equal(t, http.StatusTooManyRequests, f.request(ctx, t, http.MethodHead, f.member.Username, f.admin).Code)
+	require.Equal(t, http.StatusTooManyRequests, f.request(ctx, t, http.MethodHead, f.member.Username, f.member).Code)
 
 	close(exporter.release)
 	require.Equal(t, http.StatusOK, (<-running).Code)
 
 	// The refused request refunded its budget unit and the lock is free again.
 	f.fs.MemoExporter = f.svc
-	require.Equal(t, http.StatusOK, f.request(ctx, t, http.MethodGet, f.member.Username, f.admin).Code)
+	require.Equal(t, http.StatusOK, f.request(ctx, t, http.MethodGet, f.member.Username, f.member).Code)
 	require.Equal(t, ratelimit.DefaultPolicy()[ratelimit.ScopeArchiveUser].Limit-2,
-		f.fs.RateLimiter.Allowed(ratelimit.ScopeArchiveUser, fmt.Sprint(f.admin.ID), 1).Remaining)
+		f.fs.RateLimiter.Allowed(ratelimit.ScopeArchiveUser, fmt.Sprint(f.member.ID), 1).Remaining)
 }
 
 func TestServeMemoExport_FailureBeforeFirstByteIsAnErrorResponse(t *testing.T) {
@@ -230,7 +262,7 @@ func TestServeMemoExport_FailureBeforeFirstByteIsAnErrorResponse(t *testing.T) {
 	defer cleanup()
 
 	f.fs.MemoExporter = &stubExporter{err: errors.New("storage unavailable")}
-	failed := f.request(ctx, t, http.MethodGet, f.member.Username, f.admin)
+	failed := f.request(ctx, t, http.MethodGet, f.member.Username, f.member)
 	require.Equal(t, http.StatusInternalServerError, failed.Code)
 	require.Equal(t, "application/json", failed.Header().Get("Content-Type"))
 	require.Empty(t, failed.Header().Get("Content-Disposition"))
@@ -239,7 +271,7 @@ func TestServeMemoExport_FailureBeforeFirstByteIsAnErrorResponse(t *testing.T) {
 
 	// The lock is released after a failure.
 	f.fs.MemoExporter = f.svc
-	require.Equal(t, http.StatusOK, f.request(ctx, t, http.MethodGet, f.member.Username, f.admin).Code)
+	require.Equal(t, http.StatusOK, f.request(ctx, t, http.MethodGet, f.member.Username, f.member).Code)
 }
 
 func TestServeMemoExport_RouteDisabledWithoutExporter(t *testing.T) {
@@ -248,5 +280,5 @@ func TestServeMemoExport_RouteDisabledWithoutExporter(t *testing.T) {
 	defer cleanup()
 
 	f.fs.MemoExporter = nil
-	require.Equal(t, http.StatusNotFound, f.request(ctx, t, http.MethodGet, f.member.Username, f.admin).Code)
+	require.Equal(t, http.StatusNotFound, f.request(ctx, t, http.MethodGet, f.member.Username, f.member).Code)
 }

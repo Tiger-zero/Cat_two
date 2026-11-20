@@ -4,8 +4,7 @@ import { exportMemos, MemoExportError } from "@/lib/memo-export";
 import { showErrorToast, toast } from "@/lib/toast";
 import { useTranslate } from "@/utils/i18n";
 
-// useExportMemos starts a memo export download for a username and reports the
-// outcome with a toast. Only instance administrators may export.
+// useExportMemos starts an export download for the user's memos and reports the outcome.
 export const useExportMemos = () => {
   const t = useTranslate();
   const [exporting, setExporting] = useState(false);

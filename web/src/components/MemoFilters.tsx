@@ -5,13 +5,11 @@ import {
   CalendarIcon,
   CheckCircleIcon,
   CodeIcon,
-  EyeIcon,
   HashIcon,
   ImageIcon,
   LinkIcon,
   ListFilterIcon,
   type LucideIcon,
-  MapPinIcon,
   PaperclipIcon,
   SearchIcon,
   XIcon,
@@ -46,10 +44,6 @@ const FILTER_CONFIGS: Record<FilterFactor, FilterConfig> = {
     icon: ListFilterIcon,
     getLabel: (value, t) => t(value === "web" ? "memo-feed.source-web" : "memo-feed.source-unknown"),
   },
-  visibility: {
-    icon: EyeIcon,
-    getLabel: (value) => value,
-  },
   contentSearch: {
     icon: SearchIcon,
     getLabel: (value) => value,
@@ -81,10 +75,6 @@ const FILTER_CONFIGS: Record<FilterFactor, FilterConfig> = {
   "property.hasCode": {
     icon: CodeIcon,
     getLabel: (_, t) => t("memo.filters.has-code"),
-  },
-  "property.hasLocation": {
-    icon: MapPinIcon,
-    getLabel: (_, t) => t("memo.filters.has-location"),
   },
   "property.hasAttachments": {
     icon: PaperclipIcon,

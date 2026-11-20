@@ -18,7 +18,7 @@ export interface MemoPanelCompose {
   /** The quiet row's label, e.g. "New memo on this day". */
   label: string;
   /** What the new memo inherits from the selection: its day, its place. */
-  defaults?: Pick<MemoDraftSeed, "createTime" | "location">;
+  defaults?: Pick<MemoDraftSeed, "createTime">;
   /** Whether the editor is open in place of the row, for hosts whose own gestures could dismiss it. */
   onComposingChange?: (composing: boolean) => void;
   onSavingChange?: (saving: boolean) => void;
@@ -77,7 +77,6 @@ export function MemoPanelList({ memos, selectionKey, timeDisplay, emptyText, com
             memo={memo}
             timeDisplay={timeDisplay}
             showCreator={showCreator}
-            showVisibility
             // Pinning is the owner's arrangement, so it only shows in a single creator's scope, as on Home.
             showPinned={!showCreator}
             showSpace={!selectedSpaceName}

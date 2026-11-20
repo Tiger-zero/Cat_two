@@ -8,7 +8,6 @@ import { showErrorToast, toast } from "@/lib/toast";
 import { cn } from "@/lib/utils";
 import { InstanceSetting_Key } from "@/types/proto/api/instance_service_pb";
 import { useTranslate } from "@/utils/i18n";
-import { convertVisibilityFromString } from "@/utils/memo";
 
 import { AudioRecorderPanel, EditorContent, EditorMetadata, FocusModeExitButton, FocusModeOverlay, TimestampPopover } from "./components";
 import { EditorSuggestions } from "./components/EditorSuggestions";
@@ -63,6 +62,7 @@ export const EditSession: React.FC<EditSessionProps> = ({
 }) => {
   const t = useTranslate();
   const currentUser = useCurrentUser();
+  const { userGeneralSetting } = useAuth();
   const editorRef = useRef<EditorController>(null);
   const { actions, dispatch, getState } = useEditorContext();
   // Subscribe only to the low-frequency slices this component renders from, so
@@ -75,7 +75,6 @@ export const EditSession: React.FC<EditSessionProps> = ({
   }, [isFocusMode, onFocusModeChange]);
   const isSaving = useEditorSelector((s) => s.ui.isLoading.saving);
   const hasTimestamp = useEditorSelector((s) => Boolean(s.timestamps.createTime));
-  const { userGeneralSetting } = useAuth();
   const { aiSetting, fetchSetting } = useInstance();
   const [isAudioRecorderOpen, setIsAudioRecorderOpen] = useState(false);
   const [isTranscribingAudio, setIsTranscribingAudio] = useState(false);
@@ -102,9 +101,6 @@ export const EditSession: React.FC<EditSessionProps> = ({
     const provider = aiSetting.providers.find((p) => p.id === providerId);
     return Boolean(provider?.apiKeySet);
   }, [aiSetting.providers, aiSetting.transcription?.providerId]);
-
-  // Get default visibility from user settings
-  const defaultVisibility = userGeneralSetting?.memoVisibility ? convertVisibilityFromString(userGeneralSetting.memoVisibility) : undefined;
 
   // Source mode only changes how the text is edited, so every composer offers it.
   const [editorMode, setEditorMode] = useSourceMode();
@@ -322,7 +318,6 @@ export const EditSession: React.FC<EditSessionProps> = ({
     memoName,
     parentMemoName,
     defaultSpace,
-    defaultVisibility,
     defaultCreateTime,
     discardDraft,
     onConfirm,
@@ -406,7 +401,7 @@ export const EditSession: React.FC<EditSessionProps> = ({
             openingDrawing={drawing.opening}
           />
           {!memo && !parentMemoName && isInitialized && suggestions.length > 0 && (
-            <EditorSuggestions suggestions={suggestions} controllerRef={editorRef} space={editorSpace} />
+            <EditorSuggestions suggestions={suggestions} controllerRef={editorRef} />
           )}
           <EditorToolbar
             onSave={handleSave}

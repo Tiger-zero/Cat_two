@@ -63,8 +63,9 @@ stmt, _ := engine.CompileToStatement(ctx, `has_task_list && visibility == "PUBLI
   (a comparison against `JSON_EXTRACT('true', '$')` on MySQL). Memo payloads omit false
   flags, so a missing key counts as false: `flag == false` and `flag != true`
   render as the negated check and match the same memos as `!flag`.
-- **Presence Flags** — `has_location` renders as a JSON key-existence check on
-  `memo.payload` (`$.location`). A missing key and an explicit JSON null both
+- **Presence Flags** — `has_location` checks legacy location metadata in
+  `memo.payload` (`$.location`). The memo API preserves existing locations and
+  ignores location fields on writes. A missing key and an explicit JSON null both
   count as absent on every dialect; any other value — including an empty object —
   counts as present. Only `==`/`!=` against a boolean literal (or bare/negated
   use) is allowed.

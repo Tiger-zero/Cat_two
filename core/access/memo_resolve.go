@@ -11,7 +11,6 @@ import (
 type MemoReadStore interface {
 	GetUser(ctx context.Context, find *store.FindUser) (*store.User, error)
 	GetSpace(ctx context.Context, find *store.FindSpace) (*store.Space, error)
-	GetSpaceMember(ctx context.Context, find *store.FindSpaceMember) (*store.SpaceMember, error)
 }
 
 // MemoReadFacts holds the viewer-independent authorization inputs for one memo.
@@ -52,40 +51,16 @@ func ResolveMemoReadFacts(ctx context.Context, s MemoReadStore, memo *store.Memo
 	return facts, nil
 }
 
-// WithViewer completes the read context for one viewer. Only the membership
-// lookup is viewer-dependent, so evaluating additional viewers against the same
-// memo costs at most one query each.
-func (f MemoReadFacts) WithViewer(ctx context.Context, s MemoReadStore, viewer *store.User, allowAnonymous bool, sharedMemoID *int32) (MemoReadContext, error) {
-	readContext := MemoReadContext{
-		Memo:           f.Memo,
-		Viewer:         viewer,
-		AllowAnonymous: allowAnonymous,
-		SharedMemoID:   sharedMemoID,
-		CreatorValid:   f.CreatorValid,
-		SpaceValid:     f.SpaceValid,
-	}
-	if f.Memo == nil || f.Memo.SpaceID == nil || !f.SpaceValid {
-		return readContext, nil
-	}
-	// Membership never changes the outcome for an inactive viewer or for an
-	// instance administrator, so skip the lookup for both.
-	if !IsActiveUser(viewer) || IsInstanceAdmin(viewer) {
-		return readContext, nil
-	}
-	membership, err := s.GetSpaceMember(ctx, &store.FindSpaceMember{SpaceID: f.Memo.SpaceID, UserID: &viewer.ID})
-	if err != nil {
-		return MemoReadContext{}, err
-	}
-	readContext.ViewerSpaceMember = membership != nil && membership.Role.IsActiveMember()
-	return readContext, nil
+// WithViewer combines resolved memo facts with the requesting user.
+func (f MemoReadFacts) WithViewer(viewer *store.User) MemoReadContext {
+	return MemoReadContext{Memo: f.Memo, Viewer: viewer, CreatorValid: f.CreatorValid, SpaceValid: f.SpaceValid}
 }
 
-// ResolveMemoReadContext resolves a complete read context for one memo and one
-// viewer.
-func ResolveMemoReadContext(ctx context.Context, s MemoReadStore, memo *store.Memo, viewer *store.User, allowAnonymous bool, sharedMemoID *int32) (MemoReadContext, error) {
+// ResolveMemoReadContext resolves a complete read context for one memo and one viewer.
+func ResolveMemoReadContext(ctx context.Context, s MemoReadStore, memo *store.Memo, viewer *store.User) (MemoReadContext, error) {
 	facts, err := ResolveMemoReadFacts(ctx, s, memo)
 	if err != nil {
 		return MemoReadContext{}, err
 	}
-	return facts.WithViewer(ctx, s, viewer, allowAnonymous, sharedMemoID)
+	return facts.WithViewer(viewer), nil
 }

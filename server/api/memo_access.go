@@ -14,26 +14,19 @@ import (
 
 // buildMemoReadContext resolves authorization inputs for exactly one memo.
 // Relations never contribute access to either endpoint.
-func (s *APIService) buildMemoReadContext(ctx context.Context, memo *store.Memo, sharedMemoID *int32) (access.MemoReadContext, error) {
+func (s *APIService) buildMemoReadContext(ctx context.Context, memo *store.Memo) (access.MemoReadContext, error) {
 	viewer, err := s.fetchCurrentUser(ctx)
 	if err != nil {
 		return access.MemoReadContext{}, status.Errorf(codes.Internal, "failed to get user")
 	}
-	allowAnonymous := false
-	if viewer == nil {
-		allowAnonymous, err = s.Store.AllowsAnonymousAccess(ctx)
-		if err != nil {
-			return access.MemoReadContext{}, status.Errorf(codes.Internal, "failed to resolve instance access policy")
-		}
-	}
-	return s.buildMemoReadContextForViewer(ctx, memo, viewer, allowAnonymous, sharedMemoID)
+	return s.buildMemoReadContextForViewer(ctx, memo, viewer)
 }
 
-func (s *APIService) buildMemoReadContextForViewer(ctx context.Context, memo *store.Memo, viewer *store.User, allowAnonymous bool, sharedMemoID *int32) (access.MemoReadContext, error) {
+func (s *APIService) buildMemoReadContextForViewer(ctx context.Context, memo *store.Memo, viewer *store.User) (access.MemoReadContext, error) {
 	if memo == nil {
 		return access.MemoReadContext{}, status.Error(codes.NotFound, "memo not found")
 	}
-	readContext, err := access.ResolveMemoReadContext(ctx, s.Store, memo, viewer, allowAnonymous, sharedMemoID)
+	readContext, err := access.ResolveMemoReadContext(ctx, s.Store, memo, viewer)
 	if err != nil {
 		return access.MemoReadContext{}, status.Errorf(codes.Internal, "failed to resolve memo access")
 	}
@@ -41,7 +34,7 @@ func (s *APIService) buildMemoReadContextForViewer(ctx context.Context, memo *st
 }
 
 func (s *APIService) checkMemoReadAccess(ctx context.Context, memo *store.Memo) error {
-	readContext, err := s.buildMemoReadContext(ctx, memo, nil)
+	readContext, err := s.buildMemoReadContext(ctx, memo)
 	if err != nil {
 		return err
 	}
@@ -64,8 +57,8 @@ func memoAccessDecisionError(decision access.MemoReadDecision) error {
 // newMemoAccessScope returns the memo-local authorization predicate for a
 // caller. Drivers apply it as a database predicate before LIMIT/OFFSET so
 // inaccessible rows can neither leak nor skew counts and pagination.
-func newMemoAccessScope(currentUser *store.User, allowPublic bool) *store.MemoAccessScope {
-	accessScope := &store.MemoAccessScope{AllowPublic: allowPublic, AllowProtected: currentUser != nil}
+func newMemoAccessScope(currentUser *store.User) *store.MemoAccessScope {
+	accessScope := &store.MemoAccessScope{OwnerOnly: true}
 	if currentUser != nil {
 		accessScope.UserID = &currentUser.ID
 	}
@@ -73,22 +66,13 @@ func newMemoAccessScope(currentUser *store.User, allowPublic bool) *store.MemoAc
 }
 
 // resolveMemoAccessScope resolves the caller and builds their memo access
-// scope. For an anonymous caller the instance access policy decides whether
-// PUBLIC memos are readable at all. Callers map the returned error to their own
-// transport representation.
+// scope. An anonymous scope matches no rows.
 func (s *APIService) resolveMemoAccessScope(ctx context.Context) (*store.MemoAccessScope, *store.User, error) {
 	currentUser, err := s.fetchCurrentUser(ctx)
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "failed to get current user")
 	}
-	allowPublic := currentUser != nil
-	if currentUser == nil {
-		allowPublic, err = s.Store.AllowsAnonymousAccess(ctx)
-		if err != nil {
-			return nil, nil, errors.Wrap(err, "failed to resolve instance access policy")
-		}
-	}
-	return newMemoAccessScope(currentUser, allowPublic), currentUser, nil
+	return newMemoAccessScope(currentUser), currentUser, nil
 }
 
 // resolveSpaceByName resolves a space resource name to an existing Space

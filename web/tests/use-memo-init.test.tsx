@@ -9,7 +9,7 @@ import { cacheService } from "@/components/MemoEditor/edit/services/cacheService
 import { EditorProvider, useEditorContext } from "@/components/MemoEditor/edit/state";
 import type { EditorController } from "@/components/MemoEditor/edit/types/editorController";
 import { AttachmentSchema } from "@/types/proto/api/attachment_service_pb";
-import { type Location, LocationSchema, MemoSchema, Visibility } from "@/types/proto/api/memo_service_pb";
+import { MemoSchema, Visibility } from "@/types/proto/api/memo_service_pb";
 
 const editorRef = { current: null } as RefObject<EditorController | null>;
 const draftKey = cacheService.key("users/steven", "restored-draft");
@@ -22,18 +22,11 @@ function Probe({ autoFocus, mode = "rich" }: { autoFocus?: boolean | (() => bool
 }
 
 /** Mounts a session the way MemoEditor does: the draft read once, then the caret restored. */
-const mountSession = (props: {
-  autoFocus?: boolean | (() => boolean);
-  mode?: EditorMode;
-  defaultLocation?: Location;
-  canChooseSpace?: boolean;
-}) =>
+const mountSession = (props: { autoFocus?: boolean | (() => boolean); mode?: EditorMode; canChooseSpace?: boolean }) =>
   render(
     <EditorProvider
       initialEditorState={initialEditorState({
         draftKey,
-        defaultVisibility: Visibility.PUBLIC,
-        defaultLocation: props.defaultLocation,
         canChooseSpace: props.canChooseSpace,
       })}
     >
@@ -93,27 +86,14 @@ describe("the initial draft and useMemoInit", () => {
     expect(setSelection).not.toHaveBeenCalled();
   });
 
-  it("seeds a new location once and honors a restored removal", () => {
-    const point = create(LocationSchema, { latitude: 35, longitude: 135, placeholder: "Cafe" });
-    const { unmount } = mountSession({ defaultLocation: point });
-    expect(getEditorState().metadata.location).toEqual(point);
-    unmount();
-    cacheService.saveNow(draftKey, { content: "Draft without a location", attachments: [], location: null });
-    mountSession({ defaultLocation: point });
-    expect(getEditorState().metadata.location).toBeUndefined();
-  });
-
   it.each([true, false])("restores destination only when the composer can choose a Space (%s)", (canChooseSpace) => {
     cacheService.saveNow(draftKey, {
       content: "Draft",
       attachments: [],
-      location: null,
       space: "spaces/work",
-      visibility: Visibility.PRIVATE,
     });
     mountSession({ canChooseSpace });
     expect(getEditorState().metadata.space).toBe(canChooseSpace ? "spaces/work" : undefined);
-    expect(getEditorState().metadata.visibility).toBe(Visibility.PRIVATE);
   });
 
   it("restores uploaded attachment bindings with a new memo draft", () => {

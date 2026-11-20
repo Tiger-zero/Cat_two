@@ -39,7 +39,7 @@ describe("editing a memo's Space", () => {
     expect(memoService.fromMemo(stored()).metadata.space).toBeUndefined();
   });
 
-  it("sends placement and audience together when the Space changes, and reports the move", async () => {
+  it("keeps a legacy Space memo private when moving it and reports the move", async () => {
     const memo = stored({ space: "spaces/work", visibility: Visibility.SPACE });
     clients.getMemo.mockResolvedValue(memo);
 
@@ -47,7 +47,7 @@ describe("editing a memo's Space", () => {
 
     expect(new Set(savedMask())).toEqual(new Set(["space", "visibility"]));
     expect(savedMemo().space).toBe("spaces/reading");
-    expect(savedMemo().visibility).toBe(Visibility.SPACE);
+    expect(savedMemo().visibility).toBe(Visibility.PRIVATE);
     expect(result).toMatchObject({ hasChanges: true, moved: true });
   });
 

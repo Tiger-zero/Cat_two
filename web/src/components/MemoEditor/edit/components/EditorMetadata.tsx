@@ -1,5 +1,5 @@
 import type { FC } from "react";
-import { AttachmentListEditor, LocationDisplayEditor, RelationListEditor } from "@/components/MemoMetadata";
+import { AttachmentListEditor, RelationListEditor } from "@/components/MemoMetadata";
 import { getEditorBacklinkRelations, getEditorReferenceRelations } from "@/components/MemoMetadata/Relation/relationHelpers";
 import { extractManagedAttachmentUIDs } from "@/utils/managed-attachment";
 import { useEditorContext, useEditorSelector } from "../state";
@@ -20,7 +20,6 @@ export const EditorMetadata: FC<EditorMetadataProps> = ({
   const attachments = useEditorSelector((s) => s.metadata.attachments);
   const localFiles = useEditorSelector((s) => s.localFiles);
   const relations = useEditorSelector((s) => s.metadata.relations);
-  const location = useEditorSelector((s) => s.metadata.location);
   const attachmentOrder = useEditorSelector((s) => s.attachmentOrder);
   const content = useEditorSelector((s) => s.content);
   const placementActionsDisabled = useEditorSelector(
@@ -30,20 +29,13 @@ export const EditorMetadata: FC<EditorMetadataProps> = ({
 
   const hasLinks =
     getEditorReferenceRelations(relations, memoName).length > 0 || getEditorBacklinkRelations(relations, memoName).length > 0;
-  // Links and the place follow the attachments in the same list, so the draft reads as one quiet list under the gallery.
-  const trailingRows =
-    hasLinks || location ? (
-      <>
-        {hasLinks && (
-          <RelationListEditor
-            relations={relations}
-            onRelationsChange={(next) => dispatch(actions.setMetadata({ relations: next }))}
-            memoName={memoName}
-          />
-        )}
-        {location && <LocationDisplayEditor location={location} onRemove={() => dispatch(actions.setMetadata({ location: undefined }))} />}
-      </>
-    ) : undefined;
+  const trailingRows = hasLinks ? (
+    <RelationListEditor
+      relations={relations}
+      onRelationsChange={(next) => dispatch(actions.setMetadata({ relations: next }))}
+      memoName={memoName}
+    />
+  ) : undefined;
 
   return (
     <div className="w-full flex flex-col gap-2">

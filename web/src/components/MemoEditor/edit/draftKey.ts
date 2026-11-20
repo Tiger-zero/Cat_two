@@ -23,7 +23,6 @@ const LEGACY_SCOPE_PREFIXES: Record<string, string> = {
   home: "home-memo-editor",
   global: "global-memo-editor",
   calendar: "calendar-day-editor",
-  map: "map-editor",
 };
 
 /** The key a draft for `identity` was stored under before this scheme, if it had one. */

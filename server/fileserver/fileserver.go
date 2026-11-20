@@ -59,7 +59,6 @@ const (
 	// cacheMaxAge is the max-age value for Cache-Control headers (1 hour).
 	cacheMaxAge = "public, max-age=3600"
 
-	publicAttachmentCacheControl  = "public, no-cache"
 	privateAttachmentCacheControl = "private, no-store"
 )
 
@@ -168,12 +167,8 @@ func (s *FileServerService) serveAttachmentFile(w http.ResponseWriter, r *http.R
 		return &httphandler.Error{Code: http.StatusNotFound, Message: "attachment not found"}
 	}
 
-	readClass, err := s.checkAttachmentPermission(ctx, r, attachment)
-	if err != nil {
+	if err := s.checkAttachmentPermission(ctx, r, attachment); err != nil {
 		return err
-	}
-	if readClass == access.MemoReadClassPublic {
-		w.Header().Set("Cache-Control", publicAttachmentCacheControl)
 	}
 	// External attachments carry no blob; their reference is the upstream URL
 	// the content lives at, so they are answered with a redirect.
@@ -708,80 +703,39 @@ func (s *FileServerService) getMotionPath(attachment *store.Attachment) (string,
 // Authentication & Authorization
 // =============================================================================
 
-// checkAttachmentPermission verifies the user has permission to access the attachment.
-func (s *FileServerService) checkAttachmentPermission(ctx context.Context, r *http.Request, attachment *store.Attachment) (access.MemoReadClass, error) {
-	// For unlinked attachments, only the creator or an admin can access, as in
-	// the API's GetAttachment.
+// checkAttachmentPermission requires ownership of the linked memo or, for an
+// unlinked attachment, the file itself.
+func (s *FileServerService) checkAttachmentPermission(ctx context.Context, r *http.Request, attachment *store.Attachment) error {
+	user, err := s.getCurrentUser(ctx, r)
+	if err != nil {
+		return &httphandler.Error{Code: http.StatusInternalServerError, Message: "failed to get current user", Cause: err}
+	}
+	if !access.IsActiveUser(user) {
+		return &httphandler.Error{Code: http.StatusUnauthorized, Message: "unauthorized access"}
+	}
 	if attachment.MemoID == nil {
-		user, err := s.getCurrentUser(ctx, r)
-		if err != nil {
-			return access.MemoReadClassPrivate, &httphandler.Error{Code: http.StatusInternalServerError, Message: "failed to get current user", Cause: err}
-		}
-		if user == nil {
-			return access.MemoReadClassPrivate, &httphandler.Error{Code: http.StatusUnauthorized, Message: "unauthorized access"}
-		}
 		if !access.CanManageAttachment(user, attachment) {
-			return access.MemoReadClassPrivate, &httphandler.Error{Code: http.StatusForbidden, Message: "forbidden access"}
+			return &httphandler.Error{Code: http.StatusForbidden, Message: "forbidden access"}
 		}
-		return access.MemoReadClassPrivate, nil
+		return nil
 	}
 
 	memo, err := s.Store.GetMemo(ctx, &store.FindMemo{ID: attachment.MemoID})
 	if err != nil {
-		return access.MemoReadClassPrivate, &httphandler.Error{Code: http.StatusInternalServerError, Message: "failed to find memo", Cause: err}
+		return &httphandler.Error{Code: http.StatusInternalServerError, Message: "failed to find memo", Cause: err}
 	}
-	if memo == nil {
-		return access.MemoReadClassPrivate, &httphandler.Error{Code: http.StatusNotFound, Message: "memo not found"}
-	}
-
-	allowAnonymous, err := s.Store.AllowsAnonymousAccess(ctx)
+	readContext, err := access.ResolveMemoReadContext(ctx, s.Store, memo, user)
 	if err != nil {
-		return access.MemoReadClassPrivate, &httphandler.Error{Code: http.StatusInternalServerError, Message: "failed to get instance access policy", Cause: err}
-	}
-	var sharedMemoID *int32
-	if shareToken := r.URL.Query().Get("share_token"); shareToken != "" {
-		ms, err := s.Store.GetMemoShare(ctx, &store.FindMemoShare{UID: &shareToken})
-		if err != nil {
-			return access.MemoReadClassPrivate, &httphandler.Error{Code: http.StatusInternalServerError, Message: "failed to get memo share", Cause: err}
-		}
-		if ms != nil && !isMemoShareExpired(ms) {
-			sharedMemoID = &ms.MemoID
-		}
-	}
-
-	facts, err := access.ResolveMemoReadFacts(ctx, s.Store, memo)
-	if err != nil {
-		return access.MemoReadClassPrivate, &httphandler.Error{Code: http.StatusInternalServerError, Message: "failed to resolve memo access", Cause: err}
-	}
-	// Public and exact share-token reads do not depend on browser credentials.
-	// Decide those first so an expired cookie cannot turn an otherwise valid
-	// anonymous file request into a server error.
-	anonymousContext, err := facts.WithViewer(ctx, s.Store, nil, allowAnonymous, sharedMemoID)
-	if err != nil {
-		return access.MemoReadClassPrivate, &httphandler.Error{Code: http.StatusInternalServerError, Message: "failed to resolve memo access", Cause: err}
-	}
-	if anonymousDecision := access.CheckMemoReadContext(anonymousContext); anonymousDecision.Allowed() {
-		return anonymousDecision.Class, nil
-	}
-
-	user, err := s.getCurrentUser(ctx, r)
-	if err != nil {
-		return access.MemoReadClassPrivate, &httphandler.Error{Code: http.StatusInternalServerError, Message: "failed to get current user", Cause: err}
-	}
-	readContext, err := facts.WithViewer(ctx, s.Store, user, allowAnonymous, sharedMemoID)
-	if err != nil {
-		return access.MemoReadClassPrivate, &httphandler.Error{Code: http.StatusInternalServerError, Message: "failed to find space membership", Cause: err}
+		return &httphandler.Error{Code: http.StatusInternalServerError, Message: "failed to resolve memo access", Cause: err}
 	}
 	decision := access.CheckMemoReadContext(readContext)
 	switch decision.Denial {
 	case access.MemoReadDenialNone:
-		return decision.Class, nil
+		return nil
 	case access.MemoReadDenialNotFound:
-		return access.MemoReadClassPrivate, &httphandler.Error{Code: http.StatusNotFound, Message: "memo not found"}
-	case access.MemoReadDenialUnauthenticated:
-		return access.MemoReadClassPrivate, &httphandler.Error{Code: http.StatusUnauthorized, Message: "unauthorized access"}
+		return &httphandler.Error{Code: http.StatusNotFound, Message: "memo not found"}
 	default:
-		return access.MemoReadClassPrivate, &httphandler.Error{Code: http.StatusForbidden, Message: "forbidden access"}
+		return &httphandler.Error{Code: http.StatusForbidden, Message: "forbidden access"}
 	}
 }
 
@@ -851,9 +805,4 @@ func setMediaHeaders(w http.ResponseWriter, contentType, originalType string) {
 	if strings.HasPrefix(originalType, "image/") || strings.HasPrefix(originalType, "video/") {
 		h.Set("Color-Gamut", "srgb, p3, rec2020")
 	}
-}
-
-// isMemoShareExpired returns true if the share has a defined expiry that has already passed.
-func isMemoShareExpired(ms *store.MemoShare) bool {
-	return ms.ExpiresTs != nil && time.Now().Unix() > *ms.ExpiresTs
 }

@@ -16,29 +16,6 @@
     "export-all": "Export all my memos",
     "search": "Search memos"
   },
-  "map": {
-    "selection": "Selected memos",
-    "loaded": "{{count}} loaded",
-    "fit-all": "Show all results",
-    "zoom-in": "Zoom in",
-    "zoom-out": "Zoom out",
-    "load-error": "Could not load all memos.",
-    "tile-error": "The map could not load. The memos are still available.",
-    "empty": "No memos with a location yet",
-    "empty-hint": "Add a location to a memo to see it here.",
-    "no-results": "No matching memos",
-    "no-results-hint": "Try clearing your filters.",
-    "clear-filters": "Clear filters",
-    "loading": "Loading memos…",
-    "new-here": "Write here",
-    "saved-outside-filter": "Saved. This memo is outside the current map results.",
-    "open-memo": "Open memo",
-    "open-in-google-maps": "Open in Google Maps",
-    "location-description": "Select a location on the map or enter coordinates manually",
-    "latitude": "Latitude",
-    "longitude": "Longitude",
-    "place-placeholder": "Choose a position first."
-  },
   "auth": {
     "admin-sign-in": "Administrator sign-in",
     "back-to-sign-in": "Back to sign in",
@@ -79,9 +56,7 @@
       "copied": "Coordinates copied",
       "copy-coordinates": "Copy coordinates",
       "hide": "Hide attachment details",
-      "hide-map": "Hide map",
-      "show": "Show attachment details",
-      "show-map": "Show map"
+      "show": "Show attachment details"
     },
     "empty": "No saved capture metadata.",
     "fields": {
@@ -141,6 +116,8 @@
     }
   },
   "common": {
+    "zoom-in": "Zoom in",
+    "zoom-out": "Zoom out",
     "account-menu": "Account menu",
     "actions": "Actions",
     "add": "Add",
@@ -158,7 +135,6 @@
     "close": "Close",
     "collapse": "Collapse",
     "collapse-panel": "Collapse panel",
-    "confirm": "Confirm",
     "copy": "Copy",
     "create": "Create",
     "created-at": "Created at",
@@ -187,7 +163,6 @@
     "learn-more": "Learn more",
     "link": "Link",
     "manage": "Manage",
-    "map": "Map",
     "memo": "Memo",
     "memos": "Memos",
     "month-navigation": "Month navigation",
@@ -227,7 +202,6 @@
     "unpin": "Unpin",
     "update": "Update",
     "username": "Username",
-    "visibility": "Visibility",
     "views": "Views",
     "open-navigation": "Open navigation",
     "navigation": "Navigation",
@@ -243,8 +217,6 @@
     "docs": "Docs",
     "calendar-for-month": "Calendar for {{month}}",
     "date-at-time": "{{date}} at {{time}}",
-    "selected-location": "Selected location",
-    "choose-location": "Choose a location",
     "unknown-error": "Unknown error",
     "error-occurred": "An error occurred"
   },
@@ -278,7 +250,6 @@
     },
     "insert-menu": {
       "add-attachment": "Add attachment",
-      "add-location": "Add location",
       "image-upload-failed": "Some images could not be uploaded. Retry or keep the uploaded files as attachments.",
       "image-upload-stopped": "Image upload stopped {{completed}}/{{total}}",
       "insert-image": "Insert image",
@@ -421,7 +392,6 @@
       "reorder-hint": "Drag, or use the arrow keys"
     },
     "remove-relation": "Remove relation",
-    "remove-location": "Remove location",
     "recording-unsupported": "Audio recording is not supported in this browser.",
     "microphone-denied": "Microphone permission was denied.",
     "recording-failed": "Failed to start audio recording."
@@ -479,7 +449,6 @@
       "has-code": "hasCode",
       "has-image": "hasImage",
       "has-link": "hasLink",
-      "has-location": "hasLocation",
       "has-task-list": "hasTaskList",
       "remove": "Remove filter"
     },
@@ -504,15 +473,6 @@
     "order-by": "Order by",
     "parent-memo": "Parent memo",
     "share": {
-      "active-links": "Active share links",
-      "copy": "Copy link",
-      "create-failed": "Failed to create share link",
-      "create-link": "Create new link",
-      "creating": "Creating…",
-      "expiry-1-day": "1 day",
-      "expiry-30-days": "30 days",
-      "expiry-7-days": "7 days",
-      "expiry-never": "Never",
       "image-description": "Preview rendered at your current device width ({{width}}px).",
       "image-download": "Download PNG",
       "image-download-failed": "Failed to export image",
@@ -520,15 +480,7 @@
       "image-share": "Share image",
       "image-share-failed": "Failed to share image",
       "image-title": "Share as image",
-      "expires-on": "Expires {{date}}",
-      "never-expires": "Never expires",
-      "no-links": "No share links yet. Create one below.",
-      "open-image": "Share as image",
-      "open-panel": "Manage share links",
-      "revoke": "Revoke",
-      "revoke-failed": "Failed to revoke link",
-      "revoked": "Share link revoked",
-      "title": "Share this memo"
+      "open-image": "Share as image"
     },
     "show-less": "Show less",
     "show-more": "Show more",
@@ -538,16 +490,6 @@
       "updated": "Tasks updated"
     },
     "view-options": "View options",
-    "visibility": {
-      "private": "Private",
-      "private-description": "Only you",
-      "protected": "Protected",
-      "protected-description": "Anyone signed in",
-      "public": "Public",
-      "public-description": "Anyone, even signed out",
-      "space": "Members",
-      "space-description": "Everyone in {{space}}"
-    },
     "add-reaction": "Add reaction",
     "remove-reaction": "Remove reaction"
   },
@@ -695,10 +637,8 @@
       "transcription-warning-no-key": "The selected provider has no API key set. Edit the integration above to add one."
     },
     "instance": {
-      "access-description": "Control anonymous browsing, sign-up, authentication, and profile editing for this instance.",
+      "access-description": "Manage sign-up, authentication, and profile editing for this instance.",
       "access-title": "Access and policies",
-      "allow-public-access-description": "Allow signed-out visitors to browse public memos. Shared memo links remain available when this is disabled.",
-      "allow-public-access": "Allow public access",
       "disallow-change-nickname-description": "Prevent users from changing their display name.",
       "disallow-change-nickname": "Disallow changing nickname",
       "disallow-change-username-description": "Prevent users from changing their login username.",
@@ -752,7 +692,6 @@
       "review-file": "File",
       "review-memos": "Memos in file",
       "review-new": "Will be created",
-      "export-admin-only": "Only administrators can export memos. Ask an administrator for your export file.",
       "export-busy": "Another export is running. Try again in a moment."
     },
     "my-account": {
@@ -877,8 +816,6 @@
     "preference": {
       "appearance-description": "Choose how the app looks and which language it uses for your account.",
       "appearance-title": "Appearance",
-      "default-memo-visibility": "Default memo visibility",
-      "default-memo-visibility-description": "Visibility applied to newly created memos unless changed in the editor.",
       "device-description": "Reading and editing choices kept in this browser. They are not saved to your account.",
       "device-title": "This device",
       "double-click-edit": "Double-click to edit",
@@ -886,8 +823,6 @@
       "label": "Preferences",
       "language-description": "Updates the interface language immediately and saves it to your account.",
       "link-preview-description": "Show a preview card under bare links wherever memos are displayed.",
-      "memo-defaults-description": "Set the defaults used when composing new memos.",
-      "memo-defaults-title": "Memo defaults",
       "save-media-metadata": "Save media metadata",
       "save-media-metadata-description": "For future uploads, save available camera, capture time, location, image dimensions, and basic video details. Anyone who can view the attachment can receive this metadata. Existing attachments are unchanged.",
       "theme-description": "Applies the selected theme immediately on this device.",
@@ -935,10 +870,6 @@
           "title": "Recent notes",
           "description": "Memos created in the last hour."
         },
-        "public": {
-          "title": "Public memos",
-          "description": "Only public memos."
-        },
         "project-tags": {
           "title": "Project tags",
           "description": "Match one or more exact tags."
@@ -966,10 +897,6 @@
         "links-or-code": {
           "title": "Links or code",
           "description": "Memos containing links or code blocks."
-        },
-        "no-location": {
-          "title": "No location",
-          "description": "Memos without an attached location."
         },
         "with-attachments": {
           "title": "With attachments",
@@ -1254,7 +1181,6 @@
   },
   "tooltip": {
     "link-memo": "Link Memo",
-    "select-location": "Location",
     "link-memo-description": "Search and select a memo to link"
   },
   "welcome": {
@@ -1262,7 +1188,7 @@
     "headline": "Simple note-taking for your everyday thoughts.",
     "intro-write": "A single sentence can be a whole memo.",
     "intro-keep": "Each memo stays with the day you wrote it.",
-    "intro-share": "You choose what stays private.",
+    "intro-share": "Sign in to access the notes you create.",
     "write": "Write",
     "write-sub": "A single sentence can be a whole memo.",
     "no-title": "No title",
@@ -1276,13 +1202,11 @@
     "calendar-text": "The calendar leads back to any day.",
     "tags-text": "A word after # becomes a tag, and a tag filters the timeline.",
     "views-text": "A custom view saves a filter.",
-    "map-text": "Memos with a place sit on the map.",
-    "share": "Share",
-    "share-sub": "Memos start private. You choose what to share and what to publish.",
-    "visibility-text": "Each memo has its own setting. New ones start private, for you alone; a public one has a link anyone can open.",
-    "spaces-text": "In a space, members write alongside you, each keeping their own memos.",
+    "share": "Personal notes",
+    "share-sub": "Organize topics in Spaces and add follow-up thoughts to your notes.",
+    "spaces-text": "Organize notes by topic in Spaces.",
     "comments": "Comments",
-    "comments-text": "Anyone who can see a memo can reply beneath it.",
+    "comments-text": "Add follow-up thoughts and updates to a note.",
     "skip": "Skip",
     "next": "Next",
     "done": "Done",

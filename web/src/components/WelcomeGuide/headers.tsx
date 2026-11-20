@@ -6,8 +6,6 @@ import {
   HashIcon,
   LibraryIcon,
   ListChecksIcon,
-  LockIcon,
-  MapIcon,
   MoreVerticalIcon,
   PaperclipIcon,
   PlusIcon,
@@ -20,10 +18,8 @@ import SidebarSection from "@/components/AppSidebar/SidebarSection";
 import { sidebarSurfaceVariants } from "@/components/AppSidebar/sidebar-layout";
 import { MEMO_CARD_BASE_CLASSES } from "@/components/MemoView/constants";
 import UserAvatar from "@/components/UserAvatar";
-import VisibilityIcon from "@/components/VisibilityIcon";
 import { inAppTimeZone } from "@/lib/time-zone";
 import { cn } from "@/lib/utils";
-import { Visibility } from "@/types/proto/api/memo_service_pb";
 import { useTranslate } from "@/utils/i18n";
 
 /**
@@ -66,12 +62,7 @@ const Meta = ({ time, children }: { time: string; children?: ReactNode }) => (
   </div>
 );
 
-const MetaActions = ({ visibility }: { visibility: Visibility }) => (
-  <span className="ms-auto flex items-center gap-1">
-    <VisibilityIcon visibility={visibility} />
-    <MoreVerticalIcon className="mu-icon text-mu-text-secondary" />
-  </span>
-);
+const MetaActions = () => <MoreVerticalIcon className="mu-icon ms-auto text-mu-text-secondary" />;
 
 /** Intro: two memos, the newer in front, the older behind and cropped by the frame. */
 export const IntroHeader = () => {
@@ -80,7 +71,7 @@ export const IntroHeader = () => {
     <Still>
       <Card className="absolute -top-7 left-5 -right-2 opacity-50">
         <Meta time={t("welcome.sample.yesterday")}>
-          <MetaActions visibility={Visibility.PUBLIC} />
+          <MetaActions />
         </Meta>
         <p className="mu-body">
           {t("welcome.sample.memo-preview")} <Tag>{t("welcome.sample.tag-design")}</Tag>
@@ -88,7 +79,7 @@ export const IntroHeader = () => {
       </Card>
       <Card className="absolute top-9 left-0 right-0">
         <Meta time={t("welcome.sample.today")}>
-          <MetaActions visibility={Visibility.PRIVATE} />
+          <MetaActions />
         </Meta>
         <p className="mu-body">
           {t("welcome.sample.memo-release")} <Tag>{t("welcome.sample.tag-project")}</Tag>
@@ -114,11 +105,6 @@ export const WriteHeader = () => {
         <div className="mt-1 flex items-center gap-2">
           <span className="flex size-7 items-center justify-center rounded-mu-md border border-mu-line/80 bg-mu-surface">
             <PlusIcon className="mu-icon" />
-          </span>
-          <span className="flex h-7 items-center gap-1 rounded-mu-md px-2 mu-caption text-mu-text-secondary">
-            <LockIcon className="mu-icon-sm" />
-            {t("memo.visibility.private")}
-            <ChevronDownIcon className="mu-icon-xs" />
           </span>
           <span className="ms-auto flex h-7 items-center rounded-mu-md bg-mu-primary px-3 mu-label text-mu-on-primary">
             {t("editor.save")}
@@ -155,7 +141,6 @@ export const KeepHeader = () => {
             <ChevronDownIcon className="mu-icon-xs" />
           </span>
           <CalendarDaysIcon className="mu-icon text-mu-text-secondary" />
-          <MapIcon className="mu-icon text-mu-text-secondary" />
           <PaperclipIcon className="mu-icon text-mu-text-secondary" />
           <SearchIcon className="mu-icon text-mu-text-secondary" />
         </div>
@@ -182,7 +167,7 @@ export const KeepHeader = () => {
   );
 };
 
-/** Share: a public memo in a space, with a comment beneath it. */
+/** Share: a memo in a space, with a comment beneath it. */
 export const ShareHeader = () => {
   const t = useTranslate();
   return (
@@ -192,7 +177,7 @@ export const ShareHeader = () => {
           <Badge tone="outline" icon={<AstroidIcon />}>
             {t("welcome.sample.space")}
           </Badge>
-          <MetaActions visibility={Visibility.PUBLIC} />
+          <MetaActions />
         </Meta>
         <p className="mu-body">
           {t("welcome.sample.share-memo")} <Tag>{t("welcome.sample.tag-ideas")}</Tag>

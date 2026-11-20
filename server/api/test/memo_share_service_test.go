@@ -44,13 +44,8 @@ func TestDeleteMemoShare_VerifiesShareBelongsToMemo(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	share, err := ts.Service.CreateMemoShare(userTwoCtx, &apipb.CreateMemoShareRequest{
-		Parent:    memoTwo.Name,
-		MemoShare: &apipb.MemoShare{},
-	})
-	require.NoError(t, err)
-
-	shareToken := share.Name[strings.LastIndex(share.Name, "/")+1:]
+	const shareToken = "legacy-share-two"
+	seedLegacyMemoShare(ctx, t, ts, memoTwo.Name, userTwo.ID, shareToken, nil)
 	forgedName := memoOne.Name + "/shares/" + shareToken
 
 	_, err = ts.Service.DeleteMemoShare(userOneCtx, &apipb.DeleteMemoShareRequest{
@@ -59,11 +54,7 @@ func TestDeleteMemoShare_VerifiesShareBelongsToMemo(t *testing.T) {
 	require.Error(t, err)
 	require.Equal(t, codes.NotFound, status.Code(err))
 
-	sharedMemo, err := ts.Service.GetSharedMemo(ctx, &apipb.GetSharedMemoRequest{
-		ShareToken: shareToken,
-	})
-	require.NoError(t, err)
-	require.Equal(t, memoTwo.Name, sharedMemo.Name)
+	requireSharePresent(ctx, t, ts, shareToken)
 }
 
 func TestDeleteMemoShare_RevalidatesSpaceWriteAuthority(t *testing.T) {
@@ -83,15 +74,14 @@ func TestDeleteMemoShare_RevalidatesSpaceWriteAuthority(t *testing.T) {
 	}, owner.ID)
 	require.NoError(t, err)
 	memo, err := ts.Service.CreateMemo(ownerCtx, &apipb.CreateMemoRequest{Memo: &apipb.Memo{
-		Content: "assigned share", Visibility: apipb.Visibility_PUBLIC, Space: new("spaces/" + space.UID),
+		Content: "assigned share", Space: new("spaces/" + space.UID),
 	}})
 	require.NoError(t, err)
-	share, err := ts.Service.CreateMemoShare(ownerCtx, &apipb.CreateMemoShareRequest{Parent: memo.Name, MemoShare: &apipb.MemoShare{}})
-	require.NoError(t, err)
-	shareToken := share.Name[strings.LastIndex(share.Name, "/")+1:]
+	const shareToken = "legacy-assigned-share"
+	shareName := seedLegacyMemoShare(ctx, t, ts, memo.Name, owner.ID, shareToken, nil)
 
 	require.NoError(t, ts.Store.DeleteSpaceMember(ctx, &store.DeleteSpaceMember{SpaceID: space.ID, UserID: owner.ID}, admin.ID))
-	_, err = ts.Service.DeleteMemoShare(ownerCtx, &apipb.DeleteMemoShareRequest{Name: share.Name})
+	_, err = ts.Service.DeleteMemoShare(ownerCtx, &apipb.DeleteMemoShareRequest{Name: shareName})
 	require.Equal(t, codes.PermissionDenied, status.Code(err))
 	requireSharePresent(ctx, t, ts, shareToken)
 
@@ -99,9 +89,9 @@ func TestDeleteMemoShare_RevalidatesSpaceWriteAuthority(t *testing.T) {
 		SpaceID: space.ID, UserID: owner.ID, Role: store.SpaceMemberRoleUser,
 	}, admin.ID)
 	require.NoError(t, err)
-	_, err = ts.Service.DeleteMemoShare(ownerCtx, &apipb.DeleteMemoShareRequest{Name: share.Name})
+	_, err = ts.Service.DeleteMemoShare(ownerCtx, &apipb.DeleteMemoShareRequest{Name: shareName})
 	require.NoError(t, err)
-	storedShare, err := ts.Store.GetMemoShare(ctx, &store.FindMemoShare{UID: &shareToken})
+	storedShare, err := ts.Store.GetMemoShare(ctx, &store.FindMemoShare{UID: new(shareToken)})
 	require.NoError(t, err)
 	require.Nil(t, storedShare)
 }
@@ -122,22 +112,19 @@ func TestDeleteMemoShare_OwnerCanRevokeLegacyAdminShare(t *testing.T) {
 		Visibility: apipb.Visibility_PRIVATE,
 	}})
 	require.NoError(t, err)
-	memoUID := strings.TrimPrefix(memo.Name, "memos/")
-	storedMemo, err := ts.Store.GetMemo(ctx, &store.FindMemo{UID: &memoUID})
-	require.NoError(t, err)
-	require.NotNil(t, storedMemo)
-
 	const shareToken = "legacy-admin-created-share"
-	_, err = ts.Store.CreateMemoShare(ctx, &store.MemoShare{
-		UID:       shareToken,
-		MemoID:    storedMemo.ID,
-		CreatorID: legacyAdmin.ID,
-	})
-	require.NoError(t, err)
+	shareName := seedLegacyMemoShare(ctx, t, ts, memo.Name, legacyAdmin.ID, shareToken, nil)
+	adminCtx := ts.CreateUserContext(ctx, legacyAdmin.ID)
+	_, err = ts.Service.ListMemoShares(adminCtx, &apipb.ListMemoSharesRequest{Parent: memo.Name})
+	require.Equal(t, codes.PermissionDenied, status.Code(err))
+	_, err = ts.Service.DeleteMemoShare(adminCtx, &apipb.DeleteMemoShareRequest{Name: shareName})
+	require.Equal(t, codes.PermissionDenied, status.Code(err))
 
-	_, err = ts.Service.DeleteMemoShare(ownerCtx, &apipb.DeleteMemoShareRequest{
-		Name: memo.Name + "/shares/" + shareToken,
-	})
+	shares, err := ts.Service.ListMemoShares(ownerCtx, &apipb.ListMemoSharesRequest{Parent: memo.Name})
+	require.NoError(t, err)
+	require.Len(t, shares.MemoShares, 1)
+	require.Equal(t, shareName, shares.MemoShares[0].Name)
+	_, err = ts.Service.DeleteMemoShare(ownerCtx, &apipb.DeleteMemoShareRequest{Name: shareName})
 	require.NoError(t, err)
 
 	share, err := ts.Store.GetMemoShare(ctx, &store.FindMemoShare{UID: new(shareToken)})
@@ -147,232 +134,91 @@ func TestDeleteMemoShare_OwnerCanRevokeLegacyAdminShare(t *testing.T) {
 	require.Equal(t, codes.NotFound, status.Code(err))
 }
 
-func TestGetSharedMemo_IncludesReactions(t *testing.T) {
+func TestCreateMemoShare_DisabledForMemoOwner(t *testing.T) {
 	ctx := context.Background()
-
 	ts := NewTestService(t)
 	defer ts.Cleanup()
 
-	user, err := ts.CreateRegularUser(ctx, "share-reactions")
+	owner, err := ts.CreateRegularUser(ctx, "share-disabled-owner")
 	require.NoError(t, err)
-	userCtx := ts.CreateUserContext(ctx, user.ID)
-
-	memo, err := ts.Service.CreateMemo(userCtx, &apipb.CreateMemoRequest{
-		Memo: &apipb.Memo{
-			Content:    "memo with reactions",
-			Visibility: apipb.Visibility_PRIVATE,
-		},
+	ownerCtx := ts.CreateUserContext(ctx, owner.ID)
+	memo, err := ts.Service.CreateMemo(ownerCtx, &apipb.CreateMemoRequest{
+		Memo: &apipb.Memo{Content: "this note belongs to its author"},
 	})
 	require.NoError(t, err)
 
-	reaction, err := ts.Service.UpsertMemoReaction(userCtx, &apipb.UpsertMemoReactionRequest{
-		Parent: memo.Name,
-		Reaction: &apipb.Reaction{
-			ReactionType: "👍",
-		},
-	})
+	share, err := ts.Service.CreateMemoShare(ownerCtx, &apipb.CreateMemoShareRequest{Parent: memo.Name, MemoShare: &apipb.MemoShare{}})
+	require.Equal(t, codes.FailedPrecondition, status.Code(err))
+	require.Nil(t, share)
+	shares, err := ts.Service.ListMemoShares(ownerCtx, &apipb.ListMemoSharesRequest{Parent: memo.Name})
 	require.NoError(t, err)
-	require.NotNil(t, reaction)
-
-	share, err := ts.Service.CreateMemoShare(userCtx, &apipb.CreateMemoShareRequest{
-		Parent:    memo.Name,
-		MemoShare: &apipb.MemoShare{},
-	})
-	require.NoError(t, err)
-
-	shareToken := share.Name[strings.LastIndex(share.Name, "/")+1:]
-	sharedMemo, err := ts.Service.GetSharedMemo(ctx, &apipb.GetSharedMemoRequest{
-		ShareToken: shareToken,
-	})
-	require.NoError(t, err)
-	require.Len(t, sharedMemo.Reactions, 1)
-	require.Equal(t, "👍", sharedMemo.Reactions[0].ReactionType)
-	require.Equal(t, reaction.Name, sharedMemo.Reactions[0].Name)
+	require.Empty(t, shares.MemoShares)
 }
 
-func TestCreateMemoShare_SharesOnlyTheCommentMemo(t *testing.T) {
+func TestGetSharedMemo_LegacyTokensNeverGrantAccess(t *testing.T) {
 	ctx := context.Background()
-
 	ts := NewTestService(t)
 	defer ts.Cleanup()
 
-	user, err := ts.CreateRegularUser(ctx, "share-single-memo")
+	owner, err := ts.CreateRegularUser(ctx, "legacy-token-owner")
 	require.NoError(t, err)
-	userCtx := ts.CreateUserContext(ctx, user.ID)
-
-	parent, err := ts.Service.CreateMemo(userCtx, &apipb.CreateMemoRequest{
-		Memo: &apipb.Memo{
-			Content:    "parent must not be shared",
-			Visibility: apipb.Visibility_PRIVATE,
-		},
-	})
+	other, err := ts.CreateRegularUser(ctx, "legacy-token-other")
 	require.NoError(t, err)
-
-	comment, err := ts.Service.CreateMemoComment(userCtx, &apipb.CreateMemoCommentRequest{
-		Parent: parent.Name,
-		Comment: &apipb.Memo{
-			Content:    "only this memo is shared",
-			Visibility: apipb.Visibility_PRIVATE,
-		},
-	})
-	require.NoError(t, err)
-	require.NotEmpty(t, comment.Relations)
-
-	regularMemo, err := ts.Service.GetMemo(userCtx, &apipb.GetMemoRequest{Name: comment.Name})
-	require.NoError(t, err)
-	require.NotEmpty(t, regularMemo.GetParent())
-	require.NotEmpty(t, regularMemo.Relations)
-
-	share, err := ts.Service.CreateMemoShare(userCtx, &apipb.CreateMemoShareRequest{
-		Parent:    comment.Name,
-		MemoShare: &apipb.MemoShare{},
-	})
-	require.NoError(t, err)
-	shareToken := share.Name[strings.LastIndex(share.Name, "/")+1:]
-	sharedComment, err := ts.Service.GetSharedMemo(ctx, &apipb.GetSharedMemoRequest{ShareToken: shareToken})
-	require.NoError(t, err)
-	require.Equal(t, comment.Name, sharedComment.Name)
-	require.Equal(t, "only this memo is shared", sharedComment.Content)
-	require.Empty(t, sharedComment.GetParent())
-	require.Empty(t, sharedComment.Relations)
-}
-
-func TestGetSharedMemo_SkipsReactionsWithMissingCreators(t *testing.T) {
-	ctx := context.Background()
-
-	ts := NewTestService(t)
-	defer ts.Cleanup()
-
-	owner, err := ts.CreateRegularUser(ctx, "share-owner")
+	admin, err := ts.CreateHostUser(ctx, "legacy-token-admin")
 	require.NoError(t, err)
 	ownerCtx := ts.CreateUserContext(ctx, owner.ID)
 
-	reactor, err := ts.CreateRegularUser(ctx, "share-reaction-orphan")
-	require.NoError(t, err)
-	reactorCtx := ts.CreateUserContext(ctx, reactor.ID)
-
-	memo, err := ts.Service.CreateMemo(ownerCtx, &apipb.CreateMemoRequest{
-		Memo: &apipb.Memo{
-			Content:    "memo with orphan share reaction",
-			Visibility: apipb.Visibility_PUBLIC,
-		},
+	parent, err := ts.Service.CreateMemo(ownerCtx, &apipb.CreateMemoRequest{
+		Memo: &apipb.Memo{Content: "parent is author-only"},
 	})
 	require.NoError(t, err)
-
-	_, err = ts.Service.UpsertMemoReaction(reactorCtx, &apipb.UpsertMemoReactionRequest{
-		Parent: memo.Name,
-		Reaction: &apipb.Reaction{
-			ReactionType: "👍",
-		},
+	comment, err := ts.Service.CreateMemoComment(ownerCtx, &apipb.CreateMemoCommentRequest{
+		Parent: parent.Name, Comment: &apipb.Memo{Content: "comment is author-only"},
 	})
 	require.NoError(t, err)
+	visibleComment, err := ts.Service.GetMemo(ownerCtx, &apipb.GetMemoRequest{Name: comment.Name})
+	require.NoError(t, err)
+	require.Equal(t, parent.Name, visibleComment.GetParent())
+	require.NotEmpty(t, visibleComment.Relations)
 
-	share, err := ts.Service.CreateMemoShare(ownerCtx, &apipb.CreateMemoShareRequest{
-		Parent:    memo.Name,
-		MemoShare: &apipb.MemoShare{},
+	reaction, err := ts.Service.UpsertMemoReaction(ownerCtx, &apipb.UpsertMemoReactionRequest{
+		Parent: parent.Name, Reaction: &apipb.Reaction{ReactionType: "👍"},
 	})
 	require.NoError(t, err)
-
-	_, err = ts.Store.DeleteUser(ctx, &store.DeleteUser{ID: reactor.ID})
+	visibleParent, err := ts.Service.GetMemo(ownerCtx, &apipb.GetMemoRequest{Name: parent.Name})
 	require.NoError(t, err)
+	require.Len(t, visibleParent.Reactions, 1)
+	require.Equal(t, reaction.Name, visibleParent.Reactions[0].Name)
 
-	shareToken := share.Name[strings.LastIndex(share.Name, "/")+1:]
-	sharedMemo, err := ts.Service.GetSharedMemo(ctx, &apipb.GetSharedMemoRequest{
-		ShareToken: shareToken,
+	archived, err := ts.Service.CreateMemo(ownerCtx, &apipb.CreateMemoRequest{
+		Memo: &apipb.Memo{Content: "archived note is author-only"},
 	})
 	require.NoError(t, err)
-	require.Empty(t, sharedMemo.Reactions)
+	archivedID := parseMemoIDFromNameForTest(t, ts, archived.Name)
+	require.NoError(t, ts.Store.UpdateMemo(ctx, &store.UpdateMemo{ID: archivedID, RowStatus: new(store.Archived)}))
+
+	seedLegacyMemoShare(ctx, t, ts, parent.Name, owner.ID, "active-legacy-token", nil)
+	seedLegacyMemoShare(ctx, t, ts, parent.Name, owner.ID, "expired-legacy-token", new(time.Now().Add(-time.Hour).Unix()))
+	seedLegacyMemoShare(ctx, t, ts, comment.Name, owner.ID, "comment-legacy-token", nil)
+	seedLegacyMemoShare(ctx, t, ts, archived.Name, owner.ID, "archived-legacy-token", nil)
+	for _, token := range []string{"active-legacy-token", "expired-legacy-token", "comment-legacy-token", "archived-legacy-token", "missing-token"} {
+		t.Run(token, func(t *testing.T) {
+			for _, actor := range []context.Context{ctx, ownerCtx, ts.CreateUserContext(ctx, other.ID), ts.CreateUserContext(ctx, admin.ID)} {
+				memo, err := ts.Service.GetSharedMemo(actor, &apipb.GetSharedMemoRequest{ShareToken: token})
+				require.Equal(t, codes.NotFound, status.Code(err))
+				require.Nil(t, memo)
+			}
+		})
+	}
 }
 
-func TestGetSharedMemo_ReturnsNotFoundForUnknownShare(t *testing.T) {
-	ctx := context.Background()
-
-	ts := NewTestService(t)
-	defer ts.Cleanup()
-
-	_, err := ts.Service.GetSharedMemo(ctx, &apipb.GetSharedMemoRequest{
-		ShareToken: "missing-share-token",
-	})
-	require.Error(t, err)
-	require.Equal(t, codes.NotFound, status.Code(err))
-}
-
-func TestGetSharedMemo_ReturnsNotFoundForExpiredShare(t *testing.T) {
-	ctx := context.Background()
-
-	ts := NewTestService(t)
-	defer ts.Cleanup()
-
-	user, err := ts.CreateRegularUser(ctx, "share-expired")
-	require.NoError(t, err)
-	userCtx := ts.CreateUserContext(ctx, user.ID)
-
-	memo, err := ts.Service.CreateMemo(userCtx, &apipb.CreateMemoRequest{
-		Memo: &apipb.Memo{
-			Content:    "memo with expired share",
-			Visibility: apipb.Visibility_PRIVATE,
-		},
+func seedLegacyMemoShare(ctx context.Context, t *testing.T, ts *TestService, memoName string, creatorID int32, token string, expiresTs *int64) string {
+	t.Helper()
+	_, err := ts.Store.CreateMemoShare(ctx, &store.MemoShare{
+		UID: token, MemoID: parseMemoIDFromNameForTest(t, ts, memoName), CreatorID: creatorID, ExpiresTs: expiresTs,
 	})
 	require.NoError(t, err)
-
-	expiredTsSec := time.Now().Add(-time.Hour).Unix()
-	expiredShare, err := ts.Store.CreateMemoShare(ctx, &store.MemoShare{
-		UID:       "expired-share-token",
-		MemoID:    parseMemoIDFromNameForTest(t, ts, memo.Name),
-		CreatorID: user.ID,
-		ExpiresTs: &expiredTsSec,
-	})
-	require.NoError(t, err)
-
-	_, err = ts.Service.GetSharedMemo(ctx, &apipb.GetSharedMemoRequest{
-		ShareToken: expiredShare.UID,
-	})
-	require.Error(t, err)
-	require.Equal(t, codes.NotFound, status.Code(err))
-}
-
-func TestGetSharedMemo_ReturnsNotFoundForArchivedMemo(t *testing.T) {
-	ctx := context.Background()
-
-	ts := NewTestService(t)
-	defer ts.Cleanup()
-
-	user, err := ts.CreateRegularUser(ctx, "share-archived")
-	require.NoError(t, err)
-	userCtx := ts.CreateUserContext(ctx, user.ID)
-
-	memoResp, err := ts.Service.CreateMemo(userCtx, &apipb.CreateMemoRequest{
-		Memo: &apipb.Memo{
-			Content:    "memo that will be archived",
-			Visibility: apipb.Visibility_PRIVATE,
-		},
-	})
-	require.NoError(t, err)
-
-	share, err := ts.Service.CreateMemoShare(userCtx, &apipb.CreateMemoShareRequest{
-		Parent:    memoResp.Name,
-		MemoShare: &apipb.MemoShare{},
-	})
-	require.NoError(t, err)
-
-	memoID := parseMemoIDFromNameForTest(t, ts, memoResp.Name)
-	memo, err := ts.Store.GetMemo(ctx, &store.FindMemo{ID: &memoID})
-	require.NoError(t, err)
-	require.NotNil(t, memo)
-
-	archived := store.Archived
-	err = ts.Store.UpdateMemo(ctx, &store.UpdateMemo{
-		ID:        memo.ID,
-		RowStatus: &archived,
-	})
-	require.NoError(t, err)
-
-	shareToken := share.Name[strings.LastIndex(share.Name, "/")+1:]
-	_, err = ts.Service.GetSharedMemo(ctx, &apipb.GetSharedMemoRequest{
-		ShareToken: shareToken,
-	})
-	require.Error(t, err)
-	require.Equal(t, codes.NotFound, status.Code(err))
+	return memoName + "/shares/" + token
 }
 
 func parseMemoIDFromNameForTest(t *testing.T, ts *TestService, memoName string) int32 {

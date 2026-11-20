@@ -6,7 +6,6 @@ import MemoDetailSidebar from "@/components/MemoDetailSidebar/MemoDetailSidebar"
 import { AttachmentSchema } from "@/types/proto/api/attachment_service_pb";
 import { State } from "@/types/proto/api/common_pb";
 import {
-  LocationSchema,
   MemoRelation_MemoRefSchema,
   MemoRelation_Type,
   MemoRelationSchema,
@@ -28,7 +27,6 @@ vi.mock("@/lib/toast", () => ({ toast: { add: vi.fn(), close: vi.fn() }, showErr
 vi.mock("@/components/MemoDetailSidebar/MemoOutline", () => ({
   default: ({ headings }: { headings: unknown[] }) => <div data-testid="outline">{headings.length}</div>,
 }));
-vi.mock("@/components/MemoDetailSidebar/MemoSharePanel", () => ({ default: () => <div data-testid="share-panel" /> }));
 vi.mock("@/components/MemoMetadata/Relation/useResolvedRelationMemos", () => ({ useResolvedRelationMemos: () => ({}) }));
 vi.mock("@/contexts/AuthContext", () => ({ useAuth: () => ({ userTagsSetting: authState.tagsSetting }) }));
 vi.mock("@/contexts/InstanceContext", () => ({ useInstance: () => ({ profile: { instanceUrl: "https://memos.example/" } }) }));
@@ -82,7 +80,7 @@ describe("MemoDetailSidebar", () => {
   });
 
   it("leaves returning to the origin to browser back and the app navigation", () => {
-    const parentPage = "/spaces/travel/map?filter=tagSearch%3Atravel&lat=35&lng=135&zoom=12&memo=memos%2Fdetail";
+    const parentPage = "/spaces/travel/calendar?filter=tagSearch%3Atravel";
     const { container } = renderSidebar(<MemoDetailSidebar memo={create(MemoSchema, { name: "memos/detail" })} parentPage={parentPage} />);
 
     expect(container.querySelector(`a[href="${parentPage}"]`)).toBeNull();
@@ -96,7 +94,6 @@ describe("MemoDetailSidebar", () => {
       visibility: Visibility.PUBLIC,
       content: "# Overview\n\n## Details",
       tags: ["release/0.30"],
-      location: create(LocationSchema, { placeholder: "Singapore" }),
       attachments: [
         create(AttachmentSchema, {
           name: "attachments/spec",
@@ -160,16 +157,14 @@ describe("MemoDetailSidebar", () => {
     expect(screen.queryByText("release/0.30")).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "common.share" }));
-    fireEvent.click(await screen.findByRole("menuitem", { name: "memo.copy-link" }));
+    const copyLink = await screen.findByRole("menuitem", { name: "memo.copy-link" });
+    expect(screen.queryByRole("menuitem", { name: "memo.share.open-panel" })).not.toBeInTheDocument();
+    fireEvent.click(copyLink);
     expect(copyToClipboard).toHaveBeenCalledWith("https://memos.example/memos/detail");
 
     fireEvent.click(screen.getByRole("button", { name: "common.share" }));
     fireEvent.click(await screen.findByRole("menuitem", { name: "memo.share.open-image" }));
     expect(onShareImageOpen).toHaveBeenCalledTimes(1);
-
-    fireEvent.click(screen.getByRole("button", { name: "common.share" }));
-    fireEvent.click(await screen.findByRole("menuitem", { name: "memo.share.open-panel" }));
-    expect(screen.getByTestId("share-panel")).toBeInTheDocument();
   });
 
   it("lets an authenticated visitor comment while reserving edit for the author", () => {
@@ -210,7 +205,7 @@ describe("MemoDetailSidebar", () => {
   it.each([
     ["an archived memo", State.ARCHIVED, Visibility.PUBLIC],
     ["a Space memo", State.NORMAL, Visibility.SPACE],
-  ])("does not offer share-link management for %s", async (_label, state, visibility) => {
+  ])("lets users copy the direct link for %s", async (_label, state, visibility) => {
     const memo = create(MemoSchema, {
       name: "memos/restricted-share",
       creator: "users/alice",
@@ -222,8 +217,8 @@ describe("MemoDetailSidebar", () => {
     renderSidebar(<MemoDetailSidebar memo={memo} parentPage="/" commentCount={0} />);
     fireEvent.click(screen.getByRole("button", { name: "common.share" }));
 
-    expect(await screen.findByRole("menuitem", { name: "memo.copy-link" })).toBeInTheDocument();
-    expect(screen.queryByRole("menuitem", { name: "memo.share.open-panel" })).not.toBeInTheDocument();
+    fireEvent.click(await screen.findByRole("menuitem", { name: "memo.copy-link" }));
+    expect(copyToClipboard).toHaveBeenCalledWith("https://memos.example/memos/restricted-share");
   });
 
   it("keeps archived memo navigation and comments readable without offering write actions", () => {
@@ -240,45 +235,5 @@ describe("MemoDetailSidebar", () => {
     expect(screen.queryByRole("button", { name: "common.edit" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "memo.comment.write-a-comment" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "common.share" })).toBeInTheDocument();
-  });
-
-  it("keeps shared memos private to their token context and copies the usable share URL", async () => {
-    const memo = create(MemoSchema, {
-      name: "memos/shared",
-      creator: "users/alice",
-      state: State.NORMAL,
-      visibility: Visibility.PUBLIC,
-      content: "# Overview\n\nBody\n\n## Details\n\nMore",
-      parent: "memos/parent",
-      relations: [createIncomingReference("memos/shared", "memos/private", "Private backlink")],
-    });
-    const parentMemo = create(MemoSchema, { name: "memos/parent", content: "Private parent" });
-
-    renderSidebar(
-      <MemoDetailSidebar
-        memo={memo}
-        parentMemo={parentMemo}
-        parentPage="/explore"
-        commentCount={4}
-        forceReadonly
-        onEdit={vi.fn()}
-        onCommentCreate={vi.fn()}
-      />,
-      "/memos/shares/share-token",
-    );
-
-    expect(screen.getByText("memo.on-this-memo")).toBeInTheDocument();
-    expect(screen.getByTestId("outline")).toHaveTextContent("2");
-    expect(screen.queryByRole("link", { name: /memo.comment.self/ })).not.toBeInTheDocument();
-    expect(screen.queryByText("memo.connections")).not.toBeInTheDocument();
-    expect(screen.queryByText("Private parent")).not.toBeInTheDocument();
-    expect(screen.queryByText("Private backlink")).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "common.edit" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "memo.comment.write-a-comment" })).not.toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("button", { name: "common.share" }));
-    fireEvent.click(await screen.findByRole("menuitem", { name: "memo.copy-link" }));
-    expect(copyToClipboard).toHaveBeenCalledWith("https://memos.example/memos/shares/share-token");
-    expect(screen.queryByRole("menuitem", { name: "memo.share.open-panel" })).not.toBeInTheDocument();
   });
 });

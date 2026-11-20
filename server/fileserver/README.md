@@ -8,9 +8,8 @@ The `fileserver` package serves binary content (attachments, avatars) over plain
 GET /file/attachments/:uid[/:filename]   # attachment binary
     ?thumbnail=true                      # JPEG thumbnail for supported image types
     ?motion=true                         # embedded motion-photo video clip
-    ?share_token={uid}                   # access via a memo share link
 GET /file/users/:identifier/avatar       # user avatar (by username)
-GET /file/users/:identifier/export       # Memos export file of that user (administrators only; HEAD = preflight)
+GET /file/users/:identifier/export       # authenticated user's own Memos export (HEAD = preflight)
 ```
 
 ## Authentication
@@ -19,17 +18,13 @@ Handled by `server/auth` (see [authenticator.go](../auth/authenticator.go) and [
 
 ## Authorization
 
-Attachment access follows memo visibility, evaluated by `core/access.CheckMemoReadContext`:
-
-- Public memo: no auth required (when the instance allows anonymous access)
-- Protected memo: any authenticated user
-- Private memo: creator only
-- Valid `share_token`: grants access to that memo's attachments
-- Unlinked attachment (no memo): creator or admin only
+Attachments linked to a memo are readable only by the memo's active creator, regardless of the memo's stored
+visibility. This ownership check also governs thumbnail and motion-photo requests. An unlinked attachment is
+readable only by the account that uploaded it. Old share URLs follow the same authentication and ownership checks.
 
 Avatars are public on instances that allow anonymous access; private instances require authentication.
 
-The export route requires an instance administrator and may name any user. It streams the ZIP as `core/memoexport`
+The export route requires the requested username to match the signed-in account. It streams the ZIP as `core/memoexport`
 writes it, admits one export at a time (a second request gets `429`), and charges the caller's `archive_user` budget.
 `HEAD` runs the same checks and answers with the headers alone. The archive itself is assembled by `server/api`, which
 the server injects as `MemoExporter`; without it the route answers `404`.
@@ -40,13 +35,13 @@ the server injects as `MemoExporter`; without it the route answers `404`.
 - **Thumbnails** are generated at max 600px, cached in `{data_dir}/.thumbnail_cache/`, with a semaphore capping concurrent generation. Images with HDR/wide-gamut metadata are served as originals, since re-encoding would strip it.
 - **Motion photos** have their embedded video extracted and cached in `{data_dir}/.motion_cache/`.
 - **XSS prevention**: script-capable MIME types are rewritten to `application/octet-stream`, non-media files get `Content-Disposition: attachment`, and all responses carry `X-Content-Type-Options: nosniff` plus a restrictive `Content-Security-Policy`.
-- **Caching**: public attachments get `public, no-cache`; private ones `private, no-store`; avatars and thumbnails `public, max-age=3600`.
+- **Caching**: attachments and their thumbnails use `private, no-store`. Avatars use `public, max-age=3600` when the instance permits guest access and `private, no-store` otherwise.
 
 ## Testing
 
 Unit tests live in [fileserver_test.go](fileserver_test.go), covering permission checks, streaming, thumbnails, and metadata detection. Manual checks:
 
 ```bash
-curl "http://localhost:8081/file/attachments/{uid}/file.jpg"
-curl -H "Range: bytes=0-999" "http://localhost:8081/file/attachments/{uid}/video.mp4"
+curl -H "Authorization: Bearer ${MEMOS_ACCESS_TOKEN}" "http://localhost:8081/file/attachments/{uid}/file.jpg"
+curl -H "Authorization: Bearer ${MEMOS_ACCESS_TOKEN}" -H "Range: bytes=0-999" "http://localhost:8081/file/attachments/{uid}/video.mp4"
 ```

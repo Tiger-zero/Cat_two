@@ -77,13 +77,13 @@ describe("Space route contract", () => {
   it("sends guests to Explore unless a creator is selected", () => {
     expect(collectionNavigationPath("/", { pathname: "/about", search: "" })).toBe("/explore");
     expect(collectionNavigationPath("/", { pathname: "/calendar/2026/09", search: "" })).toBe("/explore");
-    expect(collectionNavigationPath("/", { pathname: "/map", search: "?creator=alice" })).toBe("/?creator=alice");
+    expect(collectionNavigationPath("/", { pathname: "/attachments", search: "?creator=alice" })).toBe("/?creator=alice");
     expect(collectionNavigationPath("/", { pathname: "/setting", search: "" }, "alice")).toBe("/");
   });
-  it.each(["/", "/calendar", "/map", "/attachments"])("preserves collection filters when navigating to %s", (destination) => {
+  it.each(["/", "/calendar", "/attachments"])("preserves collection filters when navigating to %s", (destination) => {
     const filter = "tagSearch:work,contentSearch:a%26b,celSearch:visibility%20%3D%3D%20%22PUBLIC%22";
-    const search = `?${new URLSearchParams({ creator: "alice", filter, lat: "31", lng: "121", zoom: "12", memo: "memos/a" })}`;
-    const path = collectionNavigationPath(destination, { pathname: "/spaces/a/map", search }, "steven");
+    const search = `?${new URLSearchParams({ creator: "alice", filter, page: "2" })}`;
+    const path = collectionNavigationPath(destination, { pathname: "/spaces/a/calendar", search }, "steven");
     const url = new URL(path, "https://memos.test");
     expect(url.pathname).toBe(destination === "/" ? "/spaces/a" : `/spaces/a${destination}`);
     expect(Object.fromEntries(url.searchParams)).toEqual({ filter, creator: "alice" });

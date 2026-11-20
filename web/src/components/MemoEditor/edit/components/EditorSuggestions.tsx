@@ -3,7 +3,6 @@ import { ListTodoIcon, PlusIcon, ZapIcon } from "lucide-react";
 import { type RefObject, useEffect, useId, useState } from "react";
 import { MAX_MEMO_SUGGESTIONS, type MemoSuggestion, type SuggestionItem } from "@/lib/memo-suggestions";
 import { useTranslate } from "@/utils/i18n";
-import { getAssignableVisibilityOptions, getVisibilityOption } from "@/utils/memo";
 import { useEditorContext, useEditorSelector } from "../state";
 import type { EditorController } from "../types/editorController";
 
@@ -50,18 +49,15 @@ export function SuggestionsBar({
 export function EditorSuggestions({
   suggestions,
   controllerRef,
-  space,
 }: {
   suggestions: readonly MemoSuggestion[];
   controllerRef: RefObject<EditorController | null>;
-  space?: string;
 }) {
   const t = useTranslate();
   const { actions, dispatch } = useEditorContext();
   const content = useEditorSelector((state) => state.content);
   const acceptedIds = useEditorSelector((state) => state.acceptedSuggestionIds);
   const isSaving = useEditorSelector((state) => state.ui.isLoading.saving);
-  const visibility = useEditorSelector((state) => state.metadata.visibility);
   const [tags, setTags] = useState<string[]>([]);
   const [hasChecklist, setHasChecklist] = useState(false);
   const needsTags = suggestions.some((suggestion) => suggestion.kind === "tag");
@@ -80,18 +76,10 @@ export function EditorSuggestions({
 
   if (!content.trim()) return null;
 
-  const visibilityOptions = getAssignableVisibilityOptions({ hasSpacePlacement: Boolean(space), current: visibility });
   const visible = suggestions
     .filter((suggestion) => {
       if (acceptedIds.includes(suggestion.id)) return false;
-      switch (suggestion.kind) {
-        case "tag":
-          return !tags.includes(suggestion.tag);
-        case "checklist":
-          return !hasChecklist;
-        case "visibility":
-          return suggestion.visibility !== visibility && visibilityOptions.some((option) => option.value === suggestion.visibility);
-      }
+      return suggestion.kind === "tag" ? !tags.includes(suggestion.tag) : !hasChecklist;
     })
     .slice(0, MAX_MEMO_SUGGESTIONS)
     .map((suggestion): MemoSuggestion & SuggestionItem => {
@@ -100,10 +88,6 @@ export function EditorSuggestions({
           return { ...suggestion, label: `#${suggestion.tag}`, accessibleLabel: `${t("common.add")} #${suggestion.tag}` };
         case "checklist":
           return { ...suggestion, label: t("editor.format.task-list"), icon: ListTodoIcon };
-        case "visibility": {
-          const option = getVisibilityOption(suggestion.visibility)!;
-          return { ...suggestion, label: t(option.labelKey), icon: option.icon };
-        }
       }
     });
 
@@ -122,12 +106,6 @@ export function EditorSuggestions({
         controller.focus();
         break;
       }
-      case "visibility":
-        // Assignability was checked when the chip was rendered from the same state.
-        dispatch(actions.setMetadata({ visibility: suggestion.visibility }));
-        controller.focus();
-        applied = true;
-        break;
     }
     if (applied) dispatch(actions.acceptSuggestion(suggestion.id));
   };

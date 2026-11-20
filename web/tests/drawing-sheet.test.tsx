@@ -153,9 +153,9 @@ describe("DrawingSheet", () => {
       fireEvent.click(await screen.findByRole("menuitem", { name }));
       await waitFor(() => expect(screen.queryByRole("menu")).not.toBeInTheDocument());
     };
-    await choose("map.zoom-in");
+    await choose("common.zoom-in");
     expect(trigger()).toHaveTextContent("120%");
-    await choose("map.zoom-out");
+    await choose("common.zoom-out");
     expect(trigger()).toHaveTextContent("100%");
     await choose("editor.drawing.zoom-to-fit");
     expect(trigger()).toHaveTextContent("50%");

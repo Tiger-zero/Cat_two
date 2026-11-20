@@ -27,6 +27,7 @@ type memoExportData struct {
 	reactionsByID    map[int32][]*store.Reaction
 	spacesByID       map[int32]*store.Space
 	memoUIDs         map[int32]string
+	ownedMemoUIDs    map[string]struct{}
 	usernames        map[int32]string
 	attachmentsCount int
 }
@@ -85,12 +86,14 @@ func (s *APIService) loadMemoExportData(ctx context.Context, user *store.User, m
 		reactionsByID:   make(map[int32][]*store.Reaction),
 		spacesByID:      make(map[int32]*store.Space),
 		memoUIDs:        make(map[int32]string),
+		ownedMemoUIDs:   make(map[string]struct{}, len(memos)),
 		usernames:       map[int32]string{user.ID: user.Username},
 	}
 	memoIDs := make([]int32, 0, len(memos))
 	for _, memo := range memos {
 		memoIDs = append(memoIDs, memo.ID)
 		export.memoUIDs[memo.ID] = memo.UID
+		export.ownedMemoUIDs[memo.UID] = struct{}{}
 		if memo.SpaceID != nil {
 			if _, ok := export.spacesByID[*memo.SpaceID]; !ok {
 				space, err := s.Store.GetSpace(ctx, &store.FindSpace{ID: memo.SpaceID})
@@ -102,7 +105,7 @@ func (s *APIService) loadMemoExportData(ctx context.Context, user *store.User, m
 		}
 	}
 
-	foreignMemoIDs := make(map[int32]struct{})
+	unselectedRelatedMemoIDs := make(map[int32]struct{})
 	reactorIDs := make(map[int32]struct{})
 	relationType := store.MemoRelationReference
 	for chunk := range slices.Chunk(memoIDs, archiveQueryChunk) {
@@ -132,7 +135,7 @@ func (s *APIService) loadMemoExportData(ctx context.Context, user *store.User, m
 			}
 			export.relatedIDsByID[relation.MemoID] = append(export.relatedIDsByID[relation.MemoID], relation.RelatedMemoID)
 			if _, own := export.memoUIDs[relation.RelatedMemoID]; !own {
-				foreignMemoIDs[relation.RelatedMemoID] = struct{}{}
+				unselectedRelatedMemoIDs[relation.RelatedMemoID] = struct{}{}
 			}
 		}
 
@@ -148,13 +151,32 @@ func (s *APIService) loadMemoExportData(ctx context.Context, user *store.User, m
 		}
 	}
 
-	for chunk := range slices.Chunk(slices.Sorted(maps.Keys(foreignMemoIDs)), archiveQueryChunk) {
-		related, err := s.Store.ListMemos(ctx, &store.FindMemo{IDList: chunk, ExcludeContent: true})
+	for chunk := range slices.Chunk(slices.Sorted(maps.Keys(unselectedRelatedMemoIDs)), archiveQueryChunk) {
+		related, err := s.Store.ListMemos(ctx, &store.FindMemo{IDList: chunk, CreatorID: &user.ID, ExcludeContent: true})
 		if err != nil {
 			return nil, errors.Wrap(err, "failed to list related memos")
 		}
 		for _, memo := range related {
 			export.memoUIDs[memo.ID] = memo.UID
+			export.ownedMemoUIDs[memo.UID] = struct{}{}
+		}
+	}
+	unselectedParentUIDs := make(map[string]struct{})
+	for _, memo := range export.memos {
+		if memo.ParentUID == nil || *memo.ParentUID == "" {
+			continue
+		}
+		if _, owned := export.ownedMemoUIDs[*memo.ParentUID]; !owned {
+			unselectedParentUIDs[*memo.ParentUID] = struct{}{}
+		}
+	}
+	for chunk := range slices.Chunk(slices.Sorted(maps.Keys(unselectedParentUIDs)), archiveQueryChunk) {
+		parents, err := s.Store.ListMemos(ctx, &store.FindMemo{UIDList: chunk, CreatorID: &user.ID, ExcludeContent: true})
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to list parent memos")
+		}
+		for _, memo := range parents {
+			export.ownedMemoUIDs[memo.UID] = struct{}{}
 		}
 	}
 	for chunk := range slices.Chunk(slices.Sorted(maps.Keys(reactorIDs)), archiveQueryChunk) {
@@ -177,7 +199,7 @@ func (s *APIService) buildMemoExportRecord(ctx context.Context, writer *memoexpo
 		CreateTime:      memoexport.FormatTime(memo.CreatedTs),
 		UpdateTime:      memoexport.FormatTime(memo.UpdatedTs),
 		State:           string(memo.RowStatus),
-		Visibility:      memo.Visibility.String(),
+		Visibility:      store.Private.String(),
 		Pinned:          memo.Pinned,
 		Tags:            memo.Payload.GetTags(),
 	}
@@ -193,8 +215,10 @@ func (s *APIService) buildMemoExportRecord(ctx context.Context, writer *memoexpo
 			record.Space = &memoexport.Space{UID: space.UID, Title: space.Title}
 		}
 	}
-	if memo.ParentUID != nil && *memo.ParentUID != "" {
-		record.Parent = *memo.ParentUID
+	if memo.ParentUID != nil {
+		if _, owned := export.ownedMemoUIDs[*memo.ParentUID]; owned {
+			record.Parent = *memo.ParentUID
+		}
 	}
 	for _, relatedID := range export.relatedIDsByID[memo.ID] {
 		uid, ok := export.memoUIDs[relatedID]

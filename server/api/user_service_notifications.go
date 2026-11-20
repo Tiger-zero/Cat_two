@@ -377,7 +377,7 @@ func (s *APIService) canAccessNotification(ctx context.Context, viewer *store.Us
 		if memo == nil {
 			return false, nil
 		}
-		readContext, err := s.buildMemoReadContextForViewer(ctx, memo, viewer, false, nil)
+		readContext, err := s.buildMemoReadContextForViewer(ctx, memo, viewer)
 		if err != nil {
 			if status.Code(err) == codes.NotFound {
 				return false, nil

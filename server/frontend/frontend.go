@@ -163,9 +163,8 @@ func (s *FrontendService) getRobotsTXT(w http.ResponseWriter, r *http.Request) e
 
 	robotsTXT := strings.Join([]string{
 		"User-agent: *",
-		"Allow: /",
+		"Disallow: /",
 		"Host: " + instanceURL,
-		"Sitemap: " + instanceURL + "/sitemap.xml",
 	}, "\n")
 	return httphandler.Text(w, http.StatusOK, robotsTXT)
 }
@@ -174,41 +173,18 @@ func (s *FrontendService) getSitemapXML(w http.ResponseWriter, r *http.Request) 
 	if err := s.requirePublicAccess(r.Context()); err != nil {
 		return err
 	}
-	instanceURL, err := normalizeInstanceURL(s.Profile.InstanceURL)
-	if err != nil {
+	if _, err := normalizeInstanceURL(s.Profile.InstanceURL); err != nil {
 		return err
 	}
 
-	normal := store.Normal
-	memos, err := s.Store.ListMemos(r.Context(), &store.FindMemo{
-		RowStatus:       &normal,
-		VisibilityList:  []store.Visibility{store.Public},
-		Access:          &store.MemoAccessScope{AllowPublic: true},
-		ExcludeComments: true,
-	})
-	if err != nil {
-		return errors.Wrap(err, "failed to list public memos for sitemap")
-	}
-	// The set of public memo URLs changes with audience updates. Require
-	// revalidation so a revoked URL is not retained by an intermediary cache.
+	// All notes require their author's session. Keep the sitemap response empty.
 	w.Header().Set("Cache-Control", "public, no-cache")
-
-	urls := make([]sitemapURL, 0, len(memos))
-	for _, memo := range memos {
-		urls = append(urls, sitemapURL{
-			Loc: instanceURL + "/memos/" + memo.UID,
-		})
-	}
-
 	w.Header().Set("Content-Type", "application/xml; charset=UTF-8")
 	w.WriteHeader(http.StatusOK)
 	if _, err := io.WriteString(w, xml.Header); err != nil {
 		return err
 	}
-	return xml.NewEncoder(w).Encode(sitemapURLSet{
-		XMLNS: sitemapXMLNamespace,
-		URLs:  urls,
-	})
+	return xml.NewEncoder(w).Encode(sitemapURLSet{XMLNS: sitemapXMLNamespace})
 }
 
 func (s *FrontendService) requirePublicAccess(ctx context.Context) error {
@@ -231,13 +207,8 @@ func normalizeInstanceURL(instanceURL string) (string, error) {
 }
 
 type sitemapURLSet struct {
-	XMLName xml.Name     `xml:"urlset"`
-	XMLNS   string       `xml:"xmlns,attr"`
-	URLs    []sitemapURL `xml:"url"`
-}
-
-type sitemapURL struct {
-	Loc string `xml:"loc"`
+	XMLName xml.Name `xml:"urlset"`
+	XMLNS   string   `xml:"xmlns,attr"`
 }
 
 //nolint:revive

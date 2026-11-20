@@ -5,7 +5,7 @@ import { getEditorReferenceRelations } from "@/components/MemoMetadata/Relation/
 import type { Attachment } from "@/types/proto/api/attachment_service_pb";
 import { AttachmentSchema } from "@/types/proto/api/attachment_service_pb";
 import type { Memo } from "@/types/proto/api/memo_service_pb";
-import { MemoSchema } from "@/types/proto/api/memo_service_pb";
+import { MemoSchema, Visibility } from "@/types/proto/api/memo_service_pb";
 import type { EditorState } from "../state";
 import type { LocalFile } from "../types/attachment";
 import { orderAttachments } from "../utils/attachmentOrder";
@@ -45,17 +45,11 @@ function buildUpdateMask(
     mask.add("content");
     patch.content = state.content;
   }
-  if (!isEqual(state.metadata.visibility, prevMemo.visibility)) {
-    mask.add("visibility");
-    patch.visibility = state.metadata.visibility;
-  }
-  // Placement and audience are validated together: a move always states the
-  // audience it lands with, so a Space-only audience never follows it implicitly.
   if ((state.metadata.space || undefined) !== (prevMemo.space || undefined)) {
     mask.add("space");
     mask.add("visibility");
     patch.space = state.metadata.space ?? "";
-    patch.visibility = state.metadata.visibility;
+    patch.visibility = Visibility.PRIVATE;
   }
   if (!isEqual(allAttachments, prevMemo.attachments)) {
     mask.add("attachments");
@@ -67,13 +61,9 @@ function buildUpdateMask(
     mask.add("relations");
     patch.relations = nextReferenceRelations;
   }
-  if (!isEqual(state.metadata.location, prevMemo.location)) {
-    mask.add("location");
-    patch.location = state.metadata.location;
-  }
 
   // Auto-update timestamp if content changed
-  if (["content", "attachments", "relations", "location"].some((key) => mask.has(key))) {
+  if (["content", "attachments", "relations"].some((key) => mask.has(key))) {
     mask.add("update_time");
   }
 
@@ -187,10 +177,9 @@ export const memoService = {
     }
     const memoData = create(MemoSchema, {
       content: state.content,
-      visibility: state.metadata.visibility,
+      visibility: Visibility.PRIVATE,
       attachments: toAttachmentReferences(allAttachments),
       relations: state.metadata.relations,
-      location: state.metadata.location,
       createTime: state.timestamps.createTime ? timestampFromDate(state.timestamps.createTime) : undefined,
       updateTime: state.timestamps.updateTime ? timestampFromDate(state.timestamps.updateTime) : undefined,
       space: options.parentMemoName ? undefined : (options.space ?? state.metadata.space),
@@ -209,11 +198,9 @@ export const memoService = {
     return {
       content: memo.content,
       metadata: {
-        visibility: memo.visibility,
         space: memo.space || undefined,
         attachments: memo.attachments,
         relations: memo.relations,
-        location: memo.location,
       },
       timestamps: {
         createTime: memo.createTime ? timestampDate(memo.createTime) : undefined,

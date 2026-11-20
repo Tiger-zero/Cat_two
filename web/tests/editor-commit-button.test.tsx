@@ -4,7 +4,7 @@ import { createInitialState, EditorProvider, type EditorState, useEditorContext 
 import { EditorToolbar } from "@/components/MemoEditor/edit/Toolbar/EditorToolbar";
 
 vi.mock("@/components/MemoEditor/edit/Toolbar/InsertMenu", () => ({ default: () => null }));
-vi.mock("@/components/MemoEditor/edit/Toolbar/AudienceMenu", () => ({ default: () => null }));
+vi.mock("@/components/MemoEditor/edit/Toolbar/SpaceMenu", () => ({ default: () => null }));
 vi.mock("@/utils/i18n", () => ({ useTranslate: () => (key: string) => key }));
 
 let dispatchSaving: ((saving: boolean) => void) | undefined;

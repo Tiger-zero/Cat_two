@@ -15,7 +15,6 @@ import {
 import { useCallback, useSyncExternalStore } from "react";
 import { memoServiceClient } from "@/connect";
 import { attachmentKeys } from "@/hooks/useAttachmentQueries";
-import { memoShareKeys } from "@/hooks/useMemoShareQueries";
 import { userKeys } from "@/hooks/useUserQueries";
 import { DEFAULT_LIST_MEMOS_PAGE_SIZE } from "@/lib/constants";
 import { shouldRetry } from "@/lib/query-client";
@@ -151,9 +150,6 @@ function findMemoInQueryData(data: unknown, name: string): Memo | undefined {
   return undefined;
 }
 
-/** The query roots that hold memos: the memo queries, and shared memos under their tokens. */
-const MEMO_QUERY_ROOTS = [memoKeys.all, memoShareKeys.all] as const;
-
 /**
  * Looks a memo up by name in the collections already fetched (lists, comments,
  * the calendar month): a seed for a detail query that would otherwise refetch
@@ -172,22 +168,20 @@ export function findMemoInCollectionQueries(queryClient: QueryClient, name: stri
 }
 
 /**
- * The freshest copy of a memo any query holds, by name: a detail, a shared memo, or
- * an entry in a list, comment page or month. `null` when a detail query recorded it as
+ * The freshest copy of a memo any query holds, by name: a detail or an entry in
+ * a list, comment page or month. `null` when a detail query recorded it as
  * unavailable, `undefined` when no query holds it.
  */
 export function findMemoRecord(queryClient: QueryClient, name: string): Memo | null | undefined {
   if (queryClient.getQueryData(memoKeys.detail(name)) === null) return null;
   let found: Memo | undefined;
   let foundAt = -1;
-  for (const root of MEMO_QUERY_ROOTS) {
-    for (const query of queryClient.getQueryCache().findAll({ queryKey: root })) {
-      if (query.state.dataUpdatedAt < foundAt || (query.state.dataUpdatedAt === foundAt && !isMemo(query.state.data))) continue;
-      const memo = findMemoInQueryData(query.state.data, name);
-      if (memo) {
-        found = memo;
-        foundAt = query.state.dataUpdatedAt;
-      }
+  for (const query of queryClient.getQueryCache().findAll({ queryKey: memoKeys.all })) {
+    if (query.state.dataUpdatedAt < foundAt || (query.state.dataUpdatedAt === foundAt && !isMemo(query.state.data))) continue;
+    const memo = findMemoInQueryData(query.state.data, name);
+    if (memo) {
+      found = memo;
+      foundAt = query.state.dataUpdatedAt;
     }
   }
   return found;
@@ -205,11 +199,9 @@ export function updateMemoReactions(queryClient: QueryClient, name: string, upda
   if (!current) return;
   const reactions = update(current.reactions);
   const patch = (memo: Memo) => (memo.name === name ? { ...memo, reactions } : memo);
-  for (const root of MEMO_QUERY_ROOTS) {
-    queryClient.setQueriesData<unknown>({ queryKey: root }, (data: unknown) =>
-      isMemo(data) ? patch(data) : mapMemoCollection(data, (memos) => memos.map(patch)),
-    );
-  }
+  queryClient.setQueriesData<unknown>({ queryKey: memoKeys.all }, (data: unknown) =>
+    isMemo(data) ? patch(data) : mapMemoCollection(data, (memos) => memos.map(patch)),
+  );
 }
 
 /**
@@ -223,8 +215,7 @@ export function useMemoRecord(name: string): Memo | null | undefined {
   const subscribe = useCallback(
     (onChange: () => void) =>
       queryClient.getQueryCache().subscribe((event) => {
-        const root = event.query.queryKey[0];
-        if (MEMO_QUERY_ROOTS.some((key) => key[0] === root)) onChange();
+        if (event.query.queryKey[0] === memoKeys.all[0]) onChange();
       }),
     [queryClient],
   );

@@ -5,9 +5,9 @@ import { useToggleReaction } from "@/hooks/useReactionQueries";
 import { useSpaces } from "@/hooks/useSpaceQueries";
 import { extractUsernameFromName } from "@/lib/resource-names";
 import { State } from "@/types/proto/api/common_pb";
-import { type Memo, type Reaction, Visibility } from "@/types/proto/api/memo_service_pb";
+import type { Memo, Reaction } from "@/types/proto/api/memo_service_pb";
 import { SpaceMember_Role } from "@/types/proto/api/space_service_pb";
-import { isSuperUser } from "@/utils/user";
+import { canManageMemo, isSuperUser } from "@/utils/user";
 
 export const useReactionGroups = (reactions: Reaction[]) => {
   const creatorNames = useMemo(() => reactions.map((reaction) => reaction.creator), [reactions]);
@@ -28,14 +28,11 @@ export const useReactionGroups = (reactions: Reaction[]) => {
 export const useReactionActions = ({ memo }: { memo: Memo }) => {
   const currentUser = useCurrentUser();
   const admin = isSuperUser(currentUser);
-  const { data: spaces } = useSpaces(currentUser?.name, { enabled: Boolean(memo.space) && !admin });
+  const owner = canManageMemo(memo, currentUser);
+  const { data: spaces } = useSpaces(currentUser?.name, { enabled: owner && Boolean(memo.space) && !admin });
   const role = spaces?.find((space) => space.name === memo.space)?.currentUserRole;
   const active = Boolean(currentUser) && currentUser?.state !== State.ARCHIVED && memo.state !== State.ARCHIVED;
-  const canReact =
-    active &&
-    (admin ||
-      ((!memo.space || role === SpaceMember_Role.ADMIN || role === SpaceMember_Role.USER) &&
-        (memo.visibility !== Visibility.PRIVATE || memo.creator === currentUser?.name)));
+  const canReact = owner && active && (admin || !memo.space || role === SpaceMember_Role.ADMIN || role === SpaceMember_Role.USER);
   const { toggleReaction, isPending } = useToggleReaction(memo, currentUser?.name);
   const hasReacted = (reactionType: string) =>
     memo.reactions.some((reaction) => reaction.reactionType === reactionType && reaction.creator === currentUser?.name);

@@ -121,7 +121,6 @@ describe("RootLayout global editor shell", () => {
     { path: "/", preferences: { maxColumns: 3 }, width: "max-w-7xl" },
     { path: "/", preferences: { fullWidth: true }, width: undefined },
     { path: "/", preferences: { maxColumns: 0 }, width: undefined },
-    { path: "/map", preferences: {}, width: undefined },
   ])("sizes the centered shell for $path with $preferences", ({ path, preferences, width }) => {
     localStorage.setItem("memos-view-setting", JSON.stringify(preferences));
 
@@ -131,7 +130,6 @@ describe("RootLayout global editor shell", () => {
           <Routes>
             <Route element={<RootLayout />}>
               <Route index element={<RouteState />} />
-              <Route path="map" element={<RouteState />} />
             </Route>
           </Routes>
         </TimelineViewProvider>
@@ -143,6 +141,5 @@ describe("RootLayout global editor shell", () => {
     if (width) expect(shell).toHaveClass(width);
     else expect(shell).not.toHaveClass(/max-w-[57]xl/);
     expect(screen.getByTestId("desktop-sidebar").parentElement).toHaveClass("sticky");
-    if (path === "/map") expect(shell).toHaveClass("h-dvh", "overflow-hidden");
   });
 });

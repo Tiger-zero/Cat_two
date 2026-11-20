@@ -14,7 +14,6 @@ import {
   useMemos,
   useUpdateMemo,
 } from "@/hooks/useMemoQueries";
-import { memoShareKeys } from "@/hooks/useMemoShareQueries";
 import { userKeys } from "@/hooks/useUserQueries";
 import { ListMemoCommentsResponseSchema, ListMemosResponseSchema, type Memo, MemoSchema } from "@/types/proto/api/memo_service_pb";
 
@@ -49,24 +48,20 @@ describe("useMemoRecord", () => {
     expect(api.getMemo).not.toHaveBeenCalled();
   });
 
-  it("reads a memo from comment pages, the calendar month and a shared memo", () => {
+  it("reads a memo from comment pages and the calendar month", () => {
     const { client, wrapper } = setup();
     const comment = memo("memos/comment");
     const monthly = memo("memos/monthly");
-    const shared = memo("memos/shared");
     client.setQueryData([...memoKeys.comments("memos/parent"), "infinite", 50], {
       pages: [create(ListMemoCommentsResponseSchema, { comments: [comment] })],
       pageParams: [""],
     });
     client.setQueryData([...memoKeys.lists(), "calendar-month", { filter: "", orderBy: "" }], [monthly]);
-    client.setQueryData(memoShareKeys.byShare("token"), shared);
+    const { result } = renderHook(() => [useMemoRecord(comment.name), useMemoRecord(monthly.name), useMemoRecord("memos/none")], {
+      wrapper,
+    });
 
-    const { result } = renderHook(
-      () => [useMemoRecord(comment.name), useMemoRecord(monthly.name), useMemoRecord(shared.name), useMemoRecord("memos/none")],
-      { wrapper },
-    );
-
-    expect(result.current).toEqual([comment, monthly, shared, undefined]);
+    expect(result.current).toEqual([comment, monthly, undefined]);
   });
 
   it("prefers the copy fetched most recently", () => {

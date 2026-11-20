@@ -6,8 +6,7 @@ import { useMemoViews } from "@/hooks/useUserQueries";
 import { buildTimestampRangeFilter, getLocalDayTimestampRange, getTimeBasisField } from "@/lib/calendar-utils";
 import { combineCELFilters } from "@/lib/cel-filter";
 import { getMemoViewId } from "@/lib/memo-views";
-import { buildMemoCreatorFilter, getVisibilityName } from "@/lib/resource-names";
-import { Visibility } from "@/types/proto/api/memo_service_pb";
+import { buildMemoCreatorFilter } from "@/lib/resource-names";
 
 const escapeFilterValue = (value: string): string => JSON.stringify(value);
 
@@ -15,7 +14,6 @@ export interface UseMemoFiltersOptions {
   creatorName?: string;
   includeMemoViews?: boolean;
   includePinned?: boolean;
-  visibilities?: Visibility[];
 }
 
 interface BuildMemoFilterOptions {
@@ -23,7 +21,6 @@ interface BuildMemoFilterOptions {
   filters: MemoFilter[];
   includePinned: boolean;
   selectedMemoViewFilter?: string;
-  visibilities?: Visibility[];
   /** Which timestamp a `displayTime` day filter selects on; defaults to creation time. */
   timeBasis?: MemoTimeBasis;
 }
@@ -33,7 +30,6 @@ export const buildMemoFilter = ({
   filters,
   includePinned,
   selectedMemoViewFilter,
-  visibilities,
   timeBasis = "create_time",
 }: BuildMemoFilterOptions): string | undefined => {
   const conditions: string[] = [];
@@ -68,8 +64,6 @@ export const buildMemoFilter = ({
       conditions.push(`has_task_list`);
     } else if (filter.factor === "property.hasCode") {
       conditions.push(`has_code`);
-    } else if (filter.factor === "property.hasLocation") {
-      conditions.push(`has_location`);
     } else if (filter.factor === "property.hasAttachments") {
       conditions.push(`has_attachments`);
     } else if (filter.factor === "property.hasImage") {
@@ -80,11 +74,6 @@ export const buildMemoFilter = ({
         conditions.push(buildTimestampRangeFilter(getTimeBasisField(timeBasis), range));
       }
     }
-  }
-
-  if (visibilities && visibilities.length > 0) {
-    const visibilityValues = visibilities.map((visibility) => `"${getVisibilityName(visibility)}"`).join(", ");
-    conditions.push(`visibility in [${visibilityValues}]`);
   }
 
   return combineCELFilters(...conditions);
@@ -101,7 +90,7 @@ export const useSelectedMemoViewFilter = (): string | undefined => {
 };
 
 export const useMemoFilters = (options: UseMemoFiltersOptions = {}): string | undefined => {
-  const { creatorName, includeMemoViews = false, includePinned = false, visibilities } = options;
+  const { creatorName, includeMemoViews = false, includePinned = false } = options;
 
   const { filters } = useMemoFilterContext();
   const selectedMemoViewFilter = useSelectedMemoViewFilter();
@@ -115,9 +104,8 @@ export const useMemoFilters = (options: UseMemoFiltersOptions = {}): string | un
         filters,
         includePinned,
         selectedMemoViewFilter: includeMemoViews ? selectedMemoViewFilter : undefined,
-        visibilities,
         timeBasis,
       }),
-    [creatorName, filters, includePinned, includeMemoViews, selectedMemoViewFilter, visibilities, timeBasis],
+    [creatorName, filters, includePinned, includeMemoViews, selectedMemoViewFilter, timeBasis],
   );
 };

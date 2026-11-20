@@ -103,6 +103,9 @@ func (s *APIService) findReplaceableAttachment(ctx context.Context, name string)
 	if !access.CanManageAttachment(user, attachment) {
 		return nil, nil, status.Errorf(codes.PermissionDenied, "permission denied")
 	}
+	if err := s.checkAttachmentAccess(ctx, attachment); err != nil {
+		return nil, nil, err
+	}
 	if attachment.StorageType == storepb.AttachmentStorageType_EXTERNAL {
 		return nil, nil, status.Errorf(codes.FailedPrecondition, "an external link has no stored content to replace")
 	}

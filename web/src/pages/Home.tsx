@@ -19,7 +19,6 @@ import { MAX_SELECTED_MEMO_EXPORT } from "@/lib/memo-export";
 import { extractMemoIdFromName } from "@/lib/resource-names";
 import { State } from "@/types/proto/api/common_pb";
 import { Memo } from "@/types/proto/api/memo_service_pb";
-import { User_Role } from "@/types/proto/api/user_service_pb";
 import { useTranslate } from "@/utils/i18n";
 
 const Home = () => {
@@ -51,7 +50,7 @@ const Home = () => {
   });
 
   const { exportMemos, exporting } = useExportMemos();
-  const canExport = user?.role === User_Role.ADMIN;
+  const canExport = Boolean(user);
   const selectionScope = JSON.stringify([user?.name, contextFilter, memoFilter]);
   const [selection, setSelection] = useState<{ scope: string; names: ReadonlySet<string> }>();
   if (selection && selection.scope !== selectionScope) setSelection(undefined);
@@ -67,7 +66,7 @@ const Home = () => {
   };
 
   const download = () => {
-    if (!user || !canExport || selectedNames?.size === 0) return;
+    if (!user || selectedNames?.size === 0) return;
     void exportMemos(user.username, selectedNames ? Array.from(selectedNames, extractMemoIdFromName) : undefined);
   };
 
@@ -83,7 +82,6 @@ const Home = () => {
                 key={getMemoKey(memo)}
                 memo={memo}
                 showCreator={!creatorUsername}
-                showVisibility
                 showPinned={honorPinned}
                 showSpace={!selectedSpaceName}
                 compact={compact}

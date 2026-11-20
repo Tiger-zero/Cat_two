@@ -12,23 +12,28 @@ import (
 // aliases when the predicate is embedded more than once in a query.
 func postgresMemoAccessPredicate(access *store.MemoAccessScope, memoAlias, memberAlias string, args *[]any) string {
 	clauses := []string{}
-	if access.AllowPublic {
+	if access.AllowPublic && !access.OwnerOnly {
 		clauses = append(clauses, memoAlias+".visibility = 'PUBLIC'")
 	}
 	if access.UserID != nil {
 		activeHolder := placeholder(len(*args) + 1)
 		*args = append(*args, *access.UserID)
 		authenticatedClauses := []string{}
-
-		privateHolder := placeholder(len(*args) + 1)
-		*args = append(*args, *access.UserID)
-		authenticatedClauses = append(authenticatedClauses, "("+memoAlias+".visibility = 'PRIVATE' AND "+memoAlias+".creator_id = "+privateHolder+")")
-		if access.AllowProtected {
-			authenticatedClauses = append(authenticatedClauses, memoAlias+".visibility = 'PROTECTED'")
+		if access.OwnerOnly {
+			ownerHolder := placeholder(len(*args) + 1)
+			*args = append(*args, *access.UserID)
+			authenticatedClauses = append(authenticatedClauses, memoAlias+".creator_id = "+ownerHolder)
+		} else {
+			privateHolder := placeholder(len(*args) + 1)
+			*args = append(*args, *access.UserID)
+			authenticatedClauses = append(authenticatedClauses, "("+memoAlias+".visibility = 'PRIVATE' AND "+memoAlias+".creator_id = "+privateHolder+")")
+			if access.AllowProtected {
+				authenticatedClauses = append(authenticatedClauses, memoAlias+".visibility = 'PROTECTED'")
+			}
+			memberHolder := placeholder(len(*args) + 1)
+			*args = append(*args, *access.UserID)
+			authenticatedClauses = append(authenticatedClauses, "("+memoAlias+".visibility = 'SPACE' AND EXISTS (SELECT 1 FROM space_member AS "+memberAlias+" WHERE "+memberAlias+".space_id = "+memoAlias+".space_id AND "+memberAlias+".user_id = "+memberHolder+" AND "+memberAlias+".status = 'ACTIVE' AND "+memberAlias+".role IN ('ADMIN', 'USER')))")
 		}
-		memberHolder := placeholder(len(*args) + 1)
-		*args = append(*args, *access.UserID)
-		authenticatedClauses = append(authenticatedClauses, "("+memoAlias+".visibility = 'SPACE' AND EXISTS (SELECT 1 FROM space_member AS "+memberAlias+" WHERE "+memberAlias+".space_id = "+memoAlias+".space_id AND "+memberAlias+".user_id = "+memberHolder+" AND "+memberAlias+".status = 'ACTIVE' AND "+memberAlias+".role IN ('ADMIN', 'USER')))")
 
 		clauses = append(clauses, `(EXISTS (SELECT 1 FROM "user" AS access_user WHERE access_user.id = `+activeHolder+` AND access_user.row_status = 'NORMAL') AND (`+strings.Join(authenticatedClauses, " OR ")+`))`)
 	}

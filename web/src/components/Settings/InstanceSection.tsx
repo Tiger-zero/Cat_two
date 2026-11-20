@@ -9,9 +9,6 @@ import useDialog from "@/hooks/useDialog";
 import { toast } from "@/lib/toast";
 import { IdentityProvider } from "@/types/proto/api/idp_service_pb";
 import {
-  InstanceAccessMode,
-  InstanceSetting_AccessSetting,
-  InstanceSetting_AccessSettingSchema,
   InstanceSetting_GeneralSetting,
   InstanceSetting_GeneralSettingSchema,
   InstanceSetting_Key,
@@ -29,21 +26,13 @@ const InstanceSection = () => {
   const t = useTranslate();
   const customizeDialog = useDialog();
   const saveInstanceSetting = useInstanceSettingUpdater();
-  const { accessSetting: originalAccessSetting, generalSetting: originalGeneralSetting, profile } = useInstance();
-  const [instanceAccessSetting, setInstanceAccessSetting] = useState<InstanceSetting_AccessSetting>(originalAccessSetting);
+  const { generalSetting: originalGeneralSetting, profile } = useInstance();
   const [instanceGeneralSetting, setInstanceGeneralSetting] = useState<InstanceSetting_GeneralSetting>(originalGeneralSetting);
   const [identityProviderList, setIdentityProviderList] = useState<IdentityProvider[]>([]);
   const managedGeneral = useManagedResource(buildInstanceSettingName(InstanceSetting_Key.GENERAL));
-  const managedAccess = useManagedResource(buildInstanceSettingName(InstanceSetting_Key.ACCESS));
   const generalLocked = (field: string) => isFieldManaged(managedGeneral, `generalSetting.${field}`);
-  const accessLocked = isFieldManaged(managedAccess, "accessSetting.accessMode");
   // A group names its configuration file only when one of its own fields is managed.
-  const groupChip = (locked: boolean, resource = managedGeneral) =>
-    locked ? <ManagedByConfigurationChip resource={resource} /> : undefined;
-
-  useEffect(() => {
-    setInstanceAccessSetting(originalAccessSetting);
-  }, [originalAccessSetting]);
+  const groupChip = (locked: boolean) => (locked ? <ManagedByConfigurationChip resource={managedGeneral} /> : undefined);
 
   useEffect(() => {
     setInstanceGeneralSetting(originalGeneralSetting);
@@ -76,49 +65,22 @@ const InstanceSection = () => {
     );
   };
 
-  const updateAccessMode = (accessMode: InstanceAccessMode) => {
-    setInstanceAccessSetting(create(InstanceSetting_AccessSettingSchema, { accessMode }));
-  };
+  const hasUnsavedChanges = !isEqual(instanceGeneralSetting, originalGeneralSetting);
 
   const handleSaveSettings = async () => {
-    const generalSettingChanged = !isEqual(instanceGeneralSetting, originalGeneralSetting);
-    const accessSettingChanged = !isEqual(instanceAccessSetting, originalAccessSetting);
-
-    if (generalSettingChanged) {
-      const generalSettingSaved = await saveInstanceSetting({
-        key: InstanceSetting_Key.GENERAL,
-        setting: create(InstanceSettingSchema, {
-          name: buildInstanceSettingName(InstanceSetting_Key.GENERAL),
-          value: {
-            case: "generalSetting",
-            value: instanceGeneralSetting,
-          },
-        }),
-        errorContext: "Update general settings",
-        showSuccessToast: !accessSettingChanged,
-      });
-      if (!generalSettingSaved) {
-        return;
-      }
-    }
-
-    if (accessSettingChanged) {
-      await saveInstanceSetting({
-        key: InstanceSetting_Key.ACCESS,
-        setting: create(InstanceSettingSchema, {
-          name: buildInstanceSettingName(InstanceSetting_Key.ACCESS),
-          value: {
-            case: "accessSetting",
-            value: instanceAccessSetting,
-          },
-        }),
-        errorContext: "Update access settings",
-      });
-    }
+    if (!hasUnsavedChanges) return;
+    await saveInstanceSetting({
+      key: InstanceSetting_Key.GENERAL,
+      setting: create(InstanceSettingSchema, {
+        name: buildInstanceSettingName(InstanceSetting_Key.GENERAL),
+        value: {
+          case: "generalSetting",
+          value: instanceGeneralSetting,
+        },
+      }),
+      errorContext: "Update general settings",
+    });
   };
-
-  const hasUnsavedChanges =
-    !isEqual(instanceGeneralSetting, originalGeneralSetting) || !isEqual(instanceAccessSetting, originalAccessSetting);
 
   return (
     <SettingSection title={t("setting.system.label")}>
@@ -162,25 +124,11 @@ const InstanceSection = () => {
         title={t("setting.instance.access-title")}
         description={t("setting.instance.access-description")}
         showSeparator
-        actions={
-          groupChip(accessLocked, managedAccess) ??
-          groupChip(
-            ["disallowUserRegistration", "disallowPasswordAuth", "disallowChangeUsername", "disallowChangeNickname"].some(generalLocked),
-          )
-        }
+        actions={groupChip(
+          ["disallowUserRegistration", "disallowPasswordAuth", "disallowChangeUsername", "disallowChangeNickname"].some(generalLocked),
+        )}
       >
         <SettingList>
-          <SettingListItem
-            label={t("setting.instance.allow-public-access")}
-            description={t("setting.instance.allow-public-access-description")}
-          >
-            <Checkbox
-              disabled={profile.demo || accessLocked}
-              checked={instanceAccessSetting.accessMode === InstanceAccessMode.PUBLIC}
-              onCheckedChange={(checked) => updateAccessMode(checked ? InstanceAccessMode.PUBLIC : InstanceAccessMode.PRIVATE)}
-            />
-          </SettingListItem>
-
           <SettingListItem
             label={t("setting.instance.disallow-user-registration")}
             description={t("setting.instance.disallow-user-registration-description")}

@@ -16,29 +16,6 @@
     "export-all": "导出我的全部笔记",
     "search": "搜索笔记"
   },
-  "map": {
-    "selection": "选中的 Memo",
-    "loaded": "已加载 {{count}} 条",
-    "fit-all": "查看全部结果",
-    "zoom-in": "放大",
-    "zoom-out": "缩小",
-    "load-error": "未能加载全部 Memo。",
-    "tile-error": "地图加载失败，你仍可以阅读 Memo。",
-    "empty": "还没有带位置的 Memo",
-    "empty-hint": "给 Memo 添加位置后，它就会显示在这里。",
-    "no-results": "没有符合条件的 Memo",
-    "no-results-hint": "试试清除筛选条件。",
-    "clear-filters": "清除筛选",
-    "loading": "正在加载 Memo…",
-    "new-here": "在这里记录",
-    "saved-outside-filter": "已保存，这条 Memo 不在当前地图结果中。",
-    "open-memo": "打开 Memo",
-    "open-in-google-maps": "在 Google Maps 中打开",
-    "location-description": "在地图上选择位置或手动输入坐标",
-    "latitude": "纬度",
-    "longitude": "经度",
-    "place-placeholder": "请先选择一个位置。"
-  },
   "auth": {
     "admin-sign-in": "管理员登录",
     "back-to-sign-in": "返回登录",
@@ -75,6 +52,8 @@
     "deploy-link": "部署你的 Memos"
   },
   "common": {
+    "zoom-in": "放大",
+    "zoom-out": "缩小",
     "account-menu": "账号菜单",
     "actions": "操作",
     "add": "增加",
@@ -92,7 +71,6 @@
     "close": "关闭",
     "collapse": "收起",
     "collapse-panel": "收起面板",
-    "confirm": "确定",
     "copy": "复制",
     "create": "创建",
     "created-at": "创建时间",
@@ -121,7 +99,6 @@
     "learn-more": "了解更多",
     "link": "链接",
     "manage": "管理",
-    "map": "地图",
     "memo": "备忘录",
     "memos": "备忘录",
     "month-navigation": "月份导航",
@@ -160,7 +137,6 @@
     "unpin": "取消置顶",
     "update": "更新",
     "username": "用户名",
-    "visibility": "可见性",
     "views": "视图",
     "resize-sidebar": "调整侧边栏大小",
     "open-navigation": "打开导航",
@@ -177,8 +153,6 @@
     "docs": "文档",
     "calendar-for-month": "{{month}}日历",
     "date-at-time": "{{date}} {{time}}",
-    "selected-location": "已选位置",
-    "choose-location": "选择位置",
     "unknown-error": "未知错误",
     "error-occurred": "发生错误"
   },
@@ -225,7 +199,6 @@
     },
     "insert-menu": {
       "add-attachment": "添加附件",
-      "add-location": "添加位置",
       "image-upload-failed": "部分图片上传失败，请重试或将已上传文件保留为附件。",
       "image-upload-stopped": "图片上传已暂停 {{completed}}/{{total}}",
       "insert-image": "插入图片",
@@ -355,7 +328,6 @@
       "reorder-hint": "拖动，或使用方向键"
     },
     "remove-relation": "移除关联",
-    "remove-location": "移除位置",
     "recording-unsupported": "此浏览器不支持录音。",
     "microphone-denied": "麦克风权限被拒绝。",
     "recording-failed": "无法开始录音。"
@@ -402,7 +374,6 @@
       "has-code": "有代码",
       "has-image": "有图片",
       "has-link": "有链接",
-      "has-location": "有位置",
       "has-task-list": "有待办",
       "remove": "移除筛选"
     },
@@ -427,26 +398,7 @@
     "show-less": "显示较少",
     "show-more": "查看更多",
     "view-options": "视图选项",
-    "visibility": {
-      "private": "私有",
-      "private-description": "仅你可见",
-      "protected": "受保护",
-      "protected-description": "对登录用户可见",
-      "public": "公开",
-      "public-description": "对所有人可见",
-      "space": "成员",
-      "space-description": "{{space}} 的所有人"
-    },
     "share": {
-      "active-links": "活跃的分享链接",
-      "copy": "复制链接",
-      "create-failed": "无法创建分享链接",
-      "create-link": "创建新链接",
-      "creating": "创建中…",
-      "expiry-1-day": "1天",
-      "expiry-30-days": "30天",
-      "expiry-7-days": "7天",
-      "expiry-never": "永不",
       "image-description": "预览会按你当前设备上的展示宽度（{{width}}px）渲染。",
       "image-download": "下载 PNG",
       "image-download-failed": "导出图片失败",
@@ -454,15 +406,7 @@
       "image-share": "分享图片",
       "image-share-failed": "分享图片失败",
       "image-title": "分享成图片",
-      "expires-on": "{{date}} 到期",
-      "never-expires": "永不过期",
-      "no-links": "还没有分享链接。在下面创建一个。",
-      "open-image": "分享成图片",
-      "open-panel": "管理分享链接",
-      "revoke": "撤销",
-      "revoke-failed": "撤销链接失败",
-      "revoked": "分享链接已撤销",
-      "title": "分享这份备忘录"
+      "open-image": "分享成图片"
     },
     "count-memos-updated-in-date": "{{date}} 更新了 {{count}} 条{{memos}}",
     "task-actions": {
@@ -561,8 +505,6 @@
     "preference": {
       "appearance-description": "选择当前账号使用的界面语言和外观主题。",
       "appearance-title": "外观",
-      "default-memo-visibility": "新备忘录的默认可见范围",
-      "default-memo-visibility-description": "新建备忘录时默认使用此范围，也可在编辑器中单独调整。",
       "device-description": "仅保存在此浏览器中的阅读与编辑选项，不会保存到你的账号。",
       "device-title": "此设备",
       "double-click-edit": "双击编辑",
@@ -570,8 +512,6 @@
       "label": "偏好设置",
       "language-description": "立即更新界面语言，并保存到当前账号。",
       "link-preview-description": "在展示备忘录时，为独自占一段的链接显示预览卡片。",
-      "memo-defaults-description": "设置创建新备忘录时使用的默认值。",
-      "memo-defaults-title": "备忘录默认值",
       "save-media-metadata": "保存媒体元数据",
       "save-media-metadata-description": "为之后上传的文件保存可用的相机型号、拍摄时间、位置、图片尺寸和基础视频信息。任何能查看附件的人都可能获取这些元数据。已有附件不受影响。",
       "theme-description": "立即在当前设备上应用所选主题。",
@@ -619,10 +559,6 @@
           "title": "最近笔记",
           "description": "过去一小时内创建的备忘录。"
         },
-        "public": {
-          "title": "公开备忘录",
-          "description": "仅公开的备忘录。"
-        },
         "project-tags": {
           "title": "项目标签",
           "description": "精确匹配一个或多个标签。"
@@ -650,10 +586,6 @@
         "links-or-code": {
           "title": "链接或代码",
           "description": "包含链接或代码块的备忘录。"
-        },
-        "no-location": {
-          "title": "无位置",
-          "description": "未附加位置的备忘录。"
         },
         "with-attachments": {
           "title": "含附件",
@@ -893,7 +825,7 @@
       "avatar-unreadable": "无法读取此图片，请换一个文件。"
     },
     "instance": {
-      "access-description": "控制该实例的公开访问、注册、登录和资料编辑。",
+      "access-description": "管理本实例的注册、登录和个人资料编辑。",
       "access-title": "访问和策略",
       "disallow-change-nickname-description": "阻止用户修改显示昵称。",
       "disallow-change-nickname": "禁止修改用户昵称",
@@ -907,9 +839,7 @@
       "saturday": "周六",
       "sunday": "周日",
       "week-start-day-description": "控制日历类视图显示的每周第一天。",
-      "week-start-day": "每周起始日",
-      "allow-public-access-description": "开启后，访客无需登录即可浏览公开备忘录。关闭后，已创建的分享链接仍可打开。",
-      "allow-public-access": "允许访客浏览公开备忘录"
+      "week-start-day": "每周起始日"
     },
     "webhook": {
       "create-dialog": {
@@ -1047,7 +977,6 @@
       "review-exported": "导出者",
       "review-memos": "文件中的备忘录",
       "review-new": "将新建",
-      "export-admin-only": "只有管理员可以导出备忘录。请向管理员索取你的导出文件。",
       "export-busy": "另一个导出正在进行。请稍后再试。"
     },
     "spaces": {
@@ -1134,7 +1063,6 @@
   },
   "tooltip": {
     "link-memo": "链接备忘录",
-    "select-location": "位置",
     "link-memo-description": "搜索并选择要关联的备忘录"
   },
   "live-update": {
@@ -1147,9 +1075,7 @@
       "copied": "已复制坐标",
       "copy-coordinates": "复制坐标",
       "hide": "隐藏附件详情",
-      "hide-map": "隐藏地图",
-      "show": "显示附件详情",
-      "show-map": "显示地图"
+      "show": "显示附件详情"
     },
     "empty": "没有保存的拍摄信息。",
     "fields": {
@@ -1262,7 +1188,7 @@
     "headline": "为日常想法而生的简单笔记。",
     "intro-write": "一句话就可以是一条完整的备忘录。",
     "intro-keep": "每条备忘录都留在你写下它的那一天。",
-    "intro-share": "什么保持私有，由你决定。",
+    "intro-share": "只有你登录后才能访问自己的笔记。",
     "write": "写作",
     "write-sub": "一句话就可以是一条完整的备忘录。",
     "no-title": "无标题",
@@ -1276,13 +1202,11 @@
     "calendar-text": "日历能带你回到任何一天。",
     "tags-text": "# 后面的词会成为标签，标签可以筛选时间线。",
     "views-text": "自定义视图会保存一个筛选条件。",
-    "map-text": "带有位置的备忘录会显示在地图上。",
-    "share": "分享",
-    "share-sub": "备忘录默认私有。分享什么、公开什么，由你决定。",
-    "visibility-text": "每条备忘录都有自己的设置。新备忘录默认私有，只有你能看到；公开的备忘录有一个任何人都能打开的链接。",
-    "spaces-text": "在空间里，成员与你一同写作，各自保留自己的备忘录。",
+    "share": "私人笔记",
+    "share-sub": "用空间整理主题，在笔记下补充想法。",
+    "spaces-text": "用空间整理不同主题的笔记。",
     "comments": "评论",
-    "comments-text": "能看到备忘录的人都可以在下方回复。",
+    "comments-text": "在笔记下补充想法或记录后续进展。",
     "skip": "跳过",
     "next": "下一步",
     "done": "完成",

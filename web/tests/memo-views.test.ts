@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import { buildMemoFilter } from "@/hooks/useMemoFilters";
 import { combineCELFilters } from "@/lib/cel-filter";
 import { getMemoViewId, isMemoCollectionRoute, isMemoScopeRoute, resolveMemoScope } from "@/lib/memo-views";
-import { Visibility } from "@/types/proto/api/memo_service_pb";
 
 describe("memo scopes", () => {
   it("resolves collection and detail routes", () => {
@@ -67,7 +66,7 @@ describe("memo views", () => {
     expect(getMemoViewId("users/steven/views/work")).toBe("work");
   });
 
-  it("composes a saved task view with search, tags, creator, and visibility", () => {
+  it("composes a saved task view with search, tags, and creator", () => {
     expect(
       buildMemoFilter({
         creatorName: "users/steven",
@@ -77,21 +76,8 @@ describe("memo views", () => {
           { factor: "tagSearch", value: "work" },
         ],
         includePinned: false,
-        visibilities: [Visibility.PUBLIC],
       }),
-    ).toBe(
-      '(creator == "users/steven") && (has_task_list && has_incomplete_tasks) && (content.contains("plan")) && (tag in ["work"]) && (visibility in ["PUBLIC"])',
-    );
-  });
-
-  it("maps the Space audience without falling back to Private", () => {
-    expect(
-      buildMemoFilter({
-        filters: [],
-        includePinned: false,
-        visibilities: [Visibility.PUBLIC, Visibility.PROTECTED, Visibility.SPACE],
-      }),
-    ).toBe('(visibility in ["PUBLIC", "PROTECTED", "SPACE"])');
+    ).toBe('(creator == "users/steven") && (has_task_list && has_incomplete_tasks) && (content.contains("plan")) && (tag in ["work"])');
   });
 
   it("maps property filter factors to their CEL flags", () => {
@@ -101,13 +87,12 @@ describe("memo views", () => {
           { factor: "property.hasLink", value: "" },
           { factor: "property.hasTaskList", value: "" },
           { factor: "property.hasCode", value: "" },
-          { factor: "property.hasLocation", value: "" },
           { factor: "property.hasAttachments", value: "" },
           { factor: "property.hasImage", value: "" },
         ],
         includePinned: false,
       }),
-    ).toBe("(has_link) && (has_task_list) && (has_code) && (has_location) && (has_attachments) && (has_image)");
+    ).toBe("(has_link) && (has_task_list) && (has_code) && (has_attachments) && (has_image)");
   });
 
   it("uses a saved memo view filter", () => {

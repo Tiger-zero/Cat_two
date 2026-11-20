@@ -67,7 +67,6 @@ describe("replacing an attachment's content", () => {
     const memo = create(MemoSchema, {
       name: "memos/m",
       content: "hello",
-      visibility: createInitialState().metadata.visibility,
       attachments: [saved],
     });
     const edit: LocalFile = {

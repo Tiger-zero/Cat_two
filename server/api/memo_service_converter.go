@@ -49,14 +49,14 @@ func (s *APIService) convertMemoFromStoreWithCreators(ctx context.Context, memo 
 		CreateTime:      timestamppb.New(time.Unix(memo.CreatedTs, 0)),
 		UpdateTime:      timestamppb.New(time.Unix(memo.UpdatedTs, 0)),
 		Content:         memo.Content,
-		Visibility:      convertVisibilityFromStore(memo.Visibility),
+		Visibility:      apipb.Visibility_PRIVATE,
 		Pinned:          memo.Pinned,
 	}
 	// An assigned memo needs a read context for its placement projection; an
 	// unassigned memo needs none.
 	var readContext access.MemoReadContext
 	if memo.SpaceID != nil {
-		resolved, err := s.buildMemoReadContext(ctx, memo, nil)
+		resolved, err := s.buildMemoReadContext(ctx, memo)
 		if err != nil {
 			return nil, errors.Wrap(err, "failed to resolve memo access")
 		}
@@ -71,11 +71,19 @@ func (s *APIService) convertMemoFromStoreWithCreators(ctx context.Context, memo 
 		memoMessage.Location = convertLocationFromStore(memo.Payload.Location)
 	}
 
-	// Parent identity is part of a readable comment's context. It grants no
-	// access to the parent; clients resolve it independently and handle denial.
+	// A legacy comment can belong to a different author from its parent.
+	// Project the parent only when the same author can read both notes.
 	if memo.ParentUID != nil {
-		parentName := buildMemoName(*memo.ParentUID)
-		memoMessage.Parent = &parentName
+		parent, err := s.Store.GetMemo(ctx, &store.FindMemo{
+			UID: memo.ParentUID, Access: &store.MemoAccessScope{OwnerOnly: true, UserID: &memo.CreatorID}, ExcludeContent: true,
+		})
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to resolve comment parent")
+		}
+		if parent != nil {
+			parentName := buildMemoName(parent.UID)
+			memoMessage.Parent = &parentName
+		}
 	}
 
 	// Reactions have no independent audience and are readable whenever this
@@ -120,11 +128,7 @@ func (s *APIService) projectMemoCollaborationContext(ctx context.Context, memo *
 		}
 		return nil
 	}
-	// Placement is visible to the author, to active members, and to an
-	// instance administrator; a non-member reading an assigned PUBLIC memo
-	// learns nothing about its Space.
-	viewer := readContext.Viewer
-	if viewer == nil || (viewer.ID != memo.CreatorID && !readContext.ViewerSpaceMember && !access.IsInstanceAdmin(viewer)) {
+	if !access.CanManageMemo(readContext.Viewer, memo) {
 		return nil
 	}
 	space, err := s.Store.GetSpace(ctx, &store.FindSpace{ID: memo.SpaceID})
@@ -388,42 +392,10 @@ func convertLocationFromStore(location *storepb.MemoPayload_Location) *apipb.Loc
 	}
 }
 
-func convertLocationToStore(location *apipb.Location) *storepb.MemoPayload_Location {
-	if location == nil {
-		return nil
-	}
-	return &storepb.MemoPayload_Location{
-		Placeholder: location.Placeholder,
-		Latitude:    location.Latitude,
-		Longitude:   location.Longitude,
-	}
-}
-
-func convertVisibilityFromStore(visibility store.Visibility) apipb.Visibility {
-	switch visibility {
-	case store.Private:
-		return apipb.Visibility_PRIVATE
-	case store.Protected:
-		return apipb.Visibility_PROTECTED
-	case store.Public:
-		return apipb.Visibility_PUBLIC
-	case store.SpaceAudience:
-		return apipb.Visibility_SPACE
-	default:
-		return apipb.Visibility_VISIBILITY_UNSPECIFIED
-	}
-}
-
 func validateCreateMemoVisibility(visibility apipb.Visibility) (store.Visibility, error) {
 	switch visibility {
-	case apipb.Visibility_VISIBILITY_UNSPECIFIED, apipb.Visibility_PRIVATE:
+	case apipb.Visibility_VISIBILITY_UNSPECIFIED, apipb.Visibility_PRIVATE, apipb.Visibility_PROTECTED, apipb.Visibility_PUBLIC, apipb.Visibility_SPACE:
 		return store.Private, nil
-	case apipb.Visibility_PROTECTED:
-		return store.Protected, nil
-	case apipb.Visibility_PUBLIC:
-		return store.Public, nil
-	case apipb.Visibility_SPACE:
-		return store.SpaceAudience, nil
 	default:
 		return "", status.Errorf(codes.InvalidArgument, "invalid memo visibility")
 	}

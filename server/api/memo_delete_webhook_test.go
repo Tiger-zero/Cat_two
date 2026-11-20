@@ -37,7 +37,7 @@ func TestDeleteMemoWebhooksRespectCurrentReadAccess(t *testing.T) {
 	assignedSpace := space.Name
 	hiddenMemo, err := service.CreateMemo(ownerCtx, &apipb.CreateMemoRequest{
 		Memo: &apipb.Memo{
-			Content:    "must not leave through a webhook",
+			Content:    "other account cannot delete",
 			Visibility: apipb.Visibility_SPACE,
 			Space:      &assignedSpace,
 		},
@@ -55,7 +55,7 @@ func TestDeleteMemoWebhooksRespectCurrentReadAccess(t *testing.T) {
 		Name: buildSpaceMemberName("delete-webhook-space", owner.Username),
 	})
 	require.NoError(t, err)
-	_, err = service.GetMemo(ownerCtx, &apipb.GetMemoRequest{Name: hiddenMemo.Name})
+	_, err = service.GetMemo(successorCtx, &apipb.GetMemoRequest{Name: hiddenMemo.Name})
 	require.Equal(t, codes.PermissionDenied, status.Code(err))
 
 	received := make(chan []byte, 4)
@@ -86,8 +86,8 @@ func TestDeleteMemoWebhooksRespectCurrentReadAccess(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	_, err = service.DeleteMemo(ownerCtx, &apipb.DeleteMemoRequest{Name: hiddenMemo.Name})
-	require.NoError(t, err, "the author retains narrow lifecycle authority after losing membership")
+	_, err = service.DeleteMemo(successorCtx, &apipb.DeleteMemoRequest{Name: hiddenMemo.Name})
+	require.Equal(t, codes.PermissionDenied, status.Code(err))
 	select {
 	case body := <-received:
 		require.Failf(t, "unreadable memo leaked through webhook", "received %s", body)

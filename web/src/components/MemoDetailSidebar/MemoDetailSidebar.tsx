@@ -10,8 +10,8 @@ import {
   MessageSquarePlusIcon,
   Share2Icon,
 } from "lucide-react";
-import { useMemo, useState } from "react";
-import { Link, useLocation } from "react-router-dom";
+import { useMemo } from "react";
+import { Link } from "react-router-dom";
 import SidebarRow, {
   SIDEBAR_ROW_CLASSES,
   SIDEBAR_ROW_COUNT_RAIL_CLASSES,
@@ -33,11 +33,10 @@ import { isMemoBlurred } from "@/lib/tag";
 import { toast } from "@/lib/toast";
 import { cn } from "@/lib/utils";
 import { State } from "@/types/proto/api/common_pb";
-import { Memo, type MemoRelation, Visibility } from "@/types/proto/api/memo_service_pb";
+import type { Memo, MemoRelation } from "@/types/proto/api/memo_service_pb";
 import { useTranslate } from "@/utils/i18n";
 import { canManageMemo } from "@/utils/user";
 import MemoOutline from "./MemoOutline";
-import MemoSharePanel from "./MemoSharePanel";
 
 interface Props {
   memo: Memo;
@@ -51,7 +50,6 @@ interface Props {
   onCommentsOpen?: () => void;
   onCommentCreate?: () => void;
   onShareImageOpen?: () => void;
-  forceReadonly?: boolean;
   /** The memo body is tag-blurred and not yet revealed; its outline would leak the headings. */
   contentHidden?: boolean;
 }
@@ -104,37 +102,24 @@ const MemoDetailSidebar = ({
   onCommentsOpen,
   onCommentCreate,
   onShareImageOpen,
-  forceReadonly = false,
   contentHidden = false,
 }: Props) => {
   const t = useTranslate();
-  const location = useLocation();
   const currentUser = useCurrentUser();
   const { profile } = useInstance();
   const { userTagsSetting } = useAuth();
-  const [sharePanelOpen, setSharePanelOpen] = useState(false);
-
-  const readonly = forceReadonly || !canManageMemo(memo, currentUser);
-  const canEdit = !!onEdit && !readonly && memo.state === State.NORMAL;
-  const canComment = !!onCommentCreate && !forceReadonly && !!currentUser && memo.state === State.NORMAL;
-  const canManageShares =
-    !forceReadonly &&
-    !memo.parent &&
-    canManageMemo(memo, currentUser) &&
-    memo.state === State.NORMAL &&
-    memo.visibility !== Visibility.SPACE;
+  const canEdit = !!onEdit && canManageMemo(memo, currentUser) && memo.state === State.NORMAL;
+  const canComment = !!onCommentCreate && !!currentUser && memo.state === State.NORMAL;
 
   const headings = useMemo(() => (contentHidden ? [] : extractHeadings(memo.content)), [contentHidden, memo.content]);
   const { referenced } = useMemo(() => getRelationBuckets(memo.relations, memo.name), [memo.relations, memo.name]);
   const backlinkMemoNames = useMemo(
     () =>
-      forceReadonly
-        ? []
-        : referenced.flatMap((relation) => {
-            const relatedMemo = getRelationMemo(relation, "referenced");
-            return relatedMemo?.name ? [relatedMemo.name] : [];
-          }),
-    [forceReadonly, referenced],
+      referenced.flatMap((relation) => {
+        const relatedMemo = getRelationMemo(relation, "referenced");
+        return relatedMemo?.name ? [relatedMemo.name] : [];
+      }),
+    [referenced],
   );
   const resolvedMemos = useResolvedRelationMemos(backlinkMemoNames);
 
@@ -148,14 +133,13 @@ const MemoDetailSidebar = ({
 
   const parentBlurred = !!parentMemo && isMemoBlurred(parentMemo, userTagsSetting);
   const parentSnippet = parentMemo && !parentBlurred ? normalizeSnippet(parentMemo.snippet || parentMemo.content || parentMemo.name) : "";
-  const showComments = !forceReadonly && commentCount !== undefined && commentCount > 0;
+  const showComments = commentCount !== undefined && commentCount > 0;
   const showOnThisMemo = headings.length > 1 || showComments;
-  const showConnections = !forceReadonly && (!!parentMemo || !!parentStatus || referenced.length > 0);
+  const showConnections = !!parentMemo || !!parentStatus || referenced.length > 0;
 
   const handleCopyLink = () => {
     const host = (profile.instanceUrl || window.location.origin).replace(/\/+$/, "");
-    const path = forceReadonly ? `${location.pathname}${location.search}` : `/${memo.name}`;
-    copy(`${host}${path.startsWith("/") ? path : `/${path}`}`);
+    copy(`${host}/${memo.name}`);
     toast.add({ title: t("message.succeed-copy-link"), type: "success" });
   };
 
@@ -239,16 +223,9 @@ const MemoDetailSidebar = ({
                 {t("memo.share.open-image")}
               </Menu.Item>
             )}
-            {canManageShares && (
-              <Menu.Item onClick={() => setSharePanelOpen(true)} icon={<Share2Icon />}>
-                {t("memo.share.open-panel")}
-              </Menu.Item>
-            )}
           </Menu.Popup>
         </Menu.Root>
       </SidebarSection>
-
-      {sharePanelOpen && <MemoSharePanel memoName={memo.name} open={sharePanelOpen} onClose={() => setSharePanelOpen(false)} />}
     </div>
   );
 };

@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import type { MemoSuggestion } from "@/lib/memo-suggestions";
 import type { Attachment } from "@/types/proto/api/attachment_service_pb";
-import type { Location, Memo, Visibility } from "@/types/proto/api/memo_service_pb";
+import type { Memo } from "@/types/proto/api/memo_service_pb";
 import type { EditorFileOrigin } from "../extensions";
 import type { AudioRecorderStatus } from "../hooks/useAudioRecorder";
 import type { DrawingSource, LocalFile } from "./attachment";
@@ -131,21 +131,10 @@ export interface FocusModeExitButtonProps {
 export interface InsertMenuProps {
   isUploading?: boolean;
   isSaving?: boolean;
-  location?: Location;
-  onLocationChange: (location?: Location) => void;
   memoName?: string;
   onAudioRecorderClick?: () => void;
   viewToggles?: EditorViewToggles;
   sourceMode: EditorSourceModeToggle;
   onInsertImages: (files: File[]) => void;
   onDrawingClick?: () => void;
-}
-
-export interface AudienceMenuProps {
-  value: Visibility;
-  onChange: (visibility: Visibility) => void;
-  /** The memo's actual placement; independent of the ambient collection scope. */
-  space?: string;
-  onSpaceChange?: (space?: string) => void;
-  disabled?: boolean;
 }

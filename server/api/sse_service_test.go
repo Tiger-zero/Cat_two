@@ -143,6 +143,7 @@ func TestUpdateAttachmentPublishesAfterCommittedAccessChange(t *testing.T) {
 	svc := newIntegrationService(t)
 	owner := createSpaceTestUser(ctx, t, svc, "sse-attachment-access-owner", store.RoleUser)
 	ownerCtx := userCtx(ctx, owner.ID)
+	other := createSpaceTestUser(ctx, t, svc, "sse-attachment-access-other", store.RoleUser)
 	space, err := svc.CreateSpace(ownerCtx, &apipb.CreateSpaceRequest{
 		SpaceId: "sse-attachment-access-space",
 		Space:   &apipb.Space{Title: "Attachment access space"},
@@ -151,7 +152,7 @@ func TestUpdateAttachmentPublishesAfterCommittedAccessChange(t *testing.T) {
 	spaceName := space.Name
 	memo, err := svc.CreateMemo(ownerCtx, &apipb.CreateMemoRequest{Memo: &apipb.Memo{
 		Content:    "attachment access changed during update",
-		Visibility: apipb.Visibility_SPACE,
+		Visibility: apipb.Visibility_PRIVATE,
 		Space:      &spaceName,
 	}})
 	require.NoError(t, err)
@@ -168,16 +169,15 @@ func TestUpdateAttachmentPublishesAfterCommittedAccessChange(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, storedAttachment)
 
-	// Authorization is checked before the attachment update. Simulate membership
-	// changing in the same transaction so the committed response can no longer be
-	// built through the read-authorized GetAttachment service method.
+	// Simulate the memo owner changing after authorization but before the
+	// attachment update returns, so only the committed result can be served.
 	trigger := fmt.Sprintf(`
-		CREATE TRIGGER revoke_attachment_owner_membership
+		CREATE TRIGGER change_attachment_memo_owner
 		AFTER UPDATE OF filename ON attachment
 		WHEN NEW.id = %d
 		BEGIN
-			DELETE FROM space_member WHERE user_id = %d;
-		END`, storedAttachment.ID, owner.ID)
+			UPDATE memo SET creator_id = %d WHERE id = NEW.memo_id;
+		END`, storedAttachment.ID, other.ID)
 	_, err = svc.Store.GetDriver().GetDB().ExecContext(ctx, trigger)
 	require.NoError(t, err)
 
@@ -193,7 +193,7 @@ func TestUpdateAttachmentPublishesAfterCommittedAccessChange(t *testing.T) {
 	requireNoMemoChanged(t, client.events)
 
 	_, err = svc.GetAttachment(ownerCtx, &apipb.GetAttachmentRequest{Name: attachment.Name})
-	require.Equal(t, codes.PermissionDenied, status.Code(err), "the authorized read would fail after the committed membership change")
+	require.Equal(t, codes.PermissionDenied, status.Code(err), "the previous owner loses read access after the committed ownership change")
 }
 
 func TestDeleteAttachmentPublishesBeforeStorageCleanupFailure(t *testing.T) {
@@ -314,7 +314,7 @@ func TestUpdateMemoSSEBroadcastsToAllSubscribers(t *testing.T) {
 	requireMemoChanged(t, otherClient.events)
 }
 
-func TestMoveSpaceAudienceMemoSSEBroadcastsWithoutAudienceCalculation(t *testing.T) {
+func TestMoveMemoBetweenSpacesBroadcastsInvalidation(t *testing.T) {
 	ctx := context.Background()
 	svc := newIntegrationService(t)
 	owner := createSpaceTestUser(ctx, t, svc, "move-audience-owner", store.RoleAdmin)
@@ -379,22 +379,11 @@ func TestCreateMemoComment_NoDuplicateSSEBroadcast(t *testing.T) {
 	ctx := context.Background()
 	svc := newIntegrationService(t)
 
-	// Create an admin so the store is initialised, then a regular commenter.
-	author, err := svc.Store.CreateUser(ctx, &store.User{
-		Username: "author", Role: store.RoleAdmin, Email: "author@example.com",
-	})
-	require.NoError(t, err)
-	commenter, err := svc.Store.CreateUser(ctx, &store.User{
-		Username: "commenter", Role: store.RoleUser, Email: "commenter@example.com",
-	})
-	require.NoError(t, err)
-
+	author := createSpaceTestUser(ctx, t, svc, "comment-thread-owner", store.RoleUser)
 	authorCtx := userCtx(ctx, author.ID)
-	commenterCtx := userCtx(ctx, commenter.ID)
 
-	// Create a public memo so the commenter can react.
 	parent, err := svc.CreateMemo(authorCtx, &apipb.CreateMemoRequest{
-		Memo: &apipb.Memo{Content: "parent memo", Visibility: apipb.Visibility_PUBLIC},
+		Memo: &apipb.Memo{Content: "parent memo", Visibility: apipb.Visibility_PRIVATE},
 	})
 	require.NoError(t, err)
 
@@ -404,9 +393,9 @@ func TestCreateMemoComment_NoDuplicateSSEBroadcast(t *testing.T) {
 	defer svc.SSEHub.Unsubscribe(client)
 
 	// Comment creation is one mutation and emits one invalidation event.
-	_, err = svc.CreateMemoComment(commenterCtx, &apipb.CreateMemoCommentRequest{
+	_, err = svc.CreateMemoComment(authorCtx, &apipb.CreateMemoCommentRequest{
 		Parent:  parent.Name,
-		Comment: &apipb.Memo{Content: "a comment", Visibility: apipb.Visibility_PUBLIC},
+		Comment: &apipb.Memo{Content: "a comment", Visibility: apipb.Visibility_PRIVATE},
 	})
 	require.NoError(t, err)
 
@@ -431,7 +420,7 @@ func TestCreateMemoComment_SSEBroadcastContainsNoSubject(t *testing.T) {
 	require.NoError(t, err)
 
 	parent, err := svc.CreateMemo(userCtx(ctx, author.ID), &apipb.CreateMemoRequest{
-		Memo: &apipb.Memo{Content: "public context", Visibility: apipb.Visibility_PUBLIC},
+		Memo: &apipb.Memo{Content: "private context", Visibility: apipb.Visibility_PRIVATE},
 	})
 	require.NoError(t, err)
 	authorClient := svc.SSEHub.Subscribe()
@@ -439,13 +428,19 @@ func TestCreateMemoComment_SSEBroadcastContainsNoSubject(t *testing.T) {
 	commenterClient := svc.SSEHub.Subscribe()
 	defer svc.SSEHub.Unsubscribe(commenterClient)
 
-	_, err = svc.CreateMemoComment(userCtx(ctx, commenter.ID), &apipb.CreateMemoCommentRequest{
+	request := &apipb.CreateMemoCommentRequest{
 		Parent: parent.Name,
 		Comment: &apipb.Memo{
 			Content:    "private reply",
 			Visibility: apipb.Visibility_PRIVATE,
 		},
-	})
+	}
+	_, err = svc.CreateMemoComment(userCtx(ctx, commenter.ID), request)
+	require.Equal(t, codes.PermissionDenied, status.Code(err))
+	requireNoMemoChanged(t, commenterClient.events)
+	requireNoMemoChanged(t, authorClient.events)
+
+	_, err = svc.CreateMemoComment(userCtx(ctx, author.ID), request)
 	require.NoError(t, err)
 	requireMemoChanged(t, commenterClient.events)
 	requireMemoChanged(t, authorClient.events)
@@ -563,25 +558,18 @@ func TestDeleteMemo_DeletesCommentSubtreeOnly(t *testing.T) {
 		Username: "delete-root-author", Role: store.RoleAdmin, Email: "delete-root-author@example.com",
 	})
 	require.NoError(t, err)
-	commentAuthor, err := svc.Store.CreateUser(ctx, &store.User{
-		Username: "delete-comment-author", Role: store.RoleUser, Email: "delete-comment-author@example.com",
-	})
-	require.NoError(t, err)
-	replyAuthor, err := svc.Store.CreateUser(ctx, &store.User{
-		Username: "delete-reply-author", Role: store.RoleUser, Email: "delete-reply-author@example.com",
-	})
-	require.NoError(t, err)
+	rootCtx := userCtx(ctx, rootAuthor.ID)
 
-	root, err := svc.CreateMemo(userCtx(ctx, rootAuthor.ID), &apipb.CreateMemoRequest{
-		Memo: &apipb.Memo{Content: "context memo", Visibility: apipb.Visibility_PUBLIC},
+	root, err := svc.CreateMemo(rootCtx, &apipb.CreateMemoRequest{
+		Memo: &apipb.Memo{Content: "context memo", Visibility: apipb.Visibility_PRIVATE},
 	})
 	require.NoError(t, err)
-	comment, err := svc.CreateMemoComment(userCtx(ctx, commentAuthor.ID), &apipb.CreateMemoCommentRequest{
+	comment, err := svc.CreateMemoComment(rootCtx, &apipb.CreateMemoCommentRequest{
 		Parent:  root.Name,
-		Comment: &apipb.Memo{Content: "branch", Visibility: apipb.Visibility_PUBLIC},
+		Comment: &apipb.Memo{Content: "branch", Visibility: apipb.Visibility_PRIVATE},
 	})
 	require.NoError(t, err)
-	reply, err := svc.CreateMemoComment(userCtx(ctx, replyAuthor.ID), &apipb.CreateMemoCommentRequest{
+	reply, err := svc.CreateMemoComment(rootCtx, &apipb.CreateMemoCommentRequest{
 		Parent:  comment.Name,
 		Comment: &apipb.Memo{Content: "nested reply"},
 	})
@@ -589,7 +577,7 @@ func TestDeleteMemo_DeletesCommentSubtreeOnly(t *testing.T) {
 
 	replyClient := svc.SSEHub.Subscribe()
 	defer svc.SSEHub.Unsubscribe(replyClient)
-	_, err = svc.DeleteMemo(userCtx(ctx, commentAuthor.ID), &apipb.DeleteMemoRequest{Name: comment.Name})
+	_, err = svc.DeleteMemo(rootCtx, &apipb.DeleteMemoRequest{Name: comment.Name})
 	require.NoError(t, err)
 	requireMemoChanged(t, replyClient.events)
 

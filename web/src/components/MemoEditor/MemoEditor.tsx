@@ -1,12 +1,9 @@
 import { type ReactNode, Suspense, useState } from "react";
-import { useAuth } from "@/contexts/AuthContext";
 import useCurrentUser from "@/hooks/useCurrentUser";
 import { useMemoByName, useUpdateMemo } from "@/hooks/useMemoQueries";
 import type { MemoSuggestion } from "@/lib/memo-suggestions";
 import { cn } from "@/lib/utils";
-import type { Location } from "@/types/proto/api/memo_service_pb";
 import { lazyWithReload } from "@/utils/lazy";
-import { convertVisibilityFromString } from "@/utils/memo";
 import { canManageMemo } from "@/utils/user";
 import { COMPOSER_PANEL_CLASSES } from "./edit/constants";
 import { draftKeyFor, type MemoEditIdentity, migrateLegacyDraft } from "./edit/draftKey";
@@ -53,14 +50,12 @@ export interface MemoDraftSeed {
   /** The memo this draft comments on. A comment has no scope, Space or timestamps of its own. */
   parent?: string;
   /**
-   * Where a new memo is composed, such as `home`, `global`, `calendar:<date>` or
-   * `map:<key>`. Each scope keeps its own draft, per Space.
+   * Where a new memo is composed, such as `home`, `global` or `calendar:<date>`.
+   * Each scope keeps its own draft, per Space.
    */
   scope?: string;
   /** Fixes the new memo's Space; the Space chooser is then off. */
   space?: string;
-  /** Seeds the location once; a restored draft wins. */
-  location?: Location;
   /**
    * Seeds `createTime` and `updateTime` and shows the timestamp popover. Followed live
    * while the draft is open, for a calendar whose selected day changes.
@@ -181,7 +176,6 @@ const MemoEditorDraft = ({ draft, ...editing }: MemoEditorDraftProps) => {
         identity={identity}
         parentMemoName={draft.parent}
         defaultSpace={draft.space}
-        defaultLocation={draft.location}
         defaultCreateTime={draft.createTime}
         {...editing}
       />
@@ -194,22 +188,12 @@ interface EditingSessionProps extends MemoEditingProps {
   memo?: Parameters<typeof initialEditorState>[0]["memo"];
   parentMemoName?: string;
   defaultSpace?: string;
-  defaultLocation?: Location;
   defaultCreateTime?: Date;
 }
 
 /** One session over one identity: the draft store is created once, so a new identity is a new key. */
-const EditingSession = ({
-  identity,
-  memo,
-  parentMemoName,
-  defaultSpace,
-  defaultLocation,
-  defaultCreateTime,
-  ...editing
-}: EditingSessionProps) => {
+const EditingSession = ({ identity, memo, parentMemoName, defaultSpace, defaultCreateTime, ...editing }: EditingSessionProps) => {
   const currentUser = useCurrentUser();
-  const { userGeneralSetting } = useAuth();
   const username = currentUser?.name ?? "";
   const draftKey = cacheService.key(username, draftKeyFor(identity));
   const [initialState] = useState(() => {
@@ -219,9 +203,7 @@ const EditingSession = ({
       draftKey,
       // A hosted editor starts in focus mode and stays there.
       initialFocusMode: Boolean(editing.onFocusModeExit),
-      defaultVisibility: userGeneralSetting?.memoVisibility ? convertVisibilityFromString(userGeneralSetting.memoVisibility) : undefined,
       defaultCreateTime,
-      defaultLocation,
       canChooseSpace: canChooseSpaceFor({ memo, currentUser, parentMemoName, defaultSpace }),
     });
   });

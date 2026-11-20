@@ -49,13 +49,11 @@ describe("Timeline display settings scope", () => {
 
   it.each([
     "/calendar",
-    "/map",
     "/archived",
     "/attachments",
     "/memos/example",
     "/memos/shares/example",
     "/spaces/test/calendar",
-    "/spaces/test/map",
     "/setting",
     "/views",
   ])("keeps %s independent of Timeline preferences", (path) => {

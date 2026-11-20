@@ -2,7 +2,6 @@ import { create } from "@bufbuild/protobuf";
 import { useIsMutating, useMutation, useQueryClient } from "@tanstack/react-query";
 import { memoServiceClient } from "@/connect";
 import { findMemoRecord, memoKeys, updateMemoReactions } from "@/hooks/useMemoQueries";
-import { memoShareKeys } from "@/hooks/useMemoShareQueries";
 import { handleError } from "@/lib/error";
 import { showErrorToast } from "@/lib/toast";
 import { type Memo, type Reaction, ReactionSchema } from "@/types/proto/api/memo_service_pb";
@@ -11,9 +10,7 @@ export function useToggleReaction(memo: Memo, creator: string | undefined) {
   const queryClient = useQueryClient();
   const mutationKey = ["memo-reaction", memo.name];
   const isPending = useIsMutating({ mutationKey }) > 0;
-  const sharedMemoKey = [...memoShareKeys.all, "by-share"];
-  const cancelReads = () =>
-    Promise.all([queryClient.cancelQueries({ queryKey: memoKeys.all }), queryClient.cancelQueries({ queryKey: sharedMemoKey })]);
+  const cancelReads = () => queryClient.cancelQueries({ queryKey: memoKeys.all });
   const mutation = useMutation({
     mutationKey,
     mutationFn: async ({ reactionType, existing }: { reactionType: string; existing: Reaction[] }) => {
@@ -57,7 +54,6 @@ export function useToggleReaction(memo: Memo, creator: string | undefined) {
     onSettled: () => {
       void queryClient.invalidateQueries({ queryKey: memoKeys.detail(memo.name) });
       void queryClient.invalidateQueries({ queryKey: memoKeys.lists() });
-      void queryClient.invalidateQueries({ queryKey: sharedMemoKey });
       if (memo.parent) void queryClient.invalidateQueries({ queryKey: memoKeys.comments(memo.parent) });
     },
   });

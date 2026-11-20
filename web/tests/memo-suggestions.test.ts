@@ -125,42 +125,6 @@ describe("checklist suggestions", () => {
   });
 });
 
-describe("visibility suggestions", () => {
-  it.each([
-    ['visibility == "PRIVATE"', "PRIVATE"],
-    ['"PUBLIC" == visibility', "PUBLIC"],
-    ['visibility == "PROTECTED"', "PROTECTED"],
-    ['visibility in ["SPACE",]', "SPACE"],
-    ['!(visibility != "PRIVATE")', "PRIVATE"],
-    ['visibility == "PRIVATE" || (visibility == "PRIVATE" && has_task_list)', "PRIVATE"],
-    ['visibility in ["PRIVATE", "PUBLIC"] && visibility != "PUBLIC"', "PRIVATE"],
-    ['visibility == "PRIVATE" || visibility == "PUBLIC"', undefined],
-    ['visibility == "PUBLIC" || content.contains("x")', undefined],
-    ['visibility != "PRIVATE"', undefined],
-    ['visibility == "private"', undefined],
-    ['visibility == "UNKNOWN"', undefined],
-    ['visibility == "PRIVATE" && visibility == "PUBLIC"', undefined],
-    ["content.contains('visibility == \"PUBLIC\"')", undefined],
-    ['visibility == "PUBLIC" &&', undefined],
-    ['visibility != "PRIVATE" && visibility != "SPACE" && visibility != "PROTECTED"', undefined],
-  ])("requires a single explicit audience: %s", (value, expected) => {
-    expect(
-      getMemoSuggestions([{ factor: "celSearch", value }])
-        .filter((item) => item.kind === "visibility")
-        .map((item) => item.id),
-    ).toEqual(expected ? [`visibility:${expected}`] : []);
-  });
-
-  it("respects conflicts and chooses the strongest agreeing source", () => {
-    expect(getMemoSuggestions([{ factor: "visibility", value: "PRIVATE" }], 'visibility == "PUBLIC"')).toEqual([]);
-    expect(
-      getMemoSuggestions(
-        [
-          { factor: "visibility", value: "PRIVATE" },
-          { factor: "celSearch", value: 'visibility == "PRIVATE"' },
-        ],
-        'visibility == "PRIVATE"',
-      ),
-    ).toMatchObject([{ id: "visibility:PRIVATE", source: "selection" }]);
-  });
+it("does not suggest alternate visibility from a legacy view", () => {
+  expect(getMemoSuggestions([], 'visibility == "PUBLIC" && "work" in tags')).toMatchObject([{ id: "tag:work", source: "view" }]);
 });

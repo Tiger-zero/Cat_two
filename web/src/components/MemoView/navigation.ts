@@ -20,15 +20,9 @@ const normalizePathname = (pathname: string): string => {
   return normalized.toLowerCase();
 };
 
-/** Whether the current route is any canonical or shared Memo detail page. */
+/** Whether the current route is a canonical Memo detail page. */
 export const isMemoResourcePath = (pathname: string): boolean => {
   const normalizedPath = normalizePathname(pathname);
-  const sharedMemoPrefix = `${ROUTES.SHARED_MEMO}/`;
-  if (normalizedPath.startsWith(sharedMemoPrefix)) {
-    const shareToken = normalizedPath.slice(sharedMemoPrefix.length);
-    return shareToken.length > 0 && !shareToken.includes("/");
-  }
-
   const directMemoPrefix = "/memos/";
   if (!normalizedPath.startsWith(directMemoPrefix)) return false;
   const memoID = normalizedPath.slice(directMemoPrefix.length);
@@ -45,11 +39,8 @@ export const resolveMemoDetailOrigin = (state: unknown, options: ResolveMemoDeta
 };
 
 /** Whether the current route is the canonical detail page for this memo. */
-export const isMemoDetailPath = (pathname: string, memoName: string): boolean => {
-  const normalizedPath = normalizePathname(pathname);
-  if (normalizedPath === `/${memoName}`.toLowerCase()) return true;
-  return normalizedPath.startsWith(`${ROUTES.SHARED_MEMO}/`) && isMemoResourcePath(normalizedPath);
-};
+export const isMemoDetailPath = (pathname: string, memoName: string): boolean =>
+  normalizePathname(pathname) === `/${memoName}`.toLowerCase();
 
 /**
  * Captures the list page that opened a memo so canonical detail routes can

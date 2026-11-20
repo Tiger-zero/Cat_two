@@ -92,12 +92,12 @@ describe("MemoHeader navigation", () => {
 
     const { container } = render(
       <MemoryRouter>
-        <MemoHeader showCreator showVisibility showSpace />
+        <MemoHeader showCreator showSpace />
       </MemoryRouter>,
     );
 
     // The session's timestamp row is the header now: it leads with the creator and shows
-    // the editable time, visibility and Space; reacting and the menu wait.
+    // the editable time and Space; reacting and the menu wait.
     expect(container).toBeEmptyDOMElement();
   });
 

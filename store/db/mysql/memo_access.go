@@ -11,20 +11,24 @@ import (
 // memoAlias and appends its bind values to args.
 func mysqlMemoAccessPredicate(access *store.MemoAccessScope, memoAlias, memberAlias string, args *[]any) string {
 	clauses := []string{}
-	if access.AllowPublic {
+	if access.AllowPublic && !access.OwnerOnly {
 		clauses = append(clauses, memoAlias+".`visibility` = 'PUBLIC'")
 	}
 	if access.UserID != nil {
 		*args = append(*args, *access.UserID)
 		authenticatedClauses := []string{}
-
-		*args = append(*args, *access.UserID)
-		authenticatedClauses = append(authenticatedClauses, "("+memoAlias+".`visibility` = 'PRIVATE' AND "+memoAlias+".`creator_id` = ?)")
-		if access.AllowProtected {
-			authenticatedClauses = append(authenticatedClauses, memoAlias+".`visibility` = 'PROTECTED'")
+		if access.OwnerOnly {
+			*args = append(*args, *access.UserID)
+			authenticatedClauses = append(authenticatedClauses, memoAlias+".`creator_id` = ?")
+		} else {
+			*args = append(*args, *access.UserID)
+			authenticatedClauses = append(authenticatedClauses, "("+memoAlias+".`visibility` = 'PRIVATE' AND "+memoAlias+".`creator_id` = ?)")
+			if access.AllowProtected {
+				authenticatedClauses = append(authenticatedClauses, memoAlias+".`visibility` = 'PROTECTED'")
+			}
+			*args = append(*args, *access.UserID)
+			authenticatedClauses = append(authenticatedClauses, "("+memoAlias+".`visibility` = 'SPACE' AND EXISTS (SELECT 1 FROM `space_member` AS "+memberAlias+" WHERE "+memberAlias+".`space_id` = "+memoAlias+".`space_id` AND "+memberAlias+".`user_id` = ? AND "+memberAlias+".`status` = 'ACTIVE' AND "+memberAlias+".`role` IN ('ADMIN', 'USER')))")
 		}
-		*args = append(*args, *access.UserID)
-		authenticatedClauses = append(authenticatedClauses, "("+memoAlias+".`visibility` = 'SPACE' AND EXISTS (SELECT 1 FROM `space_member` AS "+memberAlias+" WHERE "+memberAlias+".`space_id` = "+memoAlias+".`space_id` AND "+memberAlias+".`user_id` = ? AND "+memberAlias+".`status` = 'ACTIVE' AND "+memberAlias+".`role` IN ('ADMIN', 'USER')))")
 
 		clauses = append(clauses, "(EXISTS (SELECT 1 FROM `user` AS `access_user` WHERE `access_user`.`id` = ? AND `access_user`.`row_status` = 'NORMAL') AND ("+strings.Join(authenticatedClauses, " OR ")+"))")
 	}

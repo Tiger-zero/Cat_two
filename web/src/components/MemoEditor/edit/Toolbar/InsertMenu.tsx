@@ -1,14 +1,11 @@
 import { Button, Menu, Spinner, Tooltip } from "@usememos/ui";
 import { uniqBy } from "lodash-es";
-import { CodeXmlIcon, ImageIcon, LinkIcon, MapPinIcon, Maximize2Icon, MicIcon, PaletteIcon, PaperclipIcon, PlusIcon } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
-import { LinkMemoDialog, LocationDialog } from "@/components/MemoMetadata";
-import type { MapPoint } from "@/components/map/types";
-import { useReverseGeocoding } from "@/components/map/useReverseGeocoding";
-import { useDebouncedEffect } from "@/hooks";
+import { CodeXmlIcon, ImageIcon, LinkIcon, Maximize2Icon, MicIcon, PaletteIcon, PaperclipIcon, PlusIcon } from "lucide-react";
+import { useCallback, useRef, useState } from "react";
+import { LinkMemoDialog } from "@/components/MemoMetadata";
 import type { MemoRelation } from "@/types/proto/api/memo_service_pb";
 import { useTranslate } from "@/utils/i18n";
-import { useFileUpload, useLinkMemo, useLocation } from "../hooks";
+import { useFileUpload, useLinkMemo } from "../hooks";
 import { useEditorContext, useEditorSelector } from "../state";
 import type { InsertMenuProps } from "../types";
 import type { LocalFile } from "../types/attachment";
@@ -17,10 +14,9 @@ const InsertMenu = (props: InsertMenuProps) => {
   const t = useTranslate();
   const { actions, dispatch, getState } = useEditorContext();
   const relations = useEditorSelector((s) => s.metadata.relations);
-  const { location: initialLocation, onLocationChange, viewToggles, sourceMode, isUploading: isUploadingProp } = props;
+  const { viewToggles, sourceMode, isUploading: isUploadingProp } = props;
 
   const [linkDialogOpen, setLinkDialogOpen] = useState(false);
-  const [locationDialogOpen, setLocationDialogOpen] = useState(false);
   const inlineImageInputRef = useRef<HTMLInputElement>(null);
 
   const { fileInputRef, selectingFlag, handleFileInputChange, handleUploadClick } = useFileUpload((newFiles: LocalFile[]) => {
@@ -38,70 +34,12 @@ const InsertMenu = (props: InsertMenuProps) => {
     },
   });
 
-  const location = useLocation(props.location);
-  const {
-    state: locationState,
-    locationInitialized,
-    handlePositionChange: handleLocationPositionChange,
-    getLocation,
-    reset: locationReset,
-    updateCoordinate,
-    setPlaceholder,
-  } = location;
-
-  const [debouncedPosition, setDebouncedPosition] = useState<MapPoint | undefined>(undefined);
-
-  useDebouncedEffect(
-    () => {
-      setDebouncedPosition(locationState.position);
-    },
-    1000,
-    [locationState.position],
-  );
-
-  const { data: displayName } = useReverseGeocoding(debouncedPosition?.lat, debouncedPosition?.lng);
-
-  useEffect(() => {
-    if (displayName) {
-      setPlaceholder(displayName);
-    }
-  }, [displayName, setPlaceholder]);
-
   const isUploading = selectingFlag || isUploadingProp;
   const insertionDisabled = isUploading || props.isSaving;
 
   const handleOpenLinkDialog = useCallback(() => {
     setLinkDialogOpen(true);
   }, []);
-
-  const handleLocationClick = useCallback(() => {
-    setLocationDialogOpen(true);
-    if (!initialLocation && !locationInitialized) {
-      if (navigator.geolocation) {
-        navigator.geolocation.getCurrentPosition(
-          (position) => {
-            handleLocationPositionChange({ lat: position.coords.latitude, lng: position.coords.longitude });
-          },
-          (error) => {
-            console.error("Geolocation error:", error);
-          },
-        );
-      }
-    }
-  }, [initialLocation, locationInitialized, handleLocationPositionChange]);
-
-  const handleLocationConfirm = useCallback(() => {
-    const newLocation = getLocation();
-    if (newLocation) {
-      onLocationChange(newLocation);
-      setLocationDialogOpen(false);
-    }
-  }, [getLocation, onLocationChange]);
-
-  const handleLocationCancel = useCallback(() => {
-    locationReset();
-    setLocationDialogOpen(false);
-  }, [locationReset]);
 
   const handleAttachmentUploadClick = useCallback(() => {
     if (getState().ui.isLoading.saving) return;
@@ -131,7 +69,6 @@ const InsertMenu = (props: InsertMenuProps) => {
       : []),
     { key: "audio", label: t("editor.audio-recorder.trigger"), icon: MicIcon, onClick: props.onAudioRecorderClick },
     { key: "link", label: t("editor.insert-menu.link-memo"), icon: LinkIcon, onClick: handleOpenLinkDialog },
-    { key: "location", label: t("editor.insert-menu.add-location"), icon: MapPinIcon, onClick: handleLocationClick },
   ];
 
   return (
@@ -207,17 +144,6 @@ const InsertMenu = (props: InsertMenuProps) => {
         isFetching={linkMemo.isFetching}
         onSelectMemo={linkMemo.addMemoRelation}
         isAlreadyLinked={linkMemo.isAlreadyLinked}
-      />
-
-      <LocationDialog
-        open={locationDialogOpen}
-        onOpenChange={setLocationDialogOpen}
-        state={locationState}
-        onPositionChange={handleLocationPositionChange}
-        onUpdateCoordinate={updateCoordinate}
-        onPlaceholderChange={setPlaceholder}
-        onCancel={handleLocationCancel}
-        onConfirm={handleLocationConfirm}
       />
     </>
   );

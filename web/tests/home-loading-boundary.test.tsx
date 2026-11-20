@@ -1,6 +1,7 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import Home from "@/pages/Home";
+import { User_Role } from "@/types/proto/api/user_service_pb";
 
 vi.mock("@/hooks/useMemoSuggestions", () => ({
   useMemoSuggestions: () => [{ id: "tag:work" }],
@@ -13,6 +14,7 @@ const state = vi.hoisted(() => ({
   listProps: undefined as Record<string, unknown> | undefined,
   memoViewProps: undefined as Record<string, unknown> | undefined,
   filterOptions: undefined as Record<string, unknown> | undefined,
+  exportMemos: vi.fn(),
 }));
 
 vi.mock("@/components/MemoEditor", () => ({
@@ -29,18 +31,34 @@ vi.mock("@/components/MemoView", () => ({
   },
 }));
 
+vi.mock("@/components/MemoFeedMenu", () => ({
+  default: ({ canExport, onExport }: { canExport: boolean; onExport: () => void }) =>
+    canExport ? (
+      <button type="button" onClick={onExport}>
+        Export memos
+      </button>
+    ) : null,
+}));
+
+vi.mock("@/components/Settings/useExportMemos", () => ({
+  useExportMemos: () => ({ exportMemos: state.exportMemos, exporting: false }),
+}));
+
 vi.mock("@/components/PagedMemoList", () => ({
   default: ({
     renderer,
     renderLeading,
+    renderHeader,
     ...props
   }: {
     renderer: (memo: { name: string }, options: { compact: boolean }) => React.ReactNode;
     renderLeading: (options: { useGrid: boolean }) => React.ReactNode;
+    renderHeader: () => React.ReactNode;
   } & Record<string, unknown>) => {
     state.listProps = props;
     return (
       <>
+        {renderHeader()}
         {renderLeading({ useGrid: false })}
         {renderer({ name: "memos/1" }, { compact: false })}
       </>
@@ -94,7 +112,7 @@ vi.mock("@/hooks", () => ({
 }));
 
 vi.mock("@/hooks/useCurrentUser", () => ({
-  default: () => ({ name: "users/steven", username: "steven" }),
+  default: () => ({ name: "users/steven", username: "steven", role: User_Role.USER }),
 }));
 
 vi.mock("@/utils/i18n", () => ({
@@ -109,6 +127,7 @@ describe("<Home>", () => {
     state.listProps = undefined;
     state.memoViewProps = undefined;
     state.filterOptions = undefined;
+    state.exportMemos.mockClear();
   });
   it("renders the editor and memo cards synchronously without blank placeholders", () => {
     render(<Home />);
@@ -139,5 +158,12 @@ describe("<Home>", () => {
     expect(state.editorProps).toMatchObject({
       draft: { scope: "home", space: "spaces/product" },
     });
+  });
+
+  it("lets a regular user export their own memos while browsing another user's feed", () => {
+    state.creatorUsername = "alice";
+    render(<Home />);
+    fireEvent.click(screen.getByRole("button", { name: "Export memos" }));
+    expect(state.exportMemos).toHaveBeenCalledWith("steven", undefined);
   });
 });

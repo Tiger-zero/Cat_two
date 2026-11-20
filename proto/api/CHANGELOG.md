@@ -29,6 +29,11 @@ instead, and update `core/configuration/testdata/compat/` in the same change. Af
 
 ### Breaking
 
+- Cat_two restricts note and attachment reads, statistics derived from notes, and memo archive exports to their owners.
+  Existing audience values stay stored and notes are returned as `PRIVATE`. Legacy share links return `NOT_FOUND`
+  and `CreateMemoShare` returns `FAILED_PRECONDITION`.
+- Memos can no longer set `location` through create and update requests. The API accepts and ignores the field
+  from older clients. Saved locations remain readable and can round-trip in ZIP archives.
 - Cat_two no longer enforces the `USAGE_LIMITS` instance setting on memos or attachments.
   Existing entries and configuration files remain readable. `GetUserUsage` reports usage with empty `limits`
   and a `limit_index` of `-1`. Request and upload chunk validation continue to apply.

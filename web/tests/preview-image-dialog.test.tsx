@@ -16,10 +16,6 @@ vi.mock("@/hooks/useMediaQuery", () => ({
   default: () => false,
 }));
 
-vi.mock("@/components/map/LazyLocationPicker", () => ({
-  LazyLocationPicker: () => <div data-testid="attachment-location-map" />,
-}));
-
 // Render the English copy, so the assertions read like the screen.
 vi.mock("@/utils/i18n", () => ({
   findNearestMatchedLanguage: (language: string) => language || "en",
@@ -635,30 +631,6 @@ describe("<PreviewImageDialog>", () => {
     expect(screen.getByText("ƒ/1.78 · 1/120 s · ISO 64 · 6.86 mm")).toBeInTheDocument();
     expect(screen.getByText("1.35210°, 103.81980°")).toBeInTheDocument();
     expect(screen.getByText("Time zone unknown")).toBeInTheDocument();
-  });
-
-  it("loads the attachment map only after an explicit action", () => {
-    const attachment = buildAttachmentWithPhotoMetadata();
-    render(
-      <PreviewImageDialog
-        open
-        onOpenChange={vi.fn()}
-        items={[
-          {
-            id: attachment.name,
-            kind: "image",
-            sourceUrl: "/image.jpg",
-            filename: attachment.filename,
-            attachments: [attachment],
-          },
-        ]}
-      />,
-    );
-
-    fireEvent.click(screen.getByRole("button", { name: "Show attachment details" }));
-    expect(screen.queryByTestId("attachment-location-map")).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Show map" }));
-    expect(screen.getByTestId("attachment-location-map")).toBeInTheDocument();
   });
 
   it("closes details before closing the media dialog with Escape", async () => {

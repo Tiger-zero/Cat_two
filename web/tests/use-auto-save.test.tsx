@@ -5,7 +5,6 @@ import { useAutoSave } from "@/components/MemoEditor/edit/hooks/useAutoSave";
 import { cacheService } from "@/components/MemoEditor/edit/services/cacheService";
 import { EditorProvider, useEditorContext } from "@/components/MemoEditor/edit/state";
 import { AttachmentSchema } from "@/types/proto/api/attachment_service_pb";
-import { Visibility } from "@/types/proto/api/memo_service_pb";
 
 // Probe surfaces the store's dispatch/actions plus the autosave API so tests can
 // drive content changes the way the editor does and assert on cache writes.
@@ -51,9 +50,7 @@ describe("useAutoSave (store-subscribed)", () => {
     expect(saveSpy).toHaveBeenCalledWith(key, {
       content: "hello world",
       attachments: [],
-      location: null,
       space: undefined,
-      visibility: Visibility.PRIVATE,
     });
   });
 
@@ -65,24 +62,20 @@ describe("useAutoSave (store-subscribed)", () => {
     );
     saveSpy.mockClear();
     act(() => {
-      api.dispatch(api.actions.setMetadata({ space: "spaces/work", visibility: Visibility.SPACE }));
+      api.dispatch(api.actions.setMetadata({ space: "spaces/work" }));
     });
     expect(saveSpy).toHaveBeenLastCalledWith(cacheService.key("users/steven", "settings"), {
       content: "",
       attachments: [],
-      location: null,
       space: "spaces/work",
-      visibility: Visibility.SPACE,
     });
     act(() => {
-      api.dispatch(api.actions.setMetadata({ space: undefined, visibility: Visibility.PRIVATE }));
+      api.dispatch(api.actions.setMetadata({ space: undefined }));
     });
     expect(saveSpy).toHaveBeenLastCalledWith(cacheService.key("users/steven", "settings"), {
       content: "",
       attachments: [],
-      location: null,
       space: undefined,
-      visibility: Visibility.PRIVATE,
     });
   });
 
@@ -107,9 +100,7 @@ describe("useAutoSave (store-subscribed)", () => {
     expect(saveSpy).toHaveBeenCalledWith(key, {
       content: "",
       attachments: [image],
-      location: null,
       space: undefined,
-      visibility: Visibility.PRIVATE,
     });
   });
 
@@ -143,9 +134,7 @@ describe("useAutoSave (store-subscribed)", () => {
     expect(saveSpy).toHaveBeenCalledWith(key, {
       content: "",
       attachments: [updated],
-      location: null,
       space: undefined,
-      visibility: Visibility.PRIVATE,
     });
   });
 

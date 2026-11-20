@@ -2,25 +2,21 @@ import { createBrowserRouter, Navigate, type RouteObject, useLocation } from "re
 import App from "@/App";
 import { ChunkLoadErrorFallback } from "@/components/ErrorBoundary";
 import { preloadMemoEditing } from "@/components/MemoEditor";
-import { useAuth } from "@/contexts/AuthContext";
-import useCurrentUser from "@/hooks/useCurrentUser";
 import MainLayout from "@/layouts/MainLayout";
 import RootLayout from "@/layouts/RootLayout";
 import { lazyWithReload } from "@/utils/lazy";
 import { RequireAuthRoute, RequireFullInitializationRoute, RequireGuestRoute, RequireInstanceInitializationRoute } from "./guards";
 import { LegacyProfileRedirect } from "./LegacyProfileRedirect";
-import { CALENDAR_ROUTE_PATTERN, getCollectionCreator, ROUTES, SPACE_ROUTE_PATTERN, withCollectionCreator } from "./routes";
+import { CALENDAR_ROUTE_PATTERN, ROUTES, SPACE_ROUTE_PATTERN, withCollectionCreator } from "./routes";
 import { SpaceRoute } from "./SpaceRoute";
 
 const AdminSignIn = lazyWithReload(() => import("@/pages/AdminSignIn"));
 const Archived = lazyWithReload(() => import("@/pages/Archived"));
 const AuthCallback = lazyWithReload(() => import("@/pages/AuthCallback"));
-const MemoMap = lazyWithReload(() => import("@/pages/Map"));
 const Calendar = lazyWithReload(() => import("@/pages/Calendar"));
-const Home = lazyWithReload(() => import("@/pages/Home"));
 // A signed-in user's Home composes at once, so the page's code arrives together with the
 // editing session's and the composer renders with the page, never after it.
-const ComposingHome = lazyWithReload(() => Promise.all([import("@/pages/Home"), preloadMemoEditing()]).then(([page]) => page));
+const Home = lazyWithReload(() => Promise.all([import("@/pages/Home"), preloadMemoEditing()]).then(([page]) => page));
 const Inboxes = lazyWithReload(() => import("@/pages/Inboxes"));
 const MemoDetail = lazyWithReload(() => import("@/pages/MemoDetail"));
 const NotFound = lazyWithReload(() => import("@/pages/NotFound"));
@@ -31,23 +27,11 @@ const MemoViews = lazyWithReload(() => import("@/pages/MemoViews"));
 const SignIn = lazyWithReload(() => import("@/pages/SignIn"));
 const SignUp = lazyWithReload(() => import("@/pages/SignUp"));
 
-const HomeRoute = () => {
-  const { isIdentityInitialized } = useAuth();
-  const currentUser = useCurrentUser();
-  const location = useLocation();
-  if (!isIdentityInitialized) return null;
-  if (!currentUser && !getCollectionCreator(location.search)) {
-    return <Navigate to={{ pathname: ROUTES.EXPLORE, search: location.search, hash: location.hash }} replace />;
-  }
-  return currentUser ? <ComposingHome /> : <Home />;
-};
-
 const ExploreRoute = () => {
-  const currentUser = useCurrentUser();
   const location = useLocation();
   const search = withCollectionCreator(location.search);
   if (search !== location.search) return <Navigate to={{ pathname: location.pathname, search, hash: location.hash }} replace />;
-  return currentUser ? <ComposingHome /> : <Home />;
+  return <Home />;
 };
 
 // Backward compatibility alias.
@@ -90,19 +74,17 @@ export const routeConfig: RouteObject[] = [
       // Backward compatibility: the old `/home` URL now lives at `/`.
       { path: "home", element: <Navigate to={Routes.HOME} replace /> },
       {
-        element: <RootLayout />,
+        element: <RequireAuthRoute />,
         children: [
           {
-            element: <MainLayout />,
+            element: <RootLayout />,
             children: [
-              { index: true, element: <HomeRoute /> },
-              { path: Routes.EXPLORE, element: <ExploreRoute /> },
-              // Like Timeline, the calendar is public: guests see the memos readable to them.
-              { path: CALENDAR_ROUTE_PATTERN, element: <Calendar /> },
-              { path: Routes.USER_PROFILE, element: <LegacyProfileRedirect /> },
               {
-                element: <RequireAuthRoute />,
+                element: <MainLayout />,
                 children: [
+                  { index: true, element: <Home /> },
+                  { path: Routes.EXPLORE, element: <ExploreRoute /> },
+                  { path: CALENDAR_ROUTE_PATTERN, element: <Calendar /> },
                   { path: Routes.ARCHIVED, element: <Archived /> },
                   {
                     element: <RequireFullInitializationRoute />,
@@ -110,17 +92,7 @@ export const routeConfig: RouteObject[] = [
                   },
                 ],
               },
-            ],
-          },
-          { path: "memos/:uid", element: <MemoDetail /> },
-          { path: "memos/shares/:token", element: <MemoDetail /> },
-          {
-            element: <RequireFullInitializationRoute />,
-            children: [{ path: Routes.MAP, element: <MemoMap /> }],
-          },
-          {
-            element: <RequireAuthRoute />,
-            children: [
+              { path: "memos/:uid", element: <MemoDetail /> },
               {
                 element: <RequireFullInitializationRoute />,
                 children: [
@@ -133,13 +105,12 @@ export const routeConfig: RouteObject[] = [
                           {
                             element: <MainLayout />,
                             children: [
-                              { index: true, element: <HomeRoute /> },
+                              { index: true, element: <Home /> },
                               { path: "explore", element: <ExploreRoute /> },
                               { path: "calendar/:year?/:month?/:day?", element: <Calendar /> },
                             ],
                           },
                           { path: "attachments", element: <Attachments /> },
-                          { path: "map", element: <MemoMap /> },
                         ],
                       },
                       { path: "*", element: <NotFound /> },
@@ -152,6 +123,12 @@ export const routeConfig: RouteObject[] = [
               },
             ],
           },
+        ],
+      },
+      {
+        element: <RootLayout />,
+        children: [
+          { path: Routes.USER_PROFILE, element: <LegacyProfileRedirect /> },
           { path: "403", element: <PermissionDenied /> },
           { path: "404", element: <NotFound /> },
           { path: "*", element: <NotFound /> },

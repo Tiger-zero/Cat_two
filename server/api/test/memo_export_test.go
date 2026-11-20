@@ -20,6 +20,7 @@ import (
 	"github.com/usememos/memos/core/memoexport"
 	"github.com/usememos/memos/internal/ratelimit"
 	apipb "github.com/usememos/memos/proto/gen/api"
+	storepb "github.com/usememos/memos/proto/gen/store"
 	"github.com/usememos/memos/server/api"
 	"github.com/usememos/memos/store"
 )
@@ -54,7 +55,7 @@ func buildArchiveFixture(t *testing.T, ts *TestService, username string) *archiv
 		MemoId: "referenced1",
 		Memo: &apipb.Memo{
 			Content:    "Referenced memo #work",
-			Visibility: apipb.Visibility_PUBLIC,
+			Visibility: apipb.Visibility_PRIVATE,
 			CreateTime: timestamppb.New(mustTime(t, "2026-03-01T09:00:00Z")),
 			UpdateTime: timestamppb.New(mustTime(t, "2026-03-01T09:30:00Z")),
 		},
@@ -70,12 +71,18 @@ func buildArchiveFixture(t *testing.T, ts *TestService, username string) *archiv
 			Pinned:          true,
 			CreateTime:      timestamppb.New(mustTime(t, "2026-03-02T14:05:11Z")),
 			UpdateTime:      timestamppb.New(mustTime(t, "2026-03-02T14:20:47Z")),
-			Location:        &apipb.Location{Placeholder: "Office", Latitude: 52.52, Longitude: 13.405},
 			Attachments:     []*apipb.Attachment{{Name: attachment.Name}},
 			Relations:       []*apipb.MemoRelation{{Type: apipb.MemoRelation_REFERENCE, RelatedMemo: &apipb.MemoRelation_MemoRef{Name: referenced.Name}}},
 		},
 	})
 	require.NoError(t, err)
+	// The saved location predates the removal of location writes from the memo API.
+	parentUID := "parent00001"
+	storedParent, err := ts.Store.GetMemo(ctx, &store.FindMemo{UID: &parentUID})
+	require.NoError(t, err)
+	require.NotNil(t, storedParent)
+	storedParent.Payload.Location = &storepb.MemoPayload_Location{Placeholder: "Office", Latitude: 52.52, Longitude: 13.405}
+	require.NoError(t, ts.Store.UpdateMemo(ctx, &store.UpdateMemo{ID: storedParent.ID, Payload: storedParent.Payload}))
 	// Creation ignores pinned; pin the memo the way the client does.
 	parent, err = ts.Service.UpdateMemo(userCtx, &apipb.UpdateMemoRequest{
 		Memo:       &apipb.Memo{Name: parent.Name, Pinned: true, UpdateTime: timestamppb.New(mustTime(t, "2026-03-02T14:20:47Z"))},
@@ -94,16 +101,14 @@ func buildArchiveFixture(t *testing.T, ts *TestService, username string) *archiv
 	})
 	require.NoError(t, err)
 
-	spaceName := "spaces/" + space.UID
-	_, err = ts.Service.CreateMemo(userCtx, &apipb.CreateMemoRequest{
-		MemoId: "spacememo01",
-		Memo:   &apipb.Memo{Content: "Shared with the team", Visibility: apipb.Visibility_SPACE, Space: &spaceName},
+	legacySpaceMemo, err := ts.Store.CreateMemo(ctx, &store.Memo{
+		UID: "spacememo01", CreatorID: user.ID, Content: "Shared with the team", Visibility: store.SpaceAudience, SpaceID: &space.ID,
 	})
 	require.NoError(t, err)
 
 	archived, err := ts.Service.CreateMemo(userCtx, &apipb.CreateMemoRequest{
 		MemoId: "archived001",
-		Memo:   &apipb.Memo{Content: "Old note", Visibility: apipb.Visibility_PROTECTED},
+		Memo:   &apipb.Memo{Content: "Old note", Visibility: apipb.Visibility_PRIVATE},
 	})
 	require.NoError(t, err)
 	archived, err = ts.Service.UpdateMemo(userCtx, &apipb.UpdateMemoRequest{
@@ -111,10 +116,15 @@ func buildArchiveFixture(t *testing.T, ts *TestService, username string) *archiv
 		UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"state"}},
 	})
 	require.NoError(t, err)
+	archivedUID := "archived001"
+	archivedRecord, err := ts.Store.GetMemo(ctx, &store.FindMemo{UID: &archivedUID})
+	require.NoError(t, err)
+	legacyVisibility := store.Protected
+	require.NoError(t, ts.Store.UpdateMemo(ctx, &store.UpdateMemo{ID: archivedRecord.ID, Visibility: &legacyVisibility}))
 
 	return &archiveFixture{
 		user: user, userCtx: userCtx, photo: photo, parent: parent, archived: archived,
-		allMemoUIDs: []string{"referenced1", "parent00001", "comment0001", "spacememo01", "archived001"},
+		allMemoUIDs: []string{"referenced1", "parent00001", "comment0001", legacySpaceMemo.UID, archivedUID},
 	}
 }
 
@@ -157,11 +167,19 @@ func TestWriteMemoExport(t *testing.T) {
 	defer ts.Cleanup()
 	fixture := buildArchiveFixture(t, ts, "exporter")
 
-	// Another user's memo must never appear, even when it comments on ours.
-	other, err := ts.CreateRegularUser(context.Background(), "someone-else")
+	// A legacy cross-user reference must omit the other user's memo and UID.
+	ctx := context.Background()
+	other, err := ts.CreateRegularUser(ctx, "someone-else")
 	require.NoError(t, err)
-	_, err = ts.Service.CreateMemo(ts.CreateUserContext(context.Background(), other.ID), &apipb.CreateMemoRequest{
-		Memo: &apipb.Memo{Content: "not yours", Visibility: apipb.Visibility_PUBLIC},
+	foreignMemo, err := ts.Store.CreateMemo(ctx, &store.Memo{
+		UID: "foreign0001", CreatorID: other.ID, Content: "not yours", Visibility: store.Public,
+	})
+	require.NoError(t, err)
+	parentUID := "parent00001"
+	ownedMemo, err := ts.Store.GetMemo(ctx, &store.FindMemo{UID: &parentUID})
+	require.NoError(t, err)
+	_, err = ts.Store.UpsertMemoRelation(ctx, &store.MemoRelation{
+		MemoID: ownedMemo.ID, RelatedMemoID: foreignMemo.ID, Type: store.MemoRelationReference,
 	})
 	require.NoError(t, err)
 
@@ -211,10 +229,16 @@ func TestWriteMemoExport(t *testing.T) {
 	require.Less(t, indexOfMemo(archive, "parent00001"), indexOfMemo(archive, "comment0001"))
 
 	require.Equal(t, &memoexport.Space{UID: "team-notes", Title: "Team Notes"}, byUID["spacememo01"].Space)
-	require.Equal(t, "SPACE", byUID["spacememo01"].Visibility)
+	require.Equal(t, "PRIVATE", byUID["spacememo01"].Visibility)
 	require.Equal(t, "ARCHIVED", byUID["archived001"].State)
-	require.Equal(t, "PROTECTED", byUID["archived001"].Visibility)
+	require.Equal(t, "PRIVATE", byUID["archived001"].Visibility)
 	require.Equal(t, []string{"work"}, byUID["referenced1"].Tags)
+
+	var selected bytes.Buffer
+	require.NoError(t, ts.Service.WriteMemoExport(ctx, fixture.user, &selected, time.Now(), "comment0001"))
+	selectedArchive := readArchive(t, selected.Bytes())
+	require.Len(t, selectedArchive.Memos, 1)
+	require.Equal(t, parentUID, selectedArchive.Memos[0].Parent, "an unselected parent owned by the author stays linked")
 }
 
 func indexOfMemo(archive *memoexport.File, uid string) int {
@@ -244,9 +268,8 @@ func TestImportMemoExportIntoAnotherAccount(t *testing.T) {
 	require.Zero(t, report.Skipped)
 	require.Zero(t, report.Failed, "%v", report.Failures)
 	// The space memo cannot land in a space the importer does not belong to.
-	require.Len(t, report.Warnings, 2)
+	require.Len(t, report.Warnings, 1)
 	require.Contains(t, report.Warnings[0].Message, "space")
-	require.Contains(t, report.Warnings[1].Message, "SPACE visibility")
 
 	memos, err := ts.Store.ListMemos(ctx, &store.FindMemo{CreatorID: &importer.ID})
 	require.NoError(t, err)
@@ -297,7 +320,7 @@ func TestImportMemoExportIntoAnotherAccount(t *testing.T) {
 	archived := byContent["Old note"]
 	require.NotNil(t, archived)
 	require.Equal(t, store.Archived, archived.RowStatus)
-	require.Equal(t, store.Protected, archived.Visibility)
+	require.Equal(t, store.Private, archived.Visibility)
 
 	attachments, err := ts.Store.ListAttachments(ctx, &store.FindAttachment{MemoID: &parent.ID})
 	require.NoError(t, err)

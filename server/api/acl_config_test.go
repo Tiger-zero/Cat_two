@@ -26,21 +26,12 @@ func TestPublicMethodsArePublic(t *testing.T) {
 		"/memos.api.UserService/CreateUser",
 		"/memos.api.UserService/GetUser",
 		"/memos.api.UserService/BatchGetUsers",
-		"/memos.api.UserService/GetUserStats",
-		"/memos.api.UserService/ListUserStats",
 		// Identity Provider Service
 		"/memos.api.IdentityProviderService/ListIdentityProviders",
-		// Memo Service
-		"/memos.api.MemoService/GetMemo",
-		"/memos.api.MemoService/ListMemos",
-		"/memos.api.MemoService/ListMemoComments",
-		"/memos.api.MemoService/ListMemoAttachments",
-		"/memos.api.MemoService/ListMemoReactions",
-		"/memos.api.MemoService/ListMemoRelations",
+		// Link previews are independent of notes.
 		"/memos.api.MemoService/GetLinkMetadata",
 		"/memos.api.MemoService/BatchGetLinkMetadata",
-		// Attachment Service metadata follows linked memo visibility.
-		"/memos.api.AttachmentService/GetAttachment",
+		"/memos.api.MemoService/GetSharedMemo",
 	}
 
 	for _, method := range publicMethods {
@@ -69,6 +60,16 @@ func TestProtectedMethodsRequireAuth(t *testing.T) {
 		"/memos.api.MemoService/CreateMemo",
 		"/memos.api.MemoService/UpdateMemo",
 		"/memos.api.MemoService/DeleteMemo",
+		// Private notes, related resources, and author statistics.
+		"/memos.api.MemoService/GetMemo",
+		"/memos.api.MemoService/ListMemos",
+		"/memos.api.MemoService/ListMemoComments",
+		"/memos.api.MemoService/ListMemoAttachments",
+		"/memos.api.MemoService/ListMemoReactions",
+		"/memos.api.MemoService/ListMemoRelations",
+		"/memos.api.AttachmentService/GetAttachment",
+		"/memos.api.UserService/GetUserStats",
+		"/memos.api.UserService/ListUserStats",
 		// Space Service - every operation requires an authenticated member.
 		"/memos.api.SpaceService/CreateSpace",
 		"/memos.api.SpaceService/ListSpaces",
@@ -152,7 +153,7 @@ func TestAuthBootstrapClassification(t *testing.T) {
 		})
 	}
 
-	// Public in PUBLIC mode, but gated in PRIVATE mode: browsing and profiles.
+	// Private mode never exposes these note or profile endpoints.
 	gatedWhilePrivate := []string{
 		"/memos.api.MemoService/ListMemos",
 		"/memos.api.MemoService/GetMemo",

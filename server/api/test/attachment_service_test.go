@@ -250,13 +250,19 @@ func TestCreateAttachmentCleansSavedBlobWhenStoreCreateFails(t *testing.T) {
 	require.FileExists(t, cleanupFailurePath, "the failpoint must prove compensation was attempted")
 }
 
-func TestAttachmentMetadataFollowsMemoVisibility(t *testing.T) {
+func TestAttachmentMetadataIsOnlyVisibleToTheMemoAuthor(t *testing.T) {
 	ctx := context.Background()
 	ts := NewTestService(t)
 	defer ts.Cleanup()
 	owner, err := ts.CreateRegularUser(ctx, "metadata-owner")
 	require.NoError(t, err)
 	ownerCtx := ts.CreateUserContext(ctx, owner.ID)
+	other, err := ts.CreateRegularUser(ctx, "metadata-other")
+	require.NoError(t, err)
+	otherCtx := ts.CreateUserContext(ctx, other.ID)
+	admin, err := ts.CreateHostUser(ctx, "metadata-admin")
+	require.NoError(t, err)
+	adminCtx := ts.CreateUserContext(ctx, admin.ID)
 	attachment, err := ts.Service.CreateAttachment(ownerCtx, &apipb.CreateAttachmentRequest{Attachment: &apipb.Attachment{
 		Filename: "metadata.png",
 		Type:     "image/png",
@@ -264,25 +270,33 @@ func TestAttachmentMetadataFollowsMemoVisibility(t *testing.T) {
 	}})
 	require.NoError(t, err)
 	memo, err := ts.Service.CreateMemo(ownerCtx, &apipb.CreateMemoRequest{Memo: &apipb.Memo{
-		Content:     "public metadata",
-		Visibility:  apipb.Visibility_PUBLIC,
+		Content:     "author-only metadata",
 		Attachments: []*apipb.Attachment{{Name: attachment.Name}},
 	}})
 	require.NoError(t, err)
 
-	_, err = ts.Service.GetAttachment(ctx, &apipb.GetAttachmentRequest{Name: attachment.Name})
-	require.NoError(t, err)
-	listed, err := ts.Service.ListMemoAttachments(ctx, &apipb.ListMemoAttachmentsRequest{Parent: memo.Name})
-	require.NoError(t, err)
-	require.Len(t, listed.Attachments, 1)
-
-	protected := store.Protected
 	memoID := memoIDFromName(ctx, t, ts, memo.Name)
-	require.NoError(t, ts.Store.UpdateMemo(ctx, &store.UpdateMemo{ID: memoID, Visibility: &protected}))
-	_, err = ts.Service.GetAttachment(ctx, &apipb.GetAttachmentRequest{Name: attachment.Name})
-	require.Equal(t, codes.Unauthenticated, status.Code(err))
-	_, err = ts.Service.ListMemoAttachments(ctx, &apipb.ListMemoAttachmentsRequest{Parent: memo.Name})
-	require.Equal(t, codes.Unauthenticated, status.Code(err))
+	for _, visibility := range []store.Visibility{store.Public, store.Protected, store.Private} {
+		t.Run(string(visibility), func(t *testing.T) {
+			require.NoError(t, ts.Store.UpdateMemo(ctx, &store.UpdateMemo{ID: memoID, Visibility: &visibility}))
+			for _, actor := range []struct {
+				ctx  context.Context
+				code codes.Code
+			}{{ctx, codes.Unauthenticated}, {otherCtx, codes.PermissionDenied}, {adminCtx, codes.PermissionDenied}} {
+				_, getErr := ts.Service.GetAttachment(actor.ctx, &apipb.GetAttachmentRequest{Name: attachment.Name})
+				require.Equal(t, actor.code, status.Code(getErr))
+				_, listErr := ts.Service.ListMemoAttachments(actor.ctx, &apipb.ListMemoAttachmentsRequest{Parent: memo.Name})
+				require.Equal(t, actor.code, status.Code(listErr))
+			}
+			got, getErr := ts.Service.GetAttachment(ownerCtx, &apipb.GetAttachmentRequest{Name: attachment.Name})
+			require.NoError(t, getErr)
+			require.Equal(t, attachment.Name, got.Name)
+			listed, listErr := ts.Service.ListMemoAttachments(ownerCtx, &apipb.ListMemoAttachmentsRequest{Parent: memo.Name})
+			require.NoError(t, listErr)
+			require.Len(t, listed.Attachments, 1)
+			require.Equal(t, attachment.Name, listed.Attachments[0].Name)
+		})
+	}
 
 	archived := store.Archived
 	require.NoError(t, ts.Store.UpdateMemo(ctx, &store.UpdateMemo{ID: memoID, RowStatus: &archived}))
@@ -325,7 +339,7 @@ func TestCreateAttachmentMemoPermission(t *testing.T) {
 		require.Equal(t, memoIDFromName(ctx, t, ts, memo.Name), *stored.MemoID)
 	})
 
-	t.Run("admin creates an admin-owned attachment linked to another user's memo", func(t *testing.T) {
+	t.Run("admin cannot link an attachment to another user's memo", func(t *testing.T) {
 		ts := NewTestService(t)
 		defer ts.Cleanup()
 
@@ -343,7 +357,7 @@ func TestCreateAttachmentMemoPermission(t *testing.T) {
 		})
 		require.NoError(t, err)
 
-		created, err := ts.Service.CreateAttachment(adminCtx, &apipb.CreateAttachmentRequest{
+		_, err = ts.Service.CreateAttachment(adminCtx, &apipb.CreateAttachmentRequest{
 			Attachment: &apipb.Attachment{
 				Filename: "admin.txt",
 				Type:     "text/plain",
@@ -351,14 +365,18 @@ func TestCreateAttachmentMemoPermission(t *testing.T) {
 				Memo:     &memo.Name,
 			},
 		})
-		require.NoError(t, err, "an instance administrator is the superuser for named memo operations")
+		require.Equal(t, codes.PermissionDenied, status.Code(err))
 		attachments, err := ts.Store.ListAttachments(ctx, &store.FindAttachment{CreatorID: &admin.ID})
 		require.NoError(t, err)
-		require.Len(t, attachments, 1, "the attachment stays owned by the administrator")
-		require.NotNil(t, attachments[0].MemoID)
+		require.Empty(t, attachments)
 
-		// Removal deletes the attachment, so the memo author cannot remove a
-		// file the administrator owns; the administrator can.
+		// An attachment already linked by a former administrator retains
+		// its uploader. Neither user can use the memo API to remove it.
+		legacy, err := ts.Store.CreateAttachment(ctx, &store.Attachment{
+			UID: "legacy-admin-file", CreatorID: admin.ID, Filename: "legacy.txt", Type: "text/plain",
+			MemoID: new(memoIDFromName(ctx, t, ts, memo.Name)),
+		})
+		require.NoError(t, err)
 		_, err = ts.Service.SetMemoAttachments(ownerCtx, &apipb.SetMemoAttachmentsRequest{
 			Name:        memo.Name,
 			Attachments: []*apipb.Attachment{},
@@ -368,10 +386,11 @@ func TestCreateAttachmentMemoPermission(t *testing.T) {
 			Name:        memo.Name,
 			Attachments: []*apipb.Attachment{},
 		})
+		require.Equal(t, codes.PermissionDenied, status.Code(err))
+		stored, err := ts.Store.GetAttachment(ctx, &store.FindAttachment{ID: &legacy.ID})
 		require.NoError(t, err)
-		attachments, err = ts.Store.ListAttachments(ctx, &store.FindAttachment{CreatorID: &admin.ID})
-		require.NoError(t, err)
-		require.Empty(t, attachments, "removal deletes the bound attachment: %s", created.Name)
+		require.NotNil(t, stored)
+		require.Equal(t, legacy.MemoID, stored.MemoID)
 	})
 
 	t.Run("non-owner cannot create attachment directly linked to memo", func(t *testing.T) {
@@ -535,6 +554,10 @@ func TestListAttachmentsSpaceFilter(t *testing.T) {
 		UID: "attachment-api-space-b", CreatorID: owner.ID, Content: "b", Visibility: store.Public, SpaceID: &spaceB.ID,
 	})
 	require.NoError(t, err)
+	memberMemo, err := ts.Store.CreateMemo(ctx, &store.Memo{
+		UID: "attachment-api-space-a-member", CreatorID: member.ID, Content: "member-owned", Visibility: store.Private, SpaceID: &spaceA.ID,
+	})
+	require.NoError(t, err)
 
 	createAttachment := func(uid string, memoID *int32) {
 		t.Helper()
@@ -548,6 +571,10 @@ func TestListAttachmentsSpaceFilter(t *testing.T) {
 	createAttachment("attachment-api-space-a-file", &spaceAMemo.ID)
 	createAttachment("attachment-api-space-a-shared-file", &sharedMemo.ID)
 	createAttachment("attachment-api-space-b-file", &spaceBMemo.ID)
+	_, err = ts.Store.CreateAttachment(ctx, &store.Attachment{
+		UID: "attachment-api-space-a-member-file", CreatorID: member.ID, Filename: "member-file.txt", Type: "text/plain", MemoID: &memberMemo.ID,
+	})
+	require.NoError(t, err)
 
 	attachmentFilenames := func(response *apipb.ListAttachmentsResponse) []string {
 		t.Helper()
@@ -594,14 +621,14 @@ func TestListAttachmentsSpaceFilter(t *testing.T) {
 		Filter:   `space == "spaces/` + spaceA.UID + `"`,
 	})
 	require.NoError(t, err)
-	require.Equal(t, []string{"attachment-api-space-a-shared-file.txt"}, attachmentFilenames(memberResponse))
+	require.Equal(t, []string{"member-file.txt"}, attachmentFilenames(memberResponse))
 
 	creatorResponse, err := ts.Service.ListAttachments(ts.CreateUserContext(ctx, member.ID), &apipb.ListAttachmentsRequest{
 		PageSize: 100,
 		Filter:   `creator == "users/` + owner.Username + `"`,
 	})
 	require.NoError(t, err)
-	require.ElementsMatch(t, []string{"attachment-api-space-a-shared-file.txt", "attachment-api-space-b-file.txt"}, attachmentFilenames(creatorResponse))
+	require.Empty(t, creatorResponse.Attachments)
 
 	_, err = ts.Service.ListAttachments(ts.CreateUserContext(ctx, outsider.ID), &apipb.ListAttachmentsRequest{
 		Filter: `space == "spaces/` + spaceA.UID + `"`,
@@ -643,6 +670,9 @@ func TestAttachmentCreatorIsUploader(t *testing.T) {
 	got, err := ts.Service.GetAttachment(authorCtx, &apipb.GetAttachmentRequest{Name: listed.Attachments[0].Name})
 	require.NoError(t, err)
 	require.Equal(t, api.BuildUserName(uploader.Username), got.Creator)
+
+	_, err = ts.Service.GetAttachment(ts.CreateUserContext(ctx, uploader.ID), &apipb.GetAttachmentRequest{Name: got.Name})
+	require.Equal(t, codes.PermissionDenied, status.Code(err))
 }
 
 func memoIDFromName(ctx context.Context, t *testing.T, ts *TestService, name string) int32 {

@@ -44,7 +44,7 @@ func (s *APIService) DispatchMemoCommentCreatedWebhook(
 		return nil
 	}
 	for _, subject := range []*store.Memo{comment, relatedMemo} {
-		readContext, err := s.buildMemoReadContextForViewer(ctx, subject, receiver, false, nil)
+		readContext, err := s.buildMemoReadContextForViewer(ctx, subject, receiver)
 		if err != nil {
 			return errors.Wrap(err, "failed to resolve webhook subject access")
 		}

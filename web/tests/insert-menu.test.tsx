@@ -12,7 +12,6 @@ vi.mock("@/hooks/useCurrentUser", () => ({ default: () => undefined }));
 vi.mock("@/contexts/AuthContext", () => ({ useAuth: () => ({ userGeneralSetting: undefined }) }));
 vi.mock("@/hooks/useSpaceQueries", () => ({ useSpaces: () => ({ data: [] }) }));
 vi.mock("@/contexts/SpaceContext", () => ({ useSpaceContext: () => ({ selectedSpaceName: undefined }) }));
-vi.mock("@/components/map/useReverseGeocoding", () => ({ useReverseGeocoding: () => ({ data: undefined }) }));
 
 beforeAll(() => {
   Element.prototype.scrollIntoView = vi.fn();
@@ -33,7 +32,6 @@ const renderMenu = (onInsertImages = vi.fn(), isSaving = false, hosted = false, 
     <EditorProvider>
       <InsertMenu
         isSaving={isSaving}
-        onLocationChange={vi.fn()}
         onInsertImages={onInsertImages}
         onAudioRecorderClick={vi.fn()}
         viewToggles={hosted ? undefined : viewToggles}
@@ -55,7 +53,6 @@ describe("InsertMenu", () => {
       "editor.insert-menu.insert-image",
       "editor.audio-recorder.trigger",
       "editor.insert-menu.link-memo",
-      "editor.insert-menu.add-location",
       "editor.focus-mode",
     ]);
   });

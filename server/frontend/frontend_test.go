@@ -248,7 +248,7 @@ func TestFrontendService_RobotsTXT(t *testing.T) {
 
 	require.Equal(t, http.StatusOK, rec.Code)
 	require.Equal(t, "text/plain; charset=UTF-8", rec.Header().Get("Content-Type"))
-	require.Equal(t, "User-agent: *\nAllow: /\nHost: https://demo.usememos.com\nSitemap: https://demo.usememos.com/sitemap.xml", rec.Body.String())
+	require.Equal(t, "User-agent: *\nDisallow: /\nHost: https://demo.usememos.com", rec.Body.String())
 }
 
 func TestFrontendService_SitemapXML(t *testing.T) {
@@ -292,7 +292,8 @@ func TestFrontendService_SitemapXML(t *testing.T) {
 	require.Equal(t, http.StatusOK, rec.Code)
 	require.Contains(t, rec.Header().Get("Content-Type"), "application/xml")
 	require.Equal(t, "public, no-cache", rec.Header().Get("Cache-Control"))
-	require.Contains(t, rec.Body.String(), `<loc>https://demo.usememos.com/memos/publicmemo</loc>`)
+	require.NotContains(t, rec.Body.String(), "<loc>")
+	require.NotContains(t, rec.Body.String(), "publicmemo")
 	require.NotContains(t, rec.Body.String(), "privatememo")
 }
 

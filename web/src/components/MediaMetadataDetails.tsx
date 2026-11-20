@@ -9,7 +9,6 @@ import {
   FileType2Icon,
   FocusIcon,
   type LucideIcon,
-  MapIcon,
   MapPinIcon,
   RotateCwIcon,
   ScanIcon,
@@ -17,7 +16,6 @@ import {
   XIcon,
 } from "lucide-react";
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
-import { LazyLocationPicker } from "@/components/map/LazyLocationPicker";
 import i18n from "@/i18n";
 import { cn } from "@/lib/utils";
 import { useTranslate } from "@/utils/i18n";
@@ -60,7 +58,6 @@ const DetailSection = ({ title, children }: { title: string; children: ReactNode
 
 const MediaMetadataDetails = ({ id, item, onClose, className }: MediaMetadataDetailsProps) => {
   const t = useTranslate();
-  const [showMap, setShowMap] = useState(false);
   const [coordinatesCopied, setCoordinatesCopied] = useState(false);
   const copyResetTimer = useRef<number | undefined>(undefined);
   const locale = i18n.language;
@@ -70,7 +67,6 @@ const MediaMetadataDetails = ({ id, item, onClose, className }: MediaMetadataDet
     : t("attachment-details.actions.copy-coordinates");
 
   useEffect(() => {
-    setShowMap(false);
     setCoordinatesCopied(false);
   }, [item.id]);
 
@@ -191,16 +187,6 @@ const MediaMetadataDetails = ({ id, item, onClose, className }: MediaMetadataDet
                   />
                 }
               />
-              <Button variant="neutral" size="sm" className="mt-2" onClick={() => setShowMap((visible) => !visible)} icon={<MapIcon />}>
-                {showMap ? t("attachment-details.actions.hide-map") : t("attachment-details.actions.show-map")}
-              </Button>
-              {showMap && (
-                <LazyLocationPicker
-                  className="mt-3 h-44 rounded-mu-xl border-mu-line"
-                  latlng={{ lat: details.location.latitude, lng: details.location.longitude }}
-                  readonly
-                />
-              )}
             </DetailSection>
           )}
 

@@ -10,7 +10,6 @@ import {
   LibraryIcon,
   ListIcon,
   type LucideIcon,
-  MapIcon,
   MenuIcon,
   PaperclipIcon,
   SearchIcon,
@@ -20,7 +19,6 @@ import {
 } from "lucide-react";
 import { useRef } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { MAP_MEMO_FILTER } from "@/components/MapView/useMapMemos";
 import { MemoDetailSidebar } from "@/components/MemoDetailSidebar";
 import MemoDisplaySettingMenu from "@/components/MemoDisplaySettingMenu";
 import { DEFAULT_SETTING_SECTION, SETTINGS_SECTIONS } from "@/components/Settings/settingSections";
@@ -35,7 +33,6 @@ import useCurrentUser from "@/hooks/useCurrentUser";
 import { useFilteredMemoStats } from "@/hooks/useFilteredMemoStats";
 import useMediaQuery from "@/hooks/useMediaQuery";
 import { useNotifications } from "@/hooks/useUserQueries";
-import { combineCELFilters } from "@/lib/cel-filter";
 import { cn } from "@/lib/utils";
 import { collectionNavigationPath, ROUTES } from "@/router/routes";
 import { User_Role, UserNotification_Status } from "@/types/proto/api/user_service_pb";
@@ -71,12 +68,9 @@ const NewMemoAction = ({ onClick }: { onClick: () => void }) => {
 const CollectionSidebarContent = ({
   context,
   showStatistics = true,
-  scopeFilter,
 }: {
   context: "home" | "explore" | "archived";
   showStatistics?: boolean;
-  /** A page that can only show part of the collection counts that part, so a tag never promises memos the page cannot show. */
-  scopeFilter?: string;
 }) => {
   const t = useTranslate();
   const currentUser = useCurrentUser();
@@ -87,11 +81,9 @@ const CollectionSidebarContent = ({
   const { isInitialized: instanceInitialized } = useInstance();
   // User-level collections stay aligned with their unscoped feeds even when a Space is remembered.
   const isUserLevelCollection = context === "archived";
-  const collectionFilter = isUserLevelCollection ? undefined : memoFilter;
-  const statsFilter = scopeFilter ? combineCELFilters(collectionFilter, scopeFilter) : collectionFilter;
   const { statistics, tags } = useFilteredMemoStats({
     context: context === "archived" ? "archived" : "collection",
-    filter: statsFilter,
+    filter: isUserLevelCollection ? undefined : memoFilter,
     enabled: authInitialized && instanceInitialized && (md || mobileOpen),
   });
 
@@ -236,7 +228,6 @@ const MemoDetailSidebarContent = () => {
       onParentRetry={memoDetail.onParentRetry}
       parentPage={memoDetail.from}
       commentCount={memoDetail.commentCount}
-      forceReadonly={memoDetail.readonly}
       contentHidden={memoDetail.contentHidden}
       onEdit={runAndClose(memoDetail.onEdit)}
       onCommentsOpen={runAndClose(memoDetail.onCommentsOpen)}
@@ -255,7 +246,6 @@ const RouteSidebarContent = () => {
   }
   if (kind === "views") return <ViewsSection manageActive />;
   if (kind === "calendar") return <CollectionSidebarContent context="home" showStatistics={false} />;
-  if (kind === "map") return <CollectionSidebarContent context="home" showStatistics={false} scopeFilter={MAP_MEMO_FILTER} />;
   if (kind === "attachments") return <AttachmentsSidebarContent />;
   if (kind === "inbox") return <InboxSidebarContent />;
   if (kind === "settings") return <SettingsSidebarContent />;
@@ -266,7 +256,6 @@ const RouteSidebarContent = () => {
 /** Collection views beside Timeline. Attachments is a library of the user's own files, so guests get the reading views only. */
 const NAV_DESTINATIONS = [
   { kind: "calendar", labelKey: "common.calendar", pathname: ROUTES.CALENDAR, icon: CalendarDaysIcon, signedInOnly: false },
-  { kind: "map", labelKey: "common.map", pathname: ROUTES.MAP, icon: MapIcon, signedInOnly: false },
   { kind: "attachments", labelKey: "common.attachments", pathname: ROUTES.ATTACHMENTS, icon: PaperclipIcon, signedInOnly: true },
 ] as const;
 

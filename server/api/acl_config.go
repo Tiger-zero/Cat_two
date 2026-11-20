@@ -18,30 +18,19 @@ var PublicMethods = map[string]struct{}{
 	"/memos.api.InstanceService/GetInstanceSetting":       {},
 	"/memos.api.InstanceService/BatchGetInstanceSettings": {},
 
-	// User Service - public user profiles and stats
+	// User Service - account registration and profiles
 	"/memos.api.UserService/CreateUser":    {}, // Registration policy is enforced in UserService
 	"/memos.api.UserService/GetUser":       {},
 	"/memos.api.UserService/BatchGetUsers": {},
-	"/memos.api.UserService/GetUserStats":  {},
-	"/memos.api.UserService/ListUserStats": {},
 
 	// Identity Provider Service - SSO buttons on login page
 	"/memos.api.IdentityProviderService/ListIdentityProviders": {},
 
-	// Memo Service - public memos (visibility filtering done in service layer)
-	"/memos.api.MemoService/GetMemo":              {},
-	"/memos.api.MemoService/ListMemos":            {},
-	"/memos.api.MemoService/ListMemoComments":     {},
-	"/memos.api.MemoService/ListMemoAttachments":  {},
-	"/memos.api.MemoService/ListMemoReactions":    {},
-	"/memos.api.MemoService/ListMemoRelations":    {},
+	// Link previews do not read stored notes.
 	"/memos.api.MemoService/GetLinkMetadata":      {},
 	"/memos.api.MemoService/BatchGetLinkMetadata": {},
 
-	// Attachment metadata follows the visibility of its linked memo.
-	"/memos.api.AttachmentService/GetAttachment": {},
-
-	// Memo sharing - share-token endpoints require no authentication
+	// Disabled share links return the same not-found result for every caller.
 	"/memos.api.MemoService/GetSharedMemo": {},
 }
 
@@ -55,8 +44,8 @@ func IsPublicMethod(procedure string) bool {
 // AuthBootstrapMethods is the subset of PublicMethods that stays reachable by
 // anonymous callers even when the instance access mode is PRIVATE.
 //
-// It is the minimum required to render the sign-in page, authenticate, and follow
-// share links, and register when instance settings permit it. Every entry here
+// It allows sign-in, permitted account registration, and consistent rejection
+// of retired share links. Every entry here
 // MUST also exist in PublicMethods.
 var AuthBootstrapMethods = map[string]struct{}{
 	// Auth Service - sign-in and token refresh.
@@ -74,7 +63,7 @@ var AuthBootstrapMethods = map[string]struct{}{
 	// User Service - CreateUser applies registration and password-auth settings.
 	"/memos.api.UserService/CreateUser": {},
 
-	// Memo sharing - share-token access stays public even on a private instance.
+	// Retired share links return not found on both instance access modes.
 	"/memos.api.MemoService/GetSharedMemo": {},
 }
 

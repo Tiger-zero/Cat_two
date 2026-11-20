@@ -1,23 +1,18 @@
 import { equals } from "@bufbuild/protobuf";
 import { useCallback, useEffect, useRef } from "react";
 import { AttachmentSchema } from "@/types/proto/api/attachment_service_pb";
-import { LocationSchema } from "@/types/proto/api/memo_service_pb";
 import { cacheService, type EditorDraft } from "../services";
 import { type EditorState, useEditorStore } from "../state";
 
 const draftFromState = ({ content, metadata }: EditorState): EditorDraft => ({
   content,
   attachments: metadata.attachments,
-  location: metadata.location ?? null,
   space: metadata.space,
-  visibility: metadata.visibility,
 });
 
 const sameDraft = (left: EditorDraft, right: EditorDraft): boolean =>
   left.content === right.content &&
   left.space === right.space &&
-  left.visibility === right.visibility &&
-  (left.location === right.location || (!!left.location && !!right.location && equals(LocationSchema, left.location, right.location))) &&
   left.attachments.length === right.attachments.length &&
   left.attachments.every((attachment, index) => {
     const other = right.attachments[index];

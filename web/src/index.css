@@ -90,30 +90,4 @@
       transform: translateY(-1px) rotate(-6deg);
     }
   }
-
-  .map-attribution-minimal .leaflet-control-attribution {
-    margin: 0 0.25rem 0.25rem 0 !important;
-    border-radius: 0.25rem;
-    background: color-mix(in oklch, var(--mu-canvas) 90%, transparent);
-    color: var(--mu-text-secondary);
-    font-size: 10px;
-    line-height: 1rem;
-    padding: 0 0.25rem;
-  }
-
-  .map-attribution-minimal .leaflet-control-attribution a {
-    color: inherit;
-    text-decoration: none;
-  }
-
-  .map-attribution-minimal .leaflet-control-attribution a:hover {
-    color: var(--mu-text);
-    text-decoration: underline;
-  }
-
-  .map-attribution-minimal .leaflet-control-attribution a:focus-visible {
-    border-radius: 0.125rem;
-    outline: 2px solid var(--mu-focus);
-    outline-offset: 1px;
-  }
 }

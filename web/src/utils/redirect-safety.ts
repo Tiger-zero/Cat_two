@@ -67,10 +67,7 @@ export function buildAuthRoute(options?: { redirect?: string | null; reason?: st
 
 const PUBLIC_ROUTE_PREFIXES = [
   ROUTES.AUTH, // Authentication pages
-  ROUTES.EXPLORE, // Explore page
-  `${ROUTES.SHARED_MEMO}/`, // Shared memo pages (share-link viewer)
   "/u/", // Legacy author links redirect to Home with a creator filter
-  "/memos/", // Individual memo detail pages (dynamic)
 ] as const;
 
 /**
@@ -83,18 +80,10 @@ export function isPublicRoute(path: string): boolean {
 
 /**
  * Reports whether an anonymous visitor to a private instance should be redirected
- * to the sign-in page for the given path.
- *
- * A private instance (no configured instance URL) hides everything from anonymous
- * visitors except share-link pages, which stay accessible so public shares keep
- * working. Authenticated visitors and open instances are never gated.
+ * to the sign-in page. Authenticated visitors and public instances are never gated.
  */
-export function shouldGatePrivateInstance(params: { isPrivateInstance: boolean; isAuthenticated: boolean; pathname: string }): boolean {
-  const { isPrivateInstance, isAuthenticated, pathname } = params;
-  if (!isPrivateInstance || isAuthenticated) {
-    return false;
-  }
-  return !pathname.startsWith(`${ROUTES.SHARED_MEMO}/`);
+export function shouldGatePrivateInstance(params: { isPrivateInstance: boolean; isAuthenticated: boolean }): boolean {
+  return params.isPrivateInstance && !params.isAuthenticated;
 }
 
 /**

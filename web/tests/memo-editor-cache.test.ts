@@ -3,8 +3,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cacheService } from "@/components/MemoEditor/edit/services/cacheService";
 import { AttachmentSchema, MotionMediaFamily, MotionMediaRole, MotionMediaSchema } from "@/types/proto/api/attachment_service_pb";
 
-import { LocationSchema, Visibility } from "@/types/proto/api/memo_service_pb";
-
 describe("memo editor cache", () => {
   beforeEach(() => {
     const storage = new Map<string, string>();
@@ -93,36 +91,25 @@ describe("memo editor cache", () => {
     expect(cacheService.load(key)).toBe(jsonDraft);
   });
 
-  it("round-trips an edited or removed location and isolates Space drafts", () => {
-    const point = create(LocationSchema, { latitude: 0, longitude: 135, placeholder: "Cafe" });
-    cacheService.saveNow("map:space-a:point", { content: "draft", attachments: [], location: point });
-    cacheService.saveNow("map:space-b:point", { content: "draft", attachments: [], location: null });
-    expect(cacheService.loadDraft("map:space-a:point").location).toEqual(point);
-    expect(cacheService.loadDraft("map:space-b:point").location).toBeNull();
-    localStorage.setItem("legacy", JSON.stringify({ kind: "memos.editor-cache", version: 2, content: "old", attachments: [] }));
-    expect(cacheService.loadDraft("legacy").location).toBeUndefined();
-  });
-
   it("persists a chosen destination before typing, and clears it with the draft", () => {
-    cacheService.saveNow("destination", { content: "", attachments: [], space: "spaces/work", visibility: Visibility.PRIVATE });
-    expect(cacheService.loadDraft("destination")).toMatchObject({ space: "spaces/work", visibility: Visibility.PRIVATE });
-    cacheService.saveNow("destination", { content: "draft", attachments: [], visibility: Visibility.PRIVATE });
+    cacheService.saveNow("destination", { content: "", attachments: [], space: "spaces/work" });
+    expect(cacheService.loadDraft("destination")).toMatchObject({ space: "spaces/work" });
+    cacheService.saveNow("destination", { content: "draft", attachments: [] });
     expect(cacheService.loadDraft("destination").space).toBeUndefined();
     cacheService.clear("destination");
     expect(cacheService.loadDraft("destination").space).toBeUndefined();
   });
 
-  it("ignores invalid cached settings while preserving legacy content and location", () => {
+  it("ignores invalid cached settings and legacy location while preserving draft content", () => {
     localStorage.setItem(
       "legacy-location",
       JSON.stringify({ kind: "memos.editor-cache", version: 3, content: "old", location: null, space: 42, visibility: 999 }),
     );
     expect(cacheService.loadDraft("legacy-location")).toMatchObject({
       content: "old",
-      location: null,
       space: undefined,
-      visibility: undefined,
     });
+    expect(cacheService.loadDraft("legacy-location")).not.toHaveProperty("location");
   });
 
   it("keeps the cursor for the next editor mount", () => {

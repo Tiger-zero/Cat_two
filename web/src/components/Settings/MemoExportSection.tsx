@@ -9,7 +9,7 @@ import { importStagedMemos, type StagedMemoImport, stageMemoImport } from "@/lib
 import { inAppTimeZone } from "@/lib/time-zone";
 import { showErrorToast, toast } from "@/lib/toast";
 import type { ImportMemosIssue, ImportMemosReport } from "@/types/proto/api/user_service_pb";
-import { ImportMemosRequest_ConflictPolicy, User_Role } from "@/types/proto/api/user_service_pb";
+import { ImportMemosRequest_ConflictPolicy } from "@/types/proto/api/user_service_pb";
 import { useTranslate } from "@/utils/i18n";
 import SettingGroup from "./SettingGroup";
 import { SettingList, SettingListItem, StatRow } from "./SettingList";
@@ -60,7 +60,6 @@ const MemoExportSection = () => {
   const { exportMemos, exporting } = useExportMemos();
   const [busy, setBusy] = useState(false);
   const [stage, setStage] = useState<ImportStage>({ kind: "idle" });
-  const isAdmin = user?.role === User_Role.ADMIN;
 
   const handleFileChosen = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -99,19 +98,14 @@ const MemoExportSection = () => {
 
   return (
     <SettingSection title={t("setting.memo-export.label")} description={t("setting.memo-export.description")}>
-      <SettingGroup
-        title={t("setting.memo-export.export-title")}
-        description={isAdmin ? t("setting.memo-export.export-description") : t("setting.memo-export.export-admin-only")}
-      >
-        {isAdmin && (
-          <SettingList>
-            <SettingListItem label={t("setting.memo-export.export-label")} description={t("setting.memo-export.export-detail")}>
-              <Button variant="neutral" disabled={exporting} onClick={() => exportMemos(user.username)} icon={<DownloadIcon />}>
-                {exporting ? t("setting.memo-export.exporting") : t("setting.memo-export.export-action")}
-              </Button>
-            </SettingListItem>
-          </SettingList>
-        )}
+      <SettingGroup title={t("setting.memo-export.export-title")} description={t("setting.memo-export.export-description")}>
+        <SettingList>
+          <SettingListItem label={t("setting.memo-export.export-label")} description={t("setting.memo-export.export-detail")}>
+            <Button variant="neutral" disabled={exporting} onClick={() => exportMemos(user.username)} icon={<DownloadIcon />}>
+              {exporting ? t("setting.memo-export.exporting") : t("setting.memo-export.export-action")}
+            </Button>
+          </SettingListItem>
+        </SettingList>
       </SettingGroup>
 
       <SettingGroup showSeparator title={t("setting.memo-export.import-title")} description={t("setting.memo-export.import-description")}>

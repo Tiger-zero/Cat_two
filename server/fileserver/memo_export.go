@@ -12,7 +12,6 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/usememos/memos/core/access"
 	"github.com/usememos/memos/core/memoexport"
 	"github.com/usememos/memos/internal/httphandler"
 	"github.com/usememos/memos/internal/identifier"
@@ -34,10 +33,9 @@ type MemoExporter interface {
 	WriteMemoExport(ctx context.Context, user *store.User, w io.Writer, exportTime time.Time, memoUIDs ...string) error
 }
 
-// serveMemoExport streams a user's Memos export file to an instance
-// administrator. Only one export runs at a time; a second request is refused
-// with 429. HEAD runs every check and answers with the headers alone, so a
-// client can learn about a refusal before the browser starts a download.
+// serveMemoExport streams the authenticated user's own Memos export file.
+// Only one export runs at a time. HEAD runs every check and answers with the
+// headers alone so the client can check availability before downloading.
 func (s *FileServerService) serveMemoExport(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	if s.MemoExporter == nil {
@@ -53,17 +51,8 @@ func (s *FileServerService) serveMemoExport(w http.ResponseWriter, r *http.Reque
 	if caller == nil {
 		return &httphandler.Error{Code: http.StatusUnauthorized, Message: "unauthorized access"}
 	}
-	if !access.IsInstanceAdmin(caller) {
+	if r.PathValue("identifier") != caller.Username {
 		return &httphandler.Error{Code: http.StatusForbidden, Message: "forbidden access"}
-	}
-
-	username := r.PathValue("identifier")
-	user, err := s.Store.GetUser(ctx, &store.FindUser{Username: &username})
-	if err != nil {
-		return &httphandler.Error{Code: http.StatusInternalServerError, Message: "failed to get user", Cause: err}
-	}
-	if user == nil {
-		return &httphandler.Error{Code: http.StatusNotFound, Message: "user not found"}
 	}
 
 	selectedMemos, err := url.ParseQuery(r.URL.RawQuery)
@@ -86,7 +75,7 @@ func (s *FileServerService) serveMemoExport(w http.ResponseWriter, r *http.Reque
 	}
 
 	if len(memoUIDs) > 0 {
-		memos, err := s.Store.ListMemos(ctx, &store.FindMemo{CreatorID: &user.ID, UIDList: memoUIDs, ExcludeContent: true})
+		memos, err := s.Store.ListMemos(ctx, &store.FindMemo{CreatorID: &caller.ID, UIDList: memoUIDs, ExcludeContent: true})
 		if err != nil {
 			return &httphandler.Error{Code: http.StatusInternalServerError, Message: "failed to check selected memos", Cause: err}
 		}
@@ -97,20 +86,20 @@ func (s *FileServerService) serveMemoExport(w http.ResponseWriter, r *http.Reque
 
 	exportTime := time.Now().UTC().Truncate(time.Second)
 	w.Header().Set("Content-Type", memoexport.MediaType)
-	w.Header().Set("Content-Disposition", mime.FormatMediaType("attachment", map[string]string{"filename": memoExportFilename(user.Username, exportTime)}))
+	w.Header().Set("Content-Disposition", mime.FormatMediaType("attachment", map[string]string{"filename": memoExportFilename(caller.Username, exportTime)}))
 	if preflight {
 		w.WriteHeader(http.StatusOK)
 		return nil
 	}
 
 	body := &commitOnWrite{ResponseWriter: w}
-	if err := s.MemoExporter.WriteMemoExport(ctx, user, body, exportTime, memoUIDs...); err != nil {
+	if err := s.MemoExporter.WriteMemoExport(ctx, caller, body, exportTime, memoUIDs...); err != nil {
 		// Before the first byte this becomes a JSON 500, which the handler
 		// wrapper logs and strips the archive headers from. After it, the
 		// response is already committed and the client receives a truncated
 		// archive, which the wrapper leaves alone, so that case is logged here.
 		if body.committed && ctx.Err() == nil {
-			slog.Error("memo export failed", slog.Int("user", int(user.ID)), slog.Int("caller", int(caller.ID)), slog.Any("error", err))
+			slog.Error("memo export failed", slog.Int("user", int(caller.ID)), slog.Any("error", err))
 		}
 		return &httphandler.Error{Code: http.StatusInternalServerError, Message: "failed to export memos", Cause: err}
 	}

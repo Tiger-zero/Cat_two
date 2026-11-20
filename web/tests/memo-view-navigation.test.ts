@@ -53,13 +53,7 @@ describe("memo view navigation", () => {
     expect(resolveMemoDetailOrigin(createMemoNavigationState("/explore?filter=tagSearch%3Awork"))).toBe("/explore?filter=tagSearch%3Awork");
   });
 
-  it.each([
-    "/memos/123",
-    "/memos/123/",
-    "/Memos/123",
-    "/memos/shares/token",
-    "/Memos/Shares/token/",
-  ])("does not treat %s as its own origin", (pathname) => {
+  it.each(["/memos/123", "/memos/123/", "/Memos/123"])("does not treat %s as its own origin", (pathname) => {
     expect(isMemoDetailPath(pathname, "memos/123")).toBe(true);
     expect(resolveMemoParentPage({ pathname, search: "", memoName: "memos/123" })).toBe("/");
   });
@@ -70,20 +64,15 @@ describe("memo view navigation", () => {
     expect(resolveMemoParentPage({ pathname, search: "", memoName: "memos/123" })).toBe(pathname);
   });
 
-  it("rejects extra path segments after a share token", () => {
-    expect(isMemoDetailPath("/memos/shares/token/extra", "memos/123")).toBe(false);
+  it("rejects a retired share link as a memo detail route", () => {
+    expect(isMemoDetailPath("/memos/shares/token", "memos/123")).toBe(false);
   });
 
-  it.each([
-    "/memos/123",
-    "/Memos/123/",
-    "/memos/shares/token",
-    "/Memos/Shares/token/",
-  ])("recognizes %s as a Memo resource route", (pathname) => {
+  it.each(["/memos/123", "/Memos/123/"])("recognizes %s as a Memo resource route", (pathname) => {
     expect(isMemoResourcePath(pathname)).toBe(true);
   });
 
-  it.each(["/", "/memos", "/memos/123/extra", "/memos/shares/token/extra"])("rejects %s as a Memo resource route", (pathname) => {
+  it.each(["/", "/memos", "/memos/123/extra", "/memos/shares/token"])("rejects %s as a Memo resource route", (pathname) => {
     expect(isMemoResourcePath(pathname)).toBe(false);
   });
 

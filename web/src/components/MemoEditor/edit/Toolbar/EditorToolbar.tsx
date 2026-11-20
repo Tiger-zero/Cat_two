@@ -1,14 +1,13 @@
 import { Button, Tooltip } from "@usememos/ui";
 import { CircleAlertIcon } from "lucide-react";
 import { type FC, useId } from "react";
-import { type Location, Visibility } from "@/types/proto/api/memo_service_pb";
 import { useTranslate } from "@/utils/i18n";
 import { primaryModifierGlyph } from "@/utils/platform";
 import { validationService } from "../services";
 import { useEditorContext, useEditorSelector } from "../state";
 import type { EditorToolbarProps } from "../types";
-import AudienceMenu from "./AudienceMenu";
 import InsertMenu from "./InsertMenu";
+import SpaceMenu from "./SpaceMenu";
 
 export const EditorToolbar: FC<EditorToolbarProps> = ({
   onSave,
@@ -34,30 +33,18 @@ export const EditorToolbar: FC<EditorToolbarProps> = ({
   const isSaving = useEditorSelector((s) => s.ui.isLoading.saving);
   const drawingSaveError = useEditorSelector((s) => s.drawingSaveError);
   const isUploading = useEditorSelector((s) => s.ui.isLoading.uploading);
-  const location = useEditorSelector((s) => s.metadata.location);
-  const visibility = useEditorSelector((s) => s.metadata.visibility);
   const blockedMessage =
     valid || isSaving
       ? undefined
       : blockedReason
         ? t(blockedReason, blockedReasonDetail ? { url: blockedReasonDetail } : undefined)
         : t("editor.validation.cannot-save");
-  // The verb names what the host does with the memo: an existing memo is
-  // updated, a reply becomes a comment, and a new memo is simply saved. A memo
-  // is stored with a visibility, not posted, so messaging verbs stay out.
+  // The verb names what the host does with the memo: update, comment, or save.
   const commitLabel = memoName ? t("common.update") : parentMemoName ? t("editor.comment") : t("editor.save");
   const loadingLabel = memoName ? t("editor.updating") : parentMemoName ? t("editor.commenting") : t("editor.saving");
 
-  const handleLocationChange = (next?: Location) => {
-    dispatch(actions.setMetadata({ location: next }));
-  };
-
-  const handleVisibilityChange = (next: Visibility) => {
-    dispatch(actions.setMetadata({ visibility: next }));
-  };
-
   const handleSpaceChange = (next?: string) => {
-    dispatch(actions.setMetadata({ space: next, ...(!next && visibility === Visibility.SPACE ? { visibility: Visibility.PRIVATE } : {}) }));
+    dispatch(actions.setMetadata({ space: next }));
   };
 
   const blockedReasonId = useId();
@@ -100,8 +87,6 @@ export const EditorToolbar: FC<EditorToolbarProps> = ({
         <InsertMenu
           isUploading={isUploading}
           isSaving={isSaving}
-          location={location}
-          onLocationChange={handleLocationChange}
           memoName={memoName}
           onAudioRecorderClick={onAudioRecorderClick}
           viewToggles={viewToggles}
@@ -109,13 +94,7 @@ export const EditorToolbar: FC<EditorToolbarProps> = ({
           onInsertImages={onInsertImages}
           onDrawingClick={onDrawingClick}
         />
-        <AudienceMenu
-          value={visibility}
-          space={space}
-          onChange={handleVisibilityChange}
-          onSpaceChange={canChooseSpace ? handleSpaceChange : undefined}
-          disabled={isSaving}
-        />
+        {canChooseSpace && <SpaceMenu space={space} onChange={handleSpaceChange} disabled={isSaving} />}
       </div>
 
       <div className="flex shrink-0 flex-row items-center justify-end gap-1">

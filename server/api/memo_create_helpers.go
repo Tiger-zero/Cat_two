@@ -56,9 +56,6 @@ func (s *APIService) prepareMemoCreate(ctx context.Context, user *store.User, in
 		}
 		memo.SpaceID = &space.ID
 	}
-	if memo.Visibility == store.SpaceAudience && memo.SpaceID == nil {
-		return nil, status.Error(codes.InvalidArgument, "SPACE visibility requires a space")
-	}
 	if input.CreateTime != nil && input.CreateTime.IsValid() {
 		memo.CreatedTs = input.CreateTime.AsTime().Unix()
 	}
@@ -70,9 +67,6 @@ func (s *APIService) prepareMemoCreate(ctx context.Context, user *store.User, in
 		return nil, status.Errorf(codes.Internal, "failed to rebuild memo payload: %v", err)
 	}
 	memo.Payload.CreationChannel = channel
-	if input.Location != nil {
-		memo.Payload.Location = convertLocationToStore(input.Location)
-	}
 
 	attachments, err := s.prepareMemoAttachments(ctx, user, memo, input.Attachments)
 	if err != nil {

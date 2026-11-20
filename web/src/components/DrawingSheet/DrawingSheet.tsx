@@ -535,10 +535,10 @@ const DrawingSheet = ({
                 </Menu.Trigger>
                 <Menu.Popup side="top" align="start" data-theme="light" aria-label={t("editor.drawing.zoom")}>
                   <Menu.Item icon={<PlusIcon />} disabled={zoom >= MAX_ZOOM} onClick={() => changeZoom(1.2)}>
-                    {t("map.zoom-in")}
+                    {t("common.zoom-in")}
                   </Menu.Item>
                   <Menu.Item icon={<MinusIcon />} disabled={zoom <= MIN_ZOOM} onClick={() => changeZoom(1 / 1.2)}>
-                    {t("map.zoom-out")}
+                    {t("common.zoom-out")}
                   </Menu.Item>
                   <Menu.Separator />
                   <Menu.Item

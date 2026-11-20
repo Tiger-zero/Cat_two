@@ -1,17 +1,14 @@
 import { create } from "@bufbuild/protobuf";
-import { Select, Switch } from "@usememos/ui";
-import { useMemo } from "react";
+import { Switch } from "@usememos/ui";
 import { useAuth } from "@/contexts/AuthContext";
 import { updateDevicePreferences, useDevicePreferences } from "@/hooks/useDevicePreferences";
 import { useUpdateUserGeneralSetting } from "@/hooks/useUserQueries";
 import { DEFAULT_LOCALE } from "@/i18n";
 import { UserSetting_GeneralSetting, UserSetting_GeneralSettingSchema } from "@/types/proto/api/user_service_pb";
 import { findNearestMatchedLanguage, loadLocale, useTranslate } from "@/utils/i18n";
-import { convertVisibilityFromString, DEFAULT_VISIBILITY_OPTIONS } from "@/utils/memo";
 import { loadTheme } from "@/utils/theme";
 import LocaleSelect from "../LocaleSelect";
 import ThemeSelect from "../ThemeSelect";
-import VisibilityIcon from "../VisibilityIcon";
 import SettingGroup from "./SettingGroup";
 import { SettingList, SettingListItem } from "./SettingList";
 import SettingSection from "./SettingSection";
@@ -28,22 +25,6 @@ const PreferencesSection = () => {
     // Persist to user settings
     updateUserGeneralSetting(
       { generalSetting: { locale }, updateMask: ["locale"] },
-      {
-        onSuccess: () => {
-          refetchSettings();
-        },
-      },
-    );
-  };
-
-  const visibilityOptions = useMemo(
-    () => DEFAULT_VISIBILITY_OPTIONS.map((option) => ({ value: option.name, label: t(option.labelKey) })),
-    [t],
-  );
-
-  const handleDefaultMemoVisibilityChanged = (value: string) => {
-    updateUserGeneralSetting(
-      { generalSetting: { memoVisibility: value }, updateMask: ["memo_visibility"] },
       {
         onSuccess: () => {
           refetchSettings();
@@ -82,7 +63,6 @@ const PreferencesSection = () => {
     generalSetting ||
     create(UserSetting_GeneralSettingSchema, {
       locale: DEFAULT_LOCALE,
-      memoVisibility: "PRIVATE",
       theme: "system",
       saveMediaMetadata: false,
     });
@@ -97,39 +77,6 @@ const PreferencesSection = () => {
 
           <SettingListItem label={t("setting.preference.theme")} description={t("setting.preference.theme-description")}>
             <ThemeSelect value={setting.theme} onValueChange={handleThemeChange} />
-          </SettingListItem>
-        </SettingList>
-      </SettingGroup>
-
-      <SettingGroup
-        title={t("setting.preference.memo-defaults-title")}
-        description={t("setting.preference.memo-defaults-description")}
-        showSeparator
-      >
-        <SettingList>
-          <SettingListItem
-            label={t("setting.preference.default-memo-visibility")}
-            description={t("setting.preference.default-memo-visibility-description")}
-          >
-            <Select.Root
-              value={setting.memoVisibility || "PRIVATE"}
-              items={visibilityOptions}
-              onValueChange={(value) => value !== null && handleDefaultMemoVisibilityChanged(value)}
-            >
-              <Select.Trigger className="min-w-fit">
-                <div className="flex items-center gap-2">
-                  <VisibilityIcon visibility={convertVisibilityFromString(setting.memoVisibility)} />
-                  <Select.Value />
-                </div>
-              </Select.Trigger>
-              <Select.Popup>
-                {visibilityOptions.map((option) => (
-                  <Select.Item key={option.value} value={option.value} className="whitespace-nowrap">
-                    {option.label}
-                  </Select.Item>
-                ))}
-              </Select.Popup>
-            </Select.Root>
           </SettingListItem>
         </SettingList>
       </SettingGroup>

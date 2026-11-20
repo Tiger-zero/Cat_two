@@ -1,5 +1,6 @@
-import { Button, Menu } from "@usememos/ui";
+import { Button, Menu, menuClasses } from "@usememos/ui";
 import { ArrowDownUpIcon, CheckCircle2Icon, ChevronDownIcon, DownloadIcon, ListFilterIcon, SearchIcon } from "lucide-react";
+import { type ComponentProps, useId } from "react";
 import { useAppSidebar } from "@/contexts/AppSidebarContext";
 import { replaceFiltersByFactor, useMemoFilterContext } from "@/contexts/MemoFilterContext";
 import { type MemoTimeBasis, useView } from "@/contexts/ViewContext";
@@ -23,6 +24,31 @@ const SORT_ORDERS = [
 ] as const;
 
 const sortValue = (timeBasis: MemoTimeBasis, ascending: boolean) => `${timeBasis}-${ascending ? "asc" : "desc"}`;
+
+function FeedSubmenuTrigger({
+  icon,
+  label,
+  summary,
+}: {
+  icon: ComponentProps<typeof Menu.SubmenuTrigger>["icon"];
+  label: string;
+  summary: string;
+}) {
+  const summaryId = useId();
+  return (
+    <Menu.SubmenuTrigger
+      icon={icon}
+      aria-label={label}
+      aria-describedby={summaryId}
+      className="h-auto min-h-(--mu-row-height) items-start py-1 [&>.mu-option-icon]:mt-0.5 [&>svg:last-child]:mt-0.5"
+    >
+      <span className="block truncate">{label}</span>
+      <span id={summaryId} aria-hidden="true" className={`block ${menuClasses().description}`}>
+        {summary}
+      </span>
+    </Menu.SubmenuTrigger>
+  );
+}
 
 function MemoFeedMenu({ canExport, selectedCount, exporting, onBeginSelection, onEndSelection, onExport }: Props) {
   const t = useTranslate();
@@ -58,10 +84,7 @@ function MemoFeedMenu({ canExport, selectedCount, exporting, onBeginSelection, o
             />
             <Menu.Popup align="start" className="w-56">
               <Menu.SubmenuRoot>
-                <Menu.SubmenuTrigger icon={<ArrowDownUpIcon />} aria-label={t("memo-feed.sort")}>
-                  <span className="block">{t("memo-feed.sort")}</span>
-                  <span className="mu-caption block text-mu-text-secondary">{sortLabel(timeBasis, orderByTimeAsc)}</span>
-                </Menu.SubmenuTrigger>
+                <FeedSubmenuTrigger icon={<ArrowDownUpIcon />} label={t("memo-feed.sort")} summary={sortLabel(timeBasis, orderByTimeAsc)} />
                 <Menu.Popup className="w-56">
                   <Menu.RadioGroup
                     value={orderValue}
@@ -81,12 +104,11 @@ function MemoFeedMenu({ canExport, selectedCount, exporting, onBeginSelection, o
                 </Menu.Popup>
               </Menu.SubmenuRoot>
               <Menu.SubmenuRoot>
-                <Menu.SubmenuTrigger icon={<ListFilterIcon />} aria-label={t("memo-feed.source")}>
-                  <span className="block">{t("memo-feed.source")}</span>
-                  <span className="mu-caption block text-mu-text-secondary">
-                    {sourceOptions.find((option) => option.value === source)?.label}
-                  </span>
-                </Menu.SubmenuTrigger>
+                <FeedSubmenuTrigger
+                  icon={<ListFilterIcon />}
+                  label={t("memo-feed.source")}
+                  summary={sourceOptions.find((option) => option.value === source)?.label ?? t("common.all")}
+                />
                 <Menu.Popup>
                   <Menu.RadioGroup
                     value={source}

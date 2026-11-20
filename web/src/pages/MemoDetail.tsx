@@ -1,6 +1,5 @@
-import { Code, ConnectError } from "@connectrpc/connect";
 import { ArrowUpLeftFromCircleIcon } from "lucide-react";
-import { useCallback, useEffect, useMemo as useReactMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, Navigate, useLocation, useParams } from "react-router-dom";
 import MemoCommentSection, { type MemoCommentSectionHandle } from "@/components/MemoCommentSection";
 import MemoParentPlaceholder, { type MemoParentStatus } from "@/components/MemoParentPlaceholder";
@@ -13,12 +12,9 @@ import { useInstance } from "@/contexts/InstanceContext";
 import { MentionResolutionProvider } from "@/contexts/MentionResolutionContext";
 import useMemoDetailError from "@/hooks/useMemoDetailError";
 import { useInfiniteMemoComments, useMemo } from "@/hooks/useMemoQueries";
-import { useSharedMemo, withShareAttachmentLinks } from "@/hooks/useMemoShareQueries";
 import { LEGACY_MEMO_COMMENTS_ANCHOR_ID, MEMO_COMMENTS_ANCHOR_ID } from "@/lib/memo-comments";
 import { memoNamePrefix } from "@/lib/resource-names";
 import { isMemoBlurred } from "@/lib/tag";
-import { ROUTES } from "@/router/routes";
-import type { Attachment } from "@/types/proto/api/attachment_service_pb";
 import { State } from "@/types/proto/api/common_pb";
 import type { Memo } from "@/types/proto/api/memo_service_pb";
 import { useTranslate } from "@/utils/i18n";
@@ -31,7 +27,6 @@ const MemoSidebarRegistration = ({
   onParentRetry,
   from,
   commentCount,
-  readonly,
   contentHidden,
   onEdit,
   onCommentsOpen,
@@ -44,7 +39,6 @@ const MemoSidebarRegistration = ({
   onParentRetry?: () => void;
   from: string;
   commentCount?: number;
-  readonly: boolean;
   contentHidden: boolean;
   onEdit: () => void;
   onCommentsOpen: () => void;
@@ -61,7 +55,6 @@ const MemoSidebarRegistration = ({
       onParentRetry,
       from,
       commentCount,
-      readonly,
       contentHidden,
       onEdit,
       onCommentsOpen,
@@ -80,7 +73,6 @@ const MemoSidebarRegistration = ({
     parentMemo,
     parentStatus,
     onParentRetry,
-    readonly,
     setMemoDetail,
   ]);
 
@@ -91,7 +83,7 @@ const MemoSidebarRegistration = ({
 
 const MemoDetail = () => {
   const t = useTranslate();
-  const { currentUser, isInitialized: authInitialized, userTagsSetting } = useAuth();
+  const { isInitialized: authInitialized, userTagsSetting } = useAuth();
   const { isInitialized: instanceInitialized } = useInstance();
   const [shareImageDialogOpen, setShareImageDialogOpen] = useState(false);
   const params = useParams();
@@ -102,39 +94,15 @@ const MemoDetail = () => {
   const handleShareImageOpen = useCallback(() => setShareImageDialogOpen(true), []);
   const handleEdit = useCallback(() => memoViewRef.current?.openEditor(), []);
 
-  // Detect share mode from the route parameter.
-  const shareToken = params.token;
-  const isShareMode = !!shareToken;
-
-  // Primary memo fetch — share token or direct name.
   const memoNameFromParams = params.uid ? `${memoNamePrefix}${params.uid}` : "";
-  const {
-    data: memoFromDirect,
-    error: directError,
-    isLoading: directLoading,
-    isUnavailable: directUnavailable,
-    fetchStatus: directFetchStatus,
-  } = useMemo(memoNameFromParams, { enabled: !isShareMode && !!memoNameFromParams });
-  const { data: memoFromShare, error: shareError, isLoading: shareLoading } = useSharedMemo(shareToken ?? "", { enabled: isShareMode });
-
-  const memo = isShareMode ? memoFromShare : memoFromDirect;
-  const error = isShareMode ? shareError : directError;
-  const isLoading = isShareMode ? shareLoading : directLoading;
-  const hasExplicitOrigin =
-    !!locationState && typeof locationState === "object" && typeof (locationState as { from?: unknown }).from === "string";
-  const resolvedOrigin = resolveMemoDetailOrigin(locationState, { memoArchived: memo?.state === State.ARCHIVED });
-  const parentPage = !hasExplicitOrigin && !currentUser && memo?.state !== State.ARCHIVED ? ROUTES.EXPLORE : resolvedOrigin;
+  const { data: memo, error, isLoading, isUnavailable, fetchStatus } = useMemo(memoNameFromParams, { enabled: !!memoNameFromParams });
+  const parentPage = resolveMemoDetailOrigin(locationState, { memoArchived: memo?.state === State.ARCHIVED });
   const memoName = memo?.name ?? memoNameFromParams;
   // Keyed by memo so another memo never renders revealed; cleared on leave so returning blurs again.
   const [blurRevealedMemoName, setBlurRevealedMemoName] = useState<string>();
   const showBlurredContent = blurRevealedMemoName === memoName;
   const handleShowBlurredContentChange = useCallback((show: boolean) => setBlurRevealedMemoName(show ? memoName : undefined), [memoName]);
   useEffect(() => setBlurRevealedMemoName(undefined), [memoName]);
-  const displayMemo = useReactMemo(() => {
-    if (!memo) return undefined;
-    if (!isShareMode) return memo;
-    return { ...memo, attachments: withShareAttachmentLinks(memo.attachments as Attachment[], shareToken!) };
-  }, [isShareMode, memo, shareToken]);
 
   useMemoDetailError({
     error: error as Error | null,
@@ -146,23 +114,18 @@ const MemoDetail = () => {
     isUnavailable: parentUnavailable,
     refetch: refetchParent,
   } = useMemo(memo?.parent || "", {
-    enabled: !isShareMode && !!memo?.parent,
+    enabled: !!memo?.parent,
   });
 
-  // Private parents return 401 to guests. The transport still owns session
-  // recovery; only a settled guest view treats that result as unavailable.
-  const guestParentDenied =
-    authInitialized && !currentUser && parentError instanceof ConnectError && parentError.code === Code.Unauthenticated;
-  const parentStatus: MemoParentStatus | undefined =
-    !isShareMode && memo?.parent
-      ? parentUnavailable || guestParentDenied
-        ? "unavailable"
-        : parentError
-          ? "error"
-          : !fetchedParent
-            ? "loading"
-            : undefined
-      : undefined;
+  const parentStatus: MemoParentStatus | undefined = memo?.parent
+    ? parentUnavailable
+      ? "unavailable"
+      : parentError
+        ? "error"
+        : !fetchedParent
+          ? "loading"
+          : undefined
+    : undefined;
   const parentMemo = parentStatus ? undefined : fetchedParent;
   const handleParentRetry = useCallback(() => {
     void refetchParent();
@@ -174,7 +137,7 @@ const MemoDetail = () => {
     hasNextPage: hasNextComments,
     isFetchingNextPage: isFetchingNextComments,
   } = useInfiniteMemoComments(memoName, {
-    enabled: !isShareMode && !!memo,
+    enabled: !!memo,
   });
   const commentCount = memo ? Math.max(computeCommentAmount(memo), comments.length) : 0;
 
@@ -204,8 +167,6 @@ const MemoDetail = () => {
       return;
     }
 
-    // A legacy #comments link on a share-token page has no comment section. Let it
-    // resolve to a historical body heading instead of turning into a dead fragment.
     const el = findMemoAnchorTarget(document, memoName, fragment);
     if (!el) return;
     scrolledHashRef.current = scrollKey;
@@ -214,37 +175,29 @@ const MemoDetail = () => {
 
   // Keep the query mounted while revalidating a cached denial. Redirecting
   // earlier would abort the request that could confirm restored access.
-  if (!isShareMode && directUnavailable && directFetchStatus === "idle" && !directError) return <Navigate to="/404" replace />;
-
-  if (isShareMode) {
-    const isNotFound = error instanceof ConnectError && (error.code === Code.NotFound || error.code === Code.Unauthenticated);
-    if (isNotFound || (!isLoading && !memo)) {
-      return <Navigate to="/404" replace />;
-    }
-  }
+  if (isUnavailable && fetchStatus === "idle" && !error) return <Navigate to="/404" replace />;
 
   // Start the permitted requests as soon as routing is unlocked, but do not
   // expose content before tag-blur and instance display settings settle.
-  if (isLoading || !memo || !displayMemo || !authInitialized || !instanceInitialized) {
+  if (isLoading || !memo || !authInitialized || !instanceInitialized) {
     return null;
   }
-  const contentHidden = isMemoBlurred(displayMemo, userTagsSetting) && !showBlurredContent;
+  const contentHidden = isMemoBlurred(memo, userTagsSetting) && !showBlurredContent;
   const parentBlurred = !!parentMemo && isMemoBlurred(parentMemo, userTagsSetting);
-  const mentionResolutionContents = [displayMemo.content, ...comments.map((comment) => comment.content)];
+  const mentionResolutionContents = [memo.content, ...comments.map((comment) => comment.content)];
   const userResolutionNames = Array.from(
-    new Set([displayMemo, ...comments].flatMap((item) => [item.creator, ...(item.reactions ?? []).map((reaction) => reaction.creator)])),
+    new Set([memo, ...comments].flatMap((item) => [item.creator, ...(item.reactions ?? []).map((reaction) => reaction.creator)])),
   );
   return (
     <section className="@container flex min-h-full w-full flex-col items-center pb-8 pt-3 md:pt-6">
       <MentionResolutionProvider contents={mentionResolutionContents} userNames={userResolutionNames}>
         <MemoSidebarRegistration
-          memo={displayMemo}
+          memo={memo}
           parentMemo={parentMemo}
           parentStatus={parentStatus}
           onParentRetry={handleParentRetry}
           from={parentPage}
-          commentCount={isShareMode ? undefined : commentCount}
-          readonly={isShareMode}
+          commentCount={commentCount}
           contentHidden={contentHidden}
           onEdit={handleEdit}
           onCommentsOpen={handleCommentsOpen}
@@ -253,12 +206,12 @@ const MemoDetail = () => {
         />
         <div className="w-full max-w-2xl px-4 sm:px-6">
           <div className="w-full">
-            {!isShareMode && parentStatus && (
+            {parentStatus && (
               <div className="mb-2 md:hidden">
                 <MemoParentPlaceholder status={parentStatus} onRetry={handleParentRetry} />
               </div>
             )}
-            {!isShareMode && parentMemo && (
+            {parentMemo && (
               <div className="w-auto inline-block mb-2 md:hidden">
                 <Link
                   className="px-3 py-1 border border-mu-line rounded-mu-lg max-w-xs w-auto mu-body flex flex-row justify-start items-center flex-nowrap text-mu-text-secondary hover:shadow hover:opacity-80"
@@ -273,31 +226,28 @@ const MemoDetail = () => {
             )}
             <MemoView
               ref={memoViewRef}
-              key={displayMemo.name}
-              memo={displayMemo}
+              key={memo.name}
+              memo={memo}
               compact={false}
               parentPage={parentPage}
               shareImageDialogOpen={shareImageDialogOpen}
               showBlurredContent={showBlurredContent}
               onShowBlurredContentChange={handleShowBlurredContentChange}
               showCreator
-              showVisibility
               showPinned
               showSpace
               onShareImageDialogOpenChange={setShareImageDialogOpen}
             />
-            {!isShareMode && (
-              <MemoCommentSection
-                ref={commentSectionRef}
-                memo={displayMemo}
-                comments={comments}
-                commentCount={commentCount}
-                parentPage={parentPage}
-                hasMoreComments={hasNextComments}
-                isFetchingMoreComments={isFetchingNextComments}
-                onLoadMoreComments={fetchNextComments}
-              />
-            )}
+            <MemoCommentSection
+              ref={commentSectionRef}
+              memo={memo}
+              comments={comments}
+              commentCount={commentCount}
+              parentPage={parentPage}
+              hasMoreComments={hasNextComments}
+              isFetchingMoreComments={isFetchingNextComments}
+              onLoadMoreComments={fetchNextComments}
+            />
           </div>
         </div>
       </MentionResolutionProvider>

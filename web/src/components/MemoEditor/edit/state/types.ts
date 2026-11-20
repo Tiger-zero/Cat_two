@@ -1,6 +1,5 @@
 import type { Attachment } from "@/types/proto/api/attachment_service_pb";
-import type { Location, MemoRelation } from "@/types/proto/api/memo_service_pb";
-import { Visibility } from "@/types/proto/api/memo_service_pb";
+import type { MemoRelation } from "@/types/proto/api/memo_service_pb";
 import type { LocalFile } from "../types/attachment";
 
 export type LoadingKey = "saving" | "uploading" | "loading" | "transcribing";
@@ -8,12 +7,10 @@ export type LoadingKey = "saving" | "uploading" | "loading" | "transcribing";
 export interface EditorState {
   content: string;
   metadata: {
-    visibility: Visibility;
     /** Destination chosen in an unscoped new-memo composer. */
     space?: string;
     attachments: Attachment[];
     relations: MemoRelation[];
-    location?: Location;
   };
   ui: {
     isFocusMode: boolean;
@@ -64,10 +61,8 @@ export type EditorAction =
 const defaultState: EditorState = {
   content: "",
   metadata: {
-    visibility: Visibility.PRIVATE,
     attachments: [],
     relations: [],
-    location: undefined,
   },
   ui: {
     isFocusMode: false,

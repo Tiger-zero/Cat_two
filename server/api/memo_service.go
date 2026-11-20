@@ -87,8 +87,7 @@ func (s *APIService) ListMemos(ctx context.Context, request *apipb.ListMemosRequ
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "%v", err)
 	}
-	// An anonymous caller may only list at all when the instance permits it.
-	if currentUser == nil && !accessScope.AllowPublic {
+	if currentUser == nil {
 		return nil, status.Errorf(codes.Unauthenticated, "user not authenticated")
 	}
 	memoFind.Access = accessScope
@@ -96,11 +95,6 @@ func (s *APIService) ListMemos(ctx context.Context, request *apipb.ListMemosRequ
 	if request.State == apipb.State_ARCHIVED {
 		state := store.Archived
 		memoFind.RowStatus = &state
-		// Archived memos are only visible to their creator.
-		if currentUser == nil {
-			return &apipb.ListMemosResponse{}, nil
-		}
-		memoFind.CreatorID = &currentUser.ID
 	} else {
 		state := store.Normal
 		memoFind.RowStatus = &state
@@ -316,7 +310,14 @@ func (s *APIService) UpdateMemo(ctx context.Context, request *apipb.UpdateMemoRe
 	}
 	updatePaths := make(map[string]bool, len(request.UpdateMask.Paths))
 	for _, path := range request.UpdateMask.Paths {
+		// Old clients can still send this field. Existing locations are read-only.
+		if path == "location" {
+			continue
+		}
 		updatePaths[path] = true
+	}
+	if len(updatePaths) == 0 {
+		return s.GetMemo(ctx, &apipb.GetMemoRequest{Name: request.Memo.Name})
 	}
 	lifecycleOnly := updatePaths["space"]
 	for path := range updatePaths {
@@ -340,9 +341,8 @@ func (s *APIService) UpdateMemo(ctx context.Context, request *apipb.UpdateMemoRe
 		}
 	}
 
-	nextVisibility := memo.Visibility
 	if updatePaths["visibility"] {
-		nextVisibility, err = validateUpdateMemoVisibility(request.Memo.Visibility)
+		nextVisibility, err := validateUpdateMemoVisibility(request.Memo.Visibility)
 		if err != nil {
 			return nil, err
 		}
@@ -353,14 +353,9 @@ func (s *APIService) UpdateMemo(ctx context.Context, request *apipb.UpdateMemoRe
 	// or move. Merely including the current Space in the mask must not smuggle
 	// an audience-only mutation past membership checks.
 	lifecycleOnly = lifecycleOnly && spaceChanged
-	if nextVisibility == store.SpaceAudience && nextSpaceID == nil {
-		return nil, status.Errorf(codes.InvalidArgument, "SPACE visibility requires a space")
-	}
-	if memo.Visibility == store.SpaceAudience && spaceChanged && !updatePaths["visibility"] {
-		return nil, status.Errorf(codes.InvalidArgument, "moving a memo with SPACE visibility requires an explicit visibility update")
-	}
-	if memo.Visibility == store.SpaceAudience && nextSpaceID == nil && nextVisibility == store.SpaceAudience {
-		return nil, status.Errorf(codes.InvalidArgument, "unassigning a memo with SPACE visibility requires a replacement visibility")
+	if memo.Visibility == store.SpaceAudience && spaceChanged {
+		private := store.Private
+		update.Visibility = &private
 	}
 	update.Policy = memoWritePolicy(user.ID, lifecycleOnly)
 	previousContent := memo.Content
@@ -374,9 +369,8 @@ func (s *APIService) UpdateMemo(ctx context.Context, request *apipb.UpdateMemoRe
 	}
 
 	for _, path := range request.UpdateMask.Paths {
-		// Collaboration fields were validated together above so placement and
-		// audience transitions cannot be observed independently.
-		if path == "visibility" || path == "space" {
+		// Placement and legacy visibility are handled above. Location is read-only.
+		if path == "visibility" || path == "space" || path == "location" {
 			continue
 		}
 		if path == "content" {
@@ -409,12 +403,6 @@ func (s *APIService) UpdateMemo(ctx context.Context, request *apipb.UpdateMemoRe
 			update.UpdatedTs = &updatedTsSec
 		} else if path == "display_time" {
 			return nil, status.Errorf(codes.InvalidArgument, "display_time is not supported")
-		} else if path == "location" {
-			if nextMemo.Payload == nil {
-				nextMemo.Payload = &storepb.MemoPayload{}
-			}
-			nextMemo.Payload.Location = convertLocationToStore(request.Memo.Location)
-			update.Payload = nextMemo.Payload
 		} else if path == "attachments" {
 			attachmentsUpdated = true
 		} else if path == "relations" {

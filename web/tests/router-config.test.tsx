@@ -41,6 +41,12 @@ function hasAncestorOfType(routes: RouteObject[], path: string, guardType: unkno
 }
 
 describe("router configuration", () => {
+  it.each(["/", "/explore", "/calendar/2026/09/30"])("checks authentication before mounting the workspace for %s", (path) => {
+    const matches = matchRoutes(routeConfig, path);
+    // The first match is App. Check auth before mounting any workspace layout.
+    expect(elementType(matches?.[1]?.route)).toBe(RequireAuthRoute);
+  });
+
   it.each([
     "/spaces/product",
     "/spaces/product/explore",
@@ -72,13 +78,13 @@ describe("router configuration", () => {
   });
 
   it("wraps authenticated-only pages in RequireAuthRoute", () => {
-    for (const path of [ROUTES.ARCHIVED, ROUTES.VIEWS, ROUTES.ATTACHMENTS, ROUTES.INBOX, ROUTES.SETTING]) {
+    for (const path of [ROUTES.ARCHIVED, ROUTES.VIEWS, ROUTES.ATTACHMENTS, ROUTES.INBOX, ROUTES.SETTING, "memos/:uid"]) {
       expect(hasAncestorOfType(routeConfig, path, RequireAuthRoute)).toBe(true);
     }
   });
 
   it("keeps non-feed pages behind their full initialization requirements", () => {
-    for (const path of [ROUTES.VIEWS, ROUTES.ATTACHMENTS, ROUTES.MAP, ROUTES.INBOX, ROUTES.SETTING]) {
+    for (const path of [ROUTES.VIEWS, ROUTES.ATTACHMENTS, ROUTES.INBOX, ROUTES.SETTING]) {
       expect(hasAncestorOfType(routeConfig, path, RequireFullInitializationRoute)).toBe(true);
     }
   });
@@ -91,14 +97,18 @@ describe("router configuration", () => {
     expect(findByPath(routeConfig, "/about")).toBeUndefined();
   });
 
+  it("does not register a public share token route", () => {
+    expect(findByPath(routeConfig, "memos/shares/:token")).toBeUndefined();
+  });
+
   it("leaves memo feeds available for early queries", () => {
-    for (const path of [ROUTES.EXPLORE, ROUTES.ARCHIVED, CALENDAR_ROUTE_PATTERN, "memos/:uid", "memos/shares/:token", "u/:username"]) {
+    for (const path of [ROUTES.EXPLORE, ROUTES.ARCHIVED, CALENDAR_ROUTE_PATTERN, "memos/:uid", "u/:username"]) {
       expect(hasAncestorOfType(routeConfig, path, RequireFullInitializationRoute)).toBe(false);
     }
   });
 
   it("leaves public pages outside RequireAuthRoute", () => {
-    for (const path of [ROUTES.EXPLORE, CALENDAR_ROUTE_PATTERN, ROUTES.MAP, "memos/:uid", "memos/shares/:token", "u/:username"]) {
+    for (const path of ["callback", "u/:username", "403", "404"]) {
       expect(hasAncestorOfType(routeConfig, path, RequireAuthRoute)).toBe(false);
     }
   });

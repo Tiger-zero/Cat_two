@@ -1,4 +1,4 @@
-import type { Location, Memo, Visibility } from "@/types/proto/api/memo_service_pb";
+import type { Memo } from "@/types/proto/api/memo_service_pb";
 import type { User } from "@/types/proto/api/user_service_pb";
 import { canManageMemo } from "@/utils/user";
 import { cacheService } from "./services/cacheService";
@@ -29,9 +29,7 @@ export interface InitialEditorStateOptions {
   /** The persisted draft's key, for a new memo or comment. */
   draftKey: string;
   initialFocusMode?: boolean;
-  defaultVisibility?: Visibility;
   defaultCreateTime?: Date;
-  defaultLocation?: Location;
   /** Whether the draft may carry a Space of its own; a comment's Space is its parent's. */
   canChooseSpace?: boolean;
 }
@@ -39,16 +37,13 @@ export interface InitialEditorStateOptions {
 /**
  * The draft store's first state, computed once when editing starts: the memo's own
  * fields for an edit, otherwise the persisted draft under `draftKey` over the host's
- * defaults. A cached `null` location is one the user removed, so the default does not
- * come back.
+ * defaults.
  */
 export function initialEditorState({
   memo,
   draftKey,
   initialFocusMode = false,
-  defaultVisibility,
   defaultCreateTime,
-  defaultLocation,
   canChooseSpace = false,
 }: InitialEditorStateOptions): EditorState {
   const base = createInitialState(initialFocusMode);
@@ -57,15 +52,12 @@ export function initialEditorState({
     return { ...base, ...memoService.fromMemo(memo) };
   }
   const draft = cacheService.loadDraft(draftKey);
-  const visibility = draft.visibility ?? defaultVisibility ?? base.metadata.visibility;
   return {
     ...base,
     content: draft.content,
     metadata: {
       ...base.metadata,
       attachments: draft.attachments.length > 0 ? draft.attachments : base.metadata.attachments,
-      location: draft.location === null ? undefined : (draft.location ?? defaultLocation),
-      visibility,
       space: canChooseSpace ? draft.space : undefined,
     },
     timestamps: defaultCreateTime ? { createTime: defaultCreateTime, updateTime: defaultCreateTime } : base.timestamps,

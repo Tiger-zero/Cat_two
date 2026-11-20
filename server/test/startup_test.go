@@ -411,8 +411,7 @@ func TestStartupPrivateInstance(t *testing.T) {
 	status, _ = inst.do(t, http.MethodGet, "/api/users", "", nil)
 	require.Equal(t, http.StatusUnauthorized, status, "anonymous ListUsers should be refused")
 
-	// ListMemos is public but not a bootstrap method, so the private-instance
-	// policy must refuse anonymous callers. The Connect transport enforces this.
+	// Memo content requires authentication on both transports.
 	status, _ = inst.do(t, http.MethodPost, "/memos.api.MemoService/ListMemos", "", map[string]any{})
 	require.Equal(t, http.StatusUnauthorized, status,
 		"anonymous ListMemos over Connect should be refused on a private instance")
@@ -443,8 +442,10 @@ func TestStartupInitializesLegacyAccessOnce(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, storepb.InstanceAccessMode_INSTANCE_ACCESS_MODE_PUBLIC, accessSetting.AccessMode)
 
-		status, body := second.do(t, http.MethodGet, "/api/memos", "", nil)
-		require.Equal(t, http.StatusOK, status, "persisted PUBLIC mode should still allow anonymous access: %s", body)
+		status, body := second.do(t, http.MethodGet, "/api/instance/settings/GENERAL", "", nil)
+		require.Equal(t, http.StatusOK, status, "persisted PUBLIC mode still allows anonymous instance discovery: %s", body)
+		status, _ = second.do(t, http.MethodGet, "/api/memos", "", nil)
+		require.Equal(t, http.StatusUnauthorized, status, "PUBLIC mode does not expose personal notes")
 	})
 
 	t.Run("private remains private after URL addition", func(t *testing.T) {
@@ -481,14 +482,15 @@ func TestStartupPrivateInstanceGatewayPolicy(t *testing.T) {
 
 	inst.createAdmin(t)
 	token := inst.signIn(t)
-	inst.createMemo(t, token, "startup-private-public", "public on a private instance")
-	status, body := inst.do(t, http.MethodPatch,
-		"/api/memos/startup-private-public?updateMask=visibility", token, map[string]any{
-			"visibility": "PUBLIC",
-		})
-	require.Equal(t, http.StatusOK, status, "should be able to make the memo public: %s", body)
+	owner, err := inst.server.Store.GetUser(ctx, &store.FindUser{Username: new(testAdminUsername)})
+	require.NoError(t, err)
+	_, err = inst.server.Store.CreateMemo(ctx, &store.Memo{
+		UID: "startup-private-public", CreatorID: owner.ID, Content: "legacy public note", Visibility: store.Public,
+	})
+	require.NoError(t, err)
+	inst.requireMemo(t, token, "startup-private-public", "legacy public note")
 
-	status, _ = inst.do(t, http.MethodGet, "/api/memos", "", nil)
+	status, _ := inst.do(t, http.MethodGet, "/api/memos", "", nil)
 	require.Equal(t, http.StatusUnauthorized, status,
 		"anonymous ListMemos over REST should be refused on a private instance")
 
@@ -548,16 +550,12 @@ func TestStartupDemoMode(t *testing.T) {
 		instanceURL: "http://localhost",
 	})
 
-	status, body := inst.do(t, http.MethodGet, "/api/memos", "", nil)
-	require.Equal(t, http.StatusOK, status, "demo instances serve memos anonymously: %s", body)
+	memos, err := inst.server.Store.ListMemos(ctx, &store.FindMemo{})
+	require.NoError(t, err)
+	require.NotEmpty(t, memos, "demo mode should seed memos")
 
-	var listed struct {
-		Memos []struct {
-			Name string `json:"name"`
-		} `json:"memos"`
-	}
-	require.NoError(t, json.Unmarshal(body, &listed))
-	require.NotEmpty(t, listed.Memos, "demo mode should seed memos")
+	status, _ := inst.do(t, http.MethodGet, "/api/memos", "", nil)
+	require.Equal(t, http.StatusUnauthorized, status, "demo fixture memos are still private")
 }
 
 // TestStartupAppliesConfiguration boots a headless instance from files alone:

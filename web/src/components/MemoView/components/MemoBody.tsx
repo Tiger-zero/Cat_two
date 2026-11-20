@@ -104,14 +104,7 @@ const MemoBody: React.FC<MemoBodyProps> = ({ compact, showCreator }) => {
               onImagePreview={openPreview}
               drawings={{ memo, canEdit: !readonly && canManageMemo(memo, currentUser) }}
             />
-            <MemoMetadataRows
-              audio={audio}
-              docs={docs}
-              relations={referencedMemos}
-              currentMemoName={memo.name}
-              parentPage={parentPage}
-              location={memo.location}
-            />
+            <MemoMetadataRows audio={audio} docs={docs} relations={referencedMemos} currentMemoName={memo.name} parentPage={parentPage} />
           </ClampedSection>
         </div>
 

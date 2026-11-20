@@ -296,7 +296,7 @@ func (d *EmailDispatcher) listMemosByID(ctx context.Context, memoIDs []int32, vi
 
 	memos, err := d.store.ListMemos(ctx, &store.FindMemo{
 		IDList: uniqueMemoIDs,
-		Access: &store.MemoAccessScope{UserID: &viewerID, AllowPublic: true, AllowProtected: true},
+		Access: &store.MemoAccessScope{UserID: &viewerID, OwnerOnly: true},
 	})
 	if err != nil {
 		return nil, err

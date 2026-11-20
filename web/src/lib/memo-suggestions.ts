@@ -1,7 +1,6 @@
 import { uniqBy } from "lodash-es";
 import type { LucideIcon } from "lucide-react";
 import type { MemoFilter } from "@/contexts/MemoFilterContext";
-import type { Visibility } from "@/types/proto/api/memo_service_pb";
 import { getContextSuggestionCandidates } from "./context-suggestions";
 import { getTagSuggestionCandidates } from "./tag-suggestions";
 
@@ -19,7 +18,7 @@ export interface SuggestionItem {
 export type MemoSuggestion = {
   id: string;
   source: SuggestionSource;
-} & ({ kind: "tag"; tag: string } | { kind: "checklist" } | { kind: "visibility"; visibility: Visibility });
+} & ({ kind: "tag"; tag: string } | { kind: "checklist" });
 
 export const MAX_MEMO_SUGGESTIONS = 3;
 

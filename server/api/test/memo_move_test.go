@@ -52,11 +52,11 @@ func TestMoveMemoPreservesIndependentConversation(t *testing.T) {
 		Relations:   []*apipb.MemoRelation{{Type: apipb.MemoRelation_REFERENCE, RelatedMemo: &apipb.MemoRelation_MemoRef{Name: reference.Name}}},
 	}})
 	require.NoError(t, err)
-	comment, err := ts.Service.CreateMemoComment(commenterCtx, &apipb.CreateMemoCommentRequest{
+	comment, err := ts.Service.CreateMemoComment(authorCtx, &apipb.CreateMemoCommentRequest{
 		Parent: original.Name, Comment: &apipb.Memo{Content: "source comment", Space: &sourceName, Visibility: apipb.Visibility_SPACE},
 	})
 	require.NoError(t, err)
-	reaction, err := ts.Service.UpsertMemoReaction(commenterCtx, &apipb.UpsertMemoReactionRequest{
+	reaction, err := ts.Service.UpsertMemoReaction(authorCtx, &apipb.UpsertMemoReactionRequest{
 		Parent: original.Name, Reaction: &apipb.Reaction{ReactionType: "👍"},
 	})
 	require.NoError(t, err)
@@ -77,36 +77,30 @@ func TestMoveMemoPreservesIndependentConversation(t *testing.T) {
 	require.Len(t, moved.Reactions, 1)
 	require.Equal(t, reaction.Name, moved.Reactions[0].Name)
 
-	_, err = ts.Service.GetMemo(commenterCtx, &apipb.GetMemoRequest{Name: original.Name})
-	require.Equal(t, codes.PermissionDenied, status.Code(err))
-	readableComment, err := ts.Service.GetMemo(commenterCtx, &apipb.GetMemoRequest{Name: comment.Name})
-	require.NoError(t, err)
-	require.Equal(t, original.Name, readableComment.GetParent(), "parent identity survives lost parent access")
-	require.Equal(t, sourceName, readableComment.GetSpace())
-	require.Equal(t, comment.Visibility, readableComment.Visibility)
-	require.Equal(t, comment.Content, readableComment.Content)
-	require.Empty(t, readableComment.Relations, "the inaccessible parent must not appear in relation previews")
-
-	for _, viewer := range []context.Context{authorCtx, readerCtx} {
-		comments, err := ts.Service.ListMemoComments(viewer, &apipb.ListMemoCommentsRequest{Parent: original.Name})
-		require.NoError(t, err)
-		if viewer == authorCtx {
-			require.Len(t, comments.Comments, 1)
-		} else {
-			require.Empty(t, comments.Comments)
-		}
+	for _, viewer := range []context.Context{commenterCtx, readerCtx} {
+		_, err = ts.Service.GetMemo(viewer, &apipb.GetMemoRequest{Name: original.Name})
+		require.Equal(t, codes.PermissionDenied, status.Code(err))
+		_, err = ts.Service.GetMemo(viewer, &apipb.GetMemoRequest{Name: comment.Name})
+		require.Equal(t, codes.PermissionDenied, status.Code(err))
+		_, err = ts.Service.ListMemoComments(viewer, &apipb.ListMemoCommentsRequest{Parent: original.Name})
+		require.Equal(t, codes.PermissionDenied, status.Code(err))
 	}
-	destinationMemo, err := ts.Service.GetMemo(readerCtx, &apipb.GetMemoRequest{Name: original.Name})
+
+	readableComment, err := ts.Service.GetMemo(authorCtx, &apipb.GetMemoRequest{Name: comment.Name})
 	require.NoError(t, err)
-	require.Empty(t, destinationMemo.Relations)
-	require.Len(t, destinationMemo.Reactions, 1, "existing reactions are visible to new readers")
-	_, err = ts.Service.GetMemo(readerCtx, &apipb.GetMemoRequest{Name: comment.Name})
-	require.Equal(t, codes.PermissionDenied, status.Code(err))
+	require.Equal(t, original.Name, readableComment.GetParent())
+	require.Equal(t, sourceName, readableComment.GetSpace(), "the comment keeps its independent placement")
+	require.Equal(t, apipb.Visibility_PRIVATE, readableComment.Visibility)
+	require.Equal(t, comment.Content, readableComment.Content)
+	comments, err := ts.Service.ListMemoComments(authorCtx, &apipb.ListMemoCommentsRequest{Parent: original.Name})
+	require.NoError(t, err)
+	require.Len(t, comments.Comments, 1)
+
 	_, err = ts.Service.DeleteMemoReaction(readerCtx, &apipb.DeleteMemoReactionRequest{Name: reaction.Name})
 	require.Equal(t, codes.PermissionDenied, status.Code(err))
-	_, err = ts.Service.DeleteMemoReaction(commenterCtx, &apipb.DeleteMemoReactionRequest{Name: reaction.Name})
-	require.NoError(t, err, "the creator can withdraw a reaction without parent access")
-	reactions, err := ts.Service.ListMemoReactions(readerCtx, &apipb.ListMemoReactionsRequest{Parent: original.Name})
+	_, err = ts.Service.DeleteMemoReaction(authorCtx, &apipb.DeleteMemoReactionRequest{Name: reaction.Name})
+	require.NoError(t, err)
+	reactions, err := ts.Service.ListMemoReactions(authorCtx, &apipb.ListMemoReactionsRequest{Parent: original.Name})
 	require.NoError(t, err)
 	require.Empty(t, reactions.Reactions)
 }

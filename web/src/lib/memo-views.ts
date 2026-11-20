@@ -1,4 +1,3 @@
-import { matchPath } from "react-router-dom";
 import { ROUTES, resolveCollectionRoute } from "@/router/routes";
 
 export type MemoScope = "home" | "explore" | "archived";
@@ -31,8 +30,7 @@ export const isCalendarRoute = (pathname: string): boolean => {
  * Routes that render a memo collection the sidebar can narrow. Views, calendar days,
  * and tags apply in place on all of them.
  */
-export const isMemoCollectionRoute = (pathname: string): boolean =>
-  isMemoScopeRoute(pathname) || isCalendarRoute(pathname) || matchPath(ROUTES.MAP, comparablePathname(pathname)) !== null;
+export const isMemoCollectionRoute = (pathname: string): boolean => isMemoScopeRoute(pathname) || isCalendarRoute(pathname);
 
 interface ResolveMemoScopeOptions {
   detailFrom?: string;

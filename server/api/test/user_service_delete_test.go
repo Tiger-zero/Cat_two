@@ -82,75 +82,28 @@ func TestDeleteUserSelfDeleteRemovesOnlyOwnedMemosAndResources(t *testing.T) {
 	peer, err := ts.CreateRegularUser(ctx, "resource-peer")
 	require.NoError(t, err)
 
-	userCtx := ts.CreateUserContext(ctx, user.ID)
-	peerCtx := ts.CreateUserContext(ctx, peer.ID)
-
-	ownMemo, err := ts.Service.CreateMemo(userCtx, &apipb.CreateMemoRequest{
-		Memo: &apipb.Memo{
-			Content:    "owner memo",
-			Visibility: apipb.Visibility_PUBLIC,
-		},
-	})
-	require.NoError(t, err)
-
-	foreignMemo, err := ts.Service.CreateMemo(peerCtx, &apipb.CreateMemoRequest{
-		Memo: &apipb.Memo{
-			Content:    "peer memo",
-			Visibility: apipb.Visibility_PUBLIC,
-		},
-	})
-	require.NoError(t, err)
-
-	peerCommentOnOwnMemo, err := ts.Service.CreateMemoComment(peerCtx, &apipb.CreateMemoCommentRequest{
-		Parent: ownMemo.Name,
-		Comment: &apipb.Memo{
-			Content:    "peer comment on owner memo",
-			Visibility: apipb.Visibility_PUBLIC,
-		},
-	})
-	require.NoError(t, err)
-
-	peerNestedCommentOnOwnMemo, err := ts.Service.CreateMemoComment(peerCtx, &apipb.CreateMemoCommentRequest{
-		Parent: peerCommentOnOwnMemo.Name,
-		Comment: &apipb.Memo{
-			Content:    "peer nested comment on owner memo",
-			Visibility: apipb.Visibility_PUBLIC,
-		},
-	})
-	require.NoError(t, err)
-
-	userCommentOnForeignMemo, err := ts.Service.CreateMemoComment(userCtx, &apipb.CreateMemoCommentRequest{
-		Parent: foreignMemo.Name,
-		Comment: &apipb.Memo{
-			Content:    "owner comment on peer memo",
-			Visibility: apipb.Visibility_PUBLIC,
-		},
-	})
-	require.NoError(t, err)
-	peerReplyToUserComment, err := ts.Service.CreateMemoComment(peerCtx, &apipb.CreateMemoCommentRequest{
-		Parent: userCommentOnForeignMemo.Name,
-		Comment: &apipb.Memo{
-			Content:    "peer reply to owner comment",
-			Visibility: apipb.Visibility_PUBLIC,
-		},
-	})
-	require.NoError(t, err)
-
-	ownMemoUID, err := api.ExtractMemoUIDFromName(ownMemo.Name)
-	require.NoError(t, err)
-	ownMemoStore, err := ts.Store.GetMemo(ctx, &store.FindMemo{UID: &ownMemoUID})
-	require.NoError(t, err)
-	require.NotNil(t, ownMemoStore)
-
-	foreignMemoUID, err := api.ExtractMemoUIDFromName(foreignMemo.Name)
-	require.NoError(t, err)
-	foreignMemoStore, err := ts.Store.GetMemo(ctx, &store.FindMemo{UID: &foreignMemoUID})
-	require.NoError(t, err)
-	require.NotNil(t, foreignMemoStore)
-	peerCommentOnOwnMemoID := parseMemoIDFromNameForTest(t, ts, peerCommentOnOwnMemo.Name)
-	peerNestedCommentOnOwnMemoID := parseMemoIDFromNameForTest(t, ts, peerNestedCommentOnOwnMemo.Name)
-	userCommentOnForeignMemoID := parseMemoIDFromNameForTest(t, ts, userCommentOnForeignMemo.Name)
-	peerReplyToUserCommentID := parseMemoIDFromNameForTest(t, ts, peerReplyToUserComment.Name)
+	// Seed legacy cross-author threads through the store to exercise deletion
+	// of historical relationships without creating them via the personal-note API.
+	createMemo := func(uid string, creatorID int32, content string) *store.Memo {
+		t.Helper()
+		memo, err := ts.Store.CreateMemo(ctx, &store.Memo{UID: uid, CreatorID: creatorID, Content: content, Visibility: store.Public})
+		require.NoError(t, err)
+		return memo
+	}
+	createLegacyComment := func(uid string, creatorID, parentID int32, content string) *store.Memo {
+		t.Helper()
+		comment, err := ts.Store.CreateMemoComment(ctx, &store.Memo{
+			UID: uid, CreatorID: creatorID, Content: content, Visibility: store.Public,
+		}, parentID, creatorID)
+		require.NoError(t, err)
+		return comment
+	}
+	ownMemoStore := createMemo("legacy-owner-memo", user.ID, "owner memo")
+	foreignMemoStore := createMemo("legacy-peer-memo", peer.ID, "peer memo")
+	peerCommentOnOwnMemo := createLegacyComment("legacy-peer-comment", peer.ID, ownMemoStore.ID, "peer comment on owner memo")
+	peerNestedCommentOnOwnMemo := createLegacyComment("legacy-peer-nested", peer.ID, peerCommentOnOwnMemo.ID, "peer nested comment on owner memo")
+	userCommentOnForeignMemo := createLegacyComment("legacy-owner-comment", user.ID, foreignMemoStore.ID, "owner comment on peer memo")
+	peerReplyToUserComment := createLegacyComment("legacy-peer-reply", peer.ID, userCommentOnForeignMemo.ID, "peer reply to owner comment")
 
 	attachedAttachment, err := ts.Store.CreateAttachment(ctx, &store.Attachment{
 		UID:       "attach-owner-memo",
@@ -198,7 +151,7 @@ func TestDeleteUserSelfDeleteRemovesOnlyOwnedMemosAndResources(t *testing.T) {
 	require.NoError(t, err)
 	_, err = ts.Store.UpsertReaction(ctx, &store.Reaction{
 		CreatorID:    peer.ID,
-		MemoID:       userCommentOnForeignMemoID,
+		MemoID:       userCommentOnForeignMemo.ID,
 		ReactionType: "🔥",
 	})
 	require.NoError(t, err)
@@ -234,6 +187,26 @@ func TestDeleteUserSelfDeleteRemovesOnlyOwnedMemosAndResources(t *testing.T) {
 	})
 	require.NoError(t, err)
 
+	for _, notification := range []struct {
+		senderID, receiverID, memoID, parentID int32
+	}{
+		{peer.ID, user.ID, peerCommentOnOwnMemo.ID, ownMemoStore.ID},
+		{user.ID, peer.ID, userCommentOnForeignMemo.ID, foreignMemoStore.ID},
+	} {
+		_, err := ts.Store.CreateInbox(ctx, &store.Inbox{
+			SenderID: notification.senderID, ReceiverID: notification.receiverID, Status: store.UNREAD,
+			Message: &storepb.InboxMessage{
+				Type: storepb.InboxMessage_MEMO_COMMENT,
+				Payload: &storepb.InboxMessage_MemoComment{
+					MemoComment: &storepb.InboxMessage_MemoCommentPayload{
+						MemoId: notification.memoID, RelatedMemoId: notification.parentID,
+					},
+				},
+			},
+		})
+		require.NoError(t, err)
+	}
+
 	_, err = ts.Store.CreateUserIdentity(ctx, &store.UserIdentity{
 		UserID:    user.ID,
 		Provider:  "google",
@@ -258,41 +231,27 @@ func TestDeleteUserSelfDeleteRemovesOnlyOwnedMemosAndResources(t *testing.T) {
 	require.NoError(t, err)
 	require.Nil(t, deletedUser)
 
-	for _, memoName := range []string{
-		ownMemo.Name,
-		userCommentOnForeignMemo.Name,
-	} {
-		memoUID, extractErr := api.ExtractMemoUIDFromName(memoName)
-		require.NoError(t, extractErr)
-		memo, getErr := ts.Store.GetMemo(ctx, &store.FindMemo{UID: &memoUID})
-		require.NoError(t, getErr)
-		require.Nil(t, memo, memoName)
+	for _, memoID := range []int32{ownMemoStore.ID, userCommentOnForeignMemo.ID} {
+		memo, err := ts.Store.GetMemo(ctx, &store.FindMemo{ID: &memoID})
+		require.NoError(t, err)
+		require.Nil(t, memo, "deleted owned memo %d", memoID)
 	}
-	for _, memoName := range []string{
-		peerCommentOnOwnMemo.Name,
-		peerNestedCommentOnOwnMemo.Name,
-		peerReplyToUserComment.Name,
-	} {
-		memoUID, extractErr := api.ExtractMemoUIDFromName(memoName)
-		require.NoError(t, extractErr)
-		memo, getErr := ts.Store.GetMemo(ctx, &store.FindMemo{UID: &memoUID})
-		require.NoError(t, getErr)
-		require.NotNil(t, memo, memoName)
+	for _, memoID := range []int32{foreignMemoStore.ID, peerCommentOnOwnMemo.ID, peerNestedCommentOnOwnMemo.ID, peerReplyToUserComment.ID} {
+		memo, err := ts.Store.GetMemo(ctx, &store.FindMemo{ID: &memoID})
+		require.NoError(t, err)
+		require.NotNil(t, memo, "preserved peer memo %d", memoID)
 	}
 
-	foreignMemoAfterDelete, err := ts.Store.GetMemo(ctx, &store.FindMemo{UID: &foreignMemoUID})
-	require.NoError(t, err)
-	require.NotNil(t, foreignMemoAfterDelete)
-	nestedRelations, err := ts.Store.ListMemoRelations(ctx, &store.FindMemoRelation{MemoID: &peerNestedCommentOnOwnMemoID})
+	nestedRelations, err := ts.Store.ListMemoRelations(ctx, &store.FindMemoRelation{MemoID: &peerNestedCommentOnOwnMemo.ID})
 	require.NoError(t, err)
 	require.Len(t, nestedRelations, 1)
-	require.Equal(t, peerCommentOnOwnMemoID, nestedRelations[0].RelatedMemoID)
-	for _, memoID := range []int32{ownMemoStore.ID, userCommentOnForeignMemoID} {
+	require.Equal(t, peerCommentOnOwnMemo.ID, nestedRelations[0].RelatedMemoID)
+	for _, memoID := range []int32{ownMemoStore.ID, userCommentOnForeignMemo.ID} {
 		incidentRelations, listErr := ts.Store.ListMemoRelations(ctx, &store.FindMemoRelation{MemoIDList: []int32{memoID}})
 		require.NoError(t, listErr)
 		require.Empty(t, incidentRelations)
 	}
-	contextlessReplyRelations, err := ts.Store.ListMemoRelations(ctx, &store.FindMemoRelation{MemoID: &peerReplyToUserCommentID})
+	contextlessReplyRelations, err := ts.Store.ListMemoRelations(ctx, &store.FindMemoRelation{MemoID: &peerReplyToUserComment.ID})
 	require.NoError(t, err)
 	require.Empty(t, contextlessReplyRelations)
 
@@ -313,7 +272,7 @@ func TestDeleteUserSelfDeleteRemovesOnlyOwnedMemosAndResources(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, ownMemoReactions)
 
-	userCommentReactions, err := ts.Store.ListReactions(ctx, &store.FindReaction{MemoID: &userCommentOnForeignMemoID})
+	userCommentReactions, err := ts.Store.ListReactions(ctx, &store.FindReaction{MemoID: &userCommentOnForeignMemo.ID})
 	require.NoError(t, err)
 	require.Empty(t, userCommentReactions)
 

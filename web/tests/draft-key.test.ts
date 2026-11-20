@@ -16,7 +16,6 @@ describe("draft keys", () => {
     expect(legacyDraftKeyFor({ kind: "new", scope: "home" })).toBe("home-memo-editor");
     expect(legacyDraftKeyFor({ kind: "new", scope: "global", space: "spaces/x" })).toBe("global-memo-editor:spaces/x");
     expect(legacyDraftKeyFor({ kind: "new", scope: "calendar:2026-10-18" })).toBe("calendar-day-editor:2026-10-18");
-    expect(legacyDraftKeyFor({ kind: "new", scope: "map:users/1:all:35,135" })).toBe("map-editor:users/1:all:35,135");
     expect(legacyDraftKeyFor({ kind: "new", scope: "elsewhere" })).toBeUndefined();
     expect(legacyDraftKeyFor({ kind: "edit", name: "memos/a" })).toBeUndefined();
   });

@@ -1,4 +1,4 @@
-import { Badge, Button, buttonClasses, Popover, Tooltip } from "@usememos/ui";
+import { Badge, Button, Tooltip } from "@usememos/ui";
 import { SmilePlusIcon } from "lucide-react";
 import { Link, useLocation } from "react-router-dom";
 import RelativeTime from "@/components/RelativeTime";
@@ -7,31 +7,24 @@ import i18n from "@/i18n";
 import { APP_TIME_ZONE } from "@/lib/time-zone";
 import { cn } from "@/lib/utils";
 import { getCreatorHomePath } from "@/router/routes";
-import { Visibility } from "@/types/proto/api/memo_service_pb";
 import type { User } from "@/types/proto/api/user_service_pb";
 import { useTranslate } from "@/utils/i18n";
-import { getVisibilityOption } from "@/utils/memo";
 import MemoActionMenu from "../../MemoActionMenu";
 import { ReactionSelector } from "../../MemoReactionListView";
 import UserAvatar from "../../UserAvatar";
-import VisibilityIcon from "../../VisibilityIcon";
 import { MEMO_TIME_CONTROL_CLASSES } from "../constants";
 import { useMemoViewContext, useMemoViewDerived } from "../MemoViewContext";
 import { createMemoNavigationState, isMemoDetailPath } from "../navigation";
 import type { MemoHeaderProps } from "../types";
 import MemoSpaceBadge from "./MemoSpaceBadge";
 
-/** The card's trailing actions are the package's 24px ghost squares (`sm`), whether or not they are package buttons. */
-const MEMO_HEADER_ACTION_CLASSES = buttonClasses({ variant: "ghost", size: "sm", iconOnly: true });
-
-const MemoHeader: React.FC<MemoHeaderProps> = ({ timeDisplay = "relative", showCreator, showVisibility, showSpace }) => {
+const MemoHeader: React.FC<MemoHeaderProps> = ({ timeDisplay = "relative", showCreator, showSpace }) => {
   const t = useTranslate();
 
   const { memo, creator, currentUser, parentPage, isArchived, readonly, isEditing, openEditor } = useMemoViewContext();
   const location = useLocation();
   const { createTime, updateTime, displayTime: memoDisplayTime, isDisplayingUpdatedTime, relativeTimeFormat } = useMemoViewDerived();
   const { newMemoName } = useNewMemo();
-  const visibilityOption = getVisibilityOption(memo.visibility);
 
   const timeValue = isArchived ? (
     memoDisplayTime?.toLocaleString(i18n.language, { timeZone: APP_TIME_ZONE })
@@ -61,8 +54,7 @@ const MemoHeader: React.FC<MemoHeaderProps> = ({ timeDisplay = "relative", showC
   const isNew = memo.name === newMemoName;
 
   // While the card edits in place, the session's timestamp row is the header: the body
-  // hands it the identity (`CreatorDisplay`) to lead with, and the time, visibility and
-  // Space show once, in their editable form. Reacting or opening the action menu makes no
+  // hands it the identity (`CreatorDisplay`) to lead with, and the time and Space show once, in their editable form. Reacting or opening the action menu makes no
   // sense mid-edit, and the "new" mark is for finding the memo in the list, not for the
   // person editing it.
   if (isEditing) return null;
@@ -93,26 +85,6 @@ const MemoHeader: React.FC<MemoHeaderProps> = ({ timeDisplay = "relative", showC
           <span className="flex sm:hidden sm:group-hover:flex sm:group-focus-within:flex sm:has-[[data-popup-open]]:flex">
             <ReactionSelector memo={memo} trigger={<Button variant="ghost" size="sm" icon={<SmilePlusIcon />} />} />
           </span>
-        )}
-
-        {showVisibility && memo.visibility !== Visibility.PRIVATE && (
-          // The audience is information, not an action: a hover card that a click or tap also opens.
-          <Popover.Root>
-            <Popover.Trigger
-              openOnHover
-              delay={300}
-              aria-label={visibilityOption && t(visibilityOption.labelKey)}
-              className={MEMO_HEADER_ACTION_CLASSES}
-            >
-              <VisibilityIcon visibility={memo.visibility} className="text-current" />
-            </Popover.Trigger>
-            {visibilityOption && (
-              <Popover.Popup align="end" variant="list" className="w-56">
-                <Popover.Title>{t(visibilityOption.labelKey)}</Popover.Title>
-                <Popover.Description>{t(visibilityOption.descriptionKey)}</Popover.Description>
-              </Popover.Popup>
-            )}
-          </Popover.Root>
         )}
 
         <MemoActionMenu memo={memo} parentPage={parentPage} readonly={readonly} onEdit={openEditor} />

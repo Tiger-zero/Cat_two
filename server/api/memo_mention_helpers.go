@@ -65,22 +65,17 @@ func (s *APIService) resolveMentionContextFacts(ctx context.Context, memo *store
 	return facts, nil
 }
 
-func (s *APIService) canUserAccessMentionContext(ctx context.Context, facts *mentionContextFacts, target *store.User) bool {
+func (s *APIService) canUserAccessMentionContext(facts *mentionContextFacts, target *store.User) bool {
 	if target == nil || facts == nil || facts.memo.Memo == nil {
 		return false
 	}
-	readContext, err := facts.memo.WithViewer(ctx, s.Store, target, false, nil)
-	if err != nil || !access.CheckMemoReadContext(readContext).Allowed() {
+	if !access.CheckMemoReadContext(facts.memo.WithViewer(target)).Allowed() {
 		return false
 	}
 	if facts.related == nil {
 		return true
 	}
-	relatedContext, err := facts.related.WithViewer(ctx, s.Store, target, false, nil)
-	if err != nil {
-		return false
-	}
-	return access.CheckMemoReadContext(relatedContext).Allowed()
+	return access.CheckMemoReadContext(facts.related.WithViewer(target)).Allowed()
 }
 
 // canUserAccessMentionMemos is the one-shot form for a single target, where
@@ -90,10 +85,10 @@ func (s *APIService) canUserAccessMentionMemos(ctx context.Context, target *stor
 	if err != nil {
 		return false
 	}
-	return s.canUserAccessMentionContext(ctx, facts, target)
+	return s.canUserAccessMentionContext(facts, target)
 }
 
-func (s *APIService) shouldSkipMentionInbox(ctx context.Context, facts *mentionContextFacts, target *store.User, memo *store.Memo, relatedMemo *store.Memo) bool {
+func (s *APIService) shouldSkipMentionInbox(facts *mentionContextFacts, target *store.User, memo *store.Memo, relatedMemo *store.Memo) bool {
 	if target == nil || memo == nil {
 		return true
 	}
@@ -107,7 +102,7 @@ func (s *APIService) shouldSkipMentionInbox(ctx context.Context, facts *mentionC
 		return true
 	}
 
-	return !s.canUserAccessMentionContext(ctx, facts, target)
+	return !s.canUserAccessMentionContext(facts, target)
 }
 
 func (s *APIService) dispatchMemoMentionNotifications(ctx context.Context, memo *store.Memo, relatedMemo *store.Memo, previousContent string) error {
@@ -137,7 +132,7 @@ func (s *APIService) dispatchMemoMentionNotifications(ctx context.Context, memo 
 		if _, exists := previousTargets[userID]; exists {
 			continue
 		}
-		if s.shouldSkipMentionInbox(ctx, facts, target, memo, relatedMemo) {
+		if s.shouldSkipMentionInbox(facts, target, memo, relatedMemo) {
 			continue
 		}
 

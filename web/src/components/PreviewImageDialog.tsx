@@ -476,9 +476,9 @@ function PreviewImageDialog({ open, onOpenChange, imgUrls = [], items, initialIn
                     <div className="mx-1 h-5 w-px bg-mu-line" />
                   </>
                 )}
-                <Button aria-label={t("map.zoom-out")} onClick={handleZoomOut} disabled={zoomScale === MIN_ZOOM} icon={<ZoomOut />} />
+                <Button aria-label={t("common.zoom-out")} onClick={handleZoomOut} disabled={zoomScale === MIN_ZOOM} icon={<ZoomOut />} />
                 <div className="min-w-12 px-2 text-center mu-label-sm tabular-nums text-mu-text-secondary">{zoomPercent}%</div>
-                <Button aria-label={t("map.zoom-in")} onClick={handleZoomIn} disabled={zoomScale === MAX_ZOOM} icon={<ZoomIn />} />
+                <Button aria-label={t("common.zoom-in")} onClick={handleZoomIn} disabled={zoomScale === MAX_ZOOM} icon={<ZoomIn />} />
                 <div className="mx-1 h-5 w-px bg-mu-line" />
                 <Button aria-label={t("attachment-preview.reset-zoom")} onClick={resetZoom} disabled={!isZoomed} icon={<RotateCcw />} />
               </div>

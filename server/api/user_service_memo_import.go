@@ -345,7 +345,7 @@ func (i *memoImporter) buildMemo(record *memoexport.Memo, uid string, content []
 		CreatedTs:  createdTs,
 		UpdatedTs:  updatedTs,
 		Content:    string(content),
-		Visibility: store.Visibility(record.Visibility),
+		Visibility: store.Private,
 		Pinned:     record.Pinned,
 	}
 	if record.Space != nil {
@@ -357,10 +357,6 @@ func (i *memoImporter) buildMemo(record *memoexport.Memo, uid string, content []
 			i.warn(record.UID, fmt.Sprintf("space %q was not found among your spaces; imported without a space", record.Space.UID))
 		}
 		memo.SpaceID = spaceID
-	}
-	if memo.Visibility == store.SpaceAudience && memo.SpaceID == nil {
-		i.warn(record.UID, "SPACE visibility needs a space; imported as PRIVATE")
-		memo.Visibility = store.Private
 	}
 	if err := memopayload.RebuildMemoPayload(i.ctx, memo, i.service.MarkdownService); err != nil {
 		return nil, errors.Wrap(err, "failed to rebuild memo payload")
@@ -416,7 +412,7 @@ func (i *memoImporter) resolveMemo(uid string) (*store.Memo, error) {
 	if memo, ok := i.resolved[uid]; ok {
 		return memo, nil
 	}
-	memo, err := i.service.Store.GetMemo(i.ctx, &store.FindMemo{UID: &uid, Access: newMemoAccessScope(i.user, true)})
+	memo, err := i.service.Store.GetMemo(i.ctx, &store.FindMemo{UID: &uid, Access: newMemoAccessScope(i.user)})
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to look up memo")
 	}

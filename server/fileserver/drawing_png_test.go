@@ -58,7 +58,7 @@ func TestDrawingPNGRoundTripsUnchanged(t *testing.T) {
 				require.Equal(t, int64(len(fixture)), attachment.Size)
 				_, err = svc.CreateMemo(creatorCtx, &apipb.CreateMemoRequest{Memo: &apipb.Memo{
 					Content:     "a drawing",
-					Visibility:  apipb.Visibility_PUBLIC,
+					Visibility:  apipb.Visibility_PRIVATE,
 					Attachments: []*apipb.Attachment{{Name: attachment.Name}},
 				}})
 				require.NoError(t, err)
@@ -66,7 +66,7 @@ func TestDrawingPNGRoundTripsUnchanged(t *testing.T) {
 				mux := http.NewServeMux()
 				fs.RegisterRoutes(mux, http.HandlerFunc(httphandler.NotFound))
 				recorder := httptest.NewRecorder()
-				mux.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, fmt.Sprintf("/file/%s/%s", attachment.Name, attachment.Filename), nil))
+				mux.ServeHTTP(recorder, newAuthenticatedFileRequest(ctx, t, svc, creator.ID, fmt.Sprintf("/file/%s/%s", attachment.Name, attachment.Filename)))
 
 				require.Equal(t, http.StatusOK, recorder.Code)
 				require.Equal(t, "image/png", recorder.Header().Get("Content-Type"))

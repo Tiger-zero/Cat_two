@@ -6,7 +6,6 @@ import { EditorSuggestions, SuggestionsBar } from "@/components/MemoEditor/edit/
 import { createInitialState, EditorProvider, useEditorContext } from "@/components/MemoEditor/edit/state";
 import type { EditorController } from "@/components/MemoEditor/edit/types/editorController";
 import { getMemoSuggestions, type MemoSuggestion } from "@/lib/memo-suggestions";
-import { Visibility } from "@/types/proto/api/memo_service_pb";
 
 vi.mock("@/utils/i18n", () => ({ useTranslate: () => (key: string) => key }));
 vi.mock("@/hooks/useUserQueries", () => ({ useTagCounts: () => ({ data: {} }), useUsersByUsernames: () => ({ data: undefined }) }));
@@ -19,21 +18,21 @@ let editor: ReturnType<typeof useEditorContext>;
 let controller: React.RefObject<EditorController | null>;
 const candidates = getMemoSuggestions(["work", "release", "planning", "later"].map((value) => ({ factor: "tagSearch", value })));
 
-function Harness({ suggestions, space }: { suggestions: MemoSuggestion[]; space?: string }) {
+function Harness({ suggestions }: { suggestions: MemoSuggestion[] }) {
   editor = useEditorContext();
   controller = useRef<EditorController>(null);
   return (
     <>
       <EditorContent ref={controller} sourceMode={{ isSourceMode: false, onToggle: vi.fn() }} onSubmit={vi.fn()} onFiles={vi.fn()} />
-      <EditorSuggestions suggestions={suggestions} controllerRef={controller} space={space} />
+      <EditorSuggestions suggestions={suggestions} controllerRef={controller} />
     </>
   );
 }
 
-function composer(suggestions = candidates, content = "A note", space?: string) {
+function composer(suggestions = candidates, content = "A note") {
   return (
     <EditorProvider initialEditorState={{ ...createInitialState(), content }}>
-      <Harness suggestions={suggestions} space={space} />
+      <Harness suggestions={suggestions} />
     </EditorProvider>
   );
 }
@@ -120,10 +119,8 @@ describe("editor suggestions", () => {
 });
 
 const checklist: MemoSuggestion = { id: "checklist", kind: "checklist", source: "view" };
-const publicAudience: MemoSuggestion = { id: "visibility:PUBLIC", kind: "visibility", visibility: Visibility.PUBLIC, source: "view" };
-const spaceAudience: MemoSuggestion = { id: "visibility:SPACE", kind: "visibility", visibility: Visibility.SPACE, source: "view" };
 
-describe("checklist and visibility acceptance", () => {
+describe("checklist acceptance", () => {
   it("formats the remembered cursor block and retains acceptance after removal", async () => {
     render(composer([checklist], "First\n\nSecond"));
     act(() => controller.current?.setSelection(caret(1, 1)));
@@ -161,48 +158,16 @@ describe("checklist and visibility acceptance", () => {
     expect(screen.queryByRole("group")).not.toBeInTheDocument();
   });
 
-  it("changes visibility only on acceptance, keeps text intact, and remembers the choice", async () => {
-    render(composer([publicAudience]));
-    expect(editor.getState().metadata.visibility).toBe(Visibility.PRIVATE);
-    fireEvent.click(screen.getByRole("button", { name: "memo.visibility.public" }));
-    expect(editor.getState().metadata.visibility).toBe(Visibility.PUBLIC);
-    await waitFor(() => expect(editor.getState().content).toBe("A note"));
-    expect(controller.current?.hasFocus()).toBe(true);
-    expect(screen.queryByRole("group")).not.toBeInTheDocument();
-    act(() => editor.dispatch(editor.actions.setMetadata({ visibility: Visibility.PRIVATE })));
-    expect(screen.queryByRole("group")).not.toBeInTheDocument();
-  });
-
-  it("hides an already selected audience and reacts to manual changes", async () => {
-    render(composer([publicAudience]));
-    act(() => editor.dispatch(editor.actions.setMetadata({ visibility: Visibility.PUBLIC })));
-    expect(screen.queryByRole("group")).not.toBeInTheDocument();
-    act(() => editor.dispatch(editor.actions.setMetadata({ visibility: Visibility.PRIVATE })));
-    expect(screen.getByRole("button", { name: "memo.visibility.public" })).toBeInTheDocument();
-  });
-
-  it("requires actual Space placement to offer Space visibility", async () => {
-    const result = render(composer([spaceAudience]));
-    expect(screen.queryByRole("group")).not.toBeInTheDocument();
-    result.rerender(composer([spaceAudience], "A note", "spaces/team"));
-    expect(screen.getByRole("button", { name: "memo.visibility.space" })).toBeInTheDocument();
-    result.rerender(composer([spaceAudience]));
-    expect(screen.queryByRole("group")).not.toBeInTheDocument();
-    result.rerender(composer([spaceAudience], "A note", "spaces/team"));
-    fireEvent.click(screen.getByRole("button", { name: "memo.visibility.space" }));
-    expect(editor.getState().metadata.visibility).toBe(Visibility.SPACE);
-  });
-
   it("shares the three-chip limit across kinds after filtering fulfilled suggestions", async () => {
-    render(composer([...candidates.slice(0, 2), checklist, publicAudience], "#work A note"));
+    render(composer([...candidates.slice(0, 3), checklist], "#work A note"));
     expect(screen.getAllByRole("button")).toHaveLength(3);
     expect(screen.getByRole("button", { name: "common.add #release" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "editor.format.task-list" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "memo.visibility.public" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "common.add #planning" })).toBeInTheDocument();
   });
 
   it("hides all kinds in an empty draft and prevents acceptance while saving", async () => {
-    render(composer([checklist, publicAudience], ""));
+    render(composer([checklist, candidates[0]], ""));
     expect(screen.queryByRole("group")).not.toBeInTheDocument();
     act(() => controller.current?.setMarkdown("A note"));
     act(() => editor.dispatch(editor.actions.setLoading("saving", true)));
@@ -211,6 +176,5 @@ describe("checklist and visibility acceptance", () => {
       fireEvent.click(chip);
     }
     await waitFor(() => expect(editor.getState().content).toBe("A note"));
-    expect(editor.getState().metadata.visibility).toBe(Visibility.PRIVATE);
   });
 });

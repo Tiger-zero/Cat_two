@@ -10,9 +10,11 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/fieldmaskpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	apipb "github.com/usememos/memos/proto/gen/api"
+	storepb "github.com/usememos/memos/proto/gen/store"
 	"github.com/usememos/memos/store"
 )
 
@@ -68,9 +70,7 @@ func TestMemoCreateSharedPreparationPreservesFields(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, topCreateTime.Unix(), topMemo.CreateTime.AsTime().Unix())
 	require.Equal(t, topUpdateTime.Unix(), topMemo.UpdateTime.AsTime().Unix())
-	require.Equal(t, topLocation.Placeholder, topMemo.Location.Placeholder)
-	require.Equal(t, topLocation.Latitude, topMemo.Location.Latitude)
-	require.Equal(t, topLocation.Longitude, topMemo.Location.Longitude)
+	require.Nil(t, topMemo.Location)
 	require.Len(t, topMemo.Attachments, 1)
 	require.Equal(t, topAttachment.Name, topMemo.Attachments[0].Name)
 	requireMemoCreateRelation(t, topMemo, apipb.MemoRelation_REFERENCE, referenceTarget.Name)
@@ -96,14 +96,51 @@ func TestMemoCreateSharedPreparationPreservesFields(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, commentCreateTime.Unix(), comment.CreateTime.AsTime().Unix())
 	require.Equal(t, commentUpdateTime.Unix(), comment.UpdateTime.AsTime().Unix())
-	require.Equal(t, commentLocation.Placeholder, comment.Location.Placeholder)
-	require.Equal(t, commentLocation.Latitude, comment.Location.Latitude)
-	require.Equal(t, commentLocation.Longitude, comment.Location.Longitude)
-	require.Equal(t, apipb.Visibility_PROTECTED, comment.Visibility)
+	require.Nil(t, comment.Location)
+	require.Equal(t, apipb.Visibility_PRIVATE, comment.Visibility)
 	require.Len(t, comment.Attachments, 1)
 	require.Equal(t, commentAttachment.Name, comment.Attachments[0].Name)
 	requireMemoCreateRelation(t, comment, apipb.MemoRelation_COMMENT, topMemo.Name)
 	requireMemoCreateRelation(t, comment, apipb.MemoRelation_REFERENCE, referenceTarget.Name)
+}
+
+func TestMemoLegacyLocationRemainsReadOnly(t *testing.T) {
+	ctx := context.Background()
+	service := newIntegrationService(t)
+	user := createSpaceTestUser(ctx, t, service, "memo-legacy-location", store.RoleUser)
+	userCtx := userCtx(ctx, user.ID)
+	legacyLocation := &storepb.MemoPayload_Location{Placeholder: "legacy location", Latitude: 31.2, Longitude: 121.4}
+	legacyMemo, err := service.Store.CreateMemo(ctx, &store.Memo{
+		UID:        "legacy-location",
+		CreatorID:  user.ID,
+		Content:    "legacy memo",
+		Visibility: store.Private,
+		Payload:    &storepb.MemoPayload{Location: legacyLocation},
+	})
+	require.NoError(t, err)
+	name := "memos/" + legacyMemo.UID
+
+	unchanged, err := service.UpdateMemo(userCtx, &apipb.UpdateMemoRequest{
+		Memo:       &apipb.Memo{Name: name},
+		UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"location"}},
+	})
+	require.NoError(t, err)
+	require.Equal(t, legacyLocation.Placeholder, unchanged.GetLocation().GetPlaceholder())
+	require.Equal(t, legacyMemo.UpdatedTs, unchanged.GetUpdateTime().GetSeconds())
+
+	updated, err := service.UpdateMemo(userCtx, &apipb.UpdateMemoRequest{
+		Memo: &apipb.Memo{
+			Name:     name,
+			Content:  "edited memo",
+			Location: &apipb.Location{Placeholder: "replacement", Latitude: 1, Longitude: 2},
+		},
+		UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"content", "location"}},
+	})
+	require.NoError(t, err)
+	require.Equal(t, "edited memo", updated.Content)
+	require.Equal(t, legacyLocation.Placeholder, updated.GetLocation().GetPlaceholder())
+	require.Equal(t, legacyLocation.Latitude, updated.GetLocation().GetLatitude())
+	require.Equal(t, legacyLocation.Longitude, updated.GetLocation().GetLongitude())
 }
 
 func TestMemoCreateDuplicateIDsUseAlreadyExists(t *testing.T) {

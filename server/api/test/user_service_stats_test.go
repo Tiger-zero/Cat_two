@@ -328,20 +328,17 @@ func TestUserStatsUseMemoLocalAccess(t *testing.T) {
 		{
 			name:       "space member",
 			requestCtx: ts.CreateUserContext(ctx, member.ID),
-			wantTags:   []string{"public", "protected", "space"},
-			denyTags:   []string{"private"},
+			denyTags:   []string{"public", "protected", "private", "space"},
 		},
 		{
 			name:       "nonmember application admin",
 			requestCtx: ts.CreateUserContext(ctx, applicationAdmin.ID),
-			wantTags:   []string{"public", "protected"},
-			denyTags:   []string{"private", "space"},
+			denyTags:   []string{"public", "protected", "private", "space"},
 		},
 		{
 			name:       "anonymous",
 			requestCtx: ctx,
-			wantTags:   []string{"public"},
-			denyTags:   []string{"protected", "private", "space"},
+			denyTags:   []string{"public", "protected", "private", "space"},
 		},
 	}
 	for _, test := range tests {
@@ -360,10 +357,7 @@ func TestUserStatsUseMemoLocalAccess(t *testing.T) {
 
 	memberStats, err := ts.Service.ListUserStats(ts.CreateUserContext(ctx, member.ID), &apipb.ListUserStatsRequest{Parent: "users/-"})
 	require.NoError(t, err)
-	require.Len(t, memberStats.UserStats, 1)
-	require.Equal(t, int32(3), memberStats.UserStats[0].TotalMemoCount)
-	require.Contains(t, memberStats.UserStats[0].TagCounts, "space")
-	require.NotContains(t, memberStats.UserStats[0].TagCounts, "private")
+	require.Empty(t, memberStats.UserStats)
 }
 
 func TestUserStatsSpaceFilter(t *testing.T) {
@@ -441,14 +435,14 @@ func TestUserStatsSpaceFilter(t *testing.T) {
 		Filter: fmt.Sprintf(`space == %q`, spaceAName),
 	})
 	require.NoError(t, err)
-	require.Len(t, memberSpaceStats.UserStats, 2)
+	require.Len(t, memberSpaceStats.UserStats, 1)
 	visibleTags := map[string]int32{}
 	for _, stats := range memberSpaceStats.UserStats {
 		for tag, count := range stats.TagCounts {
 			visibleTags[tag] += count
 		}
 	}
-	require.Equal(t, map[string]int32{"a-members": 1, "member-private": 1}, visibleTags)
+	require.Equal(t, map[string]int32{"member-private": 1}, visibleTags)
 
 	_, err = ts.Service.ListUserStats(ts.CreateUserContext(ctx, outsider.ID), &apipb.ListUserStatsRequest{
 		Parent: "users/-",
@@ -528,12 +522,12 @@ func TestListUserStatsParent(t *testing.T) {
 
 	all, err := ts.Service.ListUserStats(aliceCtx, &apipb.ListUserStatsRequest{Parent: "users/-"})
 	require.NoError(t, err)
-	require.Len(t, all.UserStats, 2)
+	require.Len(t, all.UserStats, 1)
+	require.Equal(t, "users/stats-alice/stats", all.UserStats[0].Name)
 
 	one, err := ts.Service.ListUserStats(aliceCtx, &apipb.ListUserStatsRequest{Parent: "users/stats-bob"})
 	require.NoError(t, err)
-	require.Len(t, one.UserStats, 1)
-	require.Equal(t, "users/stats-bob/stats", one.UserStats[0].Name)
+	require.Empty(t, one.UserStats)
 
 	_, err = ts.Service.ListUserStats(aliceCtx, &apipb.ListUserStatsRequest{Parent: "users/missing"})
 	require.Equal(t, codes.NotFound, status.Code(err))

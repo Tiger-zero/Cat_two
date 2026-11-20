@@ -78,7 +78,7 @@ func TestReplaceAttachmentContent(t *testing.T) {
 			attachment := createDrawingInline(ownerCtx, t, svc, original)
 			memo, err := svc.CreateMemo(ownerCtx, &apipb.CreateMemoRequest{Memo: &apipb.Memo{
 				Content:     "a drawing",
-				Visibility:  apipb.Visibility_PUBLIC,
+				Visibility:  apipb.Visibility_PRIVATE,
 				Attachments: []*apipb.Attachment{{Name: attachment.Name}},
 			}})
 			require.NoError(t, err)
@@ -107,7 +107,7 @@ func TestReplaceAttachmentContent(t *testing.T) {
 			mux := http.NewServeMux()
 			fs.RegisterRoutes(mux, http.HandlerFunc(httphandler.NotFound))
 			recorder := httptest.NewRecorder()
-			mux.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, fmt.Sprintf("/file/%s/%s", replaced.Name, replaced.Filename), nil))
+			mux.ServeHTTP(recorder, newAuthenticatedFileRequest(ctx, t, svc, owner.ID, fmt.Sprintf("/file/%s/%s", replaced.Name, replaced.Filename)))
 			require.Equal(t, http.StatusOK, recorder.Code)
 			require.Equal(t, edited, recorder.Body.Bytes())
 
@@ -151,7 +151,7 @@ func TestReplaceAttachmentContentRefusals(t *testing.T) {
 	attachment := createDrawingInline(ownerCtx, t, svc, content)
 
 	_, err = replaceContent(otherCtx, svc, attachment.Name, "drawing.canvas.png", content)
-	require.Equal(t, codes.PermissionDenied, status.Code(err), "only the uploader or an admin may replace it")
+	require.Equal(t, codes.PermissionDenied, status.Code(err), "only the uploader may replace it")
 
 	_, err = replaceContent(ctx, svc, attachment.Name, "drawing.canvas.png", content)
 	require.Equal(t, codes.Unauthenticated, status.Code(err))
@@ -180,15 +180,8 @@ func TestReplaceAttachmentContentRefusals(t *testing.T) {
 	_, err = replaceContent(ownerCtx, svc, "attachments/"+linked.UID, "drawing.canvas.png", content)
 	require.Equal(t, codes.FailedPrecondition, status.Code(err), "an external link has no stored content")
 
-	// An admin may replace anyone's attachment; the owner keeps it.
-	replaced, err := replaceContent(adminCtx, svc, attachment.Name, "drawing-2.canvas.png", content)
-	require.NoError(t, err)
-	require.Equal(t, attachment.Name, replaced.Name)
-	uid, err := api.ExtractAttachmentUIDFromName(attachment.Name)
-	require.NoError(t, err)
-	stored, err := stores.GetAttachment(ctx, &store.FindAttachment{UID: &uid})
-	require.NoError(t, err)
-	require.Equal(t, owner.ID, stored.CreatorID)
+	_, err = replaceContent(adminCtx, svc, attachment.Name, "drawing-2.canvas.png", content)
+	require.Equal(t, codes.PermissionDenied, status.Code(err), "instance administrators cannot replace another user's attachment")
 }
 
 func TestReplaceAttachmentContentWithMotionPhotoStaysPlain(t *testing.T) {

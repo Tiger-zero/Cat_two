@@ -306,7 +306,7 @@ func (s *APIService) ListAttachments(ctx context.Context, request *apipb.ListAtt
 	// contract states the token is empty when there are no more pages.
 	limitPlusOne := limit + 1
 	findAttachment := &store.FindAttachment{
-		Access: newMemoAccessScope(user, true),
+		Access: newMemoAccessScope(user),
 		Limit:  &limitPlusOne,
 		Offset: &offset,
 	}
@@ -390,6 +390,9 @@ func (s *APIService) UpdateAttachment(ctx context.Context, request *apipb.Update
 		return nil, status.Errorf(codes.PermissionDenied, "permission denied")
 	}
 
+	if err := s.checkAttachmentAccess(ctx, attachment); err != nil {
+		return nil, err
+	}
 	currentTsSec := time.Now().Unix()
 	update := &store.UpdateAttachment{
 		ID:        attachment.ID,

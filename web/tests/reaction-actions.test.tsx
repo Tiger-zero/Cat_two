@@ -5,17 +5,26 @@ import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useReactionActions } from "@/components/MemoReactionListView/hooks";
 import { findMemoRecord, memoKeys, useMemoRecord } from "@/hooks/useMemoQueries";
-import { ListMemosResponseSchema, type Memo, MemoSchema, type Reaction, ReactionSchema } from "@/types/proto/api/memo_service_pb";
+import {
+  ListMemosResponseSchema,
+  type Memo,
+  MemoSchema,
+  type Reaction,
+  ReactionSchema,
+  Visibility,
+} from "@/types/proto/api/memo_service_pb";
+import { User_Role } from "@/types/proto/api/user_service_pb";
 
 const api = vi.hoisted(() => ({ getMemo: vi.fn(), upsertMemoReaction: vi.fn(), deleteMemoReaction: vi.fn(), showErrorToast: vi.fn() }));
+const viewer = vi.hoisted(() => ({ role: undefined as User_Role | undefined }));
 vi.mock("@/connect", () => ({ memoServiceClient: api }));
-vi.mock("@/hooks/useCurrentUser", () => ({ default: () => ({ name: "users/me" }) }));
+vi.mock("@/hooks/useCurrentUser", () => ({ default: () => ({ name: "users/me", role: viewer.role }) }));
 vi.mock("@/contexts/MentionResolutionContext", () => ({ useResolvedUsersByNames: () => new Map() }));
 vi.mock("@/lib/toast", () => ({ showErrorToast: api.showErrorToast }));
 
-const setup = (reactions: Memo["reactions"] = []) => {
+const setup = (reactions: Memo["reactions"] = [], creator = "users/me") => {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
-  const memo = create(MemoSchema, { name: "memos/x", reactions });
+  const memo = create(MemoSchema, { name: "memos/x", creator, visibility: Visibility.PUBLIC, reactions });
   const listKey = memoKeys.list({});
   client.setQueryData(listKey, { pages: [create(ListMemosResponseSchema, { memos: [memo] })], pageParams: [""] });
   const wrapper = ({ children }: { children: ReactNode }) => <QueryClientProvider client={client}>{children}</QueryClientProvider>;
@@ -30,7 +39,19 @@ const setup = (reactions: Memo["reactions"] = []) => {
 };
 
 describe("useReactionActions", () => {
-  beforeEach(() => vi.resetAllMocks());
+  beforeEach(() => {
+    vi.resetAllMocks();
+    viewer.role = User_Role.USER;
+  });
+
+  it.each([User_Role.USER, User_Role.ADMIN])("does not add a reaction to another author's note for role %s", (role) => {
+    viewer.role = role;
+    const { result } = setup([], "users/other");
+
+    expect(result.current.first.canReact).toBe(false);
+    expect(result.current.first.handleReactionClick("👍")).toBe(false);
+    expect(api.upsertMemoReaction).not.toHaveBeenCalled();
+  });
 
   it("updates list and detail immediately and uses the saved reaction without waiting for a refetch", async () => {
     const { result, client, listKey } = setup();

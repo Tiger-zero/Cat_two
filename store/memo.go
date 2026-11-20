@@ -220,6 +220,9 @@ type MemoWriteSnapshot struct {
 // MemoAccessScope is a typed, fail-closed read authorization predicate. When
 // present on FindMemo, drivers apply it in SQL before pagination.
 type MemoAccessScope struct {
+	// OwnerOnly restricts memo reads to the active user that created the memo,
+	// including rows with legacy visibility values.
+	OwnerOnly      bool
 	UserID         *int32
 	AllowPublic    bool
 	AllowProtected bool

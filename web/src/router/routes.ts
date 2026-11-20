@@ -7,7 +7,6 @@ export const ROUTES = {
   INBOX: "/inbox",
   ARCHIVED: "/archived",
   CALENDAR: "/calendar",
-  MAP: "/map",
   VIEWS: "/views",
   SETTING: "/setting",
   EXPLORE: "/explore",
@@ -16,7 +15,6 @@ export const ROUTES = {
   AUTH_SIGNUP: "/auth/signup",
   AUTH_ADMIN: "/auth/admin",
   AUTH_CALLBACK: "/auth/callback",
-  SHARED_MEMO: "/memos/shares",
 } as const;
 
 /** Router pattern for the calendar: month and day are optional so `/calendar` can redirect. */
@@ -28,7 +26,7 @@ export type RoutePath = (typeof ROUTES)[RouteKey];
 export const SPACE_ROUTE_PATTERN = "/spaces/:spaceUid";
 
 /** Collection pages that exist both globally and beneath a Space. */
-const COLLECTION_ROUTE_PATTERNS = [ROUTES.HOME, ROUTES.EXPLORE, ROUTES.ATTACHMENTS, CALENDAR_ROUTE_PATTERN, ROUTES.MAP];
+const COLLECTION_ROUTE_PATTERNS = [ROUTES.HOME, ROUTES.EXPLORE, ROUTES.ATTACHMENTS, CALENDAR_ROUTE_PATTERN];
 
 const isCollectionPathname = (pathname: string): boolean =>
   COLLECTION_ROUTE_PATTERNS.some((path) => matchPath({ path, caseSensitive: false }, pathname) !== null);

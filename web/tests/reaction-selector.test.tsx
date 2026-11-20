@@ -46,6 +46,7 @@ vi.mock("@/utils/i18n", () => ({ useTranslate: () => (key: string) => key, trans
 const reactionMemo = () =>
   create(MemoSchema, {
     name: "memos/1",
+    creator: "users/me",
     state: State.NORMAL,
     reactions: [
       { name: "memos/1/reactions/1", reactionType: "🎉", creator: "users/me" },
@@ -207,7 +208,7 @@ describe("ReactionSelector", () => {
     expect(screen.getByText("🎉")).toBeInTheDocument();
   });
 
-  it("hides the picker for a Space outsider but lets them withdraw their existing reaction", async () => {
+  it("hides the picker when the author loses Space membership but lets them withdraw their reaction", async () => {
     const memo = reactionMemo();
     memo.space = "spaces/a";
     setup(memo);
@@ -217,12 +218,21 @@ describe("ReactionSelector", () => {
     await waitFor(() => expect(state.api.deleteMemoReaction).toHaveBeenCalledWith({ name: "memos/1/reactions/1" }));
   });
 
-  it("offers the picker to an active Space member", async () => {
+  it("offers the picker to a memo's author while they are an active Space member", async () => {
     state.role = SpaceMember_Role.USER;
     const memo = reactionMemo();
     memo.space = "spaces/a";
     setup(memo);
     expect((await openPicker()).getByRole("combobox")).toBeInTheDocument();
+  });
+
+  it("hides the picker on another author's memo even when the viewer belongs to its Space", () => {
+    state.role = SpaceMember_Role.USER;
+    const memo = reactionMemo();
+    memo.creator = "users/other";
+    memo.space = "spaces/a";
+    setup(memo);
+    expect(screen.queryByRole("button", { name: "memo.add-reaction" })).not.toBeInTheDocument();
   });
 
   it("keeps a supplied header trigger and returns focus after Escape", async () => {

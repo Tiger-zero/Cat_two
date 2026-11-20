@@ -208,9 +208,9 @@ describe("App sidebar logo", () => {
     tagsSectionHook.mockClear();
   });
 
-  it("preserves creator and filters, excluding map state, when moving between collection pages", () => {
+  it("preserves creator and filters when moving between collection pages", () => {
     render(
-      <MemoryRouter initialEntries={["/spaces/product/map?creator=alice&filter=tagSearch%3Awork&lat=31&lng=121&zoom=12&memo=memos/a"]}>
+      <MemoryRouter initialEntries={["/spaces/product/calendar?creator=alice&filter=tagSearch%3Awork"]}>
         <AppSidebar />
       </MemoryRouter>,
     );
@@ -404,9 +404,6 @@ describe("App sidebar logo", () => {
     const calendar = navigation.getByRole("link", { name: "common.calendar" });
     expect(calendar).toHaveAttribute("href", "/calendar");
     expectCollapsedNavPill(calendar, "common.calendar");
-    const map = navigation.getByRole("link", { name: "common.map" });
-    expect(map).toHaveAttribute("href", "/map");
-    expectCollapsedNavPill(map, "common.map");
     expect(navigation.queryByRole("link", { name: "common.about" })).not.toBeInTheDocument();
     expect(navigation.queryByRole("link", { name: "common.attachments" })).not.toBeInTheDocument();
     const signIn = screen.getByRole("link", { name: "common.sign-in-to-memos" });
@@ -488,20 +485,17 @@ describe("App sidebar logo", () => {
     expect(screen.getByRole("link", { name: "common.sign-in-to-memos" }).closest("footer")).not.toBeNull();
   });
 
-  it.each([
-    ["/calendar/2026/09", "common.calendar"],
-    ["/map", "common.map"],
-  ])("marks the reading view active for a guest on %s", (path, label) => {
+  it("marks the calendar active for a guest", () => {
     authState.currentUser = undefined;
     render(
-      <MemoryRouter initialEntries={[path]}>
+      <MemoryRouter initialEntries={["/calendar/2026/09"]}>
         <AppSidebar />
       </MemoryRouter>,
     );
 
     const navigation = within(screen.getByRole("navigation", { name: "common.primary-navigation" }));
     expectCollapsedNavPill(navigation.getByRole("link", { name: "common.timeline" }), "common.timeline");
-    expectActiveNavPill(navigation.getByRole("link", { name: label }), label);
+    expectActiveNavPill(navigation.getByRole("link", { name: "common.calendar" }), "common.calendar");
     expect(screen.queryByText("Calendar")).not.toBeInTheDocument();
   });
 
@@ -552,7 +546,6 @@ describe("App sidebar logo", () => {
 
   it.each([
     "/calendar",
-    "/map",
     "/attachments",
     "/archived",
     "/spaces/test/calendar",

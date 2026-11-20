@@ -44,11 +44,11 @@ func TestAuthorizerPrivateInstanceRegistration(t *testing.T) {
 	require.ErrorIs(t, authorizer.CheckAccess(ctx, listReactions, nil), api.ErrUnauthenticated)
 	require.ErrorIs(t, authorizer.CheckAccess(ctx, listRelations, nil), api.ErrUnauthenticated)
 
-	// Policy reads are fresh: changing to PUBLIC immediately opens browsing.
+	// Note endpoints require authentication regardless of instance access mode.
 	require.NoError(t, ts.SetInstanceAccessMode(ctx, storepb.InstanceAccessMode_INSTANCE_ACCESS_MODE_PUBLIC))
-	require.NoError(t, authorizer.CheckAccess(ctx, listMemos, nil))
-	require.NoError(t, authorizer.CheckAccess(ctx, listReactions, nil))
-	require.NoError(t, authorizer.CheckAccess(ctx, listRelations, nil))
+	require.ErrorIs(t, authorizer.CheckAccess(ctx, listMemos, nil), api.ErrUnauthenticated)
+	require.ErrorIs(t, authorizer.CheckAccess(ctx, listReactions, nil), api.ErrUnauthenticated)
+	require.ErrorIs(t, authorizer.CheckAccess(ctx, listRelations, nil), api.ErrUnauthenticated)
 	require.NoError(t, ts.SetInstanceAccessMode(ctx, storepb.InstanceAccessMode_INSTANCE_ACCESS_MODE_PRIVATE))
 
 	// Once a user exists, CreateUser remains reachable so UserService can enforce
