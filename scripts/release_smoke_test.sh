@@ -13,6 +13,7 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 candidate_image="${MEMOS_SMOKE_CANDIDATE_IMAGE:-}"
 previous_image="${MEMOS_SMOKE_PREVIOUS_IMAGE:-}"
 keep_resources="${MEMOS_SMOKE_KEEP_RESOURCES:-0}"
+fresh_only=0
 
 usage() {
   cat <<'EOF'
@@ -25,6 +26,7 @@ Options:
   --candidate-image IMAGE  Test an existing image instead of building locally.
   --previous-image IMAGE   Image used to seed the upgrade test. By default, the
                            latest supported stable Git tag before HEAD is used.
+  --fresh-only             Verify a fresh install and persistent data without an upgrade.
   --keep-resources         Keep containers and volumes after the test for debugging.
   -h, --help               Show this help text.
 
@@ -64,6 +66,10 @@ while (($# > 0)); do
       ;;
     --keep-resources)
       keep_resources=1
+      shift
+      ;;
+    --fresh-only)
+      fresh_only=1
       shift
       ;;
     -h|--help)
@@ -310,14 +316,16 @@ else
   ensure_image "$candidate_image"
 fi
 
-if [[ -z "$previous_image" ]]; then
-  previous_image="$(detect_previous_image)"
+if [[ "$fresh_only" == "0" ]]; then
+  if [[ -z "$previous_image" ]]; then
+    previous_image="$(detect_previous_image)"
+  fi
+  ensure_image "$previous_image"
+  [[ "$candidate_image" != "$previous_image" ]] || die "candidate and previous images must be different"
+  log "Previous image:  $previous_image"
 fi
-ensure_image "$previous_image"
-[[ "$candidate_image" != "$previous_image" ]] || die "candidate and previous images must be different"
 
 log "Candidate image: $candidate_image"
-log "Previous image:  $previous_image"
 
 log "Running fresh-install smoke test"
 docker volume create "$fresh_volume" >/dev/null
@@ -327,12 +335,16 @@ create_admin
 fresh_token="$(sign_in)"
 create_memo "$fresh_token" "release-smoke" "fresh install smoke sentinel"
 
-docker restart "$fresh_container" >/dev/null
-set_current_base_url "$fresh_container"
-wait_until_ready "$fresh_container" "$current_base_url"
+docker rm -f "$fresh_container" >/dev/null
+start_container "$fresh_container" "$candidate_image" "$fresh_volume"
 fresh_token="$(sign_in)"
 assert_memo "$fresh_token" "release-smoke" "fresh install smoke sentinel"
 docker rm -f "$fresh_container" >/dev/null
+
+if [[ "$fresh_only" == "1" ]]; then
+  log "Fresh-install and volume persistence smoke tests passed"
+  exit 0
+fi
 
 log "Running $previous_image to $candidate_image upgrade smoke test"
 docker volume create "$upgrade_volume" >/dev/null

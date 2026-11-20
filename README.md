@@ -1,88 +1,35 @@
 # Cat_two
-自建一个笔记应用，仿照flomo和memo
 
-This project is based on [Fumos](https://github.com/Tiger-zero/Fumos), a fork of [Memos](https://github.com/usememos/memos). The upstream Memos documentation follows.
+Cat_two 是可以自行部署的个人笔记应用，基于 [Fumos](https://github.com/Tiger-zero/Fumos) 和 [Memos](https://github.com/usememos/memos)。后续开发以本仓库的 `main` 为基础。通过网页记录、整理和查找个人笔记。
 
-> ✨ Featured sponsor: [CodeRabbit — Industry-leading AI code reviews](https://coderabbit.link/usememos).
+## 部署服务端
 
-<h1 id="memos">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/usememos/.github/refs/heads/main/assets/brand/lockup-on-dark.svg" />
-    <img src="https://raw.githubusercontent.com/usememos/.github/refs/heads/main/assets/brand/lockup.svg" alt="Memos" width="220" />
-  </picture>
-</h1>
+在装有 Docker Compose 的服务器上克隆本仓库，进入仓库目录并运行以下命令。首次使用前请先构建或发布 Cat_two 镜像。
 
-### Simple note-taking for your everyday thoughts.
-
-Memos is an open-source, self-hosted note-taking app that brings your everyday thoughts together in a personal timeline. Your data stays yours, and you choose what to keep private or share.
-
-[Demo](https://demo.usememos.com) · [Install](#quick-start) · [Docs](https://usememos.com/docs) · [Discord](https://discord.gg/tfPJa4UmAv)
-
-[![Docker pulls](https://img.shields.io/docker/pulls/neosmemo/memos?style=flat-square&logo=docker)](https://hub.docker.com/r/neosmemo/memos)
-[![Latest release](https://img.shields.io/github/v/release/usememos/memos?style=flat-square&label=Release)](https://github.com/usememos/memos/releases)
-
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/usememos/.github/refs/heads/main/assets/previews/timeline-dark.png" />
-  <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/usememos/.github/refs/heads/main/assets/previews/timeline-light.png" />
-  <img src="https://raw.githubusercontent.com/usememos/.github/refs/heads/main/assets/previews/timeline-light.png" alt="The Memos timeline with a memo composer and recent memos" />
-</picture>
-
-## About Memos
-
-Memos is an open-source, self-hosted note-taking app for your everyday thoughts.
-
-- **Everyday writing.** A single sentence can be a whole memo, or you can take your time with a longer entry, using Markdown to give your words more structure.
-- **A personal timeline.** Each memo stays with the day you wrote it, bringing your thoughts together in a timeline you can look back through. Tags connect related thoughts across those days, making it easy to pick up a topic again or find something you remember writing.
-- **Your own data.** Your record lives on your own server, and your data stays yours.
-- **Sharing you control.** You choose what stays private, what to share with family and friends, and what to publish on the web. In shared spaces, you can write alongside others while each person keeps their own memos.
-
-## Quick start
-
-With Docker installed, run:
-
-```bash
-docker run -d \
-  --name memos \
-  -p 5230:5230 \
-  -v ~/.memos:/var/opt/memos \
-  neosmemo/memos:stable
+```sh
+docker compose up -d
+docker compose logs -f cat-two
 ```
 
-Open http://localhost:5230 and create the first account. Everything Memos keeps is in `~/.memos`, so back up that one folder.
+在浏览器打开服务器的 5230 端口，按页面提示创建管理员账号。SQLite 数据和本地附件保存在 Compose 管理的 `cat_two_data` 卷中，容器内的挂载路径为 `/var/opt/memos`。升级前请备份这个卷。镜像更新后可以运行 `docker compose pull` 和 `docker compose up -d`。
 
-Other ways to run Memos, including Docker Compose, Kubernetes, and a plain binary, are in the [deployment guide](https://usememos.com/docs/deploy).
+在 GitHub Actions 中打开 **Cat_two Container**，选择 `main` 并运行工作流。通过启动验证后，工作流会将镜像发布到 `ghcr.io/tiger-zero/cat_two`，标签为 `latest` 和 `sha-<完整提交 SHA>`。如果 GHCR 包是私有的，请先用有读取权限的账号登录 GHCR，再拉取镜像。
 
-## Upgrading
+也可以在单独的干净检出目录里构建本地镜像。前端发布命令会生成嵌入 Go 程序的静态文件。
 
-Releases are tagged `YY.MM.N`, with release candidates as `YY.MM.N-rc.K` and no `v` prefix. The Docker tag `stable` follows stable releases, a month tag such as `26.10` follows the newest stable release of that month, and `canary` follows development builds. Coming from a release before v0.31.0, run [v0.31.0](https://github.com/usememos/memos/releases/tag/v0.31.0) once first; see the [upgrade requirements](store/migration/README.md).
+```sh
+(cd web && pnpm install --frozen-lockfile && pnpm release)
+docker build -f scripts/Dockerfile \
+  --build-arg VERSION="$(bash scripts/release_version.sh development-version)" \
+  --build-arg COMMIT="$(git rev-parse HEAD)" \
+  -t cat-two:local .
+CAT_TWO_IMAGE=cat-two:local docker compose up -d
+```
 
-## Around Memos
+## 在网页里管理笔记
 
-- [Web Clipper](https://usememos.com/web-clipper) for [Chrome](https://chromewebstore.google.com/detail/memos-web-clipper/nebaoebnljalfegiidibihhkebeiklbl) and [Firefox](https://addons.mozilla.org/en-US/firefox/addon/memos-web-clipper/) saves pages, selections, and images to your memos as Markdown with a link to the source.
-- [Memogram](https://github.com/usememos/telegram-integration) is a Telegram bot that saves your messages and images to Memos.
-- The [API](https://usememos.com/docs/api/latest) and [MCP server](https://usememos.com/docs/integrations/mcp) connect Memos to your own scripts and AI tools.
+- 在时间线创建笔记，可用 Markdown 写标题、清单、链接和代码片段。
+- 用标签和空间整理主题，在搜索中按关键词找回内容。
+- 按笔记设置可见范围，管理私人记录和需要共享的内容。
 
-## Sponsors
-
-<p>
-  <a href="https://coderabbit.link/usememos" target="_blank" rel="noopener"><picture><source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/usememos/.github/refs/heads/main/assets/sponsors/coderabbit/white-typemark.svg" /><img src="https://raw.githubusercontent.com/usememos/.github/refs/heads/main/assets/sponsors/coderabbit/orange-typemark.svg" alt="CodeRabbit" height="40" align="middle" /></picture></a>
-  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-  <a href="https://www.testmuai.com/?utm_medium=sponsor&utm_source=memos" target="_blank" rel="noopener"><picture><source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/usememos/.github/refs/heads/main/assets/sponsors/testmuai/white.png" /><img src="https://raw.githubusercontent.com/usememos/.github/refs/heads/main/assets/sponsors/testmuai/black.png" alt="TestMu AI" height="30" align="middle" /></picture></a>
-</p>
-
-Sponsor Memos through [GitHub Sponsors](https://github.com/sponsors/usememos).
-
-## Help and contributing
-
-Questions go to the [docs](https://usememos.com/docs), [Discord](https://discord.gg/tfPJa4UmAv), or [GitHub Discussions](https://github.com/usememos/memos/discussions). Bugs and ideas go to [issues](https://github.com/usememos/memos/issues/new/choose). Code changes start with the [contributing guide](https://usememos.com/docs/development/contributing).
-
-## Star History
-
-<p>
-  <a href="https://www.star-history.com/usememos/memos"><picture><source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/badge?repo=usememos/memos&type=rank&theme=dark" /><source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/badge?repo=usememos/memos&type=rank" /><img alt="Star History Rank" src="https://api.star-history.com/badge?repo=usememos/memos&type=rank" /></picture></a>
-  <a href="https://www.star-history.com/usememos/memos"><picture><source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/badge?repo=usememos/memos&type=trending&theme=dark" /><source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/badge?repo=usememos/memos&type=trending" /><img alt="GitHub Trending Repository of the Day" src="https://api.star-history.com/badge?repo=usememos/memos&type=trending" /></picture></a>
-</p>
-
-## License
-
-Memos is open source under the [MIT License](LICENSE).
+Cat_two 保留 Fumos 和 Memos 的 MIT 许可与来源记录。见 [LICENSE](LICENSE)。

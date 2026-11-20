@@ -21,10 +21,12 @@ env:
 
 jobs:
   upgrade-smoke:
+    if: github.repository == 'usememos/memos'
     name: Verify fresh install and stable upgrade
     uses: ./.github/workflows/upgrade-smoke.yml
 
   prepare:
+    if: github.repository == 'usememos/memos'
     name: Extract Version
     runs-on: ubuntu-latest
     outputs:

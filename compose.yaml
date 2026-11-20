@@ -1,0 +1,19 @@
+services:
+  cat-two:
+    image: ${CAT_TWO_IMAGE:-ghcr.io/tiger-zero/cat_two:latest}
+    restart: unless-stopped
+    environment:
+      MEMOS_DRIVER: sqlite
+    ports:
+      - "${CAT_TWO_PORT:-5230}:5230"
+    volumes:
+      - cat_two_data:/var/opt/memos
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:5230/healthz"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 15s
+
+volumes:
+  cat_two_data:

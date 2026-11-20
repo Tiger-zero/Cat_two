@@ -83,6 +83,7 @@ jobs:
           MYSQL_VARIANT: ${{ matrix.mysql-variant }}
 
   release-smoke:
+    if: github.repository == 'usememos/memos'
     name: Fresh install and upgrade through the release image
     runs-on: ubuntu-latest
     steps:

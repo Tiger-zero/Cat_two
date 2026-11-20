@@ -5,6 +5,7 @@ on:
 
 jobs:
   deploy-demo:
+    if: github.repository == 'usememos/memos'
     runs-on: ubuntu-latest
     steps:
       - name: Trigger Render Deploy
