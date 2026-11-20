@@ -5,7 +5,6 @@ import {
   CogIcon,
   DatabaseIcon,
   FileCogIcon,
-  GaugeIcon,
   HeartHandshakeIcon,
   KeyIcon,
   KeyRoundIcon,
@@ -15,7 +14,6 @@ import {
   SquarePenIcon,
   TagsIcon,
   UserIcon,
-  UsersIcon,
   WebhookIcon,
 } from "lucide-react";
 import { type ComponentType } from "react";
@@ -24,7 +22,6 @@ import AISection from "@/components/Settings/AISection";
 import ConfigurationSection from "@/components/Settings/ConfigurationSection";
 import EditorSection from "@/components/Settings/EditorSection";
 import InstanceSection from "@/components/Settings/InstanceSection";
-import MemberSection from "@/components/Settings/MemberSection";
 import MemoExportSection from "@/components/Settings/MemoExportSection";
 import MyAccountSection from "@/components/Settings/MyAccountSection";
 import NotificationSection from "@/components/Settings/NotificationSection";
@@ -34,7 +31,6 @@ import SpacesSection from "@/components/Settings/SpacesSection";
 import SSOSection from "@/components/Settings/SSOSection";
 import StorageSection from "@/components/Settings/StorageSection";
 import TagsSection from "@/components/Settings/TagsSection";
-import UsageLimitsSection from "@/components/Settings/UsageLimitsSection";
 import WebhookSection from "@/components/Settings/WebhookSection";
 import { InstanceSetting_Key } from "@/types/proto/api/instance_service_pb";
 
@@ -46,10 +42,8 @@ export type SettingSectionKey =
   | "preference"
   | "editor"
   | "webhook"
-  | "member"
   | "system"
   | "storage"
-  | "usage-limits"
   | "notification"
   | "sso"
   | "tags"
@@ -112,13 +106,6 @@ export const SETTINGS_SECTIONS: SettingSectionDefinition[] = [
     component: WebhookSection,
   },
   {
-    key: "member",
-    scope: "admin",
-    labelKey: "setting.member.label",
-    icon: UsersIcon,
-    component: MemberSection,
-  },
-  {
     key: "system",
     scope: "admin",
     labelKey: "setting.system.label",
@@ -146,13 +133,6 @@ export const SETTINGS_SECTIONS: SettingSectionDefinition[] = [
     icon: DatabaseIcon,
     component: StorageSection,
     preloadSettingKeys: [InstanceSetting_Key.STORAGE],
-  },
-  {
-    key: "usage-limits",
-    scope: "admin",
-    labelKey: "setting.usage-limits.label",
-    icon: GaugeIcon,
-    component: UsageLimitsSection,
   },
   {
     key: "notification",

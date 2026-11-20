@@ -68,7 +68,9 @@ function SpaceSwitcher({ className, size = "md" }: { className?: string; size?: 
   const spaceLabel = selectedSpace?.title || (selectedSpaceName ? extractSpaceUidFromName(selectedSpaceName) : "");
   const contextLabel = creatorUsername ? `${creatorLabel}${selectedSpaceName ? ` / ${spaceLabel}` : ""}` : spaceLabel;
   const showBrand = !creatorUsername && !selectedSpaceName;
-  const triggerLabel = showBrand ? t("common.memos") : contextLabel;
+  const accountLabel = currentUser?.displayName || currentUser?.username;
+  const triggerLabel = accountLabel || (showBrand ? t("common.memos") : contextLabel);
+  const triggerTitle = accountLabel && contextLabel && accountLabel !== contextLabel ? `${accountLabel} · ${contextLabel}` : triggerLabel;
   const allSpacesLabel = t("space.all-spaces");
 
   const handleOpenChange = (next: boolean) => {
@@ -89,15 +91,20 @@ function SpaceSwitcher({ className, size = "md" }: { className?: string; size?: 
       <Popover.Root open={open} onOpenChange={handleOpenChange}>
         <Popover.Trigger
           ref={triggerRef}
-          aria-label={`${t("space.switch")}: ${triggerLabel}`}
-          title={triggerLabel}
+          aria-label={`${t(accountLabel ? "common.account-menu" : "space.switch")}: ${triggerLabel}`}
+          title={triggerTitle}
           className={cn(
             "memos-brand-trigger text-start transition-colors hover:bg-mu-hover/65 border border-transparent mu-focus focus-visible:border-mu-focus",
             sidebarSurfaceVariants({ role: size === "header" ? "headerBrand" : "mobileBrand" }),
             className,
           )}
         >
-          {showBrand ? (
+          {currentUser && accountLabel ? (
+            <IdentityLabel
+              label={accountLabel}
+              mark={<CreatorAvatar avatarUrl={currentUser.avatarUrl} name={accountLabel} size={size} />}
+            />
+          ) : showBrand ? (
             <MemosLogo size={size === "header" ? "header" : "md"} />
           ) : (
             <IdentityLabel
@@ -143,9 +150,11 @@ function SpaceSwitcher({ className, size = "md" }: { className?: string; size?: 
           className="mu-compact w-[min(15rem,calc(100vw-1rem))] max-h-[min(27rem,calc(100dvh-5rem))] overflow-y-auto"
           style={menuWidth ? { width: `${menuWidth}px` } : undefined}
         >
+          <UserMenu onClose={() => setOpen(false)} />
           {/* Guests have one collection, Explore, so they only get a way back to it from a creator. */}
           {(currentUser || isOtherCreator) && (
             <>
+              <div role="separator" className={menuClasses().separator} />
               <div className="flex flex-col">
                 {isOtherCreator ? (
                   <Link to={returnPath} className={SCOPE_PANEL_ROW_CLASSES}>
@@ -260,10 +269,8 @@ function SpaceSwitcher({ className, size = "md" }: { className?: string; size?: 
                   </>
                 )}
               </div>
-              <div role="separator" className={menuClasses().separator} />
             </>
           )}
-          <UserMenu onClose={() => setOpen(false)} />
         </Popover.Popup>
       </Popover.Root>
       <CreateSpaceDialog open={createOpen} onOpenChange={setCreateOpen} onCreated={selectSpace} />

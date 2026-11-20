@@ -334,14 +334,21 @@ describe("App sidebar logo", () => {
     expect(tagsSectionHook).toHaveBeenCalledWith(expect.objectContaining({ scope: "archived" }));
   });
 
-  it("shows signed-in account actions in the top switcher", () => {
+  it("opens account actions from the username across collections", () => {
+    authState.currentUser = { name: "users/test", username: "test" };
+    const product = { name: "spaces/product", title: "Product", description: "" };
+    spaceState.spaces = [product];
+    spaceState.selectedSpace = product;
     render(
-      <MemoryRouter initialEntries={["/inbox"]}>
+      <MemoryRouter initialEntries={["/spaces/product"]}>
         <AppSidebar />
       </MemoryRouter>,
     );
     expect(screen.queryByRole("contentinfo")).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "space.switch: common.memos" }));
+    const menu = screen.getByRole("button", { name: "common.account-menu: test" });
+    expect(menu).toHaveTextContent("test");
+    expect(menu).toHaveAttribute("title", "test · Product");
+    fireEvent.click(menu);
     expect(screen.getByRole("button", { name: "User menu" })).toBeInTheDocument();
   });
 
@@ -447,17 +454,8 @@ describe("App sidebar logo", () => {
       </MemoryRouter>,
     );
 
-    expect(screen.getByRole("link", { name: "common.about" })).toHaveAttribute("href", "/about");
-    expect(screen.getByRole("link", { name: "common.about" })).not.toHaveAttribute("aria-current");
-    expect(screen.getByRole("heading", { name: "common.resources", level: 2 })).toBeInTheDocument();
-    const documentationLink = screen.getByRole("link", { name: "about.documents" });
-    expect(documentationLink).toHaveAttribute("href", "https://usememos.com/docs");
-    expect(documentationLink).toHaveAttribute("target", "_blank");
-    expect(documentationLink).toHaveAttribute("rel", "noreferrer");
-    fireEvent.click(documentationLink);
-    expect(sidebarState.setMobileOpen).toHaveBeenCalledWith(false);
-    expect(screen.getByRole("link", { name: "about.api-docs" })).toHaveAttribute("href", "https://usememos.com/docs/api");
-    expect(screen.getByRole("link", { name: "about.github-repository" })).toHaveAttribute("href", "https://github.com/usememos/memos");
+    expect(screen.queryByRole("link", { name: "common.about" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "common.resources" })).not.toBeInTheDocument();
     expect(screen.queryByText("Calendar")).not.toBeInTheDocument();
     expect(screen.queryByRole("region", { name: "common.statistics" })).not.toBeInTheDocument();
     expect(screen.queryByText("common.views")).not.toBeInTheDocument();
@@ -470,23 +468,6 @@ describe("App sidebar logo", () => {
     expectCollapsedNavPill(attachments, "common.attachments");
     expect(screen.queryByRole("link", { name: "common.inbox" })).not.toBeInTheDocument();
     expect(screen.queryByRole("contentinfo")).not.toBeInTheDocument();
-  });
-
-  it.each(["/about", "/About/"])("marks the common About link active on %s", (path) => {
-    render(
-      <MemoryRouter initialEntries={[path]}>
-        <AppSidebar />
-      </MemoryRouter>,
-    );
-
-    expect(screen.getByRole("link", { name: "common.about" })).toHaveAttribute("aria-current", "page");
-    expect(screen.getByRole("heading", { name: "common.resources", level: 2 })).toBeInTheDocument();
-
-    const navigation = within(screen.getByRole("navigation", { name: "common.primary-navigation" }));
-    const scopeTrigger = navigation.getByRole("link", { name: "common.timeline" });
-    expectDefaultNavPill(scopeTrigger, "common.timeline");
-    expect(scopeTrigger.querySelector(".lucide-chevron-down")).not.toBeInTheDocument();
-    expectCollapsedNavPill(navigation.getByRole("link", { name: "common.attachments" }), "common.attachments");
   });
 
   it("uses a visitor sidebar for a guest on a route without contextual content", () => {

@@ -13,7 +13,6 @@ import { CALENDAR_ROUTE_PATTERN, getCollectionCreator, ROUTES, SPACE_ROUTE_PATTE
 import { SpaceRoute } from "./SpaceRoute";
 
 const AdminSignIn = lazyWithReload(() => import("@/pages/AdminSignIn"));
-const About = lazyWithReload(() => import("@/pages/About"));
 const Archived = lazyWithReload(() => import("@/pages/Archived"));
 const AuthCallback = lazyWithReload(() => import("@/pages/AuthCallback"));
 const MemoMap = lazyWithReload(() => import("@/pages/Map"));
@@ -97,10 +96,6 @@ export const routeConfig: RouteObject[] = [
             element: <MainLayout />,
             children: [
               { index: true, element: <HomeRoute /> },
-              {
-                element: <RequireInstanceInitializationRoute />,
-                children: [{ path: Routes.ABOUT, element: <About /> }],
-              },
               { path: Routes.EXPLORE, element: <ExploreRoute /> },
               // Like Timeline, the calendar is public: guests see the memos readable to them.
               { path: CALENDAR_ROUTE_PATTERN, element: <Calendar /> },

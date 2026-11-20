@@ -173,9 +173,6 @@ func (s *APIService) CreateAttachment(ctx context.Context, request *apipb.Create
 		return nil, status.Errorf(codes.Internal, "failed to get instance storage setting: %v", err)
 	}
 	content := request.Attachment.Content
-	if err := s.checkUploadQuota(ctx, create.CreatorID, int64(len(content))); err != nil {
-		return nil, err
-	}
 	create.Size = int64(len(content))
 	return s.processAndSaveAttachment(ctx, create, instanceStorageSetting, bytes.NewReader(content))
 }

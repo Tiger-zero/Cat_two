@@ -46,10 +46,6 @@ func (s *APIService) CreateMemo(ctx context.Context, request *apipb.CreateMemoRe
 	if err != nil {
 		return nil, err
 	}
-	if err := s.checkMemoQuota(ctx, user.ID); err != nil {
-		return nil, err
-	}
-
 	if err := s.createMemoWithMutation(ctx, user, prepared.memo, nil, prepared.attachments, prepared.requiredAttachmentIDs, prepared.referenceRelations); err != nil {
 		return nil, mapMemoCreateError(err, memoUID, "failed to create memo")
 	}
@@ -385,9 +381,6 @@ func (s *APIService) UpdateMemo(ctx context.Context, request *apipb.UpdateMemoRe
 		}
 		if path == "content" {
 			contentUpdated = true
-			if err := s.checkMemoContentQuota(ctx, memo.CreatorID, request.Memo.Content); err != nil {
-				return nil, err
-			}
 			nextMemo.Content = request.Memo.Content
 			if err := memopayload.RebuildMemoPayload(ctx, &nextMemo, s.MarkdownService); err != nil {
 				return nil, status.Errorf(codes.Internal, "failed to rebuild memo payload: %v", err)

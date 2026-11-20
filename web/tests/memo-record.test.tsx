@@ -182,7 +182,10 @@ describe("useCreateMemo", () => {
       await result.current.mutateAsync({ memo: memo("", "hi"), parent: "memos/p" });
     });
 
-    expect(api.createMemoComment).toHaveBeenCalledWith({ parent: "memos/p", comment: expect.objectContaining({ content: "hi" }) });
+    expect(api.createMemoComment).toHaveBeenCalledWith({
+      parent: "memos/p",
+      comment: expect.objectContaining({ content: "hi", creationChannel: "web" }),
+    });
     expect(api.createMemo).not.toHaveBeenCalled();
     expect(client.getQueryData(memoKeys.detail(created.name))).toEqual(created);
     const keys = invalidate.mock.calls.map(([filters]) => filters?.queryKey);
@@ -201,7 +204,7 @@ describe("useCreateMemo", () => {
       await result.current.mutateAsync({ memo: memo("", "hi") });
     });
 
-    expect(api.createMemo).toHaveBeenCalledWith({ memo: expect.objectContaining({ content: "hi" }) });
+    expect(api.createMemo).toHaveBeenCalledWith({ memo: expect.objectContaining({ content: "hi", creationChannel: "web" }) });
     expect(invalidate.mock.calls.map(([filters]) => filters?.queryKey?.[1])).not.toContain("comments");
   });
 });

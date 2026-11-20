@@ -1,9 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 
 /**
- * Custom property the layout shell publishes so the rail and the main padding stay in sync.
- * Tailwind cannot read this constant, so `RootLayout` repeats the literal name in its
- * `w-(--app-sidebar-width)` / `md:pl-(--app-sidebar-width)` classes — keep the two in step.
+ * Custom property the layout shell publishes so the rail can resize without rendering.
+ * Tailwind cannot read this constant, so `RootLayout` repeats the literal name in the width class.
  */
 export const SIDEBAR_WIDTH_VAR = "--app-sidebar-width";
 

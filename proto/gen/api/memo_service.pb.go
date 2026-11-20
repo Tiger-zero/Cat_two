@@ -189,9 +189,13 @@ type Memo struct {
 	CreateTime *timestamppb.Timestamp `protobuf:"bytes,16,opt,name=create_time,json=createTime,proto3" json:"create_time,omitempty"`
 	// Optional. The last update time. Defaults to the current time when unset on
 	// creation.
-	UpdateTime    *timestamppb.Timestamp `protobuf:"bytes,17,opt,name=update_time,json=updateTime,proto3" json:"update_time,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	UpdateTime *timestamppb.Timestamp `protobuf:"bytes,17,opt,name=update_time,json=updateTime,proto3" json:"update_time,omitempty"`
+	// Optional. The channel reported by the client when the memo was created.
+	// Values: web, telegram, browser_extension, wechat, unknown. Memos created
+	// without a reported channel are returned as unknown.
+	CreationChannel string `protobuf:"bytes,18,opt,name=creation_channel,json=creationChannel,proto3" json:"creation_channel,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *Memo) Reset() {
@@ -343,6 +347,13 @@ func (x *Memo) GetUpdateTime() *timestamppb.Timestamp {
 	return nil
 }
 
+func (x *Memo) GetCreationChannel() string {
+	if x != nil {
+		return x.CreationChannel
+	}
+	return ""
+}
+
 // Request message for MemoService.ListMemos.
 type ListMemosRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -357,6 +368,7 @@ type ListMemosRequest struct {
 	//
 	//	content (string), creator (string, e.g. "users/1"),
 	//	created_ts / updated_ts (timestamp), pinned (bool),
+	//	creation_channel (string: web | telegram | browser_extension | wechat | unknown),
 	//	visibility (string: PRIVATE | PROTECTED | PUBLIC | SPACE),
 	//	space (string resource name, or null when the memo has no space;
 	//	  supports == and comparisons against null, e.g. space != null),
@@ -2394,7 +2406,7 @@ var File_api_memo_service_proto protoreflect.FileDescriptor
 
 const file_api_memo_service_proto_rawDesc = "" +
 	"\n" +
-	"\x16api/memo_service.proto\x12\tmemos.api\x1a\x1capi/attachment_service.proto\x1a\x10api/common.proto\x1a\x1cgoogle/api/annotations.proto\x1a\x17google/api/client.proto\x1a\x1fgoogle/api/field_behavior.proto\x1a\x19google/api/resource.proto\x1a\x1bgoogle/protobuf/empty.proto\x1a google/protobuf/field_mask.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xee\b\n" +
+	"\x16api/memo_service.proto\x12\tmemos.api\x1a\x1capi/attachment_service.proto\x1a\x10api/common.proto\x1a\x1cgoogle/api/annotations.proto\x1a\x17google/api/client.proto\x1a\x1fgoogle/api/field_behavior.proto\x1a\x19google/api/resource.proto\x1a\x1bgoogle/protobuf/empty.proto\x1a google/protobuf/field_mask.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xa1\t\n" +
 	"\x04Memo\x12\x17\n" +
 	"\x04name\x18\x01 \x01(\tB\x03\xe0A\bR\x04name\x120\n" +
 	"\acreator\x18\x02 \x01(\tB\x16\xe0A\x03\xfaA\x10\n" +
@@ -2420,7 +2432,8 @@ const file_api_memo_service_proto_rawDesc = "" +
 	"\vcreate_time\x18\x10 \x01(\v2\x1a.google.protobuf.TimestampB\x03\xe0A\x01R\n" +
 	"createTime\x12@\n" +
 	"\vupdate_time\x18\x11 \x01(\v2\x1a.google.protobuf.TimestampB\x03\xe0A\x01R\n" +
-	"updateTime\x1a\xd6\x01\n" +
+	"updateTime\x121\n" +
+	"\x10creation_channel\x18\x12 \x01(\tB\x06\xe0A\x01\xe0A\x05R\x0fcreationChannel\x1a\xd6\x01\n" +
 	"\bProperty\x12\x14\n" +
 	"\x05title\x18\x01 \x01(\tR\x05title\x12\x19\n" +
 	"\bhas_link\x18\x02 \x01(\bR\ahasLink\x12\x19\n" +

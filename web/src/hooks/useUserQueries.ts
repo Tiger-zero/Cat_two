@@ -34,9 +34,6 @@ export const userKeys = {
   userStats: (name: string, filter?: string) =>
     filter ? ([...userKeys.stats(), name, filter] as const) : ([...userKeys.stats(), name] as const),
   allUserStats: (request: Partial<ListUserStatsQuery>) => [...userKeys.stats(), "all", request] as const,
-  // Usage sits under stats so that every change that refreshes stats (memo
-  // saves, deletes, attachment changes) refreshes usage too.
-  usage: (name: string) => [...userKeys.stats(), "usage", name] as const,
   currentUser: () => [...userKeys.all, "current"] as const,
   memoViews: (parent?: string) => [...userKeys.all, "memoViews", parent] as const,
   notifications: () => [...userKeys.all, "notifications"] as const,
@@ -67,20 +64,6 @@ export function useUserStats(username?: string, options?: { enabled?: boolean; f
       }
       const stats = await userServiceClient.getUserStats({ name: username, filter: options?.filter });
       return stats;
-    },
-    enabled: !!username && (options?.enabled ?? true),
-  });
-}
-
-/** A user's memo count and stored bytes, and the usage limits in effect for the user. */
-export function useUserUsage(username?: string, options?: { enabled?: boolean }) {
-  return useQuery({
-    queryKey: username ? userKeys.usage(username) : userKeys.stats(),
-    queryFn: async () => {
-      if (!username) {
-        throw new Error("Username is required");
-      }
-      return userServiceClient.getUserUsage({ name: `${username}/usage` });
     },
     enabled: !!username && (options?.enabled ?? true),
   });
@@ -219,21 +202,6 @@ export function useUpdateUser() {
   });
 }
 
-export function useDeleteUser() {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: async (name: string) => {
-      await userServiceClient.deleteUser({ name });
-      return name;
-    },
-    onSuccess: (name) => {
-      queryClient.removeQueries({ queryKey: userKeys.detail(name) });
-      queryClient.invalidateQueries({ queryKey: userKeys.all });
-    },
-  });
-}
-
 // Hook to fetch user settings
 export function useUserSettings(parent?: string) {
   return useQuery({
@@ -261,23 +229,6 @@ export function useUpdateUserSetting() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [...userKeys.all, "settings"] });
-    },
-  });
-}
-
-// Hook to list all users, paging through every result.
-export function useListUsers() {
-  return useQuery({
-    queryKey: userKeys.all,
-    queryFn: async () => {
-      const users: User[] = [];
-      let pageToken = "";
-      do {
-        const response = await userServiceClient.listUsers({ pageToken });
-        users.push(...response.users);
-        pageToken = response.nextPageToken;
-      } while (pageToken);
-      return users;
     },
   });
 }

@@ -34,6 +34,17 @@ describe("memo export files", () => {
     expect(download).toHaveBeenCalledWith("/file/users/alice/export", "memos-export-alice-20260920T083000Z.zip");
   });
 
+  it("checks and downloads the same memo selection without falling back to the whole account", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(null, { status: 200 }));
+    const selectedURL = "/file/users/alice/export?memo=first-note&memo=second-note";
+
+    await expect(exportMemos("alice", [])).rejects.toThrow("No memos selected");
+    expect(fetchSpy).not.toHaveBeenCalled();
+    await exportMemos("alice", ["first-note", "second-note"]);
+    expect(fetchSpy).toHaveBeenCalledWith(selectedURL, { method: "HEAD", credentials: "same-origin" });
+    expect(download).toHaveBeenCalledWith(selectedURL, "memos-export-alice.zip");
+  });
+
   it("keeps a filename that is not percent-encoded as sent", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(
       new Response(null, {

@@ -321,7 +321,10 @@ export function useCreateMemo() {
 
   return useMutation({
     mutationFn: async ({ memo, parent }: { memo: Memo; parent?: string }) => {
-      return parent ? await memoServiceClient.createMemoComment({ parent, comment: memo }) : await memoServiceClient.createMemo({ memo });
+      const webMemo = { ...memo, creationChannel: "web" };
+      return parent
+        ? await memoServiceClient.createMemoComment({ parent, comment: webMemo })
+        : await memoServiceClient.createMemo({ memo: webMemo });
     },
     onSuccess: (newMemo, { parent }) => {
       queryClient.setQueryData(memoKeys.detail(newMemo.name), newMemo);

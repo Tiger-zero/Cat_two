@@ -40,7 +40,6 @@ import { cn } from "@/lib/utils";
 import { collectionNavigationPath, ROUTES } from "@/router/routes";
 import { User_Role, UserNotification_Status } from "@/types/proto/api/user_service_pb";
 import { useTranslate } from "@/utils/i18n";
-import CommonSidebarContent from "./CommonSidebarContent";
 import { getSidebarRouteKind } from "./routes";
 import SidebarRow, { SIDEBAR_ROW_CLASSES, SidebarRowIconSlot, sidebarRowStateClasses } from "./SidebarRow";
 import SidebarSection, { SIDEBAR_SECTION_STACK_CLASSES } from "./SidebarSection";
@@ -261,7 +260,6 @@ const RouteSidebarContent = () => {
   if (kind === "inbox") return <InboxSidebarContent />;
   if (kind === "settings") return <SettingsSidebarContent />;
   if (kind === "memo") return <MemoDetailSidebarContent />;
-  if (kind === "common") return <CommonSidebarContent />;
   return null;
 };
 

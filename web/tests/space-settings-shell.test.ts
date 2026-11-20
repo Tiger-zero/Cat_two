@@ -4,6 +4,12 @@ import { isSettingSectionKey, SETTINGS_SECTIONS } from "@/components/Settings/se
 import enTranslation from "@/locales/en.json";
 
 describe("Spaces settings shell", () => {
+  it("keeps resource stats while removing instance membership and usage-limit settings", () => {
+    expect(isSettingSectionKey("member")).toBe(false);
+    expect(isSettingSectionKey("usage-limits")).toBe(false);
+    expect(isSettingSectionKey("resource-stats")).toBe(true);
+  });
+
   it("registers Spaces as a basic settings section", () => {
     expect(isSettingSectionKey("spaces")).toBe(true);
     expect(SETTINGS_SECTIONS.find((section) => section.key === "spaces")).toMatchObject({

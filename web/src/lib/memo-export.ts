@@ -16,7 +16,13 @@ export class MemoExportError extends Error {
   }
 }
 
-export const memoExportUrl = (username: string) => `/file/users/${encodeURIComponent(username)}/export`;
+export const MAX_SELECTED_MEMO_EXPORT = 100;
+
+export const memoExportUrl = (username: string, memoUIDs?: readonly string[]) => {
+  const url = `/file/users/${encodeURIComponent(username)}/export`;
+  if (!memoUIDs) return url;
+  return `${url}?${new URLSearchParams(memoUIDs.map((uid) => ["memo", uid]))}`;
+};
 
 const filenameFromDisposition = (disposition: string | null): string | undefined => {
   const match = disposition?.match(/filename\*?=(?:UTF-8'')?"?([^";]+)"?/i);
@@ -33,8 +39,9 @@ const filenameFromDisposition = (disposition: string | null): string | undefined
 // the file server straight into the browser's download, so it is never held
 // in page memory. A HEAD preflight runs the server's checks first, so a
 // refusal arrives as an error instead of a downloaded error document.
-export async function exportMemos(username: string): Promise<void> {
-  const url = memoExportUrl(username);
+export async function exportMemos(username: string, memoUIDs?: readonly string[]): Promise<void> {
+  if (memoUIDs?.length === 0) throw new Error("No memos selected");
+  const url = memoExportUrl(username, memoUIDs);
   const response = await fetch(url, { method: "HEAD", credentials: "same-origin" });
   if (!response.ok) {
     throw new MemoExportError(response.status);

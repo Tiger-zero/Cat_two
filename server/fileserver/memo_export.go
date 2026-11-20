@@ -7,12 +7,15 @@ import (
 	"math"
 	"mime"
 	"net/http"
+	"net/url"
+	"slices"
 	"strconv"
 	"time"
 
 	"github.com/usememos/memos/core/access"
 	"github.com/usememos/memos/core/memoexport"
 	"github.com/usememos/memos/internal/httphandler"
+	"github.com/usememos/memos/internal/identifier"
 	"github.com/usememos/memos/internal/ratelimit"
 	"github.com/usememos/memos/store"
 )
@@ -21,11 +24,14 @@ import (
 // the username, as for avatars.
 const memoExportRoute = "/file/users/{identifier}/export"
 
+// Bound both the number of SQL parameters and the download URL length.
+const maxSelectedExportMemos = 100
+
 // MemoExporter writes one user's Memos export file. The API service
 // implements it; the file server owns the HTTP side of an export so the
 // archive streams to the client instead of being held in memory.
 type MemoExporter interface {
-	WriteMemoExport(ctx context.Context, user *store.User, w io.Writer, exportTime time.Time) error
+	WriteMemoExport(ctx context.Context, user *store.User, w io.Writer, exportTime time.Time, memoUIDs ...string) error
 }
 
 // serveMemoExport streams a user's Memos export file to an instance
@@ -51,13 +57,24 @@ func (s *FileServerService) serveMemoExport(w http.ResponseWriter, r *http.Reque
 		return &httphandler.Error{Code: http.StatusForbidden, Message: "forbidden access"}
 	}
 
-	identifier := r.PathValue("identifier")
-	user, err := s.Store.GetUser(ctx, &store.FindUser{Username: &identifier})
+	username := r.PathValue("identifier")
+	user, err := s.Store.GetUser(ctx, &store.FindUser{Username: &username})
 	if err != nil {
 		return &httphandler.Error{Code: http.StatusInternalServerError, Message: "failed to get user", Cause: err}
 	}
 	if user == nil {
 		return &httphandler.Error{Code: http.StatusNotFound, Message: "user not found"}
+	}
+
+	selectedMemos, err := url.ParseQuery(r.URL.RawQuery)
+	if err != nil || len(selectedMemos["memo"]) > maxSelectedExportMemos {
+		return &httphandler.Error{Code: http.StatusBadRequest, Message: "invalid memo selection"}
+	}
+	memoUIDs := slices.Compact(slices.Sorted(slices.Values(selectedMemos["memo"])))
+	for _, uid := range memoUIDs {
+		if !identifier.UIDMatcher.MatchString(uid) {
+			return &httphandler.Error{Code: http.StatusBadRequest, Message: "invalid memo selection"}
+		}
 	}
 
 	preflight := r.Method == http.MethodHead
@@ -66,6 +83,16 @@ func (s *FileServerService) serveMemoExport(w http.ResponseWriter, r *http.Reque
 	}
 	if !preflight {
 		defer s.memoExportSemaphore.Release(1)
+	}
+
+	if len(memoUIDs) > 0 {
+		memos, err := s.Store.ListMemos(ctx, &store.FindMemo{CreatorID: &user.ID, UIDList: memoUIDs, ExcludeContent: true})
+		if err != nil {
+			return &httphandler.Error{Code: http.StatusInternalServerError, Message: "failed to check selected memos", Cause: err}
+		}
+		if len(memos) != len(memoUIDs) {
+			return &httphandler.Error{Code: http.StatusNotFound, Message: "some selected memos are unavailable"}
+		}
 	}
 
 	exportTime := time.Now().UTC().Truncate(time.Second)
@@ -77,7 +104,7 @@ func (s *FileServerService) serveMemoExport(w http.ResponseWriter, r *http.Reque
 	}
 
 	body := &commitOnWrite{ResponseWriter: w}
-	if err := s.MemoExporter.WriteMemoExport(ctx, user, body, exportTime); err != nil {
+	if err := s.MemoExporter.WriteMemoExport(ctx, user, body, exportTime, memoUIDs...); err != nil {
 		// Before the first byte this becomes a JSON 500, which the handler
 		// wrapper logs and strips the archive headers from. After it, the
 		// response is already committed and the client receives a truncated

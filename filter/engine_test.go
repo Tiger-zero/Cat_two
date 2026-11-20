@@ -562,6 +562,28 @@ func TestTagComprehensionAvoidsMySQLExistsSemiJoin(t *testing.T) {
 	}
 }
 
+func TestRenderCreationChannelPerDialect(t *testing.T) {
+	t.Parallel()
+
+	engine, err := NewEngine(NewSchema())
+	require.NoError(t, err)
+
+	cases := []struct {
+		dialect DialectName
+		sql     string
+	}{
+		{DialectSQLite, "COALESCE(NULLIF(json_extract(`memo`.`payload`, '$.creationChannel'), ''), 'unknown') = ?"},
+		{DialectMySQL, "COALESCE(NULLIF(NULLIF(JSON_UNQUOTE(JSON_EXTRACT(`memo`.`payload`, '$.creationChannel')), 'null'), ''), 'unknown') = ?"},
+		{DialectPostgres, "COALESCE(NULLIF(memo.payload->>'creationChannel', ''), 'unknown') = $1"},
+	}
+	for _, tc := range cases {
+		stmt, err := engine.CompileToStatement(context.Background(), `creation_channel == "web"`, RenderOptions{Dialect: tc.dialect})
+		require.NoError(t, err, tc.dialect)
+		require.Equal(t, tc.sql, stmt.SQL, tc.dialect)
+		require.Equal(t, []any{"web"}, stmt.Args, tc.dialect)
+	}
+}
+
 func TestRenderHasLocationPerDialect(t *testing.T) {
 	t.Parallel()
 

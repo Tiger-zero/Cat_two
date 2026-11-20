@@ -9,6 +9,7 @@ import {
   HashIcon,
   ImageIcon,
   LinkIcon,
+  ListFilterIcon,
   type LucideIcon,
   MapPinIcon,
   PaperclipIcon,
@@ -40,6 +41,10 @@ const FILTER_CONFIGS: Record<FilterFactor, FilterConfig> = {
   tagSearch: {
     icon: HashIcon,
     getLabel: (value) => value,
+  },
+  source: {
+    icon: ListFilterIcon,
+    getLabel: (value, t) => t(value === "web" ? "memo-feed.source-web" : "memo-feed.source-unknown"),
   },
   visibility: {
     icon: EyeIcon,

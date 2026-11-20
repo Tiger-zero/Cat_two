@@ -31,18 +31,18 @@ type memoExportData struct {
 	attachmentsCount int
 }
 
-// WriteMemoExport writes a Memos export file holding every memo the user
-// created, including comments and archived memos, and the attachments linked
-// to them. Nothing another user created is included. exportTime is recorded
+// WriteMemoExport writes the user's selected memos and their attachments. When
+// there is no selection, it includes every memo they created, including comments
+// and archived memos. Nothing another user created is included. exportTime is recorded
 // in the manifest; callers name the download after the same instant. Every
 // memo row the archive needs is loaded before the first byte is written, so a
 // failure loading them surfaces before the response is committed. Attachment
 // content is read while writing; a failure there truncates the archive.
-func (s *APIService) WriteMemoExport(ctx context.Context, user *store.User, w io.Writer, exportTime time.Time) error {
+func (s *APIService) WriteMemoExport(ctx context.Context, user *store.User, w io.Writer, exportTime time.Time, memoUIDs ...string) error {
 	if user == nil {
 		return errors.New("user is required")
 	}
-	export, err := s.loadMemoExportData(ctx, user)
+	export, err := s.loadMemoExportData(ctx, user, memoUIDs)
 	if err != nil {
 		return err
 	}
@@ -73,8 +73,8 @@ func (s *APIService) WriteMemoExport(ctx context.Context, user *store.User, w io
 	return writer.Close()
 }
 
-func (s *APIService) loadMemoExportData(ctx context.Context, user *store.User) (*memoExportData, error) {
-	memos, err := s.Store.ListMemos(ctx, &store.FindMemo{CreatorID: &user.ID})
+func (s *APIService) loadMemoExportData(ctx context.Context, user *store.User, memoUIDs []string) (*memoExportData, error) {
+	memos, err := s.Store.ListMemos(ctx, &store.FindMemo{CreatorID: &user.ID, UIDList: memoUIDs})
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to list memos")
 	}
@@ -171,14 +171,15 @@ func (s *APIService) loadMemoExportData(ctx context.Context, user *store.User) (
 
 func (s *APIService) buildMemoExportRecord(ctx context.Context, writer *memoexport.Writer, user *store.User, export *memoExportData, memo *store.Memo) (*memoexport.Memo, error) {
 	record := &memoexport.Memo{
-		UID:        memo.UID,
-		Creator:    user.Username,
-		CreateTime: memoexport.FormatTime(memo.CreatedTs),
-		UpdateTime: memoexport.FormatTime(memo.UpdatedTs),
-		State:      string(memo.RowStatus),
-		Visibility: memo.Visibility.String(),
-		Pinned:     memo.Pinned,
-		Tags:       memo.Payload.GetTags(),
+		CreationChannel: memo.Payload.GetCreationChannel(),
+		UID:             memo.UID,
+		Creator:         user.Username,
+		CreateTime:      memoexport.FormatTime(memo.CreatedTs),
+		UpdateTime:      memoexport.FormatTime(memo.UpdatedTs),
+		State:           string(memo.RowStatus),
+		Visibility:      memo.Visibility.String(),
+		Pinned:          memo.Pinned,
+		Tags:            memo.Payload.GetTags(),
 	}
 	if location := memo.Payload.GetLocation(); location != nil {
 		record.Location = &memoexport.Location{

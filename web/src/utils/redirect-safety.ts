@@ -67,7 +67,6 @@ export function buildAuthRoute(options?: { redirect?: string | null; reason?: st
 
 const PUBLIC_ROUTE_PREFIXES = [
   ROUTES.AUTH, // Authentication pages
-  ROUTES.ABOUT, // About page
   ROUTES.EXPLORE, // Explore page
   `${ROUTES.SHARED_MEMO}/`, // Shared memo pages (share-link viewer)
   "/u/", // Legacy author links redirect to Home with a creator filter

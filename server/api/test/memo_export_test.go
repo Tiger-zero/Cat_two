@@ -64,14 +64,15 @@ func buildArchiveFixture(t *testing.T, ts *TestService, username string) *archiv
 	parent, err := ts.Service.CreateMemo(userCtx, &apipb.CreateMemoRequest{
 		MemoId: "parent00001",
 		Memo: &apipb.Memo{
-			Content:     "# Whiteboard\n\nSee the photo. No trailing newline",
-			Visibility:  apipb.Visibility_PRIVATE,
-			Pinned:      true,
-			CreateTime:  timestamppb.New(mustTime(t, "2026-03-02T14:05:11Z")),
-			UpdateTime:  timestamppb.New(mustTime(t, "2026-03-02T14:20:47Z")),
-			Location:    &apipb.Location{Placeholder: "Office", Latitude: 52.52, Longitude: 13.405},
-			Attachments: []*apipb.Attachment{{Name: attachment.Name}},
-			Relations:   []*apipb.MemoRelation{{Type: apipb.MemoRelation_REFERENCE, RelatedMemo: &apipb.MemoRelation_MemoRef{Name: referenced.Name}}},
+			CreationChannel: "web",
+			Content:         "# Whiteboard\n\nSee the photo. No trailing newline",
+			Visibility:      apipb.Visibility_PRIVATE,
+			Pinned:          true,
+			CreateTime:      timestamppb.New(mustTime(t, "2026-03-02T14:05:11Z")),
+			UpdateTime:      timestamppb.New(mustTime(t, "2026-03-02T14:20:47Z")),
+			Location:        &apipb.Location{Placeholder: "Office", Latitude: 52.52, Longitude: 13.405},
+			Attachments:     []*apipb.Attachment{{Name: attachment.Name}},
+			Relations:       []*apipb.MemoRelation{{Type: apipb.MemoRelation_REFERENCE, RelatedMemo: &apipb.MemoRelation_MemoRef{Name: referenced.Name}}},
 		},
 	})
 	require.NoError(t, err)
@@ -178,6 +179,7 @@ func TestWriteMemoExport(t *testing.T) {
 	}
 
 	parent := byUID["parent00001"]
+	require.Equal(t, "web", parent.CreationChannel)
 	require.Equal(t, "2026-03-02T14:05:11Z", parent.CreateTime)
 	require.Equal(t, "2026-03-02T14:20:47Z", parent.UpdateTime)
 	require.Equal(t, "NORMAL", parent.State)
@@ -259,6 +261,7 @@ func TestImportMemoExportIntoAnotherAccount(t *testing.T) {
 
 	parent := byContent["# Whiteboard\n\nSee the photo. No trailing newline"]
 	require.NotNil(t, parent)
+	require.Equal(t, "web", parent.Payload.GetCreationChannel())
 	require.True(t, parent.Pinned)
 	require.Equal(t, store.Private, parent.Visibility)
 	require.Equal(t, mustTime(t, "2026-03-02T14:05:11Z").Unix(), parent.CreatedTs)
@@ -273,6 +276,7 @@ func TestImportMemoExportIntoAnotherAccount(t *testing.T) {
 
 	referenced := byContent["Referenced memo #work"]
 	require.NotNil(t, referenced)
+	require.Empty(t, referenced.Payload.GetCreationChannel(), "older archives can omit the channel")
 	require.Equal(t, []string{"work"}, referenced.Payload.GetTags())
 	relations, err := ts.Store.ListMemoRelations(ctx, &store.FindMemoRelation{MemoID: &parent.ID})
 	require.NoError(t, err)
@@ -369,7 +373,9 @@ func TestImportMemoExportConflictPolicies(t *testing.T) {
 		})
 		require.NoError(t, err)
 
-		report, err := ts.Service.ImportMemoExport(fixture.userCtx, fixture.user, openArchive(), apipb.ImportMemosRequest_REPLACE)
+		incoming := openArchive()
+		archiveMemosByUID(incoming)["parent00001"].CreationChannel = "telegram"
+		report, err := ts.Service.ImportMemoExport(fixture.userCtx, fixture.user, incoming, apipb.ImportMemosRequest_REPLACE)
 		require.NoError(t, err)
 		require.Equal(t, int32(5), report.Updated, "%v", report.Failures)
 		require.Zero(t, report.Failed)
@@ -378,6 +384,7 @@ func TestImportMemoExportConflictPolicies(t *testing.T) {
 		uid := "parent00001"
 		restored, err := ts.Store.GetMemo(ctx, &store.FindMemo{UID: &uid})
 		require.NoError(t, err)
+		require.Equal(t, "web", restored.Payload.GetCreationChannel(), "replacement retains the existing memo's provenance")
 		require.Equal(t, "# Whiteboard\n\nSee the photo. No trailing newline", restored.Content)
 		require.True(t, restored.Pinned)
 		require.Equal(t, mustTime(t, "2026-03-02T14:20:47Z").Unix(), restored.UpdatedTs)
@@ -582,15 +589,13 @@ func buildImportArchive(t *testing.T, username string, attachments []struct {
 	return buf.Bytes()
 }
 
-// An archive entry larger than the user's per-file limit fails its memo, and
-// a memo that fails to import must not take a pre-existing attachment of the
-// user with it: only attachments the run stored are discarded.
+// An invalid attachment filename fails its memo. Only attachments the failed
+// import created are discarded.
 func TestImportMemosFailureKeepsPreexistingAttachment(t *testing.T) {
 	ts := NewTestService(t)
 	defer ts.Cleanup()
 	t.Cleanup(ts.Service.CloseUploads)
 	ctx := context.Background()
-	setDefaultUploadLimit(ctx, t, ts.Store, 1<<20)
 	user, err := ts.CreateRegularUser(ctx, "keeper")
 	require.NoError(t, err)
 	userCtx := ts.CreateUserContext(ctx, user.ID)
@@ -607,7 +612,8 @@ func TestImportMemosFailureKeepsPreexistingAttachment(t *testing.T) {
 		content       []byte
 	}{
 		{"keepme0001", "keep.bin", existingContent},
-		{"toolarge01", "big.bin", bytes.Repeat([]byte("x"), 2<<20)},
+		{"discard0001", "discard.bin", []byte("bytes written by this import")},
+		{"invalid0001", ".bad.bin", []byte("bytes with an invalid filename")},
 	})
 	response, err := ts.Service.ImportMemos(userCtx, &apipb.ImportMemosRequest{
 		Name:        userName(user),
@@ -624,6 +630,9 @@ func TestImportMemosFailureKeepsPreexistingAttachment(t *testing.T) {
 	kept, err := ts.Service.GetAttachment(userCtx, &apipb.GetAttachmentRequest{Name: existing.Name})
 	require.NoError(t, err, "the pre-existing attachment survives the failed import")
 	require.Equal(t, existing.Name, kept.Name)
+
+	_, err = ts.Service.GetAttachment(userCtx, &apipb.GetAttachmentRequest{Name: "attachments/discard0001"})
+	require.Equal(t, codes.NotFound, status.Code(err), "the import's new attachment is discarded")
 }
 
 // Imported memos and stored attachments count against the same per-user

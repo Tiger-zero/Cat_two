@@ -95,11 +95,6 @@ func (s *APIService) UploadAttachment(ctx context.Context, request *apipb.Upload
 		if err == nil {
 			upload.complete = true
 			os.Remove(upload.path)
-		} else if isQuotaExceeded(err) {
-			// A refused upload cannot succeed by retrying the finish: drop its
-			// bytes and revoke it, so nothing of it stays stored.
-			os.Remove(upload.path)
-			upload.expireTime = time.Time{}
 		}
 	}
 	if err != nil {
@@ -139,12 +134,7 @@ func (s *APIService) startAttachmentUpload(ctx context.Context, request *apipb.U
 		if err != nil {
 			return "", nil, err
 		}
-		if err := s.checkReplaceQuota(ctx, target.CreatorID, spec.TotalSize, target.Size); err != nil {
-			return "", nil, err
-		}
 		replaced = target
-	} else if err := s.checkUploadQuota(ctx, ownerID, spec.TotalSize); err != nil {
-		return "", nil, err
 	}
 	// Validate before allocating a temporary file. Keep the original MIME type
 	// so an omitted type can be sniffed from real bytes at finalization.
@@ -182,11 +172,6 @@ func (s *APIService) finishAttachmentUpload(ctx context.Context, upload *attachm
 			}
 			return s.GetAttachment(ctx, &apipb.GetAttachmentRequest{Name: "attachments/" + upload.state.uid})
 		}
-	}
-	// Check again at finish: the limits may have changed, and other uploads
-	// of the same user may have finished since this one started.
-	if err := s.checkUploadQuota(ctx, upload.ownerID, upload.totalSize); err != nil {
-		return nil, err
 	}
 	setting, err := s.Store.GetInstanceStorageSetting(ctx)
 	if err != nil {

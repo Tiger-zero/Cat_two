@@ -7,13 +7,12 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	"github.com/usememos/memos/core/usagelimit"
 	apipb "github.com/usememos/memos/proto/gen/api"
 	"github.com/usememos/memos/store"
 )
 
-// GetUserUsage returns a user's usage and the limit set in effect for the
-// user. Only the user or an admin may call it.
+// GetUserUsage returns a user's usage. Cat_two applies no usage quota.
+// Only the user or an admin may call it.
 func (s *APIService) GetUserUsage(ctx context.Context, request *apipb.GetUserUsageRequest) (*apipb.UserUsage, error) {
 	parent, ok := strings.CutSuffix(request.Name, "/usage")
 	if !ok {
@@ -44,22 +43,19 @@ func (s *APIService) GetUserUsage(ctx context.Context, request *apipb.GetUserUsa
 		return nil, status.Errorf(codes.PermissionDenied, "permission denied")
 	}
 
-	usage, err := usagelimit.UsageFor(ctx, s.Store, user.ID)
+	memoCount, err := s.Store.CountUserMemos(ctx, user.ID)
 	if err != nil {
-		return nil, status.Errorf(codes.Internal, "failed to get usage: %v", err)
+		return nil, status.Errorf(codes.Internal, "failed to count memos: %v", err)
 	}
-	limits := &apipb.UserUsage_Limits{}
-	if entry := usage.Limits.Entry; entry != nil {
-		limits.MemoCount = entry.MemoCount
-		limits.MemoContentBytes = entry.MemoContentBytes
-		limits.StorageBytes = entry.StorageBytes
-		limits.UploadBytes = entry.UploadBytes
+	storageBytes, err := s.Store.GetAttachmentStorageUsage(ctx, user.ID)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to sum storage usage: %v", err)
 	}
 	return &apipb.UserUsage{
 		Name:         BuildUserName(user.Username) + "/usage",
-		MemoCount:    usage.MemoCount,
-		StorageBytes: usage.StorageBytes,
-		Limits:       limits,
-		LimitIndex:   int32(usage.Limits.Index),
+		MemoCount:    memoCount,
+		StorageBytes: storageBytes,
+		Limits:       &apipb.UserUsage_Limits{},
+		LimitIndex:   -1,
 	}, nil
 }

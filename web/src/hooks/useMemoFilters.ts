@@ -56,6 +56,8 @@ export const buildMemoFilter = ({
       conditions.push(filter.value);
     } else if (filter.factor === "tagSearch") {
       conditions.push(`tag in [${escapeFilterValue(filter.value)}]`);
+    } else if (filter.factor === "source" && (filter.value === "web" || filter.value === "unknown")) {
+      conditions.push(`creation_channel == ${escapeFilterValue(filter.value)}`);
     } else if (filter.factor === "pinned") {
       if (includePinned) {
         conditions.push(`pinned`);

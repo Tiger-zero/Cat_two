@@ -10,13 +10,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestUsageLimitRefusalOnBothTransports proves the quota refusal contract on
-// the wire: HTTP 429 with an ErrorInfo of reason QUOTA_EXCEEDED and a
-// QuotaFailure, and no Retry-After or RateLimit fields, because waiting does
-// not lift a usage limit. It also proves that the usage limits setting and
-// the user usage routes reach their handlers. Admins are limited like
-// everyone else, so the first user is enough.
-func TestUsageLimitRefusalOnBothTransports(t *testing.T) {
+// Legacy usage limits remain readable for compatibility, but do not block
+// memo creation over either transport.
+func TestStoredUsageLimitsDoNotRestrictEitherTransport(t *testing.T) {
 	ctx := context.Background()
 	inst := bootInstance(ctx, t, instanceOptions{instanceURL: "http://127.0.0.1"})
 	inst.createAdmin(t)
@@ -66,87 +62,32 @@ func TestUsageLimitRefusalOnBothTransports(t *testing.T) {
 	require.Equal(t, "8192", setting.UsageLimitsSetting.Limits[0].MemoContentBytes)
 	require.Equal(t, "33554432", setting.UsageLimitsSetting.Limits[0].UploadBytes)
 
-	inst.createMemo(t, token, "first", "the only memo the limit allows")
+	inst.createMemo(t, token, "first", "the first memo")
+	inst.createMemo(t, token, "second", "the second memo")
+	memo := map[string]any{"content": "the third memo", "visibility": "PRIVATE"}
+	connectResp := send(http.MethodPost, "/memos.api.MemoService/CreateMemo", map[string]any{"memo": memo}, map[string]string{"Connect-Protocol-Version": "1"})
+	defer connectResp.Body.Close()
+	require.Equal(t, http.StatusOK, connectResp.StatusCode)
+	var created struct {
+		Name    string `json:"name"`
+		Content string `json:"content"`
+	}
+	require.NoError(t, json.NewDecoder(connectResp.Body).Decode(&created))
+	require.NotEmpty(t, created.Name)
+	require.Equal(t, "the third memo", created.Content)
 
 	userName := "users/" + testAdminUsername
 	status, body = inst.do(t, http.MethodGet, "/api/"+userName+"/usage", token, nil)
 	require.Equal(t, http.StatusOK, status, "%s", body)
 	var usage struct {
-		Name      string `json:"name"`
-		MemoCount string `json:"memoCount"`
-		Limits    struct {
-			MemoCount string `json:"memoCount"`
-		} `json:"limits"`
-		LimitIndex int `json:"limitIndex"`
+		Name       string                     `json:"name"`
+		MemoCount  string                     `json:"memoCount"`
+		Limits     map[string]json.RawMessage `json:"limits"`
+		LimitIndex int                        `json:"limitIndex"`
 	}
 	require.NoError(t, json.Unmarshal(body, &usage))
 	require.Equal(t, userName+"/usage", usage.Name)
-	require.Equal(t, "1", usage.MemoCount)
-	require.Equal(t, "1", usage.Limits.MemoCount)
-	require.Equal(t, 0, usage.LimitIndex)
-
-	requireNoWaitHeaders := func(resp *http.Response) {
-		t.Helper()
-		require.Empty(t, resp.Header.Get("Retry-After"))
-		require.Empty(t, resp.Header.Get("RateLimit"))
-		require.Empty(t, resp.Header.Get("RateLimit-Policy"))
-	}
-	memo := map[string]any{"content": "over the limit", "visibility": "PRIVATE"}
-
-	refused := send(http.MethodPost, "/api/memos", memo, nil)
-	defer refused.Body.Close()
-	require.Equal(t, http.StatusTooManyRequests, refused.StatusCode)
-	requireNoWaitHeaders(refused)
-	var gatewayError struct {
-		Code    int    `json:"code"`
-		Message string `json:"message"`
-		Details []struct {
-			Type       string            `json:"@type"`
-			Reason     string            `json:"reason"`
-			Domain     string            `json:"domain"`
-			Metadata   map[string]string `json:"metadata"`
-			Violations []struct {
-				Subject string `json:"subject"`
-			} `json:"violations"`
-		} `json:"details"`
-	}
-	require.NoError(t, json.NewDecoder(refused.Body).Decode(&gatewayError))
-	require.Equal(t, 8, gatewayError.Code, "RESOURCE_EXHAUSTED")
-	require.Equal(t, "quota exceeded", gatewayError.Message)
-	types := []string{}
-	for _, detail := range gatewayError.Details {
-		types = append(types, detail.Type)
-		switch detail.Type {
-		case "type.googleapis.com/google.rpc.ErrorInfo":
-			require.Equal(t, "QUOTA_EXCEEDED", detail.Reason)
-			require.Equal(t, "memos.api", detail.Domain)
-			require.Equal(t, map[string]string{"metric": "MEMO_COUNT", "limit": "1", "usage": "1"}, detail.Metadata)
-		case "type.googleapis.com/google.rpc.QuotaFailure":
-			require.Len(t, detail.Violations, 1)
-			require.Equal(t, userName, detail.Violations[0].Subject)
-		default:
-			t.Fatalf("unexpected error detail %s", detail.Type)
-		}
-	}
-	require.ElementsMatch(t, []string{"type.googleapis.com/google.rpc.ErrorInfo", "type.googleapis.com/google.rpc.QuotaFailure"}, types)
-
-	connectResp := send(http.MethodPost, "/memos.api.MemoService/CreateMemo", map[string]any{"memo": memo}, map[string]string{"Connect-Protocol-Version": "1"})
-	defer connectResp.Body.Close()
-	require.Equal(t, http.StatusTooManyRequests, connectResp.StatusCode)
-	requireNoWaitHeaders(connectResp)
-	var connectError struct {
-		Code    string `json:"code"`
-		Message string `json:"message"`
-		Details []struct {
-			Type string `json:"type"`
-		} `json:"details"`
-	}
-	require.NoError(t, json.NewDecoder(connectResp.Body).Decode(&connectError))
-	require.Equal(t, "resource_exhausted", connectError.Code)
-	require.Equal(t, "quota exceeded", connectError.Message)
-	connectTypes := []string{}
-	for _, detail := range connectError.Details {
-		connectTypes = append(connectTypes, detail.Type)
-	}
-	require.ElementsMatch(t, []string{"google.rpc.ErrorInfo", "google.rpc.QuotaFailure"}, connectTypes)
+	require.Equal(t, "3", usage.MemoCount)
+	require.Empty(t, usage.Limits)
+	require.Equal(t, -1, usage.LimitIndex)
 }

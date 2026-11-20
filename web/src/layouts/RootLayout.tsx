@@ -14,6 +14,7 @@ import { GlobalMemoEditorProvider } from "@/contexts/GlobalMemoEditorContext";
 import { useInstance } from "@/contexts/InstanceContext";
 import { MemoFilterProvider, useMemoFilterContext } from "@/contexts/MemoFilterContext";
 import { SpaceProvider } from "@/contexts/SpaceContext";
+import { useView } from "@/contexts/ViewContext";
 import useCurrentUser from "@/hooks/useCurrentUser";
 import useMediaQuery from "@/hooks/useMediaQuery";
 import { cn } from "@/lib/utils";
@@ -52,9 +53,11 @@ const RootLayoutContent = () => {
   const md = useMediaQuery("md");
   const { profile } = useInstance();
   const { removeFilter } = useMemoFilterContext();
+  const { fullWidth, maxColumns } = useView();
   const { pathname } = location;
   // The map fills the viewport and scrolls inside itself, so the document must not.
   const fullBleed = resolveCollectionRoute(pathname).pathname.toLowerCase() === ROUTES.MAP;
+  const limitShell = !fullBleed && !fullWidth && maxColumns !== 0;
   const prevPathnameRef = useRef<string | undefined>(undefined);
   const shellRef = useRef<HTMLDivElement>(null);
   const { width: sidebarWidth, minWidth, maxWidth, setWidth: setSidebarWidth } = useSidebarWidth();
@@ -86,11 +89,15 @@ const RootLayoutContent = () => {
   return (
     <div
       ref={shellRef}
-      className={cn("w-full bg-mu-canvas", fullBleed ? "h-dvh overflow-hidden" : "min-h-full")}
+      className={cn(
+        "mx-auto flex w-full bg-mu-canvas",
+        limitShell && (maxColumns === 1 ? "max-w-5xl" : "max-w-7xl"),
+        fullBleed ? "h-dvh overflow-hidden" : "min-h-full",
+      )}
       style={{ [SIDEBAR_WIDTH_VAR]: `${sidebarWidth}px` } as CSSProperties}
     >
       {md && (
-        <div className="fixed inset-y-0 start-0 z-30 w-(--app-sidebar-width) border-e border-mu-line/70">
+        <div className="sticky top-0 z-30 h-dvh w-(--app-sidebar-width) shrink-0 self-start border-e border-mu-line/70">
           <AppSidebar />
           <SidebarResizeHandle
             width={sidebarWidth}
@@ -102,9 +109,7 @@ const RootLayoutContent = () => {
         </div>
       )}
       <MobileAppSidebar />
-      <main
-        className={cn("flex w-full min-w-0 flex-col items-center md:ps-(--app-sidebar-width)", fullBleed ? "h-full min-h-0" : "min-h-full")}
-      >
+      <main className={cn("flex min-w-0 flex-1 flex-col items-center", fullBleed ? "h-full min-h-0" : "min-h-full")}>
         <MobileAppHeader />
         {profile.demo && <DemoBanner />}
         <Outlet />

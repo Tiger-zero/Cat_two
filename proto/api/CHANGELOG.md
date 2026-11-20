@@ -29,6 +29,9 @@ instead, and update `core/configuration/testdata/compat/` in the same change. Af
 
 ### Breaking
 
+- Cat_two no longer enforces the `USAGE_LIMITS` instance setting on memos or attachments.
+  Existing entries and configuration files remain readable. `GetUserUsage` reports usage with empty `limits`
+  and a `limit_index` of `-1`. Request and upload chunk validation continue to apply.
 - Removed `InstanceSetting.MemoRelatedSetting`, `memo_related_setting`, and the `MEMO_RELATED` key.
   Reactions now use the full Unicode emoji picker. Configuration files declaring `instance/settings/MEMO_RELATED` or
   `memoRelatedSetting` are rejected; remove that setting from configuration files. Stored reactions are preserved.

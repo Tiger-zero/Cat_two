@@ -46,6 +46,19 @@ func (v Visibility) String() string {
 	return string(v)
 }
 
+// MemoCreationChannelUnknown represents notes without recorded provenance.
+const MemoCreationChannelUnknown = "unknown"
+
+// IsMemoCreationChannel validates the stable identifiers accepted from clients and archives.
+func IsMemoCreationChannel(value string) bool {
+	switch value {
+	case MemoCreationChannelUnknown, "web", "telegram", "browser_extension", "wechat":
+		return true
+	default:
+		return false
+	}
+}
+
 type Memo struct {
 	// ID is the system generated unique identifier for the memo.
 	ID int32

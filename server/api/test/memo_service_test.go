@@ -325,6 +325,54 @@ func TestCreateAndUpdateMemoRebuildsTagPayload(t *testing.T) {
 	require.Equal(t, []string{"next", "AB"}, stored.Tags)
 }
 
+func TestMemoCreationChannel(t *testing.T) {
+	ctx := context.Background()
+	ts := NewTestService(t)
+	defer ts.Cleanup()
+
+	user, err := ts.CreateRegularUser(ctx, "creation-channel-user")
+	require.NoError(t, err)
+	userCtx := ts.CreateUserContext(ctx, user.ID)
+	webMemo, err := ts.Service.CreateMemo(userCtx, &apipb.CreateMemoRequest{
+		Memo: &apipb.Memo{Content: "Written in the web editor", Visibility: apipb.Visibility_PRIVATE, CreationChannel: "web"},
+	})
+	require.NoError(t, err)
+	require.Equal(t, "web", webMemo.CreationChannel)
+
+	legacy, err := ts.Service.CreateMemo(userCtx, &apipb.CreateMemoRequest{
+		Memo: &apipb.Memo{Content: "No provenance supplied", Visibility: apipb.Visibility_PRIVATE},
+	})
+	require.NoError(t, err)
+	require.Equal(t, store.MemoCreationChannelUnknown, legacy.CreationChannel)
+
+	_, err = ts.Service.CreateMemo(userCtx, &apipb.CreateMemoRequest{
+		Memo: &apipb.Memo{Content: "Unsupported channel", Visibility: apipb.Visibility_PRIVATE, CreationChannel: "unsupported"},
+	})
+	require.Equal(t, codes.InvalidArgument, status.Code(err))
+
+	updated, err := ts.Service.UpdateMemo(userCtx, &apipb.UpdateMemoRequest{
+		Memo:       &apipb.Memo{Name: webMemo.Name, Content: "Edited #memo", CreationChannel: "telegram"},
+		UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"content"}},
+	})
+	require.NoError(t, err)
+	require.Equal(t, "web", updated.CreationChannel)
+	_, err = ts.Service.UpdateMemo(userCtx, &apipb.UpdateMemoRequest{
+		Memo:       &apipb.Memo{Name: webMemo.Name, CreationChannel: "telegram"},
+		UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"creation_channel"}},
+	})
+	require.Equal(t, codes.InvalidArgument, status.Code(err))
+
+	for channel, name := range map[string]string{"web": webMemo.Name, "unknown": legacy.Name} {
+		result, err := ts.Service.ListMemos(userCtx, &apipb.ListMemosRequest{
+			Filter: `creation_channel == "` + channel + `"`,
+		})
+		require.NoError(t, err)
+		require.Len(t, result.Memos, 1)
+		require.Equal(t, name, result.Memos[0].Name)
+		require.Equal(t, channel, result.Memos[0].CreationChannel)
+	}
+}
+
 func TestListMemos(t *testing.T) {
 	ctx := context.Background()
 

@@ -35,6 +35,10 @@ func (s *APIService) prepareMemoCreate(ctx context.Context, user *store.User, in
 	if user == nil || input == nil {
 		return nil, status.Error(codes.InvalidArgument, "memo is required")
 	}
+	channel := input.GetCreationChannel()
+	if channel != "" && !store.IsMemoCreationChannel(channel) {
+		return nil, status.Error(codes.InvalidArgument, "invalid memo creation_channel")
+	}
 	visibility, err := validateCreateMemoVisibility(input.Visibility)
 	if err != nil {
 		return nil, err
@@ -62,12 +66,10 @@ func (s *APIService) prepareMemoCreate(ctx context.Context, user *store.User, in
 		memo.UpdatedTs = input.UpdateTime.AsTime().Unix()
 	}
 
-	if err := s.checkMemoContentQuota(ctx, user.ID, memo.Content); err != nil {
-		return nil, err
-	}
 	if err := memopayload.RebuildMemoPayload(ctx, memo, s.MarkdownService); err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to rebuild memo payload: %v", err)
 	}
+	memo.Payload.CreationChannel = channel
 	if input.Location != nil {
 		memo.Payload.Location = convertLocationToStore(input.Location)
 	}

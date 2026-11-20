@@ -78,7 +78,7 @@ describe("User menu panel", () => {
     }
   });
 
-  it("places Inbox beside the account and Archived directly above Settings", () => {
+  it("puts Settings first while keeping Inbox beside the account", () => {
     renderMenu("/archived");
     const accountHeader = screen.getByText("Steven").parentElement!;
     const inbox = within(accountHeader).getByRole("link", { name: "common.inbox" });
@@ -86,7 +86,8 @@ describe("User menu panel", () => {
     expect(screen.queryByText("setting.sso.account")).not.toBeInTheDocument();
     expect(inbox).toHaveClass(...badgeClasses({ tone: "neutral" }).split(" "));
     expect(inbox.compareDocumentPosition(archived) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(archived.nextElementSibling).toBe(screen.getByRole("link", { name: "common.settings" }));
+    const settings = screen.getByRole("link", { name: "common.settings" });
+    expect(settings.compareDocumentPosition(inbox) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(archived).toHaveAttribute("aria-current", "page");
     expect(archived).toHaveAttribute("href", "/archived");
     fireEvent.click(archived);
@@ -101,7 +102,6 @@ describe("User menu panel", () => {
       screen.getByRole("button", { name: /common.language/ }),
       screen.getByRole("link", { name: "common.archived" }),
       screen.getByRole("link", { name: "common.settings" }),
-      screen.getByRole("link", { name: "common.about" }),
       screen.getByRole("button", { name: "common.sign-out" }),
     ];
     for (const row of rows) {
@@ -120,7 +120,7 @@ describe("User menu panel", () => {
     expect(inbox).toHaveAttribute("href", "/inbox");
   });
 
-  it("offers guests preferences and About without account pages or a second sign-in", () => {
+  it("offers guests preferences without account pages or a second sign-in", () => {
     mocks.currentUser = undefined;
     renderMenu("/explore");
     expect(screen.getByRole("button", { name: /setting.preference.theme/ })).toBeInTheDocument();
@@ -128,11 +128,7 @@ describe("User menu panel", () => {
       expect(screen.queryByRole("button", { name })).not.toBeInTheDocument();
       expect(screen.queryByRole("link", { name })).not.toBeInTheDocument();
     }
-    const about = screen.getByRole("link", { name: "common.about" });
-    expect(about).toHaveAttribute("href", "/about");
-    fireEvent.click(about);
-    expect(mocks.onClose).toHaveBeenCalledOnce();
-    expect(mocks.setMobileOpen).toHaveBeenCalledWith(false);
+    expect(screen.queryByRole("link", { name: "common.about" })).not.toBeInTheDocument();
   });
 
   it("shows current preferences on rows that open their choices as submenus", async () => {

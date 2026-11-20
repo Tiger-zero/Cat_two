@@ -10,10 +10,10 @@ export const useExportMemos = () => {
   const t = useTranslate();
   const [exporting, setExporting] = useState(false);
 
-  const run = async (username: string) => {
+  const run = async (username: string, memoUIDs?: readonly string[]) => {
     setExporting(true);
     try {
-      await exportMemos(username);
+      await exportMemos(username, memoUIDs);
       toast.add({ title: t("setting.memo-export.export-success"), type: "success" });
     } catch (error) {
       if (error instanceof MemoExportError && error.status === 429) {

@@ -1,6 +1,7 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { TimelineViewProvider } from "@/contexts/ViewContext";
 import RootLayout from "@/layouts/RootLayout";
 
 vi.mock("@/hooks/useMemoSuggestions", () => ({ useMemoSuggestions: () => [] }));
@@ -18,9 +19,8 @@ vi.mock("@/components/AppSidebar", () => ({
   useSidebarWidth: () => ({ width: 256, minWidth: 192, maxWidth: 384, setWidth: vi.fn() }),
 }));
 
-// GlobalMemoEditorContext is deliberately NOT mocked: the real provider calls
-// useAppSidebar(), which throws unless RootLayout nests it inside
-// AppSidebarProvider. That nesting is the only thing here that can break.
+// Keep the actual GlobalMemoEditorContext to verify that its useAppSidebar()
+// call resolves inside RootLayout's AppSidebarProvider.
 vi.mock("@/contexts/AuthContext", () => ({
   useAuth: () => ({ isUserSettingsInitialized: true }),
 }));
@@ -65,17 +65,20 @@ describe("RootLayout global editor shell", () => {
   beforeEach(() => {
     authState.currentUser = { name: "users/test" };
     instanceState.accessMode = 2;
+    localStorage.removeItem("memos-view-setting");
   });
 
   it("mounts the composer provider inside the sidebar provider and keeps the shell across routes", () => {
     render(
       <MemoryRouter initialEntries={["/attachments"]}>
-        <Routes>
-          <Route element={<RootLayout />}>
-            <Route path="attachments" element={<RouteState />} />
-            <Route path="inbox" element={<RouteState />} />
-          </Route>
-        </Routes>
+        <TimelineViewProvider>
+          <Routes>
+            <Route element={<RootLayout />}>
+              <Route path="attachments" element={<RouteState />} />
+              <Route path="inbox" element={<RouteState />} />
+            </Route>
+          </Routes>
+        </TimelineViewProvider>
       </MemoryRouter>,
     );
 
@@ -99,15 +102,47 @@ describe("RootLayout global editor shell", () => {
 
     render(
       <MemoryRouter initialEntries={["/explore"]}>
-        <Routes>
-          <Route element={<RootLayout />}>
-            <Route path="explore" element={<div>Explore</div>} />
-          </Route>
-          <Route path="auth" element={<RouteState />} />
-        </Routes>
+        <TimelineViewProvider>
+          <Routes>
+            <Route element={<RootLayout />}>
+              <Route path="explore" element={<div>Explore</div>} />
+            </Route>
+            <Route path="auth" element={<RouteState />} />
+          </Routes>
+        </TimelineViewProvider>
       </MemoryRouter>,
     );
 
     expect(screen.getByTestId("route")).toHaveTextContent("/auth");
+  });
+
+  it.each([
+    { path: "/", preferences: {}, width: "max-w-5xl" },
+    { path: "/", preferences: { maxColumns: 3 }, width: "max-w-7xl" },
+    { path: "/", preferences: { fullWidth: true }, width: undefined },
+    { path: "/", preferences: { maxColumns: 0 }, width: undefined },
+    { path: "/map", preferences: {}, width: undefined },
+  ])("sizes the centered shell for $path with $preferences", ({ path, preferences, width }) => {
+    localStorage.setItem("memos-view-setting", JSON.stringify(preferences));
+
+    render(
+      <MemoryRouter initialEntries={[path]}>
+        <TimelineViewProvider>
+          <Routes>
+            <Route element={<RootLayout />}>
+              <Route index element={<RouteState />} />
+              <Route path="map" element={<RouteState />} />
+            </Route>
+          </Routes>
+        </TimelineViewProvider>
+      </MemoryRouter>,
+    );
+
+    const shell = screen.getByRole("main").parentElement;
+    expect(shell).toHaveClass("mx-auto");
+    if (width) expect(shell).toHaveClass(width);
+    else expect(shell).not.toHaveClass(/max-w-[57]xl/);
+    expect(screen.getByTestId("desktop-sidebar").parentElement).toHaveClass("sticky");
+    if (path === "/map") expect(shell).toHaveClass("h-dvh", "overflow-hidden");
   });
 });

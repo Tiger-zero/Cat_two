@@ -10,7 +10,6 @@ apply the same way.
 | `notification/` | building and dispatching inbox and email notifications |
 | `memopayload/` | rebuilding a memo's derived payload from its markdown |
 | `memoexport/` | the Memos Export Format container and records used for export and import |
-| `usagelimit/` | which usage limits apply to a user, and whether memo counts, memo content, and uploads stay within them |
 | `identityprovider/` | the rules an identity provider must meet before it is stored, and its API↔store conversion |
 | `instancesetting/` | the rules each instance setting group must meet before it is stored, AI setting normalization, and the API↔store conversion |
 | `user/` | the rules a username and password must meet before they are stored |

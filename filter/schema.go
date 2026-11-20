@@ -118,6 +118,21 @@ func NewSchema() Schema {
 			SupportsContains: true,
 			Expressions:      map[DialectName]string{},
 		},
+		"creation_channel": {
+			Name:   "creation_channel",
+			Kind:   FieldKindScalar,
+			Type:   FieldTypeString,
+			Column: Column{Table: "memo", Name: "payload"},
+			Expressions: map[DialectName]string{
+				DialectSQLite:   "COALESCE(NULLIF(json_extract(%s, '$.creationChannel'), ''), 'unknown')",
+				DialectMySQL:    "COALESCE(NULLIF(NULLIF(JSON_UNQUOTE(JSON_EXTRACT(%s, '$.creationChannel')), 'null'), ''), 'unknown')",
+				DialectPostgres: "COALESCE(NULLIF(%s->>'creationChannel', ''), 'unknown')",
+			},
+			AllowedComparisonOps: map[ComparisonOperator]bool{
+				CompareEq:  true,
+				CompareNeq: true,
+			},
+		},
 		"creator": {
 			Name:   "creator",
 			Kind:   FieldKindScalar,
@@ -317,6 +332,7 @@ func NewSchema() Schema {
 
 	envOptions := []cel.EnvOption{
 		cel.Variable("content", cel.StringType),
+		cel.Variable("creation_channel", cel.StringType),
 		cel.Variable("creator", cel.StringType),
 		cel.Variable("creator_id", cel.IntType),
 		cel.Variable("created_ts", cel.TimestampType),

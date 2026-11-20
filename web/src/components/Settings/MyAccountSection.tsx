@@ -17,7 +17,6 @@ import UserAvatar from "../UserAvatar";
 import LinkedIdentitySection from "./LinkedIdentitySection";
 import SettingGroup from "./SettingGroup";
 import SettingSection from "./SettingSection";
-import UsageSection from "./UsageSection";
 import UserStatsSection from "./UserStatsSection";
 
 const MyAccountSection = () => {
@@ -36,7 +35,7 @@ const MyAccountSection = () => {
     try {
       await userServiceClient.deleteUser({ name: user.name });
       await logout();
-      toast.add({ title: t("setting.member.delete-success", { username: user.username }), type: "success" });
+      toast.add({ title: t("setting.account.delete-success", { username: user.username }), type: "success" });
       navigateTo(ROUTES.AUTH, { replace: true });
     } catch (error) {
       handleError(error, showErrorToast, { context: "Delete account" });
@@ -69,8 +68,6 @@ const MyAccountSection = () => {
 
       <UserStatsSection />
 
-      <UsageSection />
-
       <LinkedIdentitySection />
 
       <SettingGroup showSeparator title={t("setting.account.danger-area")} description={t("setting.account.danger-area-description")}>
@@ -95,8 +92,8 @@ const MyAccountSection = () => {
       <ConfirmDialog
         open={deleteOpen}
         onOpenChange={setDeleteOpen}
-        title={user ? t("setting.member.delete-warning", { username: user.username }) : ""}
-        description={t("setting.member.delete-warning-description")}
+        title={user ? t("setting.account.delete-warning", { username: user.username }) : ""}
+        description={t("setting.account.delete-warning-description")}
         confirmLabel={t("common.delete")}
         cancelLabel={t("common.cancel")}
         onConfirm={handleDeleteAccount}

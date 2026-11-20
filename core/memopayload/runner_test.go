@@ -25,7 +25,7 @@ func TestBackfillRebuildsOncePerVersion(t *testing.T) {
 	external, err := st.CreateMemo(ctx, &store.Memo{
 		UID: "backfill-external-image", CreatorID: user.ID, Visibility: store.Private,
 		Content: "![view](https://example.com/view.jpg) #travel",
-		Payload: &storepb.MemoPayload{Tags: []string{"travel"}, Location: location},
+		Payload: &storepb.MemoPayload{Tags: []string{"travel"}, Location: location, CreationChannel: "web"},
 	})
 	require.NoError(t, err)
 	plain, err := st.CreateMemo(ctx, &store.Memo{
@@ -43,6 +43,7 @@ func TestBackfillRebuildsOncePerVersion(t *testing.T) {
 	require.True(t, got.Payload.GetProperty().GetHasInlineImage())
 	require.Equal(t, []string{"travel"}, got.Payload.Tags)
 	require.Equal(t, "Pier", got.Payload.GetLocation().GetPlaceholder(), "the rebuild keeps the location")
+	require.Equal(t, "web", got.Payload.GetCreationChannel(), "the rebuild keeps the creation channel")
 	got, err = st.GetMemo(ctx, &store.FindMemo{ID: &plain.ID})
 	require.NoError(t, err)
 	require.False(t, got.Payload.GetProperty().GetHasLink(), "stale flags are recomputed from content")

@@ -5,6 +5,7 @@ import { useLocation, useSearchParams } from "react-router-dom";
 export type FilterFactor =
   | "tagSearch"
   | "visibility"
+  | "source"
   | "contentSearch"
   | "celSearch"
   | "displayTime"

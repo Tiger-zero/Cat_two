@@ -283,6 +283,14 @@ message Memo {
   // creation.
   google.protobuf.Timestamp update_time = 17 [(google.api.field_behavior) = OPTIONAL];
 
+  // Optional. The channel reported by the client when the memo was created.
+  // Values: web, telegram, browser_extension, wechat, unknown. Memos created
+  // without a reported channel are returned as unknown.
+  string creation_channel = 18 [
+    (google.api.field_behavior) = OPTIONAL,
+    (google.api.field_behavior) = IMMUTABLE
+  ];
+
   // Property holds properties computed from the memo content.
   message Property {
     // The text of the H1 heading when it is the first block of the content.
@@ -319,6 +327,7 @@ message ListMemosRequest {
   // Available fields:
   //   content (string), creator (string, e.g. "users/1"),
   //   created_ts / updated_ts (timestamp), pinned (bool),
+  //   creation_channel (string: web | telegram | browser_extension | wechat | unknown),
   //   visibility (string: PRIVATE | PROTECTED | PUBLIC | SPACE),
   //   space (string resource name, or null when the memo has no space;
   //     supports == and comparisons against null, e.g. space != null),

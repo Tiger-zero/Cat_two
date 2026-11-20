@@ -126,13 +126,10 @@ func (s *APIService) finishAttachmentReplace(ctx context.Context, upload *attach
 		}
 		return s.GetAttachment(ctx, &apipb.GetAttachmentRequest{Name: "attachments/" + upload.state.uid})
 	}
-	// Check again at finish: the attachment may have been deleted, linked to a
-	// memo the user can no longer write, or the limits may have changed.
+	// Check again at finish: the attachment may have been deleted or linked to a
+	// memo the user can no longer write.
 	replaced, user, err := s.findReplaceableAttachment(ctx, "attachments/"+upload.state.uid)
 	if err != nil {
-		return nil, err
-	}
-	if err := s.checkReplaceQuota(ctx, replaced.CreatorID, upload.totalSize, replaced.Size); err != nil {
 		return nil, err
 	}
 	setting, err := s.Store.GetInstanceStorageSetting(ctx)

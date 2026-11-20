@@ -81,11 +81,14 @@ describe("router configuration", () => {
     for (const path of [ROUTES.VIEWS, ROUTES.ATTACHMENTS, ROUTES.MAP, ROUTES.INBOX, ROUTES.SETTING]) {
       expect(hasAncestorOfType(routeConfig, path, RequireFullInitializationRoute)).toBe(true);
     }
-    expect(hasAncestorOfType(routeConfig, ROUTES.ABOUT, RequireInstanceInitializationRoute)).toBe(true);
   });
 
   it("does not register a dedicated new memo route", () => {
     expect(findByPath(routeConfig, "/new")).toBeUndefined();
+  });
+
+  it("does not register an About page", () => {
+    expect(findByPath(routeConfig, "/about")).toBeUndefined();
   });
 
   it("leaves memo feeds available for early queries", () => {
@@ -95,15 +98,7 @@ describe("router configuration", () => {
   });
 
   it("leaves public pages outside RequireAuthRoute", () => {
-    for (const path of [
-      ROUTES.ABOUT,
-      ROUTES.EXPLORE,
-      CALENDAR_ROUTE_PATTERN,
-      ROUTES.MAP,
-      "memos/:uid",
-      "memos/shares/:token",
-      "u/:username",
-    ]) {
+    for (const path of [ROUTES.EXPLORE, CALENDAR_ROUTE_PATTERN, ROUTES.MAP, "memos/:uid", "memos/shares/:token", "u/:username"]) {
       expect(hasAncestorOfType(routeConfig, path, RequireAuthRoute)).toBe(false);
     }
   });

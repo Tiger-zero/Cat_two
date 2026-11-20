@@ -1,15 +1,5 @@
 import { badgeClasses, Menu, menuClasses } from "@usememos/ui";
-import {
-  ArchiveIcon,
-  BellIcon,
-  ChevronRightIcon,
-  GlobeIcon,
-  InfoIcon,
-  LogOutIcon,
-  type LucideIcon,
-  PaletteIcon,
-  SettingsIcon,
-} from "lucide-react";
+import { ArchiveIcon, BellIcon, ChevronRightIcon, GlobeIcon, LogOutIcon, type LucideIcon, PaletteIcon, SettingsIcon } from "lucide-react";
 import { type ReactNode, useState } from "react";
 import { Link, matchPath, useLocation } from "react-router-dom";
 import { ScopePanelRowIcon } from "@/components/AppSidebar/SidebarRow";
@@ -139,7 +129,7 @@ const NavRow = ({
   </Link>
 );
 
-/** The account half of the scope menu: preferences for everyone, then the user's own pages. */
+/** Account settings and personal destinations at the top of the username menu. */
 const UserMenu = ({ onClose }: { onClose: () => void }) => {
   const t = useTranslate();
   const location = useLocation();
@@ -153,6 +143,7 @@ const UserMenu = ({ onClose }: { onClose: () => void }) => {
   const accountLabel = currentUser?.displayName || currentUser?.username || t("common.profile");
   const inboxActive = Boolean(matchPath(Routes.INBOX, location.pathname));
   const archivedActive = Boolean(matchPath(Routes.ARCHIVED, location.pathname));
+  const settingsActive = Boolean(matchPath(Routes.SETTING, location.pathname));
 
   const closePanel = () => {
     onClose();
@@ -177,11 +168,16 @@ const UserMenu = ({ onClose }: { onClose: () => void }) => {
 
   return (
     <>
+      {currentUser && (
+        <NavRow to={Routes.SETTING} current={settingsActive} icon={SettingsIcon} onNavigate={closePanel}>
+          {t("common.settings")}
+        </NavRow>
+      )}
       <UserPreferenceMenu />
-      <div role="separator" className={menuClasses().separator} />
-      <section aria-label={t("setting.sso.account")}>
-        {currentUser && (
-          <>
+      {currentUser && (
+        <>
+          <div role="separator" className={menuClasses().separator} />
+          <section aria-label={t("setting.sso.account")}>
             <div className="flex h-(--mu-row-height) items-center gap-2 px-(--mu-row-padding)">
               <span className={cn(SIDEBAR_LEADING_SLOT_CLASSES, "relative")}>
                 <UserAvatar avatarUrl={currentUser.avatarUrl} name={accountLabel} className="size-5" />
@@ -214,23 +210,13 @@ const UserMenu = ({ onClose }: { onClose: () => void }) => {
             <NavRow to={Routes.ARCHIVED} current={archivedActive} icon={ArchiveIcon} onNavigate={closePanel}>
               {t("common.archived")}
             </NavRow>
-            <NavRow to={Routes.SETTING} icon={SettingsIcon} onNavigate={closePanel}>
-              {t("common.settings")}
-            </NavRow>
-          </>
-        )}
-        <NavRow to={Routes.ABOUT} icon={InfoIcon} onNavigate={closePanel}>
-          {t("common.about")}
-        </NavRow>
-        {/* Guests sign in from the sidebar footer, which is always in view. */}
-        {currentUser && (
-          // Leaving is secondary to the pages above it, so it reads quieter.
-          <button type="button" className={cn(SCOPE_PANEL_ROW_CLASSES, "text-mu-text-secondary")} onClick={() => void handleSignOut()}>
-            <ScopePanelRowIcon icon={LogOutIcon} />
-            <span className="min-w-0 flex-1 truncate">{t("common.sign-out")}</span>
-          </button>
-        )}
-      </section>
+            <button type="button" className={cn(SCOPE_PANEL_ROW_CLASSES, "text-mu-text-secondary")} onClick={() => void handleSignOut()}>
+              <ScopePanelRowIcon icon={LogOutIcon} />
+              <span className="min-w-0 flex-1 truncate">{t("common.sign-out")}</span>
+            </button>
+          </section>
+        </>
+      )}
     </>
   );
 };

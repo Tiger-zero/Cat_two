@@ -35,6 +35,19 @@ describe("memo scopes", () => {
 });
 
 describe("memo views", () => {
+  it("combines the creation-channel facet with the search and ignores unsupported channel inputs", () => {
+    expect(
+      buildMemoFilter({
+        filters: [
+          { factor: "source", value: "web" },
+          { factor: "contentSearch", value: "plan" },
+        ],
+        includePinned: false,
+      }),
+    ).toBe('(creation_channel == "web") && (content.contains("plan"))');
+    expect(buildMemoFilter({ filters: [{ factor: "source", value: "not-supported" }], includePinned: false })).toBeUndefined();
+  });
+
   it("keeps OR expressions inside the author, Space, view, and facet constraints", () => {
     const query = 'content.contains("plan") || pinned';
     const filter = buildMemoFilter({

@@ -713,6 +713,7 @@ paths:
                      Available fields:
                        content (string), creator (string, e.g. "users/1"),
                        created_ts / updated_ts (timestamp), pinned (bool),
+                       creation_channel (string: web | telegram | browser_extension | wechat | unknown),
                        visibility (string: PRIVATE | PROTECTED | PUBLIC | SPACE),
                        space (string resource name, or null when the memo has no space;
                          supports == and comparisons against null, e.g. space != null),
@@ -4678,6 +4679,12 @@ components:
                         Optional. The last update time. Defaults to the current time when unset on
                          creation.
                     format: date-time
+                creationChannel:
+                    type: string
+                    description: |-
+                        Optional. The channel reported by the client when the memo was created.
+                         Values: web, telegram, browser_extension, wechat, unknown. Memos created
+                         without a reported channel are returned as unknown.
             description: Memo is a Markdown note written by a user.
         MemoRelation:
             required:

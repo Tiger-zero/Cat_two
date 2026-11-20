@@ -70,21 +70,22 @@ type Counts struct {
 
 // Memo is the record stored at memos/<uid>.json.
 type Memo struct {
-	UID         string       `json:"uid"`
-	Creator     string       `json:"creator"`
-	CreateTime  string       `json:"createTime"`
-	UpdateTime  string       `json:"updateTime"`
-	State       string       `json:"state"`
-	Visibility  string       `json:"visibility"`
-	Pinned      bool         `json:"pinned"`
-	ContentPath string       `json:"contentPath"`
-	Tags        []string     `json:"tags,omitempty"`
-	Location    *Location    `json:"location,omitempty"`
-	Space       *Space       `json:"space,omitempty"`
-	Parent      string       `json:"parent,omitempty"`
-	Relations   []Relation   `json:"relations,omitempty"`
-	Attachments []Attachment `json:"attachments,omitempty"`
-	Reactions   []Reaction   `json:"reactions,omitempty"`
+	CreationChannel string       `json:"creationChannel,omitempty"`
+	UID             string       `json:"uid"`
+	Creator         string       `json:"creator"`
+	CreateTime      string       `json:"createTime"`
+	UpdateTime      string       `json:"updateTime"`
+	State           string       `json:"state"`
+	Visibility      string       `json:"visibility"`
+	Pinned          bool         `json:"pinned"`
+	ContentPath     string       `json:"contentPath"`
+	Tags            []string     `json:"tags,omitempty"`
+	Location        *Location    `json:"location,omitempty"`
+	Space           *Space       `json:"space,omitempty"`
+	Parent          string       `json:"parent,omitempty"`
+	Relations       []Relation   `json:"relations,omitempty"`
+	Attachments     []Attachment `json:"attachments,omitempty"`
+	Reactions       []Reaction   `json:"reactions,omitempty"`
 }
 
 // Location mirrors the public API Location message.

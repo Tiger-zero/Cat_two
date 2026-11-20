@@ -79,7 +79,8 @@ const renderAt = (path = "/", size: "md" | "header" = "md") => {
   return router;
 };
 
-const openSwitcher = () => fireEvent.click(screen.getByRole("button", { name: /space.switch:/ }));
+const switcherName = /(?:space.switch|common.account-menu):/;
+const openSwitcher = () => fireEvent.click(screen.getByRole("button", { name: switcherName }));
 
 describe("SpaceSwitcher", () => {
   beforeEach(() => {
@@ -156,15 +157,13 @@ describe("SpaceSwitcher", () => {
     expect(state.setMobileOpen).not.toHaveBeenCalled();
   });
 
-  it("uses the selected author in the user slot and trigger", () => {
+  it("keeps the account name as the trigger while indicating the selected author and space", () => {
     state.selectedSpaceName = "spaces/product";
     state.selectedSpace = state.spaces[0];
     renderAt("/spaces/product?creator=alice", "header");
-    const trigger = screen.getByRole("button", { name: "space.switch: Alice / Product" });
-    // With a Space selected, the creator shows as an avatar only; its name stays in the tooltip.
-    expect(trigger).toHaveAttribute("title", "Alice / Product");
-    expect(within(trigger).queryByText("Alice")).not.toBeInTheDocument();
-    expect(within(trigger).getByText("Product")).toHaveClass("truncate");
+    const trigger = screen.getByRole("button", { name: "common.account-menu: Steven" });
+    expect(trigger).toHaveAttribute("title", "Steven · Alice / Product");
+    expect(within(trigger).getByText("Steven")).toHaveClass("truncate");
     expect(trigger).toHaveClass("h-9", "gap-2", "px-2");
     openSwitcher();
     expect(screen.queryByRole("navigation", { name: "common.browse" })).not.toBeInTheDocument();
@@ -209,7 +208,7 @@ describe("SpaceSwitcher", () => {
 
   it("keeps the popup aligned to the sidebar rail and opens Space creation", () => {
     renderAt();
-    const trigger = screen.getByRole("button", { name: /space.switch:/ });
+    const trigger = screen.getByRole("button", { name: switcherName });
     const sidebar = trigger.closest("aside") as HTMLElement;
     vi.spyOn(sidebar, "getBoundingClientRect").mockReturnValue({ left: 0, right: 223, width: 223 } as DOMRect);
     vi.spyOn(trigger, "getBoundingClientRect").mockReturnValue({ left: 12, right: 143, width: 131 } as DOMRect);

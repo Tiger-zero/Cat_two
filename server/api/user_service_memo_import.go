@@ -18,7 +18,6 @@ import (
 
 	"github.com/usememos/memos/core/memoexport"
 	"github.com/usememos/memos/core/memopayload"
-	"github.com/usememos/memos/core/usagelimit"
 	"github.com/usememos/memos/internal/ratelimit"
 	apipb "github.com/usememos/memos/proto/gen/api"
 	storepb "github.com/usememos/memos/proto/gen/store"
@@ -192,9 +191,6 @@ func (i *memoImporter) importMemo(record *memoexport.Memo) error {
 	if err != nil {
 		return err
 	}
-	if err := usagelimit.CheckMemoContentSize(i.ctx, i.service.Store, i.user.ID, int64(len(content))); err != nil {
-		return err
-	}
 	targetUID := record.UID
 	if existing := i.existing[record.UID]; existing != nil {
 		if existing.CreatorID == i.user.ID {
@@ -269,6 +265,8 @@ func (i *memoImporter) replaceMemo(record *memoexport.Memo, existing *store.Memo
 	if err != nil {
 		return err
 	}
+	// Replacing the content of an existing memo does not recreate it.
+	next.Payload.CreationChannel = existing.Payload.GetCreationChannel()
 	if record.Parent != "" && (existing.ParentUID == nil || *existing.ParentUID != record.Parent) {
 		i.warn(record.UID, "comment threading of an existing memo cannot be changed; the parent from the archive was ignored")
 	}
@@ -366,6 +364,9 @@ func (i *memoImporter) buildMemo(record *memoexport.Memo, uid string, content []
 	}
 	if err := memopayload.RebuildMemoPayload(i.ctx, memo, i.service.MarkdownService); err != nil {
 		return nil, errors.Wrap(err, "failed to rebuild memo payload")
+	}
+	if store.IsMemoCreationChannel(record.CreationChannel) {
+		memo.Payload.CreationChannel = record.CreationChannel
 	}
 	if record.Location != nil {
 		memo.Payload.Location = &storepb.MemoPayload_Location{
@@ -495,9 +496,6 @@ func (i *memoImporter) storeAttachment(entry *memoexport.Attachment, uid, mimeTy
 			return "", errors.Wrap(err, "failed to create external attachment")
 		}
 		return AttachmentNamePrefix + attachment.UID, nil
-	}
-	if err := i.service.checkFileSizeQuota(i.ctx, i.user.ID, entry.Size); err != nil {
-		return "", err
 	}
 	data, err := i.archive.ReadAttachment(entry)
 	if err != nil {

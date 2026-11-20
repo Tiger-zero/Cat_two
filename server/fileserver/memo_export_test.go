@@ -111,6 +111,41 @@ func TestServeMemoExport_RefusesMembersAndAnonymous(t *testing.T) {
 	require.Contains(t, forbidden.Body.String(), "forbidden access")
 }
 
+func TestServeMemoExport_SelectedMemos(t *testing.T) {
+	ctx := context.Background()
+	f, cleanup := newMemoExportFixture(ctx, t)
+	defer cleanup()
+
+	owned, err := f.stores.ListMemos(ctx, &store.FindMemo{CreatorID: &f.admin.ID})
+	require.NoError(t, err)
+	require.Len(t, owned, 2)
+	other, err := f.stores.ListMemos(ctx, &store.FindMemo{CreatorID: &f.member.ID})
+	require.NoError(t, err)
+	require.Len(t, other, 2)
+
+	request := func(method, query string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(method, "/file/users/"+f.admin.Username+"/export?"+query, nil)
+		req.AddCookie(newRefreshTokenCookie(ctx, t, f.stores, f.admin.ID, f.svc.Secret))
+		recorder := httptest.NewRecorder()
+		f.mux.ServeHTTP(recorder, req)
+		return recorder
+	}
+	require.Equal(t, http.StatusBadRequest, request(http.MethodHead, "memo=%zz").Code)
+	require.Equal(t, http.StatusBadRequest, request(http.MethodGet, "memo=").Code)
+	require.Equal(t, http.StatusNotFound, request(http.MethodHead, "memo="+other[0].UID).Code)
+	require.Equal(t, http.StatusNotFound, request(http.MethodGet, "memo="+owned[0].UID+"&memo="+other[0].UID).Code)
+
+	query := "memo=" + owned[0].UID + "&memo=" + owned[0].UID
+	require.Equal(t, http.StatusOK, request(http.MethodHead, query).Code)
+	recorder := request(http.MethodGet, query)
+	require.Equal(t, http.StatusOK, recorder.Code)
+	archive, err := memoexport.Read(bytes.NewReader(recorder.Body.Bytes()), int64(recorder.Body.Len()))
+	require.NoError(t, err)
+	require.Len(t, archive.Memos, 1)
+	require.Equal(t, owned[0].UID, archive.Memos[0].UID)
+	require.Equal(t, 1, archive.Manifest.Counts.Memos)
+}
+
 func TestServeMemoExport_HeadPreflightChecksWithoutExporting(t *testing.T) {
 	ctx := context.Background()
 	f, cleanup := newMemoExportFixture(ctx, t)
@@ -148,7 +183,7 @@ type stubExporter struct {
 	err     error
 }
 
-func (e *stubExporter) WriteMemoExport(ctx context.Context, _ *store.User, w io.Writer, _ time.Time) error {
+func (e *stubExporter) WriteMemoExport(ctx context.Context, _ *store.User, w io.Writer, _ time.Time, _ ...string) error {
 	if e.err != nil {
 		return e.err
 	}

@@ -66,7 +66,6 @@ describe("isPublicRoute", () => {
   it("identifies anonymous-accessible page prefixes", () => {
     expect(isPublicRoute("/auth")).toBe(true);
     expect(isPublicRoute("/auth/signup")).toBe(true);
-    expect(isPublicRoute("/about")).toBe(true);
     expect(isPublicRoute("/explore")).toBe(true);
     expect(isPublicRoute("/memos/abc")).toBe(true);
     expect(isPublicRoute("/memos/shares/abc")).toBe(true);
@@ -79,6 +78,10 @@ describe("isPublicRoute", () => {
     expect(isPublicRoute("/inbox")).toBe(false);
     expect(isPublicRoute("/attachments")).toBe(false);
     expect(isPublicRoute("/archived")).toBe(false);
+  });
+
+  it("does not allow the removed About route for anonymous access", () => {
+    expect(isPublicRoute("/about")).toBe(false);
   });
 });
 
