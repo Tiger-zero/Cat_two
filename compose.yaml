@@ -4,6 +4,9 @@ services:
     restart: unless-stopped
     environment:
       MEMOS_DRIVER: sqlite
+      # Map NAS project variables to names supported by existing images.
+      MEMOS_UID: "${MEMOS_UID:-${PUID:-}}"
+      MEMOS_GID: "${MEMOS_GID:-${PGID:-}}"
     ports:
       - "${CAT_TWO_PORT:-5230}:5230"
     volumes:

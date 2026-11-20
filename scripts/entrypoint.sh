@@ -2,8 +2,8 @@
 
 # Fix ownership of the data directory (e.g. for users upgrading from older
 # versions where files were created as root) and drop to a non-root user.
-MEMOS_UID=${MEMOS_UID:-10001}
-MEMOS_GID=${MEMOS_GID:-10001}
+MEMOS_UID=${MEMOS_UID:-${PUID:-10001}}
+MEMOS_GID=${MEMOS_GID:-${PGID:-10001}}
 DATA_DIR="/var/opt/memos"
 
 # MEMOS_ENTRYPOINT_SWITCHED marks that the privilege drop below has already run.

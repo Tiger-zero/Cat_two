@@ -26,6 +26,19 @@ docker build -f scripts/Dockerfile \
 CAT_TWO_IMAGE=cat-two:local docker compose up -d
 ```
 
+## NAS 数据目录权限
+
+如果数据目录由 NAS 共享文件夹提供，可以在 Compose 项目的 `.env` 中配置应用的运行身份。绿联 NAS 上可按界面提示设置：
+
+```dotenv
+PUID=1000
+PGID=10
+```
+
+本仓库的 Compose 会把项目的 `PUID/PGID` 转成现有镜像也支持的 `MEMOS_UID/MEMOS_GID`。应用仍需对挂载到 `/var/opt/memos` 的原数据目录拥有读写权限。修改环境变量后重新创建服务，继续使用原有挂载。
+
+默认运行身份为 `10001:10001`。`MEMOS_UID` 和 `MEMOS_GID` 分别优先于 `PUID` 和 `PGID`。若直接编辑 NAS 的服务 `environment`，可以写入 `MEMOS_UID: "1000"` 和 `MEMOS_GID: "10"`，以兼容已发布的镜像。
+
 ## 在网页里管理笔记
 
 - 在时间线创建笔记，可用 Markdown 写标题、清单、链接和代码片段。
