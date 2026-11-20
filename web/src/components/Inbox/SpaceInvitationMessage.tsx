@@ -8,8 +8,10 @@ import { useSpaceContext } from "@/contexts/SpaceContext";
 import useCurrentUser from "@/hooks/useCurrentUser";
 import { useAcceptSpaceInvitation, useDeclineSpaceInvitation } from "@/hooks/useSpaceQueries";
 import { useArchiveNotification, useDeleteNotification } from "@/hooks/useUserQueries";
+import i18n from "@/i18n";
 import { handleError } from "@/lib/error";
 import { extractSpaceUidFromName } from "@/lib/space-display";
+import { APP_TIME_ZONE } from "@/lib/time-zone";
 import { showErrorToast, toast } from "@/lib/toast";
 import { cn } from "@/lib/utils";
 import {
@@ -35,6 +37,7 @@ function SpaceInvitationMessage({ notification }: Props) {
   const payload = notification.payload?.case === "spaceInvitation" ? notification.payload.value : undefined;
   const space = payload?.space;
   const sender = notification.senderUser;
+  const createdAt = notification.createTime ? timestampDate(notification.createTime) : undefined;
 
   const handleArchiveMessage = async (silence = false) => {
     try {
@@ -134,10 +137,10 @@ function SpaceInvitationMessage({ notification }: Props) {
               <span className="mu-label text-mu-text/95">{sender?.displayName || sender?.username}</span>
               <span className="mu-body text-mu-text-secondary/80">{t("inbox.space-invitation")}</span>
               <span className="mu-caption text-mu-text-secondary/60">
-                {notification.createTime &&
+                {createdAt &&
                   t("common.date-at-time", {
-                    date: timestampDate(notification.createTime).toLocaleDateString([], { month: "short", day: "numeric" }),
-                    time: timestampDate(notification.createTime).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+                    date: createdAt.toLocaleDateString(i18n.language, { timeZone: APP_TIME_ZONE, month: "short", day: "numeric" }),
+                    time: createdAt.toLocaleTimeString(i18n.language, { timeZone: APP_TIME_ZONE, hour: "2-digit", minute: "2-digit" }),
                   })}
               </span>
             </div>

@@ -20,9 +20,9 @@ describe("<LocalePicker>", () => {
 
     const input = await screen.findByRole("combobox", { name: "Language" });
     fireEvent.click(screen.getByRole("button", { name: "Language" }));
-    fireEvent.change(input, { target: { value: "Deutsch" } });
-    fireEvent.click(await screen.findByRole("option", { name: /Deutsch/ }));
+    fireEvent.change(input, { target: { value: "中文" } });
+    fireEvent.click(await screen.findByRole("option", { name: /简体中文/ }));
 
-    expect(picked).toEqual(["de"]);
+    expect(picked).toEqual(["zh-Hans"]);
   });
 });

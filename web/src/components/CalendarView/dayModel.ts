@@ -8,12 +8,12 @@ import {
   type Root,
   visit,
 } from "@usememos/editor";
-import dayjs from "dayjs";
 import type { MemoTimeBasis } from "@/contexts/ViewContext";
 import { getMemoSortTime } from "@/hooks/useMemoSorting";
 import { ISO_DATE_FORMAT } from "@/lib/calendar-utils";
 import { allowedAttributeValue } from "@/lib/html-sanitize-schema";
 import { parseMemoAst } from "@/lib/memo-ast";
+import { inAppTimeZone } from "@/lib/time-zone";
 import type { Memo } from "@/types/proto/api/memo_service_pb";
 import { getAttachmentThumbnailUrl, getAttachmentUrl, isImage } from "@/utils/attachment";
 import { classifyManagedAttachmentImageURL, extractAttachmentUIDFromName } from "@/utils/managed-attachment";
@@ -198,7 +198,7 @@ export const buildCalendarMonthModel = (
   const model: CalendarMonthModel = {};
   const fileFallbacks = new Map<string, CalendarDayExcerpt>();
   for (const { memo, time } of dated) {
-    const date = dayjs(time).format(ISO_DATE_FORMAT);
+    const date = inAppTimeZone(time).format(ISO_DATE_FORMAT);
     const summary = (model[date] ??= { memos: [], creators: [], images: [] });
     summary.memos.push(memo);
     if (!summary.creators.includes(memo.creator)) summary.creators.push(memo.creator);

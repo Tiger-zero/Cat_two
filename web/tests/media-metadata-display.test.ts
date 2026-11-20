@@ -1,4 +1,5 @@
 import { create } from "@bufbuild/protobuf";
+import { timestampFromDate } from "@bufbuild/protobuf/wkt";
 import { describe, expect, it } from "vitest";
 import { AttachmentSchema, MediaMetadataSchema, VideoMetadataSchema } from "@/types/proto/api/attachment_service_pb";
 import { buildMediaMetadataDisplay, formatExposureTime, formatMediaDuration } from "@/utils/media-metadata";
@@ -30,6 +31,23 @@ describe("media metadata display formatting", () => {
       dimensions: "1920 × 1080 px",
       duration: "0:13",
       hasSavedMetadata: true,
+    });
+  });
+
+  it("uses Shanghai time for uploads and keeps the camera's recorded local time", () => {
+    const attachment = create(AttachmentSchema, {
+      filename: "photo.jpg",
+      type: "image/jpeg",
+      createTime: timestampFromDate(new Date("2026-11-20T18:00:00Z")),
+      mediaMetadata: {
+        details: { case: "photo", value: { captureTime: { localDateTime: "2026-11-19T15:30:00", utcOffset: "-08:00" } } },
+      },
+    });
+
+    expect(buildMediaMetadataDisplay([attachment], "en-US")).toMatchObject({
+      uploaded: "Nov 21, 2026, 2:00 AM",
+      captured: "Nov 19, 2026, 03:30:00 PM",
+      utcOffset: "-08:00",
     });
   });
 });

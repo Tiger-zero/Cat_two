@@ -1,5 +1,5 @@
-import dayjs from "dayjs";
 import { useMemo } from "react";
+import { calendarDate } from "@/lib/time-zone";
 import type { CalendarData, CalendarDayCell } from "./types";
 
 const DAYS_IN_WEEK = 7;
@@ -26,7 +26,7 @@ export const rotateWeekdays = <T>(labels: T[], weekStartDayOffset: number): T[] 
  * the list is a whole number of weeks aligned to `weekStartDayOffset`.
  */
 export const buildMonthDays = ({ month, data, weekStartDayOffset, today, selectedDate }: MonthDaysParams): CalendarDayCell[] => {
-  const monthStart = dayjs(month).startOf("month");
+  const monthStart = calendarDate(month).startOf("month");
   const monthEnd = monthStart.endOf("month");
   const monthKey = monthStart.format("YYYY-MM");
 

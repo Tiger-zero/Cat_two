@@ -11,7 +11,6 @@ const geometry = (popup: Locator) =>
 for (const [locale, label] of [
   ["en", "Use default icon"],
   ["zh-Hans", "使用默认图标"],
-  ["de", "Standardsymbol verwenden"],
 ]) {
   for (const theme of ["light", "dark"]) {
     test(`${locale} ${theme}: the default action and tabs keep the picker stable`, async ({ page }, testInfo) => {

@@ -11,7 +11,7 @@ docker compose up -d
 docker compose logs -f cat-two
 ```
 
-在浏览器打开服务器的 5230 端口，按页面提示创建管理员账号。SQLite 数据和本地附件保存在 Compose 管理的 `cat_two_data` 卷中，容器内的挂载路径为 `/var/opt/memos`。升级前请备份这个卷。镜像更新后可以运行 `docker compose pull` 和 `docker compose up -d`。
+在浏览器打开服务器的 5230 端口，按页面提示创建管理员账号。SQLite 数据和本地附件保存在 Compose 管理的 `cat_two_data` 卷中，容器内的挂载路径为 `/var/opt/memos`。升级前请备份这个卷。镜像更新后可以运行 `docker compose pull` 和 `docker compose up -d`。镜像和 Compose 默认使用 `Asia/Shanghai` 时区，可用 `TZ` 覆盖。
 
 在 GitHub Actions 中打开 **Cat_two Container**，选择 `main` 和 `dockerhub` 并运行工作流。它使用仓库的 `DOCKERHUB_USERNAME` 和 `DOCKERHUB_TOKEN` Secrets 登录 Docker Hub。通过启动验证后，工作流会将 AMD64 和 ARM64 镜像发布到 `docker.io/tiger2896/cat_two`，标签为 `latest` 和 `sha-<完整提交 SHA>`。也可在推送到 `main` 的最新提交消息中加上 `[publish dockerhub]` 来触发发布。手动选择 `ghcr` 时，目标为 `ghcr.io/tiger-zero/cat_two`。
 
@@ -26,20 +26,30 @@ docker build -f scripts/Dockerfile \
 CAT_TWO_IMAGE=cat-two:local docker compose up -d
 ```
 
-## NAS 数据目录权限
+## 在 NAS 上部署
 
-如果数据目录由 NAS 共享文件夹提供，可以在 Compose 项目的 `.env` 中配置应用的运行身份。绿联 NAS 上可按界面提示设置：
+绿联 NAS 可以导入 [compose.nas.yaml](compose.nas.yaml)，也可以从仓库目录运行：
+
+```sh
+docker compose -f compose.nas.yaml up -d
+```
+
+这份配置把 NAS 上的 `/volume1/docker/cat2/data` 挂载到容器的 `/var/opt/memos`，应用默认以 `1000:10` 运行，网页端口为 `5230`。首次部署需先创建该目录并授予运行身份读写权限。已有 NAS 实例应继续使用存放 SQLite 数据和附件的原路径，备份后再更新。如果现有实例使用普通 Compose 的 `cat_two_data` 命名卷，请继续用原配置升级。NAS 配置会读取指定目录中的数据。
+
+如果本机目录、运行身份或端口不同，可以在 NAS 项目的环境变量中设置对应值。也可以放在 Compose 使用的 `.env` 文件中：
 
 ```dotenv
 PUID=1000
 PGID=10
+CAT_TWO_DATA_DIR=/volume1/docker/cat2/data
+CAT_TWO_PORT=5230
 ```
 
-本仓库的 Compose 会把项目的 `PUID/PGID` 转成现有镜像也支持的 `MEMOS_UID/MEMOS_GID`。应用仍需对挂载到 `/var/opt/memos` 的原数据目录拥有读写权限。修改环境变量后重新创建服务，继续使用原有挂载。
-
-默认运行身份为 `10001:10001`。`MEMOS_UID` 和 `MEMOS_GID` 分别优先于 `PUID` 和 `PGID`。若直接编辑 NAS 的服务 `environment`，可以写入 `MEMOS_UID: "1000"` 和 `MEMOS_GID: "10"`，以兼容已发布的镜像。
+两份 Compose 都会把项目的 `PUID/PGID` 转成已发布镜像也支持的 `MEMOS_UID/MEMOS_GID`。显式设置的 `MEMOS_UID/MEMOS_GID` 优先。普通 Compose 的默认运行身份为 `10001:10001`。
 
 ## 在网页里管理笔记
+
+界面默认使用简体中文，可在「设置 → 偏好设置 → 语言」切换为 English。网页的时间和日历按上海时区显示。
 
 - 在时间线创建笔记，可用 Markdown 写标题、清单、链接和代码片段。
 - 用标签和空间整理主题，在搜索中按关键词找回内容。

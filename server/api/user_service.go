@@ -587,7 +587,7 @@ func convertUserWriteError(err error, context string) error {
 
 func getDefaultUserGeneralSetting() *apipb.UserSetting_GeneralSetting {
 	return &apipb.UserSetting_GeneralSetting{
-		Locale:         "en",
+		Locale:         "zh-Hans",
 		MemoVisibility: "PRIVATE",
 		Theme:          "",
 	}

@@ -4,6 +4,7 @@ import { Link, useLocation } from "react-router-dom";
 import RelativeTime from "@/components/RelativeTime";
 import { useNewMemo } from "@/contexts/NewMemoContext";
 import i18n from "@/i18n";
+import { APP_TIME_ZONE } from "@/lib/time-zone";
 import { cn } from "@/lib/utils";
 import { getCreatorHomePath } from "@/router/routes";
 import { Visibility } from "@/types/proto/api/memo_service_pb";
@@ -33,9 +34,9 @@ const MemoHeader: React.FC<MemoHeaderProps> = ({ timeDisplay = "relative", showC
   const visibilityOption = getVisibilityOption(memo.visibility);
 
   const timeValue = isArchived ? (
-    memoDisplayTime?.toLocaleString(i18n.language)
+    memoDisplayTime?.toLocaleString(i18n.language, { timeZone: APP_TIME_ZONE })
   ) : timeDisplay === "time" ? (
-    memoDisplayTime?.toLocaleTimeString(i18n.language, { hour: "numeric", minute: "2-digit" })
+    memoDisplayTime?.toLocaleTimeString(i18n.language, { timeZone: APP_TIME_ZONE, hour: "numeric", minute: "2-digit" })
   ) : (
     <RelativeTime date={memoDisplayTime} format={relativeTimeFormat} />
   );
@@ -47,10 +48,12 @@ const MemoHeader: React.FC<MemoHeaderProps> = ({ timeDisplay = "relative", showC
     timeValue
   );
   const timeTooltip = {
-    createdAt: createTime ? `${t("common.created-at")}: ${createTime.toLocaleString(i18n.language)}` : undefined,
+    createdAt: createTime
+      ? `${t("common.created-at")}: ${createTime.toLocaleString(i18n.language, { timeZone: APP_TIME_ZONE })}`
+      : undefined,
     updatedAt:
       updateTime && (!createTime || updateTime.getTime() !== createTime.getTime())
-        ? `${t("common.last-updated-at")}: ${updateTime.toLocaleString(i18n.language)}`
+        ? `${t("common.last-updated-at")}: ${updateTime.toLocaleString(i18n.language, { timeZone: APP_TIME_ZONE })}`
         : undefined,
   };
   const spaceMetadata = showSpace && memo.space ? <MemoSpaceBadge spaceName={memo.space} /> : null;

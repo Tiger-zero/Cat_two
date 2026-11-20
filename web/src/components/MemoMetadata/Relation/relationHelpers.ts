@@ -1,3 +1,4 @@
+import { APP_TIME_ZONE, inAppTimeZone } from "@/lib/time-zone";
 import type { MemoRelation } from "@/types/proto/api/memo_service_pb";
 import { MemoRelation_Type } from "@/types/proto/api/memo_service_pb";
 
@@ -48,7 +49,8 @@ export const getEditorBacklinkRelations = (relations: MemoRelation[], memoName?:
 /** A related memo's date on its row: month and day, with the year when it isn't this year. */
 export const formatRelationDate = (date: Date, locale: string): string =>
   date.toLocaleDateString(locale, {
+    timeZone: APP_TIME_ZONE,
     month: "short",
     day: "numeric",
-    year: date.getFullYear() === new Date().getFullYear() ? undefined : "numeric",
+    year: inAppTimeZone(date).year() === inAppTimeZone().year() ? undefined : "numeric",
   });

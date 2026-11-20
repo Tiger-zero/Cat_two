@@ -5,6 +5,8 @@ import copy from "copy-to-clipboard";
 import { CheckIcon, CopyIcon, LinkIcon, Trash2Icon } from "lucide-react";
 import { useMemo, useState } from "react";
 import { getShareUrl, useCreateMemoShare, useDeleteMemoShare, useMemoShares } from "@/hooks/useMemoShareQueries";
+import i18n from "@/i18n";
+import { APP_TIME_ZONE } from "@/lib/time-zone";
 import { showErrorToast, toast } from "@/lib/toast";
 import type { MemoShare } from "@/types/proto/api/memo_service_pb";
 import { useTranslate } from "@/utils/i18n";
@@ -13,17 +15,14 @@ type ExpiryOption = "never" | "1d" | "7d" | "30d";
 
 function getExpireDate(option: ExpiryOption): Date | undefined {
   if (option === "never") return undefined;
-  const d = new Date();
-  if (option === "1d") d.setDate(d.getDate() + 1);
-  else if (option === "7d") d.setDate(d.getDate() + 7);
-  else if (option === "30d") d.setDate(d.getDate() + 30);
-  return d;
+  const days = Number.parseInt(option, 10);
+  return new Date(Date.now() + days * 24 * 60 * 60 * 1000);
 }
 
 function formatExpiry(share: MemoShare, t: ReturnType<typeof useTranslate>): string {
   if (!share.expireTime) return t("memo.share.never-expires");
   const d = timestampDate(share.expireTime);
-  return t("memo.share.expires-on", { date: d.toLocaleDateString() });
+  return t("memo.share.expires-on", { date: d.toLocaleDateString(i18n.language, { timeZone: APP_TIME_ZONE }) });
 }
 
 interface ShareLinkRowProps {

@@ -1,10 +1,11 @@
 import type { MemoFilter } from "@/contexts/MemoFilterContext";
-import { parseLocalDate } from "@/lib/calendar-utils";
+import { ISO_DATE_FORMAT } from "@/lib/calendar-utils";
+import { inAppTimeZone, parseAppDateTime } from "@/lib/time-zone";
 
 /**
  * Derive a default `createTime` for a new memo from the active memo filters.
- * If a `displayTime:YYYY-MM-DD` filter is present, returns that local date
- * combined with `now`'s wall-clock hh:mm:ss. Returns undefined otherwise or
+ * If a `displayTime:YYYY-MM-DD` filter is present, combines that day
+ * with `now`'s Shanghai clock time. Returns undefined otherwise or
  * when the filter value is malformed.
  */
 export function deriveDefaultCreateTimeFromFilters(filters: MemoFilter[], now: Date = new Date()): Date | undefined {
@@ -14,20 +15,16 @@ export function deriveDefaultCreateTimeFromFilters(filters: MemoFilter[], now: D
 }
 
 /**
- * The local date `YYYY-MM-DD` combined with `now`'s wall-clock hh:mm:ss, so a memo composed
+ * The date `YYYY-MM-DD` combined with `now`'s Shanghai clock time, so a memo composed
  * for a past day still orders naturally within it. Undefined for a malformed date.
  */
 export function deriveDefaultCreateTimeFromDate(value: string, now: Date = new Date()): Date | undefined {
-  const date = parseLocalDate(value);
-  if (!date) return undefined;
-  return withTimeOfDay(date, now);
+  return parseAppDateTime(`${value} ${inAppTimeZone(now).format("HH:mm:ss")}`);
 }
 
-/** A copy of `date` whose wall-clock hh:mm:ss is taken from `now`; the calendar day is kept. */
-export function withTimeOfDay(date: Date, now: Date = new Date()): Date {
-  const next = new Date(date);
-  next.setHours(now.getHours(), now.getMinutes(), now.getSeconds(), 0);
-  return next;
+/** Combine the Shanghai calendar day of `date` with the Shanghai clock time of `now`. */
+export function withTimeOfDay(date: Date, now: Date = new Date()): Date | undefined {
+  return deriveDefaultCreateTimeFromDate(inAppTimeZone(date).format(ISO_DATE_FORMAT), now);
 }
 
 /**
@@ -43,5 +40,5 @@ export function restampDefaultCreateTime(
   now: Date = new Date(),
 ): Date | undefined {
   if (!time || !defaultCreateTime || time !== defaultCreateTime) return time;
-  return withTimeOfDay(time, now);
+  return withTimeOfDay(time, now) ?? time;
 }

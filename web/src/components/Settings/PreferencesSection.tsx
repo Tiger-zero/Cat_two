@@ -4,8 +4,9 @@ import { useMemo } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { updateDevicePreferences, useDevicePreferences } from "@/hooks/useDevicePreferences";
 import { useUpdateUserGeneralSetting } from "@/hooks/useUserQueries";
+import { DEFAULT_LOCALE } from "@/i18n";
 import { UserSetting_GeneralSetting, UserSetting_GeneralSettingSchema } from "@/types/proto/api/user_service_pb";
-import { loadLocale, useTranslate } from "@/utils/i18n";
+import { findNearestMatchedLanguage, loadLocale, useTranslate } from "@/utils/i18n";
 import { convertVisibilityFromString, DEFAULT_VISIBILITY_OPTIONS } from "@/utils/memo";
 import { loadTheme } from "@/utils/theme";
 import LocaleSelect from "../LocaleSelect";
@@ -80,7 +81,7 @@ const PreferencesSection = () => {
   const setting: UserSetting_GeneralSetting =
     generalSetting ||
     create(UserSetting_GeneralSettingSchema, {
-      locale: "en",
+      locale: DEFAULT_LOCALE,
       memoVisibility: "PRIVATE",
       theme: "system",
       saveMediaMetadata: false,
@@ -91,7 +92,7 @@ const PreferencesSection = () => {
       <SettingGroup title={t("setting.preference.appearance-title")} description={t("setting.preference.appearance-description")}>
         <SettingList>
           <SettingListItem label={t("common.language")} description={t("setting.preference.language-description")}>
-            <LocaleSelect value={setting.locale} onChange={handleLocaleSelectChange} />
+            <LocaleSelect value={findNearestMatchedLanguage(setting.locale)} onChange={handleLocaleSelectChange} />
           </SettingListItem>
 
           <SettingListItem label={t("setting.preference.theme")} description={t("setting.preference.theme-description")}>

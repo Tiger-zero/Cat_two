@@ -21,6 +21,7 @@ import { sidebarSurfaceVariants } from "@/components/AppSidebar/sidebar-layout";
 import { MEMO_CARD_BASE_CLASSES } from "@/components/MemoView/constants";
 import UserAvatar from "@/components/UserAvatar";
 import VisibilityIcon from "@/components/VisibilityIcon";
+import { inAppTimeZone } from "@/lib/time-zone";
 import { cn } from "@/lib/utils";
 import { Visibility } from "@/types/proto/api/memo_service_pb";
 import { useTranslate } from "@/utils/i18n";
@@ -129,9 +130,8 @@ export const WriteHeader = () => {
 };
 
 const currentMonth = () => {
-  const now = new Date();
-  const month = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
-  return { month, today: now.getDate() };
+  const now = inAppTimeZone();
+  return { month: now.format("YYYY-MM"), today: now.date() };
 };
 
 /** Keep: this month's calendar beside the sidebar's tool row, Views and Tags. */

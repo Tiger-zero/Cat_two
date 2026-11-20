@@ -1,0 +1,23 @@
+services:
+  cat-two:
+    image: ${CAT_TWO_IMAGE:-docker.io/tiger2896/cat_two:latest}
+    restart: unless-stopped
+    environment:
+      TZ: "${TZ:-Asia/Shanghai}"
+      MEMOS_DRIVER: sqlite
+      MEMOS_UID: "${MEMOS_UID:-${PUID:-1000}}"
+      MEMOS_GID: "${MEMOS_GID:-${PGID:-10}}"
+    ports:
+      - "${CAT_TWO_PORT:-5230}:5230"
+    volumes:
+      - type: bind
+        source: ${CAT_TWO_DATA_DIR:-/volume1/docker/cat2/data}
+        target: /var/opt/memos
+        bind:
+          create_host_path: false
+    healthcheck:
+      test: ["CMD", "wget", "-Y", "off", "-q", "-O", "/dev/null", "http://127.0.0.1:5230/healthz"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 15s

@@ -8,8 +8,8 @@ import { type Memo, MemoSchema } from "@/types/proto/api/memo_service_pb";
 const memoAt = (hour: number, overrides: MessageInitShape<typeof MemoSchema> = {}): Memo =>
   create(MemoSchema, {
     name: `memos/${hour}`,
-    createTime: timestampFromDate(new Date(2026, 7, 2, hour)),
-    updateTime: timestampFromDate(new Date(2026, 7, 3, hour)),
+    createTime: timestampFromDate(new Date(`2026-08-02T${String(hour).padStart(2, "0")}:00:00+08:00`)),
+    updateTime: timestampFromDate(new Date(`2026-08-03T${String(hour).padStart(2, "0")}:00:00+08:00`)),
     ...overrides,
   });
 const image = (name: string) => create(AttachmentSchema, { name: `attachments/${name}`, filename: `${name}.jpg`, type: "image/jpeg" });
@@ -17,7 +17,7 @@ const pdf = create(AttachmentSchema, { name: "attachments/doc", filename: "doc.p
 const day = (memos: Memo[]) => buildCalendarMonthModel(memos, "create_time")["2026-08-02"];
 
 describe("calendar day snapshots", () => {
-  it("groups by local day and keeps every memo in chronological order", () => {
+  it("groups by Shanghai day and keeps every memo in chronological order", () => {
     const memos = Array.from({ length: 24 }, (_, i) => memoAt(i, { content: `memo ${i}` })).reverse();
     const summary = day(memos);
     expect(summary.memos).toHaveLength(24);

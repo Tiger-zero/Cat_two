@@ -18,9 +18,9 @@ vi.mock("@/utils/i18n", async (importOriginal) => ({
   useTranslate: () => (key: string) => key,
 }));
 
-const originalCreate = new Date(2020, 0, 1, 10, 20, 30);
-const originalUpdate = new Date(2020, 0, 2, 11, 22, 33);
-const customTime = new Date(2024, 1, 29, 12, 34, 56);
+const originalCreate = new Date("2020-01-01T10:20:30+08:00");
+const originalUpdate = new Date("2020-01-02T11:22:33+08:00");
+const customTime = new Date("2024-02-29T04:34:56Z");
 let editor: ReturnType<typeof useEditorContext>;
 
 function Probe() {
@@ -88,7 +88,7 @@ describe("memo editor timestamps", () => {
     "2024-13-01 12:34:56",
     "2024-02-29 24:34:56",
     "invalid",
-  ])("rejects invalid local time %s without changing the saved timestamp", async (value) => {
+  ])("rejects invalid Shanghai time %s without changing the saved timestamp", async (value) => {
     const memo = renderEditor();
     const input = screen.getAllByRole("textbox")[0];
     fireEvent.change(input, { target: { value } });

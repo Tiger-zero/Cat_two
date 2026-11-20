@@ -173,7 +173,7 @@ describe("User menu panel", () => {
       field: "theme",
       label: /setting.preference.theme.*setting.preference.theme-dark/,
     },
-    { row: /common.language/, choice: "Français", load: loadLocale, value: "fr", field: "locale", label: /common.language.*Français/ },
+    { row: /common.language/, choice: "简体中文", load: loadLocale, value: "zh-Hans", field: "locale", label: /common.language.*简体中文/ },
   ] as const)("applies and saves $field from its submenu", async ({ row, choice, load, value, field, label }) => {
     renderMenu();
     fireEvent.click(screen.getByRole("button", { name: row }));
@@ -195,7 +195,7 @@ describe("User menu panel", () => {
       value: "default-dark",
       label: /setting.preference.theme.*setting.preference.theme-dark/,
     },
-    { row: /common.language/, choice: "Français", storageKey: "memos-locale", value: "fr", label: /common.language.*Français/ },
+    { row: /common.language/, choice: "简体中文", storageKey: "memos-locale", value: "zh-Hans", label: /common.language.*简体中文/ },
   ] as const)("persists a guest's choice of $storageKey locally without updating an account", async ({
     row,
     choice,

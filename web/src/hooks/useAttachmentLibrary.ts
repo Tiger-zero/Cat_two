@@ -1,5 +1,4 @@
 import { timestampDate } from "@bufbuild/protobuf/wkt";
-import dayjs from "dayjs";
 import { useEffect, useMemo } from "react";
 import {
   getAttachmentMetadata,
@@ -9,6 +8,7 @@ import {
 } from "@/components/MemoMetadata/Attachment/attachmentHelpers";
 import { useInfiniteAttachments } from "@/hooks/useAttachmentQueries";
 import { combineCELFilters } from "@/lib/cel-filter";
+import { APP_TIME_ZONE, inAppTimeZone } from "@/lib/time-zone";
 import type { Attachment, ListAttachmentsRequest } from "@/types/proto/api/attachment_service_pb";
 import { getAttachmentUrl, isMotionAttachment } from "@/utils/attachment";
 import { useTranslate } from "@/utils/i18n";
@@ -106,6 +106,7 @@ const formatCreatedAt = (date: Date | undefined, locale: string) => {
   }
 
   return date.toLocaleDateString(locale, {
+    timeZone: APP_TIME_ZONE,
     month: "short",
     day: "numeric",
     year: "numeric",
@@ -150,7 +151,7 @@ const groupMediaByMonth = (
   const groups = new Map<string, AttachmentLibraryMediaItem[]>();
 
   for (const item of items) {
-    const key = item.createdAt ? dayjs(item.createdAt).format("YYYY-MM") : "unknown";
+    const key = item.createdAt ? inAppTimeZone(item.createdAt).format("YYYY-MM") : "unknown";
     const group = groups.get(key) ?? [];
     group.push(item);
     groups.set(key, group);
@@ -161,12 +162,11 @@ const groupMediaByMonth = (
     .map(([key, groupedItems]) => ({
       key,
       label:
-        key === "unknown"
-          ? unknownDateLabel
-          : dayjs(`${key}-01`).toDate().toLocaleDateString(locale, {
-              month: "short",
-              year: "numeric",
-            }),
+        groupedItems[0].createdAt?.toLocaleDateString(locale, {
+          timeZone: APP_TIME_ZONE,
+          month: "short",
+          year: "numeric",
+        }) ?? unknownDateLabel,
       items: groupedItems.sort((a, b) => sortByNewest(a.createdAt, b.createdAt)),
     }));
 };

@@ -72,6 +72,7 @@ func TestGeneralUserSettingSaveMediaMetadata(t *testing.T) {
 	defaultSetting, err := ts.Service.GetUserSetting(userCtx, &apipb.GetUserSettingRequest{Name: settingName})
 	require.NoError(t, err)
 	require.False(t, defaultSetting.GetGeneralSetting().GetSaveMediaMetadata())
+	require.Equal(t, "zh-Hans", defaultSetting.GetGeneralSetting().GetLocale())
 
 	updated, err := ts.Service.UpdateUserSetting(userCtx, &apipb.UpdateUserSettingRequest{
 		UserSetting: &apipb.UserSetting{
@@ -84,20 +85,20 @@ func TestGeneralUserSettingSaveMediaMetadata(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.True(t, updated.GetGeneralSetting().GetSaveMediaMetadata())
-	require.Equal(t, "en", updated.GetGeneralSetting().GetLocale())
+	require.Equal(t, "zh-Hans", updated.GetGeneralSetting().GetLocale())
 	require.Equal(t, "PRIVATE", updated.GetGeneralSetting().GetMemoVisibility())
 
 	updated, err = ts.Service.UpdateUserSetting(userCtx, &apipb.UpdateUserSettingRequest{
 		UserSetting: &apipb.UserSetting{
 			Name: settingName,
 			Value: &apipb.UserSetting_GeneralSetting_{
-				GeneralSetting: &apipb.UserSetting_GeneralSetting{Locale: "ja"},
+				GeneralSetting: &apipb.UserSetting_GeneralSetting{Locale: "en"},
 			},
 		},
 		UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"locale"}},
 	})
 	require.NoError(t, err)
-	require.Equal(t, "ja", updated.GetGeneralSetting().GetLocale())
+	require.Equal(t, "en", updated.GetGeneralSetting().GetLocale())
 	require.True(t, updated.GetGeneralSetting().GetSaveMediaMetadata())
 
 	updated, err = ts.Service.UpdateUserSetting(userCtx, &apipb.UpdateUserSettingRequest{
@@ -111,6 +112,7 @@ func TestGeneralUserSettingSaveMediaMetadata(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.False(t, updated.GetGeneralSetting().GetSaveMediaMetadata())
+	require.Equal(t, "en", updated.GetGeneralSetting().GetLocale())
 }
 
 func TestUserTagSettings(t *testing.T) {

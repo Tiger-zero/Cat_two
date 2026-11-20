@@ -49,7 +49,7 @@ WORKDIR /var/opt/memos
 # Data directory
 VOLUME /var/opt/memos
 
-ENV TZ="UTC" \
+ENV TZ="Asia/Shanghai" \
     MEMOS_PORT="5230"
 
 EXPOSE 5230

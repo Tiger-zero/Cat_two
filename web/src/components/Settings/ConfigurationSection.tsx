@@ -1,5 +1,7 @@
 import { timestampDate } from "@bufbuild/protobuf/wkt";
 import { useConfigurationStatus } from "@/hooks/useConfigurationQueries";
+import i18n from "@/i18n";
+import { APP_TIME_ZONE } from "@/lib/time-zone";
 import type { ConfigurationStatus_ManagedResource } from "@/types/proto/api/instance_service_pb";
 import { useTranslate } from "@/utils/i18n";
 import InfoChip from "./InfoChip";
@@ -22,7 +24,10 @@ const ConfigurationSection = () => {
         <div className="flex flex-wrap gap-2">
           <InfoChip label={t("setting.configuration.serial")} value={status.serial.toString()} />
           {status.applyTime ? (
-            <InfoChip label={t("setting.configuration.last-apply")} value={timestampDate(status.applyTime).toLocaleString()} />
+            <InfoChip
+              label={t("setting.configuration.last-apply")}
+              value={timestampDate(status.applyTime).toLocaleString(i18n.language, { timeZone: APP_TIME_ZONE })}
+            />
           ) : null}
           <InfoChip label={t("setting.configuration.applied-by")} value={`${status.appliedBy} · ${status.version}`} />
         </div>

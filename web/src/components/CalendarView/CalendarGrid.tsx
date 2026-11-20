@@ -1,10 +1,10 @@
 import { useDirection } from "@base-ui/react/direction-provider";
-import dayjs from "dayjs";
 import { type KeyboardEvent, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { type CalendarData, calculateMaxCount, useMonthDays, useWeekdayLabels, WEEKDAY_LABEL_CLASSES } from "@/components/ActivityCalendar";
 import { useInstance } from "@/contexts/InstanceContext";
 import { useView } from "@/contexts/ViewContext";
 import { ISO_DATE_FORMAT } from "@/lib/calendar-utils";
+import { calendarDate } from "@/lib/time-zone";
 import { cn } from "@/lib/utils";
 import { CalendarDayCell, layoutForCellSize } from "./CalendarDayCell";
 import type { CalendarMonthModel } from "./dayModel";
@@ -62,7 +62,7 @@ export const CalendarGrid = ({
   // The same all-time ceiling the sidebar heatmap uses, so a day reads the same tint in both.
   const maxCount = useMemo(() => calculateMaxCount(counts), [counts]);
   const firstDate = `${month}-01`;
-  const lastDate = dayjs(firstDate).endOf("month").format(ISO_DATE_FORMAT);
+  const lastDate = calendarDate(firstDate).endOf("month").format(ISO_DATE_FORMAT);
   // One tab stop for the grid: the open day, else today, else the first of the month.
   const focusDate = selectedDate ?? getDefaultDate(month, today);
   const rowCount = Math.ceil(days.length / DAYS_IN_WEEK);
@@ -89,7 +89,7 @@ export const CalendarGrid = ({
     if (event.key in KEY_DELTAS) {
       const horizontal = event.key === "ArrowLeft" || event.key === "ArrowRight";
       const delta = KEY_DELTAS[event.key] * (horizontal && direction === "rtl" ? -1 : 1);
-      next = dayjs(current).add(delta, "day").format(ISO_DATE_FORMAT);
+      next = calendarDate(current).add(delta, "day").format(ISO_DATE_FORMAT);
     } else if (event.key === "Home") {
       next = firstDate;
     } else if (event.key === "End") {

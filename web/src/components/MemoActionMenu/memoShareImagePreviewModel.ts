@@ -1,5 +1,6 @@
 import { timestampDate } from "@bufbuild/protobuf/wkt";
 import { separateAttachments } from "@/components/MemoMetadata/Attachment/attachmentHelpers";
+import { APP_TIME_ZONE } from "@/lib/time-zone";
 import type { Memo } from "@/types/proto/api/memo_service_pb";
 import type { User } from "@/types/proto/api/user_service_pb";
 import { filterInlineManagedAttachments } from "@/utils/managed-attachment";
@@ -38,6 +39,7 @@ export const buildMemoShareImagePreviewModel = ({
   const avatarUrl = getMemoSharePreviewAvatarUrl(creator?.avatarUrl);
   const displayTime = memo.createTime ? timestampDate(memo.createTime) : undefined;
   const formattedDisplayTime = displayTime?.toLocaleString(locale, {
+    timeZone: APP_TIME_ZONE,
     dateStyle: "medium",
     timeStyle: "short",
   });

@@ -3,6 +3,7 @@ services:
     image: ${CAT_TWO_IMAGE:-docker.io/tiger2896/cat_two:latest}
     restart: unless-stopped
     environment:
+      TZ: "${TZ:-Asia/Shanghai}"
       MEMOS_DRIVER: sqlite
       # Map NAS project variables to names supported by existing images.
       MEMOS_UID: "${MEMOS_UID:-${PUID:-}}"

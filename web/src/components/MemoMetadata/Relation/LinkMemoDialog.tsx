@@ -2,6 +2,8 @@ import { timestampDate } from "@bufbuild/protobuf/wkt";
 import { Dialog, Input } from "@usememos/ui";
 import { LinkIcon } from "lucide-react";
 import { MemoPreview } from "@/components/MemoPreview";
+import i18n from "@/i18n";
+import { APP_TIME_ZONE } from "@/lib/time-zone";
 import { cn } from "@/lib/utils";
 import type { Memo } from "@/types/proto/api/memo_service_pb";
 import { useTranslate } from "@/utils/i18n";
@@ -65,7 +67,9 @@ export const LinkMemoDialog = ({
                     <div className="w-full flex flex-col gap-1">
                       <div className="flex items-center gap-1.5 mu-body text-mu-text-secondary select-none">
                         {alreadyLinked && <LinkIcon className="mu-icon-xs shrink-0" />}
-                        <span>{memo.createTime && timestampDate(memo.createTime).toLocaleString()}</span>
+                        <span>
+                          {memo.createTime && timestampDate(memo.createTime).toLocaleString(i18n.language, { timeZone: APP_TIME_ZONE })}
+                        </span>
                       </div>
                       <MemoPreview name={memo.name} content={memo.content} attachments={memo.attachments} showMemoId />
                     </div>

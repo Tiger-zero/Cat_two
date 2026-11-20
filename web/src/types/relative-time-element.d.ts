@@ -8,6 +8,7 @@ declare module "react" {
       "relative-time": HTMLAttributes<RelativeTimeElement> & {
         datetime?: string;
         format?: Format;
+        "time-zone"?: string;
         "no-title"?: string;
       };
     }

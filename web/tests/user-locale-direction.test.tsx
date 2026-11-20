@@ -29,11 +29,11 @@ describe("useUserLocale", () => {
     await i18n.changeLanguage(originalLanguage);
   });
 
-  it("keeps the user setting direction while its translations load", async () => {
+  it("uses Simplified Chinese for an unsupported account preference", async () => {
     const { result } = renderHook(() => useUserLocale());
 
-    await waitFor(() => expect(result.current).toBe("rtl"));
-    expect(document.documentElement).toHaveAttribute("lang", "ar");
-    expect(document.documentElement).toHaveAttribute("dir", "rtl");
+    await waitFor(() => expect(document.documentElement).toHaveAttribute("lang", "zh-Hans"));
+    expect(result.current).toBe("ltr");
+    expect(document.documentElement).toHaveAttribute("dir", "ltr");
   });
 });

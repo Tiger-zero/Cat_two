@@ -1,12 +1,12 @@
 import { timestampDate } from "@bufbuild/protobuf/wkt";
 import { Code, ConnectError } from "@connectrpc/connect";
 import { Button, Field, Fieldset, Radio, RadioGroup } from "@usememos/ui";
-import dayjs from "dayjs";
 import { DownloadIcon, UploadIcon } from "lucide-react";
 import { useRef, useState } from "react";
 import useCurrentUser from "@/hooks/useCurrentUser";
 import { getErrorMessage } from "@/lib/error";
 import { importStagedMemos, type StagedMemoImport, stageMemoImport } from "@/lib/memo-export";
+import { inAppTimeZone } from "@/lib/time-zone";
 import { showErrorToast, toast } from "@/lib/toast";
 import type { ImportMemosIssue, ImportMemosReport } from "@/types/proto/api/user_service_pb";
 import { ImportMemosRequest_ConflictPolicy, User_Role } from "@/types/proto/api/user_service_pb";
@@ -140,7 +140,7 @@ const MemoExportSection = () => {
               <StatRow
                 label={t("setting.memo-export.review-exported")}
                 value={`${stage.staged.plan.exporter} · ${
-                  stage.staged.plan.exportTime ? dayjs(timestampDate(stage.staged.plan.exportTime)).format("YYYY-MM-DD HH:mm") : ""
+                  stage.staged.plan.exportTime ? inAppTimeZone(timestampDate(stage.staged.plan.exportTime)).format("YYYY-MM-DD HH:mm") : ""
                 }`}
               />
               <StatRow label={t("setting.memo-export.review-memos")} value={String(stage.staged.plan.memoCount)} />

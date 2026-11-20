@@ -1,4 +1,5 @@
 import { create, type MessageInitShape } from "@bufbuild/protobuf";
+import { timestampFromDate } from "@bufbuild/protobuf/wkt";
 import { toBlob } from "html-to-image";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
@@ -42,6 +43,12 @@ const buildPreviewModel = (memo: Memo) =>
   });
 
 describe("memo share image preview model", () => {
+  it("shows the Shanghai date and time even when the note was created on the preceding UTC day", () => {
+    const memo = buildMemo({ createTime: timestampFromDate(new Date("2026-11-20T18:00:00Z")) });
+
+    expect(buildPreviewModel(memo).formattedDisplayTime).toBe("Nov 21, 2026, 2:00 AM");
+  });
+
   it("does not create footer chips for memo tags already rendered in content", () => {
     const memo = buildMemo({
       content: "Investigate #bug",

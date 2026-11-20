@@ -1,5 +1,4 @@
 import { Button, Tooltip } from "@usememos/ui";
-import dayjs from "dayjs";
 import { isEqual } from "lodash-es";
 import {
   BookmarkIcon,
@@ -23,11 +22,12 @@ import { useAppSidebar } from "@/contexts/AppSidebarContext";
 import { type FilterFactor, getMemoFilterKey, type MemoFilter, useMemoFilterContext } from "@/contexts/MemoFilterContext";
 import useCurrentUser from "@/hooks/useCurrentUser";
 import { useMemoViews } from "@/hooks/useUserQueries";
+import i18n from "@/i18n";
+import { parseLocalDate } from "@/lib/calendar-utils";
 import { getMemoViewId, isMemoCollectionRoute } from "@/lib/memo-views";
+import { APP_TIME_ZONE } from "@/lib/time-zone";
 import { cn } from "@/lib/utils";
 import { useTranslate } from "@/utils/i18n";
-
-const DATE_FILTER_FORMAT = "MMM D, YYYY";
 
 interface FilterConfig {
   icon: LucideIcon;
@@ -57,8 +57,8 @@ const FILTER_CONFIGS: Record<FilterFactor, FilterConfig> = {
   displayTime: {
     icon: CalendarIcon,
     getLabel: (value) => {
-      const date = dayjs(value);
-      return date.isValid() ? date.format(DATE_FILTER_FORMAT) : value;
+      const date = parseLocalDate(value);
+      return date?.toLocaleDateString(i18n.language, { timeZone: APP_TIME_ZONE, month: "short", day: "numeric", year: "numeric" }) ?? value;
     },
   },
   pinned: {

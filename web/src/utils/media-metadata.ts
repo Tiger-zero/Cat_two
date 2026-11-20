@@ -1,4 +1,5 @@
 import { timestampDate } from "@bufbuild/protobuf/wkt";
+import { APP_TIME_ZONE } from "@/lib/time-zone";
 import type { Attachment } from "@/types/proto/api/attachment_service_pb";
 import { formatFileSize, getFileTypeLabel } from "./format";
 
@@ -115,7 +116,9 @@ export const buildMediaMetadataDisplay = (attachments: Attachment[] | undefined,
         ? `${dimensionsMetadata.width} × ${dimensionsMetadata.height} px`
         : undefined,
     uploaded: primaryAttachment.createTime
-      ? new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeStyle: "short" }).format(timestampDate(primaryAttachment.createTime))
+      ? new Intl.DateTimeFormat(locale, { timeZone: APP_TIME_ZONE, dateStyle: "medium", timeStyle: "short" }).format(
+          timestampDate(primaryAttachment.createTime),
+        )
       : undefined,
     duration: video?.durationSeconds !== undefined ? formatMediaDuration(video.durationSeconds) : undefined,
     captured: photo?.captureTime?.localDateTime ? formatCivilDateTime(photo.captureTime.localDateTime, locale) : undefined,

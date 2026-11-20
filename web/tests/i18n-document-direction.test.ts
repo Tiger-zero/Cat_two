@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import i18n from "@/i18n";
-import { getLocaleDirection, loadLocale, subscribeToLocaleDirection } from "@/utils/i18n";
+import { applyDocumentLocale, applyLocaleEarly, getLocaleDirection, loadLocale, subscribeToLocaleDirection } from "@/utils/i18n";
 
 const originalLanguage = i18n.language;
 const originalLangAttribute = document.documentElement.getAttribute("lang");
@@ -23,9 +23,7 @@ describe("document locale direction", () => {
   });
 
   it.each([
-    ["ar", "rtl"],
-    ["fa", "rtl"],
-    ["he", "rtl"],
+    ["zh-Hans", "ltr"],
     ["en", "ltr"],
   ] as const)("sets %s as a %s document", (locale, direction) => {
     loadLocale(locale);
@@ -34,11 +32,17 @@ describe("document locale direction", () => {
     expect(document.documentElement).toHaveAttribute("dir", direction);
   });
 
+  it("uses Simplified Chinese at first load even with an English browser", () => {
+    localStorage.clear();
+    applyLocaleEarly();
+    expect(document.documentElement).toHaveAttribute("lang", "zh-Hans");
+  });
+
   it("notifies direction consumers before translations finish loading", () => {
     const listener = vi.fn();
     const unsubscribe = subscribeToLocaleDirection(listener);
 
-    loadLocale("ar");
+    applyDocumentLocale("ar");
 
     expect(getLocaleDirection()).toBe("rtl");
     expect(listener).toHaveBeenCalledOnce();

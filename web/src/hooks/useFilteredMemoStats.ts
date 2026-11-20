@@ -1,11 +1,12 @@
 import { timestampDate } from "@bufbuild/protobuf/wkt";
-import dayjs from "dayjs";
 import { countBy } from "lodash-es";
 import { useMemo } from "react";
 import { type MemoTimeBasis, useView } from "@/contexts/ViewContext";
 import useCurrentUser from "@/hooks/useCurrentUser";
 import { useAllUserStats, useUserStats } from "@/hooks/useUserQueries";
+import { ISO_DATE_FORMAT } from "@/lib/calendar-utils";
 import { mergeTagCounts } from "@/lib/tag";
+import { inAppTimeZone } from "@/lib/time-zone";
 import { State } from "@/types/proto/api/common_pb";
 import type { UserStats } from "@/types/proto/api/user_service_pb";
 import type { StatisticsData } from "@/types/statistics";
@@ -25,7 +26,7 @@ export interface UseFilteredMemoStatsOptions {
   filter?: string;
 }
 
-const toDateString = (date: Date) => dayjs(date).format("YYYY-MM-DD");
+const toDateString = (date: Date) => inAppTimeZone(date).format(ISO_DATE_FORMAT);
 
 const timestampsForBasis = (stats: UserStats, basis: MemoTimeBasis) => {
   const createdArray = stats.memoCreatedTimestamps ?? [];

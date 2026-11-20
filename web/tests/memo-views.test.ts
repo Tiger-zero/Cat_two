@@ -107,10 +107,9 @@ describe("memo views", () => {
     ).toBe('(tag in ["work"])');
   });
 
-  it("builds display-time filters from valid local calendar-day boundaries", () => {
-    const start = new Date(2026, 7, 2);
-    const end = new Date(start);
-    end.setDate(end.getDate() + 1);
+  it("builds display-time filters from Shanghai calendar-day boundaries", () => {
+    const start = new Date("2026-08-01T16:00:00Z");
+    const end = new Date("2026-08-02T16:00:00Z");
 
     expect(
       buildMemoFilter({
@@ -123,9 +122,8 @@ describe("memo views", () => {
   });
 
   it("selects on update time when that is the basis", () => {
-    const start = new Date(2026, 7, 2);
-    const end = new Date(start);
-    end.setDate(end.getDate() + 1);
+    const start = new Date("2026-08-01T16:00:00Z");
+    const end = new Date("2026-08-02T16:00:00Z");
 
     expect(
       buildMemoFilter({

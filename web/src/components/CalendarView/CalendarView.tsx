@@ -15,6 +15,7 @@ import { useMemoFilters } from "@/hooks/useMemoFilters";
 import { formatMonthLabel, getToday, parseLocalDate } from "@/lib/calendar-utils";
 import { combineCELFilters } from "@/lib/cel-filter";
 import { isMemoBlurred } from "@/lib/tag";
+import { APP_TIME_ZONE } from "@/lib/time-zone";
 import { collectionPathForLocation } from "@/router/routes";
 import type { Memo } from "@/types/proto/api/memo_service_pb";
 import { useTranslate } from "@/utils/i18n";
@@ -101,7 +102,12 @@ export const CalendarView = ({ month, date }: CalendarViewProps) => {
   const dateLabel = useMemo(
     () =>
       activeDate
-        ? (parseLocalDate(activeDate)?.toLocaleDateString(i18n.language, { weekday: "long", month: "long", day: "numeric" }) ?? activeDate)
+        ? (parseLocalDate(activeDate)?.toLocaleDateString(i18n.language, {
+            timeZone: APP_TIME_ZONE,
+            weekday: "long",
+            month: "long",
+            day: "numeric",
+          }) ?? activeDate)
         : "",
     [activeDate, i18n.language],
   );

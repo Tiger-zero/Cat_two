@@ -3,7 +3,9 @@ import { AtSignIcon, CheckIcon, MessageSquareIcon, TrashIcon, XIcon } from "luci
 import UserAvatar from "@/components/UserAvatar";
 import useNavigateTo from "@/hooks/useNavigateTo";
 import { useArchiveNotification, useDeleteNotification } from "@/hooks/useUserQueries";
+import i18n from "@/i18n";
 import { handleError } from "@/lib/error";
+import { APP_TIME_ZONE } from "@/lib/time-zone";
 import { showErrorToast, toast } from "@/lib/toast";
 import { cn } from "@/lib/utils";
 import { UserNotification, UserNotification_Status } from "@/types/proto/api/user_service_pb";
@@ -20,6 +22,7 @@ function MemoMentionMessage({ notification }: Props) {
   const navigateTo = useNavigateTo();
   const mentionPayload = notification.payload?.case === "memoMention" ? notification.payload.value : undefined;
   const sender = notification.senderUser;
+  const createdAt = notification.createTime ? timestampDate(notification.createTime) : undefined;
 
   const handleArchiveMessage = async (silence = false) => {
     try {
@@ -104,10 +107,10 @@ function MemoMentionMessage({ notification }: Props) {
                 {isCommentMention ? t("inbox.mentioned-in-comment") : t("inbox.mentioned-in-memo")}
               </span>
               <span className="mu-caption text-mu-text-secondary/60">
-                {notification.createTime &&
+                {createdAt &&
                   t("common.date-at-time", {
-                    date: timestampDate(notification.createTime).toLocaleDateString([], { month: "short", day: "numeric" }),
-                    time: timestampDate(notification.createTime).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+                    date: createdAt.toLocaleDateString(i18n.language, { timeZone: APP_TIME_ZONE, month: "short", day: "numeric" }),
+                    time: createdAt.toLocaleTimeString(i18n.language, { timeZone: APP_TIME_ZONE, hour: "2-digit", minute: "2-digit" }),
                   })}
               </span>
             </div>
