@@ -9,7 +9,7 @@ services:
     volumes:
       - cat_two_data:/var/opt/memos
     healthcheck:
-      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:5230/healthz"]
+      test: ["CMD", "wget", "-Y", "off", "-q", "-O", "/dev/null", "http://127.0.0.1:5230/healthz"]
       interval: 30s
       timeout: 3s
       retries: 3
