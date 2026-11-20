@@ -68,7 +68,8 @@ const SIDEBAR_ROW_HOVER_CLASSES = "hover:bg-mu-hover/65 hover:text-mu-text";
 
 export const sidebarRowStateClasses = (state: SidebarRowState = "idle") => {
   // Selection never changes weight (the type rules), so labels do not shift: fill and color carry it.
-  if (state === "current") return "bg-mu-hover text-mu-text";
+  if (state === "current")
+    return "bg-mu-hover text-mu-text light:bg-mu-primary light:text-mu-on-primary light:focus-visible:border-mu-on-primary";
   if (state === "checked") {
     // The mark hangs in the rail's 12px inset so the label stays on its rail.
     return `relative text-mu-text ${SIDEBAR_ROW_HOVER_CLASSES} before:absolute before:inset-y-1.5 before:-start-3 before:w-0.5 before:rounded-e-full before:bg-mu-primary before:content-['']`;
@@ -102,7 +103,9 @@ const SidebarRow = ({ state = "idle", icon: Icon, label, count, onClick, trailin
     <span data-sidebar-label className="min-w-0 flex-1 truncate text-start">
       {label}
     </span>
-    {count != null && count > 0 && <span className={SIDEBAR_ROW_COUNT_RAIL_CLASSES}>{count}</span>}
+    {count != null && count > 0 && (
+      <span className={cn(SIDEBAR_ROW_COUNT_RAIL_CLASSES, state === "current" && "light:text-mu-on-primary")}>{count}</span>
+    )}
     {trailing}
   </button>
 );

@@ -13,8 +13,9 @@
  * this variant and source mode keeps the text and its color.
  */
 @custom-variant rich (&:not(.mbe-source-mode *));
-/* The package switches themes with data-theme, so `dark:` follows the app's choice, not the OS. */
+/* Theme variants follow the app's active data-theme. */
 @custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+@custom-variant light (&:where([data-theme="light"], [data-theme="light"] *));
 
 @layer base {
   .memos-theme-changing,

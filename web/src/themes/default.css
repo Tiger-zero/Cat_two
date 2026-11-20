@@ -1,13 +1,33 @@
 /*
  * memos' theme entries on top of @usememos/ui (read web/node_modules/@usememos/ui/llms.txt).
  * Colors and radius are the package's tokens, used through its `mu-` utilities
- * (`bg-mu-surface`, `rounded-mu-md`) and `var(--mu-*)`; Light and Dark come
- * from its tokens.css and Paper from paper.css. This file only sets the text fonts to the
- * package's and adds the serif face of the wordmark. App text uses the package's type classes
+ * (`bg-mu-surface`, `rounded-mu-md`) and `var(--mu-*)`. Light overrides the package's
+ * colors below. Dark comes from its tokens.css and Paper from paper.css.
+ * App text uses the package's type classes
  * (`mu-caption`, `mu-body`, `mu-label`, `mu-title`, `mu-heading`), not Tailwind text sizes.
  * Memo text (the content view, the composer and its placeholder) stays 16px/24px at weight
  * 400 with `text-base leading-6`: the scale has no regular 16px style, and `mu-title` is 500.
  */
+@layer mu {
+  @media (forced-colors: none) {
+    [data-theme="light"] {
+      --mu-canvas: #f7f7f7;
+      --mu-well: #ececec;
+      --mu-hover: #efefef;
+      --mu-selected: #dff2e6;
+      --mu-key-hover: #f7f7f7;
+      --mu-edge: #d8d8d8;
+      --mu-line: #e5e5e5;
+      --mu-text: #242424;
+      --mu-text-secondary: #666666;
+      --mu-primary: #168047;
+      --mu-primary-hover: #106b3a;
+      --mu-accent: #126b40;
+      --mu-selection: rgb(22 128 71 / 18%);
+    }
+  }
+}
+
 @theme inline {
   --font-sans: var(--mu-font-sans);
   --font-mono: var(--mu-font-mono);

@@ -28,7 +28,7 @@ const APPEARANCES: Record<ResolvedTheme, Appearance> = {
 
 /** Each theme's canvas, for the browser chrome on phones; the values in index.html match. */
 const THEME_COLORS: Record<Appearance, string> = {
-  light: "#fafafa",
+  light: "#f7f7f7",
   dark: "#0f0f0f",
   paper: "#f5ede4",
 };

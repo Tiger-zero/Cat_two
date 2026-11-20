@@ -4,7 +4,7 @@ import { loadTheme } from "@/utils/theme";
 describe("theme-color meta tags update", () => {
   beforeEach(() => {
     document.head.innerHTML = `
-      <meta name="theme-color" media="(prefers-color-scheme: light)" content="#fafafa" />
+      <meta name="theme-color" media="(prefers-color-scheme: light)" content="#f7f7f7" />
       <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0f0f0f" />
     `;
     localStorage.clear();
@@ -27,7 +27,7 @@ describe("theme-color meta tags update", () => {
     const lightMeta = document.querySelector<HTMLMetaElement>('meta[name="theme-color"][media*="light"]');
     const darkMeta = document.querySelector<HTMLMetaElement>('meta[name="theme-color"][media*="dark"]');
 
-    expect(lightMeta?.content).toBe("#fafafa");
+    expect(lightMeta?.content).toBe("#f7f7f7");
     expect(darkMeta?.content).toBe("#0f0f0f");
   });
 });
