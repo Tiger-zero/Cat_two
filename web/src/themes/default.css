@@ -24,6 +24,11 @@
       --mu-primary-hover: #065e3a;
       --mu-accent: #146d45;
       --mu-selection: rgb(8 118 73 / 18%);
+      --memos-activity-empty: #e7e7e2;
+      --memos-activity-low: #b9f8cf;
+      --memos-activity-medium: #05df72;
+      --memos-activity-high: #00a63e;
+      --memos-activity-today: #00a63e;
       --memos-panel-shadow: 0 1px 2px rgb(29 31 35 / 4%), 0 3px 12px rgb(29 31 35 / 3%);
     }
 
@@ -44,6 +49,11 @@
       --mu-on-primary: #101b15;
       --mu-accent: #91e5b8;
       --mu-selection: rgb(119 217 160 / 22%);
+      --memos-activity-empty: #2a2e34;
+      --memos-activity-low: #0d542b;
+      --memos-activity-medium: #087039;
+      --memos-activity-high: #00c950;
+      --memos-activity-today: #00c950;
       --memos-panel-shadow: 0 2px 10px rgb(0 0 0 / 16%);
     }
   }

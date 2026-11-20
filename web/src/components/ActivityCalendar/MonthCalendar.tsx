@@ -6,7 +6,7 @@ import { useTranslate } from "@/utils/i18n";
 import { CalendarCell } from "./CalendarCell";
 import { rotateWeekdays, useMonthDays } from "./monthDays";
 import type { MonthCalendarProps } from "./types";
-import { calculateMaxCount, getTooltipText } from "./utils";
+import { getTooltipText } from "./utils";
 
 /** The type of a weekday column label, shared by every month grid. */
 /**
@@ -42,7 +42,6 @@ export const MonthCalendar = memo(({ month, data, selectedDate, onClick, timeBas
   const t = useTranslate();
   const { generalSetting } = useInstance();
   const weekDays = useWeekdayLabels(generalSetting.weekStartDayOffset);
-  const maxCount = useMemo(() => calculateMaxCount(data), [data]);
   const days = useMonthDays({
     month,
     data,
@@ -64,13 +63,7 @@ export const MonthCalendar = memo(({ month, data, selectedDate, onClick, timeBas
 
       <div className={CALENDAR_GRID_CLASSES}>
         {days.map((day) => (
-          <CalendarCell
-            key={day.date}
-            day={day}
-            maxCount={maxCount}
-            tooltipText={getTooltipText(day.count, day.date, t, timeBasis)}
-            onClick={onClick}
-          />
+          <CalendarCell key={day.date} day={day} tooltipText={getTooltipText(day.count, day.date, t, timeBasis)} onClick={onClick} />
         ))}
       </div>
     </div>

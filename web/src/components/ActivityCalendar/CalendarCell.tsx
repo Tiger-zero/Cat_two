@@ -6,7 +6,6 @@ import type { CalendarDayCell } from "./types";
 
 export interface CalendarCellProps {
   day: CalendarDayCell;
-  maxCount: number;
   tooltipText: string;
   onClick?: (date: string) => void;
 }
@@ -14,13 +13,13 @@ export interface CalendarCellProps {
 /** The cell spans its whole column and takes the pointer; the chip inside it carries the fill. */
 const CELL_CLASSES = "group/day flex w-full items-center justify-center select-none";
 
-export const CalendarCell = memo(({ day, maxCount, tooltipText, onClick }: CalendarCellProps) => {
+export const CalendarCell = memo(({ day, tooltipText, onClick }: CalendarCellProps) => {
   const isInteractive = Boolean(onClick);
 
   if (!day.isCurrentMonth) {
     return (
       <div className={cn(CELL_CLASSES, "cursor-default")}>
-        <span className={getChipClassName(day, maxCount, false)}>{day.label}</span>
+        <span className={getChipClassName(day, false)}>{day.label}</span>
       </div>
     );
   }
@@ -35,7 +34,7 @@ export const CalendarCell = memo(({ day, maxCount, tooltipText, onClick }: Calen
       aria-disabled={!isInteractive}
       className={cn(CELL_CLASSES, "p-0 focus-visible:outline-none", isInteractive ? "cursor-pointer" : "cursor-default")}
     >
-      <span className={getChipClassName(day, maxCount, isInteractive)}>
+      <span className={getChipClassName(day, isInteractive)}>
         {day.label}
         {day.isToday && (
           <span

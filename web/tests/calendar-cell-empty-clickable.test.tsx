@@ -19,7 +19,7 @@ const chipOf = (button: HTMLElement) => button.firstElementChild as HTMLElement;
 describe("CalendarCell empty-day clickability", () => {
   it("fires onClick for an in-month day with count=0", () => {
     const onClick = vi.fn();
-    render(<CalendarCell day={makeDay()} maxCount={5} tooltipText="May 1, 2025" onClick={onClick} />);
+    render(<CalendarCell day={makeDay()} tooltipText="May 1, 2025" onClick={onClick} />);
 
     const button = screen.getByRole("button", { name: /May 1, 2025/ });
     fireEvent.click(button);
@@ -28,18 +28,18 @@ describe("CalendarCell empty-day clickability", () => {
   });
 
   it("renders an empty in-month day as interactive (tabIndex 0, not aria-disabled)", () => {
-    render(<CalendarCell day={makeDay()} maxCount={5} tooltipText="May 1, 2025" onClick={() => {}} />);
+    render(<CalendarCell day={makeDay()} tooltipText="May 1, 2025" onClick={() => {}} />);
 
     const button = screen.getByRole("button", { name: /May 1, 2025/ });
     expect(button).toHaveAttribute("tabindex", "0");
     expect(button).toHaveAttribute("aria-disabled", "false");
     expect(button).not.toHaveClass("mu-tooltip-trigger");
-    expect(chipOf(button)).toHaveClass("bg-transparent");
+    expect(chipOf(button)).toHaveClass("bg-[var(--memos-activity-empty,var(--mu-well))]");
   });
 
   it("still renders a populated in-month day as interactive", () => {
     const onClick = vi.fn();
-    render(<CalendarCell day={makeDay({ count: 3 })} maxCount={5} tooltipText="May 1, 2025" onClick={onClick} />);
+    render(<CalendarCell day={makeDay({ count: 3 })} tooltipText="May 1, 2025" onClick={onClick} />);
 
     const button = screen.getByRole("button", { name: /May 1, 2025/ });
     expect(button).toHaveClass("mu-tooltip-trigger");
@@ -47,35 +47,46 @@ describe("CalendarCell empty-day clickability", () => {
     expect(onClick).toHaveBeenCalledWith("2025-05-01");
   });
 
-  it("marks today with a dot without changing the numeral weight", () => {
-    render(<CalendarCell day={makeDay({ isToday: true })} maxCount={5} tooltipText="May 1, 2025" onClick={() => {}} />);
+  it.each([
+    [1, "low"],
+    [2, "low"],
+    [3, "medium"],
+    [5, "medium"],
+    [6, "high"],
+  ] as const)("colors %s notes in the %s activity band", (count, band) => {
+    render(<CalendarCell day={makeDay({ count })} tooltipText="May 1, 2025" onClick={() => {}} />);
+    expect(chipOf(screen.getByRole("button"))).toHaveClass(`bg-[var(--memos-activity-${band},var(--mu-selected))]`);
+  });
+
+  it("marks today with a green border and a dot without changing the numeral weight", () => {
+    render(<CalendarCell day={makeDay({ isToday: true })} tooltipText="May 1, 2025" onClick={() => {}} />);
 
     const button = screen.getByRole("button", { name: /May 1, 2025/ });
     expect(button).not.toHaveClass("font-semibold", "font-bold");
+    expect(chipOf(button)).toHaveClass("border-[color:var(--memos-activity-today,var(--mu-primary))]");
     expect(button.querySelector('[aria-hidden="true"]')).toHaveClass("rounded-full");
   });
 
-  it("fills a selected day with the accent like a checked filter row, keeping the numeral weight", () => {
-    render(<CalendarCell day={makeDay({ isSelected: true })} maxCount={5} tooltipText="May 1, 2025" onClick={() => {}} />);
+  it("marks the selected filter with a soft fill and accent border", () => {
+    render(<CalendarCell day={makeDay({ isSelected: true })} tooltipText="May 1, 2025" onClick={() => {}} />);
 
     const button = screen.getByRole("button", { name: /selected/ });
-    expect(chipOf(button)).toHaveClass("bg-mu-primary", "text-mu-on-primary");
+    expect(chipOf(button)).toHaveClass("bg-mu-selected", "text-mu-text", "border-mu-accent");
     expect(chipOf(button)).not.toHaveClass("font-medium");
     expect(chipOf(button)).not.toHaveClass("ring-2", "ring-inset");
     expect(chipOf(button)).not.toHaveClass("font-semibold", "font-bold");
   });
 
   it("keeps the accent fill on a selected empty day under hover", () => {
-    render(<CalendarCell day={makeDay({ isSelected: true })} maxCount={5} tooltipText="May 1, 2025" onClick={() => {}} />);
+    render(<CalendarCell day={makeDay({ isSelected: true })} tooltipText="May 1, 2025" onClick={() => {}} />);
 
     const chip = chipOf(screen.getByRole("button", { name: /selected/ }));
-    // The empty-cell hover tint would replace bg-mu-primary on hover and strand the light numeral.
-    expect(chip).not.toHaveClass("group-hover/day:bg-mu-well/40", "bg-transparent");
-    expect(chip).toHaveClass("bg-mu-primary");
+    expect(chip).not.toHaveClass("bg-[var(--memos-activity-empty,var(--mu-well))]");
+    expect(chip).toHaveClass("bg-mu-selected");
   });
 
   it("caps the chip so a wider container buys hit area, not calendar height", () => {
-    render(<CalendarCell day={makeDay()} maxCount={5} tooltipText="May 1, 2025" onClick={() => {}} />);
+    render(<CalendarCell day={makeDay()} tooltipText="May 1, 2025" onClick={() => {}} />);
 
     const button = screen.getByRole("button", { name: /May 1, 2025/ });
     // The square lives on the capped chip. Putting it back on the button would make row
@@ -85,7 +96,7 @@ describe("CalendarCell empty-day clickability", () => {
   });
 
   it("does not render out-of-month days as interactive (no role=button)", () => {
-    render(<CalendarCell day={makeDay({ isCurrentMonth: false })} maxCount={5} tooltipText="May 1, 2025" onClick={() => {}} />);
+    render(<CalendarCell day={makeDay({ isCurrentMonth: false })} tooltipText="May 1, 2025" onClick={() => {}} />);
 
     expect(screen.queryByRole("button")).toBeNull();
   });
