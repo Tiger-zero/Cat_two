@@ -51,8 +51,8 @@ function MemoFeedMenu({ canExport, selectedCount, exporting, onBeginSelection, o
           <Menu.Root>
             <Menu.Trigger
               render={
-                <Button variant="ghost" iconEnd={<ChevronDownIcon />} className="mu-title max-w-full px-2">
-                  {t("memo-feed.title")}
+                <Button variant="ghost" iconEnd={<ChevronDownIcon />} className="max-w-full px-2">
+                  <span className="mu-heading">{t("memo-feed.title")}</span>
                 </Button>
               }
             />
