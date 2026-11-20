@@ -1,7 +1,9 @@
 import { cn } from "@/lib/utils";
 
-export const MEMO_CARD_BASE_CLASSES =
-  "relative group flex flex-col justify-start items-start bg-mu-surface w-full px-4 py-3 mb-2 gap-2 text-mu-text rounded-mu-lg border border-mu-line/70 transition-colors";
+export const MEMO_CARD_CONTENT_CLASSES =
+  "relative group flex w-full flex-col items-start justify-start gap-2 px-4 py-3 text-mu-text transition-colors";
+
+export const MEMO_CARD_BASE_CLASSES = `${MEMO_CARD_CONTENT_CLASSES} memos-panel mb-2`;
 
 /**
  * A memo's timestamp as a control, on the card header and in the editor: one line of muted

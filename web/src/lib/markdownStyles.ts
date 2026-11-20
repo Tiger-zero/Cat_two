@@ -38,8 +38,9 @@ export const markdownStyles = {
 export const tagStyles = {
   base: "rich:inline rich:rounded-mu-sm rich:border rich:border-transparent rich:px-0.5 rich:box-decoration-clone",
   interactive: "mu-focus rich:focus-visible:border-mu-focus touch-manipulation",
-  /** Ink in the well, used when the tag has no color of its own. */
-  defaultColor: "text-mu-text rich:bg-mu-well rich:[&[role=button]]:hover:bg-mu-hover",
+  /** Default tag color; saved custom colors use the separate tint below. */
+  defaultColor:
+    "text-mu-text rich:bg-mu-well rich:[&[role=button]]:hover:bg-mu-hover rich:light:bg-mu-selected rich:light:text-mu-accent rich:dark:bg-mu-selected rich:dark:text-mu-accent",
   /**
    * The user's color, read from `--tag-color` on the element, as the package's Badge `color` draws
    * it: lightness kept between 50% and 75%, then clipped to sRGB before the 18% tint.

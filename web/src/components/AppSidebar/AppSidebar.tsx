@@ -289,7 +289,7 @@ interface NavPillProps {
  * header's compose control. Expanding the label only opens the text track, so the
  * artwork and surface never jump.
  *
- * Actions are separated by 4px; icons and labels by 6px. Below a 230px row the current
+ * Actions are separated by 2px; icons and labels by 6px. Below a 230px row the current
  * page stays a filled square with its tooltip, leaving room for the other actions.
  * Timeline's trailing arrow shares its surface, with a separate click target.
  */
@@ -353,7 +353,7 @@ const GlobalNavigation = () => {
   return (
     <Tooltip.Provider>
       <nav
-        className={cn("@container mu-s-md flex h-(--mu-row-height) items-center gap-1", SIDEBAR_RAIL_CLASSES)}
+        className={cn("@container mu-s-md flex h-(--mu-row-height) items-center gap-0.5", SIDEBAR_RAIL_CLASSES)}
         aria-label={t("common.primary-navigation")}
       >
         <div
@@ -380,7 +380,7 @@ const GlobalNavigation = () => {
             expanded={destination.kind === expandedKind}
           />
         ))}
-        <NavPill label={t("common.search")} icon={SearchIcon} onClick={() => setQuickFindOpen(true)} className="ms-auto" />
+        <NavPill label={t("common.search")} icon={SearchIcon} onClick={() => setQuickFindOpen(true)} className="ms-auto bg-mu-well" />
       </nav>
     </Tooltip.Provider>
   );

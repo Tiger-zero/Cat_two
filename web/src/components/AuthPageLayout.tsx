@@ -45,7 +45,7 @@ export const AuthOptionsLoading = () => <Skeleton height={32} />;
  */
 const AuthPageLayout = ({ title, description, children }: Props) => (
   <div className="flex min-h-svh w-full flex-col sm:items-center sm:justify-center sm:p-8">
-    <main className="flex w-full flex-1 flex-col sm:w-90 sm:flex-none sm:rounded-mu-xl sm:border sm:border-mu-line sm:bg-mu-surface">
+    <main className="flex w-full flex-1 flex-col sm:memos-panel sm:w-90 sm:flex-none">
       <div className="flex flex-1 flex-col justify-center px-5 py-12 sm:px-7 sm:pt-8 sm:pb-7">
         <MemosLogo size="lg" className="mb-8" />
         {title && <h1 className="mu-heading text-mu-text">{title}</h1>}

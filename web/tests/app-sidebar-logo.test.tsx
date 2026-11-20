@@ -389,7 +389,7 @@ describe("App sidebar logo", () => {
 
     expect(screen.getByRole("button", { name: "space.switch: common.memos" })).toHaveTextContent("Memos logo");
     const primaryNavigation = screen.getByRole("navigation", { name: "common.primary-navigation" });
-    expect(primaryNavigation).toHaveClass("h-(--mu-row-height)", "items-center", "gap-1", "px-3");
+    expect(primaryNavigation).toHaveClass("h-(--mu-row-height)", "items-center", "gap-0.5", "px-3");
     expect(primaryNavigation).not.toHaveClass("flex-col");
     const navigation = within(primaryNavigation);
     expect(navigation.getByRole("button", { name: "common.search" })).toHaveClass("ms-auto", "h-(--mu-row-height)", "px-1.5");

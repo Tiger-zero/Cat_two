@@ -1,8 +1,8 @@
 /*
  * memos' theme entries on top of @usememos/ui (read web/node_modules/@usememos/ui/llms.txt).
  * Colors and radius are the package's tokens, used through its `mu-` utilities
- * (`bg-mu-surface`, `rounded-mu-md`) and `var(--mu-*)`. Light overrides the package's
- * colors below. Dark comes from its tokens.css and Paper from paper.css.
+ * (`bg-mu-surface`, `rounded-mu-md`) and `var(--mu-*)`. Light and Dark use the palettes
+ * below. Paper is defined in paper.css.
  * App text uses the package's type classes
  * (`mu-caption`, `mu-body`, `mu-label`, `mu-title`, `mu-heading`), not Tailwind text sizes.
  * Memo text (the content view, the composer and its placeholder) stays 16px/24px at weight
@@ -11,19 +11,40 @@
 @layer mu {
   @media (forced-colors: none) {
     [data-theme="light"] {
-      --mu-canvas: #f7f7f7;
-      --mu-well: #ececec;
-      --mu-hover: #efefef;
-      --mu-selected: #dff2e6;
-      --mu-key-hover: #f7f7f7;
-      --mu-edge: #d8d8d8;
-      --mu-line: #e5e5e5;
-      --mu-text: #242424;
-      --mu-text-secondary: #666666;
-      --mu-primary: #168047;
-      --mu-primary-hover: #106b3a;
-      --mu-accent: #126b40;
-      --mu-selection: rgb(22 128 71 / 18%);
+      --mu-canvas: #f6f6f3;
+      --mu-well: #eeefeb;
+      --mu-hover: #eeefeb;
+      --mu-selected: #ddf5e6;
+      --mu-key-hover: #f6f6f3;
+      --mu-edge: #dadcd5;
+      --mu-line: #e3e5df;
+      --mu-text: #1d1f23;
+      --mu-text-secondary: #565b63;
+      --mu-primary: #087649;
+      --mu-primary-hover: #065e3a;
+      --mu-accent: #146d45;
+      --mu-selection: rgb(8 118 73 / 18%);
+      --memos-panel-shadow: 0 1px 2px rgb(29 31 35 / 4%), 0 3px 12px rgb(29 31 35 / 3%);
+    }
+
+    [data-theme="dark"] {
+      --mu-canvas: #0f1013;
+      --mu-surface: #17191d;
+      --mu-well: #202328;
+      --mu-hover: #24282e;
+      --mu-selected: #223b2d;
+      --mu-key: #24282e;
+      --mu-key-hover: #2a2e34;
+      --mu-edge: #373c44;
+      --mu-line: #2a2e34;
+      --mu-text: #e7e8ea;
+      --mu-text-secondary: #a8adb5;
+      --mu-primary: #77d9a0;
+      --mu-primary-hover: #9ae7bf;
+      --mu-on-primary: #101b15;
+      --mu-accent: #91e5b8;
+      --mu-selection: rgb(119 217 160 / 22%);
+      --memos-panel-shadow: 0 2px 10px rgb(0 0 0 / 16%);
     }
   }
 }

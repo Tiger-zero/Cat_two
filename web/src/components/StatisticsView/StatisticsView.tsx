@@ -20,20 +20,22 @@ const StatisticsView = (props: Props) => {
   const selectedDate = filters.find((filter) => filter.factor === "displayTime")?.value;
 
   return (
-    <div className="group flex w-full flex-col text-mu-text-secondary animate-fade-in">
-      <MonthNavigator visibleMonth={visibleMonthString} onMonthChange={setVisibleMonthString} />
+    <div className="@container w-full animate-fade-in">
+      <div className="memos-panel group flex w-full flex-col px-px py-2 text-mu-text-secondary @min-[214px]:px-2">
+        <MonthNavigator visibleMonth={visibleMonthString} onMonthChange={setVisibleMonthString} />
 
-      <div className="w-full animate-scale-in">
-        <MonthCalendar
-          month={visibleMonthString}
-          data={activityStats}
-          selectedDate={selectedDate}
-          onClick={(date) => {
-            navigateToDateFilter(date);
-            props.onDateSelect?.();
-          }}
-          timeBasis={timeBasis}
-        />
+        <div className="w-full animate-scale-in">
+          <MonthCalendar
+            month={visibleMonthString}
+            data={activityStats}
+            selectedDate={selectedDate}
+            onClick={(date) => {
+              navigateToDateFilter(date);
+              props.onDateSelect?.();
+            }}
+            timeBasis={timeBasis}
+          />
+        </div>
       </div>
     </div>
   );

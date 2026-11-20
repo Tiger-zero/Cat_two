@@ -24,8 +24,7 @@ const PREVIEW_MIN_HEIGHT_CLASSES = ["", "min-h-6", "min-h-12", "min-h-18"];
 /**
  * The comment strip hangs off the card's bottom edge: up to three comments, each a 24px row
  * whose avatar sits in the leading slot on the card's text edge, then a "View all N comments"
- * row when there are more. No title: sitting outside the card already marks the strip as
- * secondary, and every line is muted 13px/400 so it reads below the memo's own content.
+ * row when there are more. The divider and muted labels keep it secondary to the memo.
  */
 const MemoCommentListView: React.FC = () => {
   const t = useTranslate();
@@ -46,11 +45,7 @@ const MemoCommentListView: React.FC = () => {
   }
 
   return (
-    <section
-      ref={viewportRef}
-      aria-label={t("memo.comment.self")}
-      className="rounded-b-mu-lg border border-t-0 border-mu-line/70 px-4 py-1"
-    >
+    <section ref={viewportRef} aria-label={t("memo.comment.self")} className="border-t border-mu-line px-4 py-1">
       <div className={cn(METADATA_ROW_LIST_CLASSES, "gap-0", PREVIEW_MIN_HEIGHT_CLASSES[Math.min(commentAmount, COMMENT_PREVIEW_LIMIT)])}>
         {displayedComments.map((comment) => {
           const uid = extractMemoIdFromName(comment.name);

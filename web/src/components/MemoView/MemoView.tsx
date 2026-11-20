@@ -11,7 +11,7 @@ import { lazyWithReload } from "@/utils/lazy";
 import { canManageMemo } from "@/utils/user";
 import { MemoBody, MemoCommentListView, MemoHeader } from "./components";
 import MemoPinnedMark from "./components/MemoPinnedMark";
-import { MEMO_CARD_BASE_CLASSES } from "./constants";
+import { MEMO_CARD_BASE_CLASSES, MEMO_CARD_CONTENT_CLASSES } from "./constants";
 import { useImagePreview } from "./hooks";
 import { computeCommentAmount, MemoViewContext } from "./MemoViewContext";
 import { isMemoDetailPath, resolveMemoParentPage } from "./navigation";
@@ -182,7 +182,7 @@ const MemoView = forwardRef<MemoViewHandle, MemoViewProps>((props, ref) => {
 
   const article = (
     <article
-      className={cn(MEMO_CARD_BASE_CLASSES, "group/memo", showCommentPreview ? "mb-0 rounded-b-none" : "mb-2", className)}
+      className={cn(showCommentPreview ? MEMO_CARD_CONTENT_CLASSES : MEMO_CARD_BASE_CLASSES, "group/memo", className)}
       ref={cardRef}
       tabIndex={readonly ? -1 : 0}
     >
@@ -213,7 +213,7 @@ const MemoView = forwardRef<MemoViewHandle, MemoViewProps>((props, ref) => {
   );
 
   const memoDisplay = showCommentPreview ? (
-    <div className="w-full mb-2">
+    <div className="memos-panel mb-2 w-full">
       {article}
       <MemoCommentListView />
     </div>

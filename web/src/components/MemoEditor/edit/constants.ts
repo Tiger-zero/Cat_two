@@ -1,3 +1,5 @@
+export const COMPOSER_PANEL_CLASSES = "memos-panel px-4 pt-3 pb-4";
+
 export const FOCUS_MODE_STYLES = {
   backdrop: "fixed inset-0 bg-mu-overlay backdrop-blur-sm z-(--mu-layer-overlay)",
   container: {

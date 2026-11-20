@@ -12,7 +12,7 @@ import { convertVisibilityFromString } from "@/utils/memo";
 
 import { AudioRecorderPanel, EditorContent, EditorMetadata, FocusModeExitButton, FocusModeOverlay, TimestampPopover } from "./components";
 import { EditorSuggestions } from "./components/EditorSuggestions";
-import { FOCUS_MODE_STYLES } from "./constants";
+import { COMPOSER_PANEL_CLASSES, FOCUS_MODE_STYLES } from "./constants";
 import type { EditorFileOrigin } from "./extensions";
 import {
   splitInlineLocalFiles,
@@ -350,7 +350,7 @@ export const EditSession: React.FC<EditSessionProps> = ({
           // A card that is the frame already supplies the background, border and padding; a session floating over the page in
           // focus mode always brings its own. The bottom is 16px like the sides: the toolbar's
           // hard edge needs more room than the text's soft top.
-          (!frameless || isFocusMode) && "relative bg-mu-surface px-4 pt-3 pb-4 rounded-mu-lg border border-mu-line/70",
+          (!frameless || isFocusMode) && cn("relative", COMPOSER_PANEL_CLASSES),
           isFocusMode && cn(FOCUS_MODE_STYLES.container.base, FOCUS_MODE_STYLES.container.spacing),
           !isFocusMode && className,
         )}

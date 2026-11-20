@@ -17,6 +17,11 @@
 @custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
 @custom-variant light (&:where([data-theme="light"], [data-theme="light"] *));
 
+@utility memos-panel {
+  @apply rounded-mu-xl border border-mu-line bg-mu-surface;
+  box-shadow: var(--memos-panel-shadow, none);
+}
+
 @layer base {
   .memos-theme-changing,
   .memos-theme-changing *,

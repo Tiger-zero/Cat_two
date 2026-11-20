@@ -8,6 +8,7 @@ import type { Location } from "@/types/proto/api/memo_service_pb";
 import { lazyWithReload } from "@/utils/lazy";
 import { convertVisibilityFromString } from "@/utils/memo";
 import { canManageMemo } from "@/utils/user";
+import { COMPOSER_PANEL_CLASSES } from "./edit/constants";
 import { draftKeyFor, type MemoEditIdentity, migrateLegacyDraft } from "./edit/draftKey";
 import { canChooseSpaceFor, initialEditorState } from "./edit/initialState";
 import { cacheService } from "./edit/services/cacheService";
@@ -168,10 +169,7 @@ const MemoEditorDraft = ({ draft, ...editing }: MemoEditorDraftProps) => {
   // placeholder line and the toolbar's height, so the page below does not move when the
   // session takes its place.
   const fallback = editing.frameless ? null : (
-    <div
-      aria-hidden
-      className={cn("flex w-full flex-col gap-2 rounded-mu-lg border border-mu-line/70 bg-mu-surface px-4 py-3", editing.className)}
-    >
+    <div aria-hidden className={cn("flex w-full flex-col gap-2", COMPOSER_PANEL_CLASSES, editing.className)}>
       <div className="w-full text-base leading-6 text-mu-text-secondary">{editing.placeholder ?? " "}</div>
       <div className="h-9 w-full" />
     </div>
