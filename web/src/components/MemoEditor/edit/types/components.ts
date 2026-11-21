@@ -16,6 +16,8 @@ export interface EditSessionProps {
   initialDraftRaw: string | null;
   /** Inside a card that is the frame already: no background, border or padding of its own outside focus mode. */
   frameless?: boolean;
+  /** Expand a desktop inline new-note composer while in use. */
+  expandOnFocus?: boolean;
   /** Leads the timestamp row, before the time: the card's creator while it edits in place. */
   timestampLead?: ReactNode;
   placeholder?: string;

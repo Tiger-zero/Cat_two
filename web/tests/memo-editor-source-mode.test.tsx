@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { MemoEditor, preloadMemoEditing } from "@/components/MemoEditor";
 import { draftKeyFor } from "@/components/MemoEditor/edit/draftKey";
@@ -69,10 +69,10 @@ beforeAll(async () => {
 
 const CACHE_KEY = "source-mode-test";
 
-const mount = (suggestions?: readonly MemoSuggestion[]) =>
+const mount = (suggestions?: readonly MemoSuggestion[], expandOnFocus = false) =>
   render(
     <QueryClientProvider client={new QueryClient()}>
-      <MemoEditor draft={{ scope: CACHE_KEY }} suggestions={suggestions} />
+      <MemoEditor draft={{ scope: CACHE_KEY }} suggestions={suggestions} expandOnFocus={expandOnFocus} />
     </QueryClientProvider>,
   );
 
@@ -96,6 +96,7 @@ describe("MemoEditor source mode", () => {
   it("switches modes without adding a toolbar label", () => {
     const { container } = mount();
     expect(sourceText(container)).toBeNull();
+    expect(container.querySelector("[data-expand-on-focus]")).toBeNull();
     expect(screen.queryByText("Markdown", { exact: true })).not.toBeInTheDocument();
 
     toggleSourceMode();
@@ -110,6 +111,50 @@ describe("MemoEditor source mode", () => {
     expect(sourceText(container)).toBeNull();
     expect(screen.queryByText("Markdown", { exact: true })).not.toBeInTheDocument();
     expect(updateEditorSetting).toHaveBeenLastCalledWith(expect.objectContaining({ sourceMode: false }), expect.anything());
+  });
+
+  it("restores the inline composer layout after leaving the full-screen focus mode", () => {
+    mount(undefined, true);
+    const editor = screen.getByRole("textbox");
+    expect(editor.closest("[data-expand-on-focus]")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "common.add" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "editor.focus-mode" }));
+
+    expect(editor.closest("[data-expand-on-focus]")).toBeNull();
+    expect(editor.closest("[data-focus-mode]")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "editor.exit-focus-mode" }));
+
+    expect(editor.closest("[data-expand-on-focus]")).toBeInTheDocument();
+  });
+
+  it("keeps the toolbar stable while focus moves between the composer controls", async () => {
+    cacheService.saveNow(cacheService.key("users/1", draftKeyFor({ kind: "new", scope: CACHE_KEY })), {
+      content: "Draft waiting to be saved",
+      attachments: [],
+    });
+    mount(undefined, true);
+    const editor = screen.getByRole("textbox");
+    const save = screen.getByRole("button", { name: "editor.save" });
+    const frame = editor.closest("[data-expand-on-focus]");
+
+    act(() => save.focus());
+    expect(save).toHaveFocus();
+    expect(frame).not.toHaveAttribute("data-composer-expanded");
+
+    act(() => editor.focus());
+    expect(frame).toHaveAttribute("data-composer-expanded");
+    act(() => save.focus());
+    expect(frame).toHaveAttribute("data-composer-expanded");
+
+    fireEvent.pointerDown(window, { isPrimary: true });
+    act(() => save.blur());
+    await act(() => new Promise<void>((resolve) => requestAnimationFrame(() => resolve())));
+    expect(frame).toHaveAttribute("data-composer-expanded");
+
+    fireEvent.pointerUp(window, { isPrimary: true });
+    await waitFor(() => expect(frame).not.toHaveAttribute("data-composer-expanded"));
   });
 
   it("switches back when saving the mode fails", () => {

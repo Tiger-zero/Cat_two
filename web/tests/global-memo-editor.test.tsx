@@ -18,13 +18,6 @@ const mocks = vi.hoisted(() => ({
   renderEditor: ((_props: MemoEditorDraftProps) => null) as (props: MemoEditorDraftProps) => React.ReactNode,
   setMobileOpen: vi.fn(),
   setQuickFindOpen: vi.fn(),
-  pathname: "/",
-  desktop: true,
-}));
-
-vi.mock("react-router-dom", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("react-router-dom")>()),
-  useLocation: () => ({ pathname: mocks.pathname }),
 }));
 
 vi.mock("@/components/MemoEditor", () => ({
@@ -43,10 +36,6 @@ vi.mock("@/contexts/AuthContext", () => ({
 
 vi.mock("@/hooks/useCurrentUser", () => ({
   default: () => mocks.currentUser,
-}));
-
-vi.mock("@/hooks/useMediaQuery", () => ({
-  default: () => mocks.desktop,
 }));
 
 vi.mock("@/utils/i18n", () => ({
@@ -130,56 +119,6 @@ describe("GlobalMemoEditorProvider", () => {
     mocks.editorProps = undefined;
     mocks.setMobileOpen.mockClear();
     mocks.setQuickFindOpen.mockClear();
-    mocks.pathname = "/";
-    mocks.desktop = true;
-  });
-
-  it("allows Home autofocus once after settings finish loading", () => {
-    let claimFocus!: () => boolean;
-    const Probe = () => {
-      claimFocus = useGlobalMemoEditor().claimHomeAutoFocus;
-      return null;
-    };
-    mocks.isUserSettingsInitialized = false;
-    const { rerender } = renderProvider(<Probe />);
-    mocks.isUserSettingsInitialized = true;
-    rerender(
-      <GlobalMemoEditorProvider>
-        <Probe />
-      </GlobalMemoEditorProvider>,
-    );
-
-    expect(claimFocus()).toBe(true);
-    expect(claimFocus()).toBe(false);
-  });
-
-  it.each(["mobile", "other route", "navigation", "existing focus"])("does not autofocus Home after %s", (scenario) => {
-    let claimFocus!: () => boolean;
-    const Probe = () => {
-      claimFocus = useGlobalMemoEditor().claimHomeAutoFocus;
-      return <button type="button">Another control</button>;
-    };
-    if (scenario === "mobile") mocks.desktop = false;
-    if (scenario === "other route") mocks.pathname = "/setting";
-    const { rerender } = renderProvider(<Probe />);
-
-    if (scenario === "navigation") mocks.pathname = "/archived";
-    if (scenario === "existing focus") screen.getByRole("button", { name: "Another control" }).focus();
-    rerender(
-      <GlobalMemoEditorProvider>
-        <Probe />
-      </GlobalMemoEditorProvider>,
-    );
-
-    // Returning to the original route or viewport must not rearm focus.
-    mocks.pathname = "/";
-    mocks.desktop = true;
-    rerender(
-      <GlobalMemoEditorProvider>
-        <Probe />
-      </GlobalMemoEditorProvider>,
-    );
-    expect(claimFocus()).toBe(false);
   });
 
   it("opens a modal focus-mode editor, closes the sidebar surfaces, and restores focus after Escape", async () => {
@@ -298,24 +237,5 @@ describe("GlobalMemoEditorProvider", () => {
     renderProvider(<Trigger />);
     fireEvent.click(screen.getByRole("button", { name: "Open editor" }));
     expect(mocks.preload).not.toHaveBeenCalled();
-  });
-
-  it.each([
-    "/",
-    "/archived",
-    "/trash",
-    "/setting",
-    "/views",
-    "/about",
-    "/memos/abc",
-    "/memos/shares/token",
-    "/403",
-    "/404",
-    "/unknown",
-  ])("creates an unassigned memo from %s", async (pathname) => {
-    mocks.pathname = pathname;
-    await openViaTrigger();
-
-    expect(mocks.editorProps?.draft).toEqual({ scope: "global" });
   });
 });

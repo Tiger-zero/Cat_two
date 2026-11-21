@@ -8,7 +8,6 @@ import PagedMemoList, { EmptyLine, getMemoKey } from "@/components/PagedMemoList
 import { useExportMemos } from "@/components/Settings/useExportMemos";
 import { useWelcomeGuide, WelcomeGuideDialog } from "@/components/WelcomeGuide";
 import { useAuth } from "@/contexts/AuthContext";
-import { useGlobalMemoEditor } from "@/contexts/GlobalMemoEditorContext";
 import { useMemoFilterContext } from "@/contexts/MemoFilterContext";
 import { NewMemoProvider } from "@/contexts/NewMemoContext";
 import { useMemoFilters, useMemoSorting } from "@/hooks";
@@ -25,7 +24,6 @@ const Home = () => {
   const suggestions = useMemoSuggestions();
   const t = useTranslate();
   const { isUserSettingsInitialized } = useAuth();
-  const { claimHomeAutoFocus } = useGlobalMemoEditor();
   const { filters } = useMemoFilterContext();
   const contextFilter = user && buildMemoCreatorFilter(user.name);
   const calendarDay = filters.find((filter) => filter.factor === "displayTime")?.value;
@@ -98,15 +96,26 @@ const Home = () => {
           orderBy={orderBy}
           filter={memoFilter}
           contextFilter={contextFilter}
-          renderHeader={() => (
-            <MemoFeedMenu
-              canExport={canExport}
-              selectedCount={selectedNames?.size}
-              exporting={exporting}
-              onBeginSelection={() => setSelection({ scope: selectionScope, names: new Set() })}
-              onEndSelection={() => setSelection(undefined)}
-              onExport={download}
-            />
+          renderStickyHeader={() => (
+            <>
+              <MemoFeedMenu
+                canExport={canExport}
+                selectedCount={selectedNames?.size}
+                exporting={exporting}
+                onBeginSelection={() => setSelection({ scope: selectionScope, names: new Set() })}
+                onEndSelection={() => setSelection(undefined)}
+                onExport={download}
+              />
+              {isUserSettingsInitialized && user && (
+                <MemoEditor
+                  draft={{ scope: "home", createTime: defaultCreateTime }}
+                  expandOnFocus
+                  className="memo-list-gap md:px-5 md:pt-4"
+                  placeholder={t("editor.any-thoughts")}
+                  suggestions={suggestions}
+                />
+              )}
+            </>
           )}
           emptyState={
             <EmptyLine
@@ -115,19 +124,6 @@ const Home = () => {
               onAction={user ? welcomeGuide.show : undefined}
             />
           }
-          renderLeading={({ useGrid }) => {
-            if (!isUserSettingsInitialized || !user) return null;
-
-            return (
-              <MemoEditor
-                draft={{ scope: "home", createTime: defaultCreateTime }}
-                autoFocus={claimHomeAutoFocus}
-                className={useGrid ? undefined : "memo-list-gap md:px-5 md:pt-4"}
-                placeholder={t("editor.any-thoughts")}
-                suggestions={suggestions}
-              />
-            );
-          }}
         />
       </NewMemoProvider>
     </div>

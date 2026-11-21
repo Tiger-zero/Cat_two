@@ -1,5 +1,5 @@
 import copy from "copy-to-clipboard";
-import { Suspense, useCallback, useEffect, useRef, useState } from "react";
+import { type FocusEvent, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { DrawingSheet } from "@/components/DrawingSheet";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSourceMode } from "@/hooks/useSourceMode";
@@ -44,6 +44,7 @@ export const EditSession: React.FC<EditSessionProps> = ({
   draftKey,
   initialDraftRaw,
   frameless,
+  expandOnFocus,
   timestampLead,
   memo,
   parentMemoName,
@@ -72,6 +73,11 @@ export const EditSession: React.FC<EditSessionProps> = ({
   const isSaving = useEditorSelector((s) => s.ui.isLoading.saving);
   const hasTimestamp = useEditorSelector((s) => Boolean(s.timestamps.createTime));
   const [isAudioRecorderOpen, setIsAudioRecorderOpen] = useState(false);
+  const [isComposerExpanded, setIsComposerExpanded] = useState(false);
+  const collapseFrame = useRef(0);
+  const pressedPointer = useRef(false);
+  const pendingCollapse = useRef<(() => void) | undefined>(undefined);
+  const canExpandComposer = expandOnFocus && !memo && !parentMemoName && !frameless && !isFocusMode;
   const { createBlobUrl } = useBlobUrls();
   const saveMediaMetadata = userGeneralSetting?.saveMediaMetadata ?? false;
   const inlineImageUpload = useInlineImageUpload(editorRef);
@@ -133,6 +139,34 @@ export const EditSession: React.FC<EditSessionProps> = ({
   }, [draftKey, getBaseRevision, notifyStaleDraft]);
 
   const { containerRef: editorContainerRef, placeholderHeight, animateFocusMode } = useFocusMode(isFocusMode);
+  useEffect(() => {
+    if (!canExpandComposer || !isComposerExpanded) return;
+    const browser = editorContainerRef.current?.ownerDocument.defaultView;
+    if (!browser) return;
+
+    // Resizing before pointerup can move a control below the composer away from the pointer.
+    const press = (event: PointerEvent) => {
+      if (event.isPrimary) pressedPointer.current = true;
+    };
+    const release = () => {
+      pressedPointer.current = false;
+      pendingCollapse.current?.();
+      pendingCollapse.current = undefined;
+    };
+    browser.addEventListener("pointerdown", press, true);
+    browser.addEventListener("pointerup", release, true);
+    browser.addEventListener("pointercancel", release, true);
+    browser.addEventListener("blur", release);
+    return () => {
+      browser.removeEventListener("pointerdown", press, true);
+      browser.removeEventListener("pointerup", release, true);
+      browser.removeEventListener("pointercancel", release, true);
+      browser.removeEventListener("blur", release);
+      pressedPointer.current = false;
+      pendingCollapse.current = undefined;
+      cancelAnimationFrame(collapseFrame.current);
+    };
+  }, [canExpandComposer, isComposerExpanded, editorContainerRef]);
 
   // Initial state restores manual times for the selected day. Only an actual
   // day change, including clearing the filter, resets the calendar defaults.
@@ -182,7 +216,32 @@ export const EditSession: React.FC<EditSessionProps> = ({
       onFocusModeExit();
       return;
     }
-    animateFocusMode(() => dispatch(actions.toggleFocusMode()));
+    animateFocusMode(() => {
+      setIsComposerExpanded(false);
+      dispatch(actions.toggleFocusMode());
+    });
+  };
+
+  const handleComposerFocus = (event: FocusEvent<HTMLDivElement>) => {
+    pendingCollapse.current = undefined;
+    cancelAnimationFrame(collapseFrame.current);
+    if (event.target.closest(".memo-editor-root")) setIsComposerExpanded(true);
+  };
+
+  const handleComposerBlur = (event: FocusEvent<HTMLDivElement>) => {
+    const frame = event.currentTarget;
+    if (!isComposerExpanded || frame.contains(event.relatedTarget)) return;
+
+    // Focus can move to a portal, whose React focus event still reaches this frame.
+    // Wait for it before deciding whether to move the toolbar back up.
+    const collapseAfterFocus = () => {
+      cancelAnimationFrame(collapseFrame.current);
+      collapseFrame.current = requestAnimationFrame(() => {
+        if (!frame.contains(frame.ownerDocument.activeElement)) setIsComposerExpanded(false);
+      });
+    };
+    if (pressedPointer.current) pendingCollapse.current = collapseAfterFocus;
+    else collapseAfterFocus();
   };
 
   const handleCancel = useCallback(async () => {
@@ -275,6 +334,10 @@ export const EditSession: React.FC<EditSessionProps> = ({
 
       <div
         ref={editorContainerRef}
+        data-expand-on-focus={canExpandComposer || undefined}
+        data-composer-expanded={(canExpandComposer && isComposerExpanded) || undefined}
+        onFocusCapture={canExpandComposer ? handleComposerFocus : undefined}
+        onBlurCapture={canExpandComposer ? handleComposerBlur : undefined}
         className={cn(
           "group w-full flex flex-col justify-between items-start gap-2",
           // A card that is the frame already supplies the background, border and padding; a session floating over the page in

@@ -59,8 +59,8 @@ interface Props {
   enabled?: boolean;
   /** Route-owned content rendered before the list and inside column one in grid mode. */
   renderLeading?: (options: { useGrid: boolean }) => ReactNode;
-  /** Route-owned content spanning the full list width above every column (e.g. a page identity block). */
-  renderHeader?: (options: { useGrid: boolean }) => ReactNode;
+  /** Route-owned controls above the list that stay visible when scrolling on desktop. */
+  renderStickyHeader?: () => ReactNode;
   /** Route-owned first-use content for an empty, unfiltered list. Without it the generic placeholder shows. */
   emptyState?: ReactNode;
 }
@@ -217,10 +217,11 @@ const PagedMemoList = (props: Props) => {
   }, [canPaginate, hasNextPage, isFetchingNextPage, fetchNextPage]);
 
   const leadingContent = props.renderLeading?.({ useGrid });
-  const headerContent = props.renderHeader?.({ useGrid });
+  const stickyHeader = props.renderStickyHeader?.();
+  const stickyHeaderMaxWidth =
+    useGrid && !fullWidth && maxColumns > 1 ? maxColumns * MAX_COLUMN_WIDTH + (maxColumns - 1) * GRID_GAP : undefined;
 
-  // A freshly created memo is hoisted to the front; pin it to the top of column one so it
-  // appears right under the composer instead of dropping into a random (shortest) column.
+  // A freshly created memo is hoisted to the front and placed at the top of column one.
   const displayMemoList = isDisplayPending || isInitialError ? [] : sortedMemoList;
   const firstMemo = displayMemoList[0];
   const priorityKey = newMemoName && firstMemo?.name === newMemoName ? getMemoKey(firstMemo) : undefined;
@@ -268,10 +269,7 @@ const PagedMemoList = (props: Props) => {
   const initialError = isInitialError ? errorNotice : null;
   const pageError = isFetchNextPageError ? errorNotice : null;
 
-  // Column one is the action column: the composer and any active filters head it, and the
-  // empty state follows them. The newest memo also lands directly beneath them (priorityKey
-  // above). Every vertical seam inside the stack uses GRID_GAP so y-spacing matches the
-  // grid's x-spacing exactly.
+  // The first column carries the collection's active filters, loading and empty states.
   const gridLeading =
     leadingContent || hasFilters || initialLoader || emptyPlaceholder || initialError ? (
       <div className="flex w-full flex-col" style={{ gap: GRID_GAP }}>
@@ -302,6 +300,17 @@ const PagedMemoList = (props: Props) => {
             !useGrid && "md:[--memos-list-gap:1rem]",
           )}
         >
+          {stickyHeader && (
+            <div
+              className={cn(
+                "mx-auto flex w-full flex-col md:sticky md:top-0 md:z-40 md:-mt-3 md:bg-mu-canvas md:pt-3 md:[overflow-anchor:none]",
+                useGrid && "md:[--memos-list-gap:0.75rem]",
+              )}
+              style={stickyHeaderMaxWidth === undefined ? undefined : { maxWidth: stickyHeaderMaxWidth }}
+            >
+              {stickyHeader}
+            </div>
+          )}
           {useGrid ? (
             <>
               <ColumnGridUntrappedProvider>
@@ -310,7 +319,6 @@ const PagedMemoList = (props: Props) => {
                   getKey={getMemoKey}
                   renderItem={(memo) => props.renderer(memo, { compact: effectiveCompact })}
                   estimateHeight={estimateMemoCardHeight}
-                  header={headerContent}
                   leading={gridLeading}
                   priorityKey={priorityKey}
                   maxColumns={maxColumns}
@@ -321,7 +329,6 @@ const PagedMemoList = (props: Props) => {
             </>
           ) : (
             <>
-              {headerContent}
               {leadingContent}
               <MemoFilters className="memo-list-gap" />
               {initialLoader}

@@ -35,7 +35,7 @@ export const EditorMetadata: FC<EditorMetadataProps> = ({
   ) : undefined;
 
   return (
-    <div className="w-full flex flex-col gap-2">
+    <div className="memo-editor-metadata w-full flex flex-col gap-2">
       <AttachmentListEditor
         attachments={attachments}
         localFiles={localFiles}

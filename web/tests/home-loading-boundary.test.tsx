@@ -45,19 +45,16 @@ vi.mock("@/components/Settings/useExportMemos", () => ({
 vi.mock("@/components/PagedMemoList", () => ({
   default: ({
     renderer,
-    renderLeading,
-    renderHeader,
+    renderStickyHeader,
     ...props
   }: {
     renderer: (memo: { name: string; space?: string }, options: { compact: boolean }) => React.ReactNode;
-    renderLeading: (options: { useGrid: boolean }) => React.ReactNode;
-    renderHeader: () => React.ReactNode;
+    renderStickyHeader: () => React.ReactNode;
   } & Record<string, unknown>) => {
     state.listProps = props;
     return (
       <>
-        {renderHeader()}
-        {renderLeading({ useGrid: false })}
+        {renderStickyHeader()}
         {renderer({ name: "memos/1", space: "spaces/legacy" }, { compact: false })}
       </>
     );
@@ -73,10 +70,6 @@ vi.mock("@/components/WelcomeGuide", () => ({
 
 vi.mock("@/contexts/AuthContext", () => ({
   useAuth: () => ({ isUserSettingsInitialized: true }),
-}));
-
-vi.mock("@/contexts/GlobalMemoEditorContext", () => ({
-  useGlobalMemoEditor: () => ({ claimHomeAutoFocus: () => true }),
 }));
 
 vi.mock("@/contexts/MemoFilterContext", () => ({
@@ -118,7 +111,8 @@ describe("<Home>", () => {
     expect(screen.getByTestId("memo-view")).toBeInTheDocument();
     expect(state.listProps).toMatchObject({ contextFilter: 'creator == "users/steven"' });
     expect(state.editorProps?.draft).toEqual({ scope: "home", createTime: undefined });
-    expect(state.editorProps?.autoFocus).toEqual(expect.any(Function));
+    expect(state.editorProps).toMatchObject({ expandOnFocus: true });
+    expect(state.editorProps?.autoFocus).toBeUndefined();
     expect(state.editorProps?.suggestions).toEqual([{ id: "tag:work" }]);
     expect(state.filterOptions).not.toHaveProperty("creatorName");
     expect(state.memoViewProps).toMatchObject({ showPinned: true });

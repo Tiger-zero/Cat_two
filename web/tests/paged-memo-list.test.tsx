@@ -307,6 +307,29 @@ describe("<PagedMemoList>", () => {
     }
   });
 
+  it("keeps the sticky composer mounted when switching between flow and grid", () => {
+    const widthSpy = vi.spyOn(Element.prototype, "clientWidth", "get").mockReturnValue(900);
+    const client = new QueryClient();
+    const list = () => (
+      <QueryClientProvider client={client}>
+        <PagedMemoList renderer={() => <div />} renderStickyHeader={() => <textarea aria-label="Draft" />} />
+      </QueryClientProvider>
+    );
+    try {
+      const { rerender } = render(list());
+      const composer = screen.getByRole("textbox", { name: "Draft" });
+      fireEvent.change(composer, { target: { value: "Unsent text" } });
+
+      view.maxColumns = 2;
+      rerender(list());
+
+      expect(screen.getByRole("textbox", { name: "Draft" })).toBe(composer);
+      expect(composer).toHaveValue("Unsent text");
+    } finally {
+      widthSpy.mockRestore();
+    }
+  });
+
   describe("compact policy", () => {
     beforeEach(() => {
       feed.memos = [memo];

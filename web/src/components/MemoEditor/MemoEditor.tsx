@@ -97,6 +97,8 @@ export interface MemoEditorEditProps extends MemoEditingProps {
 export interface MemoEditorDraftProps extends MemoEditingProps {
   mode?: "edit";
   draft: MemoDraftSeed;
+  /** Give the desktop inline composer more writing room while it has focus. */
+  expandOnFocus?: boolean;
 }
 
 export type MemoEditorProps = MemoEditorViewProps | MemoEditorEditProps | MemoEditorDraftProps;
@@ -182,6 +184,7 @@ const MemoEditorDraft = ({ draft, ...editing }: MemoEditorDraftProps) => {
 
 interface EditingSessionProps extends MemoEditingProps {
   identity: MemoEditIdentity;
+  expandOnFocus?: boolean;
   memo?: Parameters<typeof initialEditorState>[0]["memo"];
   parentMemoName?: string;
   defaultCreateTime?: Date;

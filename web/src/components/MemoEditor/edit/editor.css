@@ -30,6 +30,29 @@
   }
 }
 
+@variant md {
+  [data-expand-on-focus] {
+    & .memo-editor-scroller {
+      max-height: min(6rem, 22dvh);
+    }
+    & .memo-editor-metadata {
+      max-height: min(12rem, 22dvh);
+      overflow-y: auto;
+    }
+
+    &[data-composer-expanded] {
+      border-color: rgb(48, 207, 121);
+
+      & .memo-editor-scroller {
+        max-height: min(18rem, 36dvh);
+      }
+      & .memo-editor-root {
+        min-height: min(8rem, 24dvh);
+      }
+    }
+  }
+}
+
 /*
  * Focus mode's toggle (useFocusMode): the frame's box moves and resizes between its
  * place on the page and the sheet, its two looks cross-fading inside it at their

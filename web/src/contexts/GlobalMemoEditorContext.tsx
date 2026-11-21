@@ -1,12 +1,9 @@
 import { Dialog as DialogPrimitive } from "@base-ui/react/dialog";
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
-import { useLocation } from "react-router-dom";
-import { getSidebarRouteKind } from "@/components/AppSidebar/routes";
 import { MemoEditor, preloadMemoEditing } from "@/components/MemoEditor";
 import { useAppSidebar } from "@/contexts/AppSidebarContext";
 import { useAuth } from "@/contexts/AuthContext";
 import useCurrentUser from "@/hooks/useCurrentUser";
-import useMediaQuery from "@/hooks/useMediaQuery";
 import { useMemoSuggestions } from "@/hooks/useMemoSuggestions";
 import { useTranslate } from "@/utils/i18n";
 
@@ -14,8 +11,6 @@ interface GlobalMemoEditorContextValue {
   /** Whether the signed-in user is ready to compose; gates every visible entry point. */
   canOpen: boolean;
   openEditor: () => void;
-  /** Claims the initial desktop Home focus once, after the editor restores its draft. */
-  claimHomeAutoFocus: () => boolean;
 }
 
 const GlobalMemoEditorContext = createContext<GlobalMemoEditorContextValue | null>(null);
@@ -38,13 +33,9 @@ const findVisibleFocusTarget = (selector: string): HTMLElement | null =>
 
 export function GlobalMemoEditorProvider({ children }: { children: ReactNode }) {
   const t = useTranslate();
-  const location = useLocation();
   const currentUserName = useCurrentUser()?.name;
   const suggestions = useMemoSuggestions();
   const { isUserSettingsInitialized } = useAuth();
-  const desktop = useMediaQuery("md");
-  const [initialHome] = useState(() => ({ location, user: currentUserName }));
-  const homeAutoFocusPending = useRef(desktop && getSidebarRouteKind(location.pathname) === "home" && Boolean(currentUserName));
   const { setMobileOpen, setQuickFindOpen } = useAppSidebar();
   // Keep the open composer tied to the session that opened it.
   const [openedBy, setOpenedBy] = useState<string>();
@@ -52,25 +43,6 @@ export function GlobalMemoEditorProvider({ children }: { children: ReactNode }) 
   // re-rendering the provider and the whole editor tree it hosts.
   const isSavingRef = useRef(false);
   const returnFocusRef = useRef<HTMLElement | null>(null);
-
-  useEffect(() => {
-    if (
-      location.key !== initialHome.location.key ||
-      location.pathname !== initialHome.location.pathname ||
-      location.search !== initialHome.location.search ||
-      currentUserName !== initialHome.user ||
-      !desktop
-    ) {
-      homeAutoFocusPending.current = false;
-    }
-  }, [location, currentUserName, desktop, initialHome]);
-
-  const claimHomeAutoFocus = useCallback(() => {
-    const pending = homeAutoFocusPending.current;
-    homeAutoFocusPending.current = false;
-    // A user who already focused another control takes precedence over startup focus.
-    return pending && (document.activeElement === document.body || document.activeElement === null);
-  }, []);
 
   const closeEditor = useCallback(() => {
     isSavingRef.current = false;
@@ -89,8 +61,6 @@ export function GlobalMemoEditorProvider({ children }: { children: ReactNode }) 
 
   const openEditor = useCallback(() => {
     if (!canOpen || !currentUserName) return;
-    homeAutoFocusPending.current = false;
-
     // Owned here so no caller can leave a sidebar surface open underneath.
     setMobileOpen(false);
     setQuickFindOpen(false);
@@ -121,7 +91,7 @@ export function GlobalMemoEditorProvider({ children }: { children: ReactNode }) 
   }, []);
 
   const editorIsOpen = openedBy !== undefined && openedBy === currentUserName;
-  const value = useMemo(() => ({ canOpen, openEditor, claimHomeAutoFocus }), [canOpen, openEditor, claimHomeAutoFocus]);
+  const value = useMemo(() => ({ canOpen, openEditor }), [canOpen, openEditor]);
 
   return (
     <GlobalMemoEditorContext.Provider value={value}>
