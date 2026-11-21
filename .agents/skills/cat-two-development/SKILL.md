@@ -51,6 +51,11 @@ Cat_two 从 Fumos 和 Memos 衍生而来，以 `Tiger-zero/Cat_two` 的 `main` �
 
 `0.03` 的发布工作流通过。同提交的后端 CI 中，MySQL 的 `TestUserStore` 在删除账号时返回 `Error 1615`，提示预处理语句需要重新准备。本地 MySQL 套件及后续两版后端 CI 通过。再遇到类似问题时，先按驱动和用例单独复现，记录原始 SQL 错误。 [MySQL 测试日志](https://github.com/Tiger-zero/Cat_two/actions/runs/44883528899/job/136783787756)
 
+### 11 月 21 日 17:29
+
+- **Codex 笔记插件**　新增仓库插件目录和 `cat-two-notes@cat-two` v0.1.0。插件复用现有 `/mcp`，NAS 地址、令牌环境变量和工具范围由客户端配置。原仓库 MCP Skill 引用同一份查询、分组和确认后归档工作流。升级插件时用隔离的 Codex 配置检查实际安装、工作流命名空间和工具发现。 [插件安装与接入](../../../plugins/cat-two-notes/README.md) · [插件目录](../../plugins/marketplace.json)
+- **验证范围**　插件清单和文档示例通过检查，Codex CLI 实测安装，App Server 在仓库外发现已启用的工作流。Docker Hub `0.05` 的独立实例验证 MCP 握手、鉴权、笔记读写与标签筛选。Codex 实际连接测试中默认发现四个只读工具，启用写入后可额外发现创建和更新工具。本次变更通过仓库交付，实测使用既有镜像和合成笔记，真实 NAS 接入待本地配置。
+
 ## 开发和验证
 
 1. 检查工作区和目标提交，保留已有修改。按用户要完成的操作，从网页或 API 入口追到权限和数据层。先用相关的小范围测试验证，再运行与改动面相符的检查。

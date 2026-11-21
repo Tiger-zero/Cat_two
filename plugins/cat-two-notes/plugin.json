@@ -1,0 +1,18 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "cat-two-notes",
+  "version": "0.1.0",
+  "description": "通过已配置的 Cat_two MCP 查询和分组笔记、汇总知识，并归档 Codex 任务。",
+  "extensions": {
+    "com.openai": {
+      "interface": {
+        "displayName": "Cat_two 笔记",
+        "shortDescription": "整理 NAS 上的个人笔记，归档 Codex 任务",
+        "defaultPrompt": [
+          "按现有标签汇总 Cat_two 最近七天的未完成待办，保留原笔记链接。",
+          "把本次任务整理成 Cat_two 归档草稿，先给我确认。"
+        ]
+      }
+    }
+  }
+}
