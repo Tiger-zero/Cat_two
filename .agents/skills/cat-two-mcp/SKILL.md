@@ -18,3 +18,5 @@ description: >-
 ## 使用 MCP 整理笔记
 
 按 [Cat_two 笔记工作流](../../../plugins/cat-two-notes/skills/organize-notes/SKILL.md) 发现工具、核对当前账号、整理笔记和归档任务。该文件同样用于已安装的 Codex 插件。笔记写入前展示完整草稿并取得用户确认，工具名和参数以部署实例返回的列表为准。 [工具定义](../../../server/mcp/catalog.go) · [REST 字段](../../../proto/gen/openapi.yaml)
+
+同步总结时，将正文作为 Markdown 写入 `content`。标题、表格、任务列表、提示块等语法可查项目的格式清单。 [支持的内容格式](../cat-two-development/SKILL.md#支持的内容格式)

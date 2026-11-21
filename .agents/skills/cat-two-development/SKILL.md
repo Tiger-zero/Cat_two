@@ -19,6 +19,31 @@ Cat_two 从 Fumos 和 Memos 衍生而来，以 `Tiger-zero/Cat_two` 的 `main` �
 - 默认简体中文，仅提供简体中文和英语。日历、笔记日期和日期筛选统一使用 `Asia/Shanghai`。调整局部颜色或字体时，先找实际渲染组件和主题变量，再核对相邻状态与主题。
 - 个人笔记的权限由服务端检查。移除入口时一起核对路由、设置、API 和数据依赖。升级时保留旧有笔记、附件及关联数据，使原作者仍能访问自己的内容。
 
+## 支持的内容格式
+
+以下清单以仓库当前源码为准。笔记正文以 Markdown 保存，富文本和 Markdown 模式是同一篇笔记的两个编辑界面。通过底部「＋ → Markdown 模式」切换。 [编辑器说明](../../../web/src/components/MemoEditor/README.md#formatting-and-source-mode)
+
+| 入口 | 可用格式 |
+| --- | --- |
+| 底部快捷按钮 | 粗体、斜体、无序列表、有序列表、代码块。 |
+| 底部「更多格式」 | 正文、一级至三级标题、删除线、行内代码、引用、任务列表、表格、分割线和网页链接。 |
+| 富文本 `/` 菜单 | 还可插入四级标题、提示块和可折叠章节。 |
+
+### Markdown 和同步
+
+- **结构**　`#` 至 `######` 标题、`>` 引用、无序和有序列表、嵌套列表、`- [ ]` 与 `- [x]` 任务、带列对齐的 GFM 管道表格、`---` 分隔线。单个换行会在正文显示为换行。
+- **行内和代码**　粗体 `**文字**`、斜体 `*文字*`、删除线 `~~文字~~`、用反引号包住的行内代码、围栏代码块（可标注语言）、普通链接、站内锚点、Markdown 图片、`#标签/子标签` 和 `@用户名`。
+- **扩展**　GitHub 风格提示块使用独立的首行 `> [!NOTE]`、`> [!TIP]`、`> [!IMPORTANT]`、`> [!WARNING]` 或 `> [!CAUTION]`，正文续行以 `>` 开头。脚注用 `[^1]` 和 `[^1]: 说明`。KaTeX 行内公式用 `$…$`，独立公式的开头和结尾各用单独一行 `$$`。Mermaid 图使用标记为 `mermaid` 的代码围栏。HTML 按允许列表处理，常用例子有 `<details>`、`<summary>`、`<kbd>`、`<sub>` 和 `<sup>`。 [解析配置](../../../web/src/lib/memo-ast.ts) · [渲染扩展](../../../web/src/lib/memo-markdown.ts) · [HTML 允许列表](../../../web/src/lib/html-sanitize-schema.ts)
+- **同步和粘贴**　通过 MCP 或 API 把完整 Markdown 作为笔记 `content` 提交。手动粘贴时，用 Markdown 模式里的纯文本粘贴保留原写法。富文本粘贴会将格式转换成 Markdown，可能规范化标记的写法。 [同步入口](../../../server/mcp/README.md#tool-surface)
+
+### 附件和归档
+
+| 用途 | 常用格式和行为 |
+| --- | --- |
+| 笔记附件 | 常见图片如 PNG、JPEG、GIF、WebP 可预览。视频和音频的播放取决于浏览器支持。PDF（`.pdf`）可交由浏览器打开，Word（`.doc`、`.docx`）、Excel（`.xls`、`.xlsx`）及其他普通附件可按原文件名下载。回形针是通用上传入口。 [附件列表](../../../web/src/components/MemoMetadata/Attachment/AttachmentListView.tsx) · [文件类型识别](../../../server/api/attachment_service.go) |
+| 笔记导入和导出 | 批量迁移使用项目 ZIP 归档（`memos-export` 1.x），包含 `manifest.json`、每篇笔记的 `.md` 正文与 `.json` 元数据，以及附件或附件外链。单篇 Markdown 可通过编辑器粘贴或走 API/MCP 同步。 [归档规范](../../../core/memoexport/format.go) |
+| 笔记图片 | 可把一条笔记导出为 PNG 图片。 [图片导出](../../../web/src/components/MemoActionMenu/MemoShareImageDialog.tsx) |
+
 ## 开发记录
 
 日期按上海时区记录，提交可用于回看变更动机。
@@ -104,6 +129,10 @@ Cat_two 从 Fumos 和 Memos 衍生而来，以 `Tiger-zero/Cat_two` 的 `main` �
 - **笔记格式工具栏**　底部增加斜体和「更多格式」。富文本和 Markdown 模式可使用正文、一级至三级标题、删除线、行内代码、引用、任务列表、表格、分割线和网页链接。复用编辑器的 Markdown 序列化与 URL 校验，支持从选区添加格式。源码表格和分割线放在当前区块之后，保留原来的段落或选区文本。菜单选择后先更新草稿，再随关闭流程把焦点交还编辑器，避免紧接着保存时漏掉格式。处理含有字面百分号的站内锚点。 [编辑器说明](../../../web/src/components/MemoEditor/README.md#formatting-and-source-mode)
 - **同步验证**　用隔离实例的真实 Codex CLI 写入和更新中文 Markdown 总结，核对标题、任务、表格、代码、提示块、脚注和链接原样读回。在 Chromium 打开同类同步笔记，确认渲染及切换模式保存后保留原文。源码模式下用纯文本粘贴可保留原写法。 [功能说明](../../../docs/cat-two-guide.md#网页里的功能)
 - **网页验证**　浅色桌面及深色 360px Chromium 实测菜单、键盘切换、选区链接、快速保存后重开、附件和工具栏布局。1,371 项前端测试、类型检查和生产构建通过。源码交付后随新版容器镜像提供给 NAS。
+
+### 11 月 21 日 21:14
+
+- **格式清单**　对照编辑器工具栏、Markdown 配置、附件显示及 ZIP 归档代码，在本 Skill 记录可用格式，并从 MCP Skill 链入供同步笔记时查阅。格式能力以实例部署版本为准。
 
 ## 开发和验证
 
