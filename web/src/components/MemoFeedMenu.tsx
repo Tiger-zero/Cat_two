@@ -78,7 +78,9 @@ function MemoFeedMenu({ canExport, selectedCount, exporting, onBeginSelection, o
             <Menu.Trigger
               render={
                 <Button variant="ghost" iconEnd={<ChevronDownIcon />} className="max-w-full px-2">
-                  <span className="mu-heading">{t("memo-feed.title")}</span>
+                  <span className="mu-heading" style={{ fontSize: 17, fontWeight: 700 }}>
+                    {t("memo-feed.title")}
+                  </span>
                 </Button>
               }
             />
