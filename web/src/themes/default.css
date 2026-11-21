@@ -5,8 +5,7 @@
  * below. Paper is defined in paper.css.
  * App text uses the package's type classes
  * (`mu-caption`, `mu-body`, `mu-label`, `mu-title`, `mu-heading`), not Tailwind text sizes.
- * Memo text (the content view, the composer and its placeholder) stays 16px/24px at weight
- * 400 with `text-base leading-6`: the scale has no regular 16px style, and `mu-title` is 500.
+ * Memo text uses its own typography shared with the Markdown editor theme.
  */
 @layer mu {
   @media (forced-colors: none) {

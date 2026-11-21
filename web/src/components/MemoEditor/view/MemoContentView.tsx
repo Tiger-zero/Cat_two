@@ -119,7 +119,7 @@ const MemoContentViewImpl = (props: MemoContentViewProps) => {
         data-memo-content
         data-memo-name={memoName}
         className={cn(
-          "relative w-full max-w-full wrap-break-word text-base leading-6",
+          "memo-text relative w-full max-w-full wrap-break-word",
           "[&_.katex-display]:max-w-full",
           "[&_.katex-display]:overflow-x-auto",
           "[&_.katex-display]:overflow-y-hidden",

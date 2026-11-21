@@ -6,6 +6,15 @@
 @import "./themes/default.css";
 @import "./themes/paper.css";
 
+/* Barlow Regular from https://github.com/jpt/barlow, distributed with its SIL OFL. */
+@font-face {
+  font-family: "Barlow";
+  src: url("/fonts/barlow/Barlow-Regular.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+}
+
 /*
  * Rich text in the memo editor: everything outside its source mode, which shows the
  * Markdown as text (the editor marks its root `.mbe-source-mode`). The editor applies
@@ -22,7 +31,20 @@
   box-shadow: var(--memos-panel-shadow, none);
 }
 
+@utility memo-text {
+  font-family: var(--memos-note-font);
+  font-size: var(--memos-note-font-size);
+  line-height: var(--memos-note-line-height);
+  letter-spacing: 0.1px;
+}
+
 @layer base {
+  :root {
+    --memos-note-font: "Barlow", "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", "Noto Sans SC", Helvetica, Arial, sans-serif;
+    --memos-note-font-size: 14px;
+    --memos-note-line-height: 25.2px;
+  }
+
   .memos-theme-changing,
   .memos-theme-changing *,
   .memos-theme-changing *::before,

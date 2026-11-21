@@ -256,10 +256,10 @@ export const MEMO_EDITOR_THEME: Theme = (() => {
     colorScheme: "inherit",
     tokens: {
       colors,
-      font: "inherit",
+      font: "var(--memos-note-font)",
       mono: "var(--mu-font-mono)",
-      fontSize: 16,
-      lineHeight: 24,
+      fontSize: "var(--memos-note-font-size)",
+      lineHeight: "var(--memos-note-line-height)",
       radius: "var(--mu-radius-md)",
       blockGap: 12,
     },
