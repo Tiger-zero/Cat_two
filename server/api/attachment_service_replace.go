@@ -160,7 +160,7 @@ func (s *APIService) finishAttachmentReplace(ctx context.Context, upload *attach
 	upload.state.finalizeAttempted = true
 	// A replacement is never part of a motion photo: a motion JPEG is stored as
 	// a plain, EXIF-stripped image.
-	if err := s.processAndStoreContent(ctx, content, setting, file, false); err != nil {
+	if err := s.processAndStoreContent(ctx, content, setting, file, replaced.ID); err != nil {
 		return nil, err
 	}
 	// From here the new object is the attachment's, under the replaced UID.

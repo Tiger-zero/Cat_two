@@ -21,11 +21,34 @@ type MemoCommentAuthorizationSnapshot struct {
 // memo. The replying memo is authorized independently by the normal memo-create
 // policy; no placement or audience is inherited from this snapshot.
 func ValidateMemoCommentAuthorization(snapshot *MemoCommentAuthorizationSnapshot) error {
+	return checkMemoCommentParticipation(snapshot, false)
+}
+
+// AuthorizeCommentContext checks the parent inside a memo creation
+// transaction. Archive restoration can include an owned archived parent.
+func (m *MemoMutation) AuthorizeCommentContext(snapshot *MemoCommentAuthorizationSnapshot) error {
+	if snapshot == nil {
+		return ErrMemoPermissionDenied
+	}
+	participation := *snapshot
+	participation.Personal = m.PersonalCreation
+	return checkMemoCommentParticipation(&participation, m.RestoreArchivedComment)
+}
+
+func checkMemoCommentParticipation(snapshot *MemoCommentAuthorizationSnapshot, restoreArchivedComment bool) error {
 	if snapshot == nil || snapshot.ActorUserID <= 0 || !snapshot.Actor.Active {
 		return ErrMemoPermissionDenied
 	}
-	if snapshot.ContextID <= 0 || snapshot.ContextRowStatus != Normal || !isValidVisibility(snapshot.ContextVisibility) {
+	if snapshot.ContextID <= 0 || !isValidVisibility(snapshot.ContextVisibility) {
 		return ErrMemoSpaceNotWritable
+	}
+	if snapshot.ContextRowStatus != Normal {
+		if !restoreArchivedComment || snapshot.ContextRowStatus != Archived {
+			return ErrMemoSpaceNotWritable
+		}
+		if snapshot.ContextCreatorID != snapshot.ActorUserID {
+			return ErrMemoPermissionDenied
+		}
 	}
 	if snapshot.Personal {
 		if snapshot.ContextCreatorID != snapshot.ActorUserID {

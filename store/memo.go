@@ -285,6 +285,32 @@ func (s *Store) ListMemos(ctx context.Context, find *FindMemo) ([]*Memo, error) 
 	return s.driver.ListMemos(ctx, find)
 }
 
+// VisitActiveMemoTags visits the tags of each active top-level memo owned by the active account.
+func (s *Store) VisitActiveMemoTags(ctx context.Context, creatorID int32, visit func([]string)) error {
+	rows, err := s.driver.QueryActiveMemoTags(ctx, creatorID)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var encoded []byte
+		if err := rows.Scan(&encoded); err != nil {
+			return err
+		}
+		if len(encoded) == 0 {
+			continue
+		}
+		var tags []string
+		if err := json.Unmarshal(encoded, &tags); err != nil {
+			return errors.Wrap(err, "decode memo tags")
+		}
+		if len(tags) > 0 {
+			visit(tags)
+		}
+	}
+	return rows.Err()
+}
+
 // CountUserMemos counts the memos a user created, comments included, in every
 // row status and Space.
 func (s *Store) CountUserMemos(ctx context.Context, creatorID int32) (int64, error) {

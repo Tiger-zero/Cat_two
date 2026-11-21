@@ -73,6 +73,7 @@ func saveAttachmentContent(
 	create *store.Attachment,
 	instanceStorageSetting *storepb.InstanceStorageSetting,
 	content io.Reader,
+	replacingID int32,
 ) error {
 	defaultStorage := store.GetDefaultStorage(instanceStorageSetting)
 	if defaultStorage == nil {
@@ -118,7 +119,20 @@ func saveAttachmentContent(
 		if err := ctx.Err(); err != nil {
 			return errors.Wrap(err, "failed to finalize attachment file")
 		}
-		savedPath, err := publishLocalAttachment(file.Name(), targetPath, create.UID)
+		var isReserved func(string) (bool, error)
+		if !strings.Contains(filepathTemplate, "{uuid}") {
+			isReserved = func(path string) (bool, error) {
+				if !filepath.IsAbs(path) {
+					absolute, err := filepath.Abs(path)
+					if err != nil {
+						return false, err
+					}
+					path = absolute
+				}
+				return stores.LocalAttachmentStorageReserved(ctx, path, replacingID)
+			}
+		}
+		savedPath, err := publishLocalAttachment(file.Name(), targetPath, create.UID, isReserved)
 		if err != nil {
 			return err
 		}
@@ -140,11 +154,10 @@ func saveAttachmentContent(
 		}
 		objectKey := replaceFilenameWithPathTemplate(filepathTemplate, create.Filename)
 		if !strings.Contains(filepathTemplate, "{uuid}") {
-			// PutObject overwrites silently, and two users can pick the same
-			// filename in the same second, so a template without a random
-			// component gets the attachment UID appended to keep keys unique.
+			// PutObject overwrites silently. Use fresh randomness even when
+			// re-importing the same attachment UID while cleanup is pending.
 			ext := filepath.Ext(objectKey)
-			objectKey = strings.TrimSuffix(objectKey, ext) + "_" + create.UID + ext
+			objectKey = strings.TrimSuffix(objectKey, ext) + "_" + random.UUID() + ext
 		}
 		key, err := driver.UploadObject(ctx, objectKey, create.Type, content)
 		if err != nil {
@@ -340,17 +353,24 @@ func replaceFilenameWithPathTemplate(path, filename string) string {
 
 // publishLocalAttachment reserves its destination exclusively before replacing
 // that reservation with the fully written file.
-func publishLocalAttachment(staged, path, uid string) (string, error) {
+func publishLocalAttachment(staged, path, uid string, isReserved func(string) (bool, error)) (string, error) {
 	ext := filepath.Ext(path)
 	base := strings.TrimSuffix(path, ext)
 	destination := path
 	for collision := 1; ; collision++ {
+		if isReserved != nil {
+			reserved, err := isReserved(destination)
+			if err != nil {
+				return "", errors.Wrap(err, "failed to check attachment file reservation")
+			}
+			if reserved {
+				destination = nextLocalAttachmentPath(base, uid, ext, collision)
+				continue
+			}
+		}
 		reservation, err := os.OpenFile(destination, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
 		if os.IsExist(err) {
-			destination = base + "_" + uid + ext
-			if collision > 1 {
-				destination = fmt.Sprintf("%s_%s_%d%s", base, uid, collision, ext)
-			}
+			destination = nextLocalAttachmentPath(base, uid, ext, collision)
 			continue
 		}
 		if err != nil {
@@ -366,6 +386,13 @@ func publishLocalAttachment(staged, path, uid string) (string, error) {
 		}
 		return destination, nil
 	}
+}
+
+func nextLocalAttachmentPath(base, uid, ext string, collision int) string {
+	if collision == 1 {
+		return base + "_" + uid + ext
+	}
+	return fmt.Sprintf("%s_%s_%d%s", base, uid, collision, ext)
 }
 
 func validateFilename(filename string) bool {

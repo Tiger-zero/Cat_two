@@ -7,13 +7,13 @@ Cat_two 是面向单账户使用的自托管笔记应用，交付为 Docker 服�
 | 功能 | 当前用法 | 代码入口 |
 | --- | --- | --- |
 | 登录和安全 | 首次启动按页面引导创建管理员，随后关闭网页注册。在「系统」修改密码，在「我的账户」启用验证器两步验证。丢失验证器时按 README 从运行中的容器恢复。 | [路由](../../../../web/src/router/index.tsx) · [账户服务](../../../../server/api/user_service.go) · [恢复步骤](../../../../README.md#重置两步验证) |
-| 日历和笔记列表 | 「日历」打开笔记列表。点侧栏日期筛选当天，选中日期后新笔记带上该日，点筛选标签的「×」清除。日历、时间显示和日期筛选用 `Asia/Shanghai`。旧按日链接会转到当前列表。 | [首页](../../../../web/src/pages/Home.tsx) · [日期工具](../../../../web/src/lib/calendar-utils.ts) · [旧日历链接](../../../../web/src/router/LegacyCalendarRedirect.tsx) |
-| 搜索和视图 | 关键词和 CEL 搜索可配合日期、标签使用。筛选可由链接恢复，常用条件可保存为视图。「全部笔记」可按创建时间或更新时间排序、筛选来源及多选导出。网页创建记为「网页端」，旧笔记缺少来源时显示「未记录」。 | [搜索](../../../../web/src/components/AppSidebar/QuickFindDialog.tsx) · [列表菜单](../../../../web/src/components/MemoFeedMenu.tsx) · [视图](../../../../web/src/pages/MemoViews.tsx) · [CEL](../../../../filter/README.md) |
+| 日历和笔记列表 | 「日历」打开笔记列表。点侧栏日期筛选当天，选中日期后新笔记带上该日，点筛选标签的「×」清除。同一天更改搜索或标签时，手动设置的笔记时间会保留。日历、时间显示和日期筛选用 `Asia/Shanghai`。旧按日链接会转到当前列表。 | [首页](../../../../web/src/pages/Home.tsx) · [日期工具](../../../../web/src/lib/calendar-utils.ts) · [旧日历链接](../../../../web/src/router/LegacyCalendarRedirect.tsx) |
+| 搜索和视图 | 登录后可在搜索面板选择「未归档」或「归档」。在两个列表间切换搜索范围时，日期、标签和当前视图会一起保留。可用关键词或 CEL 搜索，常用条件可保存为视图。「全部笔记」可按创建时间或更新时间排序、筛选来源及多选导出。网页创建记为「网页端」，旧笔记缺少来源时显示「未记录」。 | [搜索](../../../../web/src/components/AppSidebar/QuickFindDialog.tsx) · [列表菜单](../../../../web/src/components/MemoFeedMenu.tsx) · [视图](../../../../web/src/pages/MemoViews.tsx) · [CEL](../../../../filter/README.md) |
 | 标签 | 侧栏按路径展示标签，选择父标签会包含子路径。重命名会带动下级路径，目标已存在时合并。置顶按账户在当前浏览器保存。「设置 → 标签」可整理斜杠两侧的空格。 | [标签侧栏](../../../../web/src/components/AppSidebar/TagsSection.tsx) · [标签接口](../../../../server/api/memo_tag_routes.go) |
-| 编辑和草稿 | 富文本和 Markdown 源码有同一套格式操作，从「＋ → Markdown 模式」切换。底部提供粗体、斜体、列表和代码块。「更多格式」包括正文、标题、删除线、行内代码、引用、任务列表、表格、分隔线和网页链接。新笔记草稿按账户和写作位置保存在当前浏览器。 | [编辑器与格式](../../../../web/src/components/MemoEditor/README.md) · [保存逻辑](../../../../web/src/components/MemoEditor/edit/hooks/useMemoSave.ts) |
+| 编辑和草稿 | 富文本和 Markdown 源码共用格式操作，从「＋ → Markdown 模式」切换。新笔记和已有笔记的编辑草稿，以及待上传的附件，保存在当前浏览器。重新打开已有笔记时，符合当前版本的草稿可恢复。遇到版本冲突，编辑器会提示。 | [编辑器与格式](../../../../web/src/components/MemoEditor/README.md) · [保存逻辑](../../../../web/src/components/MemoEditor/edit/hooks/useMemoSave.ts) |
 | 附件 | 用回形针添加图片、PDF、Word、Excel 等文件。可以只添加附件并保存。保存后可预览图片或下载文档，部分图片可涂画。站内下载使用当前网页会话，遇到错误时页面会显示状态。 | [附件组件](../../../../web/src/components/MemoMetadata/Attachment/) · [上传](../../../../server/api/attachment_upload.go) · [下载](../../../../web/src/lib/attachment-download.ts) |
 | 私有访问和归档 | 笔记、统计及附件只对所属账号开放，旧笔记和旧空间数据沿用作者权限。详情支持笔记引用、评论、反应和导出为图片。可置顶笔记，或在归档列表查阅已归档的笔记。 | [访问规则](../../../../core/access/memo.go) · [详情](../../../../web/src/pages/MemoDetail.tsx) · [归档](../../../../web/src/pages/Archived.tsx) |
-| 回收站 | 从侧栏底部打开。创建者可在回收站恢复笔记或彻底删除。恢复带回原状态和附件。超过 30 天后由服务端定期清理。 | [回收站页面](../../../../web/src/pages/Trash.tsx) · [回收站接口](../../../../server/api/memo_trash_handler.go) · [保留规则](../../../../store/memo_trash.go) |
+| 回收站 | 从侧栏底部打开。创建者可在回收站恢复笔记或彻底删除。恢复带回原状态和附件。超过 30 天后由服务端定期清理。彻底删除以数据库提交结果为准，文件清理失败会由后台任务重试。 | [回收站页面](../../../../web/src/pages/Trash.tsx) · [回收站接口](../../../../server/api/memo_trash_handler.go) · [保留规则](../../../../store/memo_trash.go) |
 | 偏好设置 | 默认简体中文，可切换英语。主题可跟随系统，也可选浅色、深色和纸张。可配置账号资料、媒体元数据和编辑偏好。受支持的手机浏览器可把网页加到主屏幕，默认使用小猫图标。 | [语言](../../../../web/src/i18n.ts) · [主题](../../../../web/src/themes/) · [设置项](../../../../web/src/components/Settings/settingSections.ts) · [网页应用配置](../../../../web/public/site.webmanifest) |
 
 浅色日历的低活跃度单元格使用 `rgb(185, 248, 207)`。正文采用 14px 字号、25.2px 行高，拉丁字符和数字优先使用内置 Barlow，中文按平台回退到苹方、微软雅黑等可用字体。部分旧资料引用的独立日历、附件库和地图已从网页移除。旧笔记的位置元数据可通过 ZIP 保存。 [主题色](../../../../web/src/themes/default.css) · [字体与编辑器](../../../../web/src/components/MemoEditor/README.md) · [API 变更记录](../../../../proto/api/CHANGELOG.md)
@@ -45,7 +45,7 @@ flowchart LR
 - 普通 Compose 使用 `cat_two_data` 命名卷。NAS 配置将数据目录挂载到容器内的 `/var/opt/memos`。升级时沿用现有项目和挂载，确保容器运行身份可读写。部署配置和镜像标签的操作见 README。[普通配置](../../../../compose.yaml) · [NAS 配置](../../../../compose.nas.yaml) · [备份和升级](../../../../README.md#备份和升级)
 - 完整实例备份使用一致性快照，或先停止服务再复制整个数据目录和部署配置，保留 SQLite 数据库及配套文件。附件可保存在数据库、本地文件或 S3 兼容存储。新的本地附件可随数据目录迁移，已有绝对路径记录仍按原位置读取，独立目录与对象存储要一并备份。验证恢复时，使用备份副本、独立 Compose 项目及独立附件存储。 [存储设置](../../../../web/src/components/Settings/settingSections.ts) · [恢复操作](../../../../README.md#备份和升级)
 - 多选可导出最多 100 条笔记，也可在「设置 → 导出和导入」导出整个账户的笔记。ZIP 含 Markdown、笔记元数据和可归档附件。导入时先预演，可保留现有、覆盖或创建副本。完成后根据逐项报告检查附件、引用、评论和归档状态。[导入导出](../../../../web/src/components/Settings/MemoExportSection.tsx) · [归档格式](../../../../core/memoexport/format.go)
-- 用 ZIP 跨实例迁移时，已归档父笔记可能影响评论导入，大压缩比附件可能触发 ZIP 解包限制。覆盖导入时，归档未携带的笔记引用仍保留。[评论规则](../../../../store/memo_comment.go) · [ZIP 读取](../../../../core/memoexport/reader.go) · [导入实现](../../../../server/api/user_service_memo_import.go)
+- ZIP 导入可恢复同一作者的归档笔记及评论层级。新导出的 ZIP 原样存储附件数据，易压缩文件较多时归档可能变大。导入仍会检查解压大小和压缩比，已经超出限制的旧 ZIP 仍需从原实例重新导出。覆盖导入时，归档未携带的笔记引用仍保留。 [评论规则](../../../../store/memo_comment.go) · [ZIP 读写](../../../../core/memoexport/) · [导入实现](../../../../server/api/user_service_memo_import.go)
 
 ## 外部集成
 

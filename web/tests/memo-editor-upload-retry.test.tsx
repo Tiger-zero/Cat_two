@@ -10,6 +10,7 @@ import { createInitialState } from "@/components/MemoEditor/edit/state/types";
 import type { LocalFile } from "@/components/MemoEditor/edit/types/attachment";
 import { showErrorToast } from "@/lib/toast";
 import { type Attachment, AttachmentSchema } from "@/types/proto/api/attachment_service_pb";
+import { MemoSchema } from "@/types/proto/api/memo_service_pb";
 import { clientSaveOperations as ops } from "./helpers/memo-save-operations";
 
 const mocks = vi.hoisted(() => ({
@@ -90,6 +91,22 @@ describe("memoService.save", () => {
 
     expect(onFileUploaded).toHaveBeenCalledOnce();
     expect(onFileUploaded).toHaveBeenCalledWith(file, expect.objectContaining({ name: "attachments/a.txt" }));
+  });
+
+  it("checks the current memo again after uploading and stops on a concurrent edit", async () => {
+    const memo = create(MemoSchema, { name: "memos/existing", content: "Earlier saved version" });
+    const getMemo = vi.fn().mockResolvedValueOnce(memo).mockRejectedValueOnce(new Error("memo changed during upload"));
+    const updateMemo = vi.fn();
+    const file = localFile("a.txt");
+    const onFileUploaded = vi.fn();
+
+    await expect(
+      memoService.save(editorState([file]), { memoName: memo.name, onFileUploaded }, { ...ops, getMemo, updateMemo }),
+    ).rejects.toThrow("memo changed during upload");
+
+    expect(getMemo).toHaveBeenCalledTimes(2);
+    expect(onFileUploaded).toHaveBeenCalledOnce();
+    expect(updateMemo).not.toHaveBeenCalled();
   });
 });
 

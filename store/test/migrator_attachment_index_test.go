@@ -20,9 +20,23 @@ func attachmentLookupIndex(driver string) string {
 	return "idx_attachment_memo_id_type"
 }
 
+// removeSchemaAfterMCPConnection returns a fresh test database to the schema
+// just after the MCP connection migration, without changing its version marker.
+func removeSchemaAfterMCPConnection(ctx context.Context, t *testing.T, ts *store.Store, driver string) {
+	t.Helper()
+	db := ts.GetDriver().GetDB()
+	_, err := db.ExecContext(ctx, "DROP TABLE attachment_storage_cleanup")
+	require.NoError(t, err)
+	if driver == "sqlite" {
+		_, err := db.ExecContext(ctx, "DROP INDEX idx_memo_owner_pinned_created")
+		require.NoError(t, err)
+	}
+}
+
 func removeSchemaAfterAttachmentLookupIndex(ctx context.Context, t *testing.T, ts *store.Store, driver string) {
 	t.Helper()
 	db := ts.GetDriver().GetDB()
+	removeSchemaAfterMCPConnection(ctx, t, ts, driver)
 	for _, table := range []string{"mcp_connection", "user_totp"} {
 		_, err := db.ExecContext(ctx, "DROP TABLE "+table)
 		require.NoError(t, err)
@@ -71,7 +85,9 @@ func TestMigrationAttachmentIndex(t *testing.T) {
 	require.NoError(t, ts.Migrate(ctx), "a completed upgrade can restart")
 	setting, err := ts.GetUncachedInstanceSetting(ctx, &store.FindInstanceSetting{Name: "BASIC"})
 	require.NoError(t, err)
-	require.Equal(t, "26.11.4", setting.GetBasicSetting().SchemaVersion)
+	currentSchemaVersion, err := ts.GetCurrentSchemaVersion()
+	require.NoError(t, err)
+	require.Equal(t, currentSchemaVersion, setting.GetBasicSetting().SchemaVersion)
 	migratedMemo, err := ts.GetMemo(ctx, &store.FindMemo{ID: &memo.ID})
 	require.NoError(t, err)
 	require.NotNil(t, migratedMemo)

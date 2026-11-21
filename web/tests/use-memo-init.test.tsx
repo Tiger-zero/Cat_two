@@ -3,6 +3,7 @@ import { act, render } from "@testing-library/react";
 import type { EditorMode } from "@usememos/editor";
 import type { RefObject } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { memoDraftRevision } from "@/components/MemoEditor/edit/draftRevision";
 import { useMemoInit } from "@/components/MemoEditor/edit/hooks/useMemoInit";
 import { initialEditorState } from "@/components/MemoEditor/edit/initialState";
 import { cacheService } from "@/components/MemoEditor/edit/services/cacheService";
@@ -116,5 +117,39 @@ describe("the initial draft and useMemoInit", () => {
     expect(state.metadata.space).toBe("spaces/work");
     expect(state.ui.isFocusMode).toBe(true);
     expect(cacheService.loadDraft(draftKey).content).toBe("");
+  });
+
+  it("restores an edit for the same revision, including attachment removals and timestamps", () => {
+    const attachment = create(AttachmentSchema, { name: "attachments/original", filename: "original.png" });
+    const memo = create(MemoSchema, { name: "memos/one", content: "Original", attachments: [attachment] });
+    const createTime = Date.parse("2026-11-21T01:02:03+08:00");
+    cacheService.saveNow(draftKey, { content: "Edited", attachments: [], createTime, baseRevision: memoDraftRevision(memo) });
+
+    const state = initialEditorState({ memo, draftKey });
+
+    expect(state.content).toBe("Edited");
+    expect(state.metadata.attachments).toEqual([]);
+    expect(state.timestamps.createTime).toEqual(new Date(createTime));
+  });
+
+  it("keeps the current memo when its content changed without a timestamp change", () => {
+    const memo = create(MemoSchema, { name: "memos/one", content: "Original" });
+    cacheService.saveNow(draftKey, { content: "Unfinished edit", attachments: [], baseRevision: memoDraftRevision(memo) });
+
+    const state = initialEditorState({ memo: { ...memo, content: "Newer content" }, draftKey });
+
+    expect(state.content).toBe("Newer content");
+    expect(cacheService.loadDraft(draftKey).content).toBe("Unfinished edit");
+  });
+
+  it("restores a manual calendar time only for the selected Shanghai day", () => {
+    const createTime = Date.parse("2026-11-21T01:02:03+08:00");
+    cacheService.saveNow(draftKey, { content: "Backdated note", attachments: [], calendarDay: "2026-11-21", createTime });
+    const sameDay = new Date("2026-11-21T21:02:03+08:00");
+    const nextDay = new Date("2026-11-22T00:00:00+08:00");
+
+    expect(initialEditorState({ draftKey, defaultCreateTime: sameDay }).timestamps.createTime).toEqual(new Date(createTime));
+    expect(initialEditorState({ draftKey, defaultCreateTime: nextDay }).timestamps.createTime).toBe(nextDay);
+    expect(initialEditorState({ draftKey }).timestamps.createTime).toBeUndefined();
   });
 });

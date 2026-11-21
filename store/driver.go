@@ -27,10 +27,17 @@ type Driver interface {
 	DeleteAttachments(ctx context.Context, deletes []*DeleteAttachment) error
 	DeleteAttachmentsWithPolicy(ctx context.Context, policy *AttachmentDeletionPolicy, attachmentIDs []int32) error
 	ApplyMemoMutation(ctx context.Context, mutation *MemoMutation) error
+	ListMemoTrashAttachmentCleanup(ctx context.Context, afterID int32, nowTs int64, limit int) ([]*Attachment, error)
+	ClaimMemoTrashAttachmentCleanup(ctx context.Context, attachmentID int32, nowTs, retryTs int64) (bool, error)
+	CompleteMemoTrashAttachmentCleanup(ctx context.Context, attachmentID int32, retryTs int64) error
+	ListLocalAttachmentStorageMatches(ctx context.Context, basename, suffixPattern string, replacingID int32, includePending bool) (*sql.Rows, error)
+	ListS3AttachmentStorageMatches(ctx context.Context, key string) ([]*Attachment, error)
 
 	// Memo model related methods.
 	CreateMemo(ctx context.Context, create *Memo) (*Memo, error)
 	ListMemos(ctx context.Context, find *FindMemo) ([]*Memo, error)
+	// QueryActiveMemoTags returns one JSON tags column per active top-level memo of the active owner.
+	QueryActiveMemoTags(ctx context.Context, creatorID int32) (*sql.Rows, error)
 	UpdateMemo(ctx context.Context, update *UpdateMemo) error
 	RefreshMemoDerivedPayload(ctx context.Context, refresh *RefreshMemoDerivedPayload) error
 	DeleteMemo(ctx context.Context, delete *DeleteMemo) error

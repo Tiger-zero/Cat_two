@@ -6,9 +6,10 @@ import { useAppSidebar } from "@/contexts/AppSidebarContext";
 import { getFilterSearch, isSearchFilter, type MemoFilter, useMemoFilterContext } from "@/contexts/MemoFilterContext";
 import useCurrentUser from "@/hooks/useCurrentUser";
 import { useMemoViews } from "@/hooks/useUserQueries";
-import { getMemoViewId, isMemoCollectionRoute } from "@/lib/memo-views";
+import { getMemoViewId, isMemoCollectionRoute, type MemoScope, resolveMemoScope } from "@/lib/memo-views";
+import { ROUTES } from "@/router/routes";
 import { useTranslate } from "@/utils/i18n";
-import { getRouteActionPolicy, getSidebarRouteKind } from "./routes";
+import { getRouteActionPolicy } from "./routes";
 
 export type QuickFindMode = "text" | "cel";
 
@@ -51,24 +52,21 @@ export const resolveQuickFindSubmission = (
   query: string,
   currentFilters: MemoFilter[],
   mode: QuickFindMode,
+  scope = resolveMemoScope(pathname),
 ): QuickFindSubmission => {
   const routePolicy = getRouteActionPolicy(pathname);
   const filters = buildQuickFindFilters(query, currentFilters, routePolicy.searchScope !== "all", mode);
+  const target =
+    scope === resolveMemoScope(pathname) ? routePolicy.searchDestination : scope === "archived" ? ROUTES.ARCHIVED : ROUTES.HOME;
   return {
     filters,
-    destination: routePolicy.searchDestination ? `${routePolicy.searchDestination}${getFilterSearch(filters)}` : undefined,
+    destination: target ? `${target}${getFilterSearch(filters)}` : undefined,
   };
-};
-
-const getScopeLabel = (pathname: string, t: ReturnType<typeof useTranslate>) => {
-  const routeKind = getSidebarRouteKind(pathname);
-  if (routeKind === "archived") return t("common.archived");
-  return t("common.memos");
 };
 
 const QuickFindDialog = () => {
   const t = useTranslate();
-  const location = useLocation();
+  const { pathname } = useLocation();
   const navigate = useNavigate();
   const currentUser = useCurrentUser();
   const { data: memoViews = [] } = useMemoViews(currentUser?.name);
@@ -76,11 +74,17 @@ const QuickFindDialog = () => {
   const { quickFindOpen, setQuickFindOpen } = useAppSidebar();
   const [query, setQuery] = useState("");
   const [mode, setMode] = useState<QuickFindMode>("text");
+  const [scope, setScope] = useState<MemoScope>(() => resolveMemoScope(pathname));
   const [autoFocusField, setAutoFocusField] = useState(true);
   const hintId = useId();
-  const viewApplies = isMemoCollectionRoute(location.pathname);
+  const viewApplies = isMemoCollectionRoute(pathname);
   const selectedMemoView = viewApplies ? memoViews.find((item) => getMemoViewId(item.name) === memoView) : undefined;
-  const scopeLabel = selectedMemoView?.title || getScopeLabel(location.pathname, t);
+  const effectiveScope = currentUser ? scope : "home";
+  const scopeLabel = selectedMemoView?.title || t(effectiveScope === "archived" ? "common.archived" : "common.memos");
+
+  useEffect(() => {
+    if (quickFindOpen) setScope(resolveMemoScope(pathname));
+  }, [pathname, quickFindOpen]);
 
   useEffect(() => {
     if (!quickFindOpen) return;
@@ -91,10 +95,10 @@ const QuickFindDialog = () => {
   }, [filters, quickFindOpen]);
 
   const submitQuery = () => {
-    const submission = resolveQuickFindSubmission(location.pathname, query, filters, mode);
+    const submission = resolveQuickFindSubmission(pathname, query, filters, mode, effectiveScope);
 
     if (submission.destination) {
-      setMemoView(undefined);
+      if (!viewApplies) setMemoView(undefined);
       navigate(submission.destination);
     } else {
       setFilters(submission.filters);
@@ -137,10 +141,22 @@ const QuickFindDialog = () => {
           {t("common.search")} {scopeLabel}
         </Dialog.Description>
         <form onSubmit={handleSubmit}>
-          <div className="flex items-center justify-between gap-3 border-b border-mu-line/50 px-4 py-2">
-            <span className="min-w-0 truncate mu-caption text-mu-text-secondary" title={scopeLabel}>
-              {scopeLabel}
-            </span>
+          <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b border-mu-line/50 px-4 py-2">
+            {currentUser ? (
+              <ToggleGroup
+                size="sm"
+                aria-label={t("search.scope")}
+                value={[effectiveScope]}
+                onValueChange={([next]: string[]) => {
+                  if (next === "home" || next === "archived") setScope(next);
+                }}
+              >
+                <Toggle value="home">{t("search.unarchived")}</Toggle>
+                <Toggle value="archived">{t("common.archived")}</Toggle>
+              </ToggleGroup>
+            ) : (
+              <span className="mu-caption text-mu-text-secondary">{scopeLabel}</span>
+            )}
             <ToggleGroup
               size="sm"
               className="shrink-0"
@@ -157,6 +173,11 @@ const QuickFindDialog = () => {
                 </Toggle>
               ))}
             </ToggleGroup>
+            {selectedMemoView && (
+              <span className="w-full truncate mu-caption text-mu-text-secondary" title={selectedMemoView.title}>
+                {selectedMemoView.title}
+              </span>
+            )}
           </div>
           {mode === "cel" ? (
             <div className="space-y-3 p-4">

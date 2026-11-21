@@ -67,3 +67,4 @@ Cat_two 面向单人自托管。新实例在首次设置时创建一个管理员
 
 - **2026-11-21**　汇总单账户收敛、笔记编辑和附件、MCP 接入、存储验证及镜像进展。 [当日复盘](references/development-log.md)
 - **2026-11-21 22:00**　重写开发 Skill，精简功能说明并迁移历史设计。文档链接、ZIP Schema 字节比对和归档、配置、限流测试通过。 [优化方案](references/optimization-plan.md)
+- **2026-11-21 22:20**　完成笔记时间、草稿、归档导入和回收站清理修复。搜索支持归档范围，SQLite 默认列表和 MCP 标签读取已优化。 [P1、P2 修复与验证](references/development-log.md#p1-与-p2-修复)

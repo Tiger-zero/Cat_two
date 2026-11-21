@@ -55,8 +55,8 @@ export interface MemoDraftSeed {
    */
   scope?: string;
   /**
-   * Seeds `createTime` and `updateTime` and shows the timestamp popover. Followed live
-   * while the draft is open, for a calendar whose selected day changes.
+   * Seeds `createTime` and `updateTime` and shows the timestamp popover.
+   * Updated while the draft is open when the calendar's selected day changes.
    */
   createTime?: Date;
 }
@@ -187,25 +187,48 @@ interface EditingSessionProps extends MemoEditingProps {
   defaultCreateTime?: Date;
 }
 
-/** One session over one identity: the draft store is created once, so a new identity is a new key. */
-const EditingSession = ({ identity, memo, parentMemoName, defaultCreateTime, ...editing }: EditingSessionProps) => {
+/** Remount the draft store if either its subject or its account changes. */
+const EditingSession = (props: EditingSessionProps) => {
   const currentUser = useCurrentUser();
   const username = currentUser?.name ?? "";
-  const draftKey = cacheService.key(username, draftKeyFor(identity));
-  const [initialState] = useState(() => {
+  const draftKey = cacheService.key(username, draftKeyFor(props.identity));
+  return <DraftEditingSession key={draftKey} draftKey={draftKey} username={username} {...props} />;
+};
+
+const DraftEditingSession = ({
+  identity,
+  memo,
+  parentMemoName,
+  defaultCreateTime,
+  draftKey,
+  username,
+  ...editing
+}: EditingSessionProps & { draftKey: string; username: string }) => {
+  const [{ initialState, initialDraftRaw }] = useState(() => {
     migrateLegacyDraft(username, identity);
-    return initialEditorState({
+    const rawDraft = cacheService.readRaw(draftKey);
+    const initialState = initialEditorState({
       memo,
       draftKey,
+      rawDraft,
       // A hosted editor starts in focus mode and stays there.
       initialFocusMode: Boolean(editing.onFocusModeExit),
       defaultCreateTime,
     });
+    // Initialization can remove a legacy edit draft that cannot be restored.
+    return { initialState, initialDraftRaw: rawDraft && !cacheService.readRaw(draftKey) ? null : rawDraft };
   });
   const EditSession = loadedEditSession ?? LazyEditSession;
   return (
     <EditorProvider initialEditorState={initialState}>
-      <EditSession memo={memo} parentMemoName={parentMemoName} defaultCreateTime={defaultCreateTime} draftKey={draftKey} {...editing} />
+      <EditSession
+        memo={memo}
+        parentMemoName={parentMemoName}
+        defaultCreateTime={defaultCreateTime}
+        draftKey={draftKey}
+        initialDraftRaw={initialDraftRaw}
+        {...editing}
+      />
     </EditorProvider>
   );
 };

@@ -8,16 +8,15 @@ import (
 	"github.com/usememos/memos/store"
 )
 
-func authorizeMySQLMemoComment(ctx context.Context, tx *sql.Tx, contextMemoID, actorUserID int32, personal bool) error {
-	snapshot, err := loadMySQLMemoParticipation(ctx, tx, contextMemoID, actorUserID)
+func authorizeMySQLMemoComment(ctx context.Context, tx *sql.Tx, mutation *store.MemoMutation) error {
+	snapshot, err := loadMySQLMemoParticipation(ctx, tx, *mutation.CommentContextMemoID, mutation.MemoCreate.CreatorID)
 	if err != nil {
 		if stderrors.Is(err, sql.ErrNoRows) || stderrors.Is(err, store.ErrMemoMutationConflict) {
 			return store.ErrMemoSpaceNotWritable
 		}
 		return err
 	}
-	snapshot.Personal = personal
-	return store.ValidateMemoCommentAuthorization(snapshot)
+	return mutation.AuthorizeCommentContext(snapshot)
 }
 
 // loadMySQLMemoParticipation resolves the current actor, Space, membership,

@@ -51,3 +51,10 @@
   将夹具改为按嵌入的当前版本计算下一修订，并限制事务重试只处理该错误。第二次并行迁移仍使 MySQL 最后一条带级联的账号删除语句重试耗尽，故将这条固定 SQL 改为直接执行，参数使用已解码的整数账号 ID。MySQL 全量以 8 个并发通过。
   [修复夹具](https://github.com/Tiger-zero/Cat_two/commit/8d8868c67) · [删除修复](https://github.com/Tiger-zero/Cat_two/commit/53968a153) · [首次日志](https://github.com/Tiger-zero/Cat_two/actions/runs/44895305239/job/136819563071) · [复测日志](https://github.com/Tiger-zero/Cat_two/actions/runs/44896373212/job/136822797176) · [候选一](https://github.com/Tiger-zero/Cat_two/actions/runs/44895938286) · [候选二](https://github.com/Tiger-zero/Cat_two/actions/runs/44896373037)
 - 发版核验编号、`latest`、对应 SHA 标签及平台清单，从独立卷验证旧版本升级和数据回读。以 Git、Actions、注册表及实际实例分别核对源码、检查、镜像和部署。NAS 升级后可用 `/api/instance/profile` 的 `commit` 对照镜像。 [发布工作流](../../../../.github/workflows/cat-two-container.yml) · [部署说明](../../../../README.md#备份和升级)
+
+### P1 与 P2 修复
+
+- **编辑与搜索。** 保留同一上海日期下的手动时间，恢复当前浏览器中的已有笔记草稿和待上传附件。保存前检查笔记版本，避免慢上传期间的更新被覆盖。隔离 SQLite 和 Chromium 核对刷新、暂存文件原始字节、取消编辑、多个标签页和服务器版本冲突。归档范围搜索覆盖日期、标签、同一查询多页、浏览器返回及 360px 深色界面。 [编辑器](../../../../web/src/components/MemoEditor/README.md) · [搜索回归](../../../../web/tests/quick-find-navigation.test.tsx)
+- **归档与回收站。** ZIP 恢复归档笔记下同一作者的评论，测试覆盖导入冲突策略和高压缩比附件字节。清理任务随彻底删除一并入库。测试模拟清理失败并重开数据库，也验证了旧的绝对路径、共享文件和 S3 同名对象。 [导入回归](../../../../server/api/test/memo_export_test.go) · [清理回归](../../../../server/api/memo_trash_handler_test.go)
+- **存储与查询。** 增量迁移将数据库架构升级到 `26.11.6`。SQLite 新索引覆盖默认置顶排序，MCP 标签改为单次流式读取。对 SQLite 运行存储全套及服务端和核心竞态测试，验证 MySQL、MariaDB 和 PostgreSQL 的相关迁移及存储用例。 [索引回归](../../../../store/test/migrator_memo_index_test.go) · [查询基准与约束](optimization-plan.md#p2--查找与查询)
+- **整体验证。** Go 静态检查和现代化检查通过，前端类型检查、1,378 项全量测试及生产构建通过。本地标准 Docker 构建遇到 Alpine 软件源证书错误，改用 `0.06` 的运行层封装新编译程序。隔离容器通过新装、重建和从 `0.06` 升级后的笔记读写验证。 [冒烟脚本](../../../../scripts/release_smoke_test.sh)

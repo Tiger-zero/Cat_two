@@ -206,18 +206,18 @@ type attachmentSource interface {
 // the content, and creates the database row. create.Size must hold the source
 // length on entry; it is updated when stripping re-encodes the image.
 func (s *APIService) processAndSaveAttachment(ctx context.Context, create *store.Attachment, instanceStorageSetting *storepb.InstanceStorageSetting, source attachmentSource) (*apipb.Attachment, error) {
-	if err := s.processAndStoreContent(ctx, create, instanceStorageSetting, source, true); err != nil {
+	if err := s.processAndStoreContent(ctx, create, instanceStorageSetting, source, 0); err != nil {
 		return nil, err
 	}
 	return s.persistAttachment(ctx, create, instanceStorageSetting)
 }
 
 // processAndStoreContent strips EXIF metadata and writes the content to the
-// default storage, filling in create's storage fields. With detectMotion, a
-// JPEG that is an Android motion photo becomes a motion container and keeps
-// its embedded video unstripped. It creates no database row.
-func (s *APIService) processAndStoreContent(ctx context.Context, create *store.Attachment, instanceStorageSetting *storepb.InstanceStorageSetting, source attachmentSource, detectMotion bool) error {
-	if detectMotion && create.Payload.GetMotionMedia() == nil && (create.Type == "image/jpeg" || create.Type == "image/jpg") {
+// default storage, filling in create's storage fields. A newly uploaded
+// Android motion photo keeps its embedded video. A replacement can restore
+// the missing file referenced by replacingID. It creates no database row.
+func (s *APIService) processAndStoreContent(ctx context.Context, create *store.Attachment, instanceStorageSetting *storepb.InstanceStorageSetting, source attachmentSource, replacingID int32) error {
+	if replacingID == 0 && create.Payload.GetMotionMedia() == nil && (create.Type == "image/jpeg" || create.Type == "image/jpg") {
 		detected, err := motionphoto.DetectJPEGReader(source, create.Size)
 		if err != nil {
 			return status.Errorf(codes.Internal, "failed to inspect motion photo: %v", err)
@@ -265,7 +265,7 @@ func (s *APIService) processAndStoreContent(ctx context.Context, create *store.A
 	if _, err := content.Seek(0, io.SeekStart); err != nil {
 		return status.Errorf(codes.Internal, "failed to rewind attachment content: %v", err)
 	}
-	if err := saveAttachmentContent(ctx, s.Profile, s.Store, create, instanceStorageSetting, content); err != nil {
+	if err := saveAttachmentContent(ctx, s.Profile, s.Store, create, instanceStorageSetting, content, replacingID); err != nil {
 		return status.Errorf(codes.Internal, "failed to save attachment blob: %v", err)
 	}
 	return nil

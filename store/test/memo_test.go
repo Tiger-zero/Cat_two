@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
@@ -62,6 +63,50 @@ func TestMemoStore(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 0, len(memoList))
 	ts.Close()
+}
+
+func TestVisitActiveMemoTags(t *testing.T) {
+	ctx := t.Context()
+	ts := NewTestingStore(ctx, t)
+	t.Cleanup(func() { require.NoError(t, ts.Close()) })
+	owner, err := createTestingHostUser(ctx, ts)
+	require.NoError(t, err)
+	other, err := createTestingUserWithRole(ctx, ts, "tag-query-other", store.RoleAdmin)
+	require.NoError(t, err)
+	createMemo := func(uid string, creatorID int32, tags ...string) *store.Memo {
+		t.Helper()
+		memo, err := ts.CreateMemo(ctx, &store.Memo{
+			UID: uid, CreatorID: creatorID, Visibility: store.Public,
+			Payload: &storepb.MemoPayload{Tags: tags},
+		})
+		require.NoError(t, err)
+		return memo
+	}
+	root := createMemo("tag-query-root", owner.ID, "项目/Cat", "项目/Cat", "项目/cat")
+	createMemo("tag-query-untagged", owner.ID)
+	createMemo("tag-query-foreign", other.ID, "foreign")
+	archived := createMemo("tag-query-archived", owner.ID, "archived")
+	archivedState := store.Archived
+	require.NoError(t, ts.UpdateMemo(ctx, &store.UpdateMemo{ID: archived.ID, RowStatus: &archivedState}))
+	trashed := createMemo("tag-query-trashed", owner.ID, "trashed")
+	_, err = ts.ApplyMemoTrash(ctx, &store.MemoTrashMutation{
+		MemoID: trashed.ID, ActorUserID: owner.ID, Action: store.MemoTrashMove, NowTs: time.Now().Unix(),
+	})
+	require.NoError(t, err)
+	_, err = ts.CreateMemoComment(ctx, &store.Memo{
+		UID: "tag-query-comment", CreatorID: owner.ID, Visibility: store.Public,
+		Payload: &storepb.MemoPayload{Tags: []string{"comment"}},
+	}, root.ID, owner.ID)
+	require.NoError(t, err)
+
+	var results [][]string
+	require.NoError(t, ts.VisitActiveMemoTags(ctx, owner.ID, func(tags []string) { results = append(results, tags) }))
+	require.Equal(t, [][]string{{"项目/Cat", "项目/Cat", "项目/cat"}}, results)
+	_, err = ts.UpdateUser(ctx, &store.UpdateUser{ID: owner.ID, RowStatus: &archivedState})
+	require.NoError(t, err)
+	require.NoError(t, ts.VisitActiveMemoTags(ctx, owner.ID, func([]string) {
+		t.Error("inactive user tags must not be returned")
+	}))
 }
 
 func TestMemoListByTags(t *testing.T) {

@@ -235,7 +235,7 @@ func (i *memoImporter) createMemo(record *memoexport.Memo, targetUID string, con
 	// second write, as they do for a memo created through the API.
 	wantPinned, wantRowStatus := memo.Pinned, memo.RowStatus
 	err = i.bindAttachments(memo, memo.Content, nil, attachments, func(prepared *preparedMemoAttachments, required []int32) error {
-		if err := i.service.createMemoWithMutation(i.ctx, i.user, memo, parentID, prepared, required, nil); err != nil {
+		if err := i.service.createMemoWithMutation(i.ctx, i.user, memo, parentID, prepared, required, nil, parentID != nil); err != nil {
 			return mapMemoCreateError(err, targetUID, "failed to create memo")
 		}
 		return nil

@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"testing"
 	"time"
@@ -518,6 +519,105 @@ func TestImportMemoExportConflictPolicies(t *testing.T) {
 		require.NotNil(t, copies[0].ParentUID)
 		require.NotEqual(t, "parent00001", *copies[0].ParentUID, "the copied comment threads under the copied parent")
 	})
+}
+
+func TestImportMemoExportRestoresArchivedCommentThread(t *testing.T) {
+	for _, tc := range []struct {
+		name                      string
+		policy                    apipb.ImportMemosRequest_ConflictPolicy
+		selected                  []string
+		importAsOther             bool
+		created, updated, skipped int32
+	}{
+		{name: "duplicate", policy: apipb.ImportMemosRequest_DUPLICATE, created: 3},
+		{name: "skip existing archived parent", policy: apipb.ImportMemosRequest_SKIP, created: 2, skipped: 1},
+		{name: "replace existing archived parent", policy: apipb.ImportMemosRequest_REPLACE, created: 2, updated: 1},
+		{name: "link an unselected archived parent", policy: apipb.ImportMemosRequest_SKIP, selected: []string{"thread-comment", "thread-reply"}, created: 2},
+		{name: "do not link another account's archived parent", policy: apipb.ImportMemosRequest_SKIP, selected: []string{"thread-comment", "thread-reply"}, importAsOther: true, created: 2},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ts := NewTestService(t)
+			defer ts.Cleanup()
+			ts.Profile.Personal = true
+			ctx := context.Background()
+			author, err := ts.CreateRegularUser(ctx, "thread-author")
+			require.NoError(t, err)
+			authorCtx := ts.CreateUserContext(ctx, author.ID)
+			parent, err := ts.Service.CreateMemo(authorCtx, &apipb.CreateMemoRequest{
+				MemoId: "thread-parent", Memo: &apipb.Memo{Content: "archived parent"},
+			})
+			require.NoError(t, err)
+			comment, err := ts.Service.CreateMemoComment(authorCtx, &apipb.CreateMemoCommentRequest{
+				Parent: parent.Name, CommentId: "thread-comment", Comment: &apipb.Memo{Content: "archived comment"},
+			})
+			require.NoError(t, err)
+			_, err = ts.Service.CreateMemoComment(authorCtx, &apipb.CreateMemoCommentRequest{
+				Parent: comment.Name, CommentId: "thread-reply", Comment: &apipb.Memo{Content: "nested reply"},
+			})
+			require.NoError(t, err)
+			for _, memo := range []*apipb.Memo{parent, comment} {
+				_, err := ts.Service.UpdateMemo(authorCtx, &apipb.UpdateMemoRequest{
+					Memo:       &apipb.Memo{Name: memo.Name, State: apipb.State_ARCHIVED},
+					UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"state"}},
+				})
+				require.NoError(t, err)
+			}
+			_, err = ts.Service.CreateMemoComment(authorCtx, &apipb.CreateMemoCommentRequest{
+				Parent: parent.Name, Comment: &apipb.Memo{Content: "new comment"},
+			})
+			require.Equal(t, codes.FailedPrecondition, status.Code(err))
+
+			var data bytes.Buffer
+			require.NoError(t, ts.Service.WriteMemoExport(ctx, author, &data, time.Now(), tc.selected...))
+			archive := readArchive(t, data.Bytes())
+			importer := author
+			originalUIDs := []string{"thread-parent", "thread-comment", "thread-reply"}
+			if tc.importAsOther {
+				importer, err = ts.CreateRegularUser(ctx, "other-importer")
+				require.NoError(t, err)
+			} else if tc.policy != apipb.ImportMemosRequest_DUPLICATE {
+				// Leave the original parent archived so these cases exercise
+				// restoration into a thread that already exists.
+				for _, uid := range []string{"thread-reply", "thread-comment"} {
+					old, err := ts.Store.GetMemo(ctx, &store.FindMemo{UID: &uid})
+					require.NoError(t, err)
+					require.NotNil(t, old)
+					require.NoError(t, ts.Store.DeleteMemo(ctx, &store.DeleteMemo{ID: old.ID}))
+				}
+			}
+			report, err := ts.Service.ImportMemoExport(ts.CreateUserContext(ctx, importer.ID), importer, archive, tc.policy)
+			require.NoError(t, err)
+			require.Zero(t, report.Failed, "%v", report.Failures)
+			require.Equal(t, tc.created, report.Created)
+			require.Equal(t, tc.updated, report.Updated)
+			require.Equal(t, tc.skipped, report.Skipped)
+
+			byContent := make(map[string]*store.Memo)
+			memos, err := ts.Store.ListMemos(ctx, &store.FindMemo{CreatorID: &importer.ID})
+			require.NoError(t, err)
+			for _, memo := range memos {
+				if tc.policy == apipb.ImportMemosRequest_DUPLICATE && slices.Contains(originalUIDs, memo.UID) {
+					continue
+				}
+				byContent[memo.Content] = memo
+			}
+			restoredComment, restoredReply := byContent["archived comment"], byContent["nested reply"]
+			require.NotNil(t, restoredComment)
+			require.NotNil(t, restoredReply)
+			require.Equal(t, store.Archived, restoredComment.RowStatus)
+			require.Equal(t, store.Normal, restoredReply.RowStatus)
+			require.Equal(t, &restoredComment.UID, restoredReply.ParentUID)
+			if tc.importAsOther {
+				require.Nil(t, restoredComment.ParentUID)
+				require.Len(t, report.Warnings, 1)
+			} else {
+				restoredParent := byContent["archived parent"]
+				require.NotNil(t, restoredParent)
+				require.Equal(t, store.Archived, restoredParent.RowStatus)
+				require.Equal(t, &restoredParent.UID, restoredComment.ParentUID)
+			}
+		})
+	}
 }
 
 func userName(user *store.User) string {

@@ -35,7 +35,8 @@ Code blocks use lazy-loaded `@pierre/highlights` tokens as editor decorations, w
 
 - **Reads are by name.** `useMemoByName` (`hooks/useMemoQueries.ts`) returns the freshest copy of the memo any query holds (a list, a comment page, the calendar month, a detail, a shared memo) and fetches the detail only when nothing holds it. A card in a list therefore costs no request beyond the list's, follows the list's refetches, and never refetches on its own.
 - **Writes are mutations.** A ticked task, a save and a new memo go through `useUpdateMemo` and `useCreateMemo`, which patch and refresh every query holding the memo, so the saved text shows wherever the memo is on the page as soon as the server answers.
-- **The draft is UI state keyed by identity.** `edit/draftKey.ts` derives the key from what is edited: `edit:<name>`, `comment:<parent>`, `new:<scope>[:<space>]`. `initialEditorState` computes the store's first state once, from the memo or the persisted draft over the host's defaults; `useAutoSave` persists it while the session is open; an edit of an existing memo persists no draft. A new identity is a new session (`key`).
+- **Drafts stay in the current browser.** `edit/draftKey.ts` scopes memo edits, replies and new notes by account and subject. `initialEditorState` restores text and saved attachment references from localStorage. A recovered edit must match the memo's saved revision. `useStagedDraftFiles` restores files awaiting upload from IndexedDB and recreates their preview URLs. Writes and removal compare the last observed snapshot to detect changes from another tab. Successful saves and cancellation of an existing edit clear the session's draft when its snapshot still matches.
+- **Calendar defaults follow the selected Shanghai day.** Manual create and update times survive filter changes and refreshes for that day. Changing or clearing the date filter resets the defaults for the new selection.
 
 ## The editing session
 
@@ -83,8 +84,8 @@ This first release has no Memos markup-draft UI or persistence. **Close** confir
 recoverable markup. There is no Continue entry, no markup-dependent memo-save blocker, and no permanent More/Download/Discard menu.
 Normal states add no copy or badges to the canvas. Viewing and editing share one dialog and Canvas instance, retaining the visible content, pan and zoom across mode changes. Both modes keep a ghost X at the top left and the current action at the top right, without bordered action containers or a visible mode heading. A live zoom percentage opens the same four-action zoom menu in both modes (zoom in, zoom out, fit, reset to 100%). The trigger stays at the bottom left, above the phone tools bar and clear of the safe area. Editing adds the tools bar at the top center on desktop and at the bottom on phones. Available phone Undo/Redo actions follow X as quiet ghost icons; unavailable history actions are omitted. Returning to view focuses Edit; discarding restores the accepted scene.
 
-Canvas `26.11.3` provides checkpoints for a future recovery integration. The current editor's text-only localStorage draft behavior
-is unchanged and excludes local file bytes. The server preserves editable PNGs unchanged (`server/fileserver/drawing_png_test.go`).
+Canvas `26.11.3` provides checkpoints for a future recovery integration. Drawings already added to a draft can be recovered from
+IndexedDB like other staged files. The server preserves editable PNGs unchanged (`server/fileserver/drawing_png_test.go`).
 Browser regressions live in `tests/browser/`: run `pnpm test:drawings` after `pnpm exec playwright install chromium`. They verify
 image preparation, original bytes/order, active Chinese text at export, desktop/360px controls, and view/edit content, viewport, focus and discard behavior.
 

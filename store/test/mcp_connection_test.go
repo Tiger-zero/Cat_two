@@ -209,12 +209,15 @@ func TestMigrationMCPConnection(t *testing.T) {
 	require.NoError(t, err)
 	_, err = ts.GetDriver().GetDB().ExecContext(ctx, "DROP TABLE mcp_connection")
 	require.NoError(t, err)
+	removeSchemaAfterMCPConnection(ctx, t, ts, getDriverFromEnv())
 	setSchemaVersion(ctx, t, ts, "26.11.3")
 	require.NoError(t, ts.Migrate(ctx))
 	require.NoError(t, ts.Migrate(ctx), "a completed migration can restart")
 	setting, err := ts.GetUncachedInstanceSetting(ctx, &store.FindInstanceSetting{Name: "BASIC"})
 	require.NoError(t, err)
-	require.Equal(t, "26.11.4", setting.GetBasicSetting().SchemaVersion)
+	currentSchemaVersion, err := ts.GetCurrentSchemaVersion()
+	require.NoError(t, err)
+	require.Equal(t, currentSchemaVersion, setting.GetBasicSetting().SchemaVersion)
 	connection := &store.MCPConnection{
 		ID: "after-upgrade", UserID: owner.ID, Label: "After upgrade", TokenHash: strings.Repeat("cd", 32),
 		Status: store.MCPConnectionApproved, CreatedAt: 100, ExpiresAt: 200,

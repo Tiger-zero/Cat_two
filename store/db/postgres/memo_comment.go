@@ -8,16 +8,15 @@ import (
 	"github.com/usememos/memos/store"
 )
 
-func authorizePostgresMemoComment(ctx context.Context, tx *sql.Tx, contextMemoID, actorUserID int32, personal bool) error {
-	snapshot, err := readPostgresMemoParticipation(ctx, tx, contextMemoID, actorUserID)
+func authorizePostgresMemoComment(ctx context.Context, tx *sql.Tx, mutation *store.MemoMutation) error {
+	snapshot, err := readPostgresMemoParticipation(ctx, tx, *mutation.CommentContextMemoID, mutation.MemoCreate.CreatorID)
 	if err != nil {
 		if stderrors.Is(err, sql.ErrNoRows) || stderrors.Is(err, store.ErrMemoMutationConflict) {
 			return store.ErrMemoSpaceNotWritable
 		}
 		return err
 	}
-	snapshot.Personal = personal
-	return store.ValidateMemoCommentAuthorization(snapshot)
+	return mutation.AuthorizeCommentContext(snapshot)
 }
 
 // readPostgresMemoParticipation resolves the current actor, Space, membership,

@@ -2,6 +2,7 @@ package sqlite
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"strings"
 
@@ -291,6 +292,14 @@ func (d *DB) ListMemos(ctx context.Context, find *store.FindMemo) ([]*store.Memo
 	}
 
 	return list, nil
+}
+
+func (d *DB) QueryActiveMemoTags(ctx context.Context, creatorID int32) (*sql.Rows, error) {
+	var args []any
+	owner := sqliteMemoAccessPredicate(&store.MemoAccessScope{UserID: &creatorID, OwnerOnly: true}, "memo", "access_member", &args)
+	return d.db.QueryContext(ctx, `SELECT json_extract(memo.payload, '$.tags') FROM memo
+		WHERE memo.row_status = 'NORMAL' AND memo.deleted_ts IS NULL AND `+owner+`
+		AND NOT EXISTS (SELECT 1 FROM memo_relation AS r WHERE r.memo_id = memo.id AND r.type = 'COMMENT')`, args...)
 }
 
 // CountUserMemos counts the memos a user created, comments included, in every

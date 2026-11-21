@@ -1,13 +1,14 @@
-import { act, createEvent, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, createEvent, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { createMemoryRouter, RouterProvider, useLocation } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import QuickFindDialog from "@/components/AppSidebar/QuickFindDialog";
 import MemoFilters from "@/components/MemoFilters";
 import { AppSidebarProvider, useAppSidebar } from "@/contexts/AppSidebarContext";
+import { getFilterSearch, type MemoFilter, parseFilterQuery } from "@/contexts/MemoFilterContext";
 
 const state = vi.hoisted(() => ({
   currentUser: { name: "users/alice" } as { name: string } | undefined,
-  filters: [] as Array<{ factor: "contentSearch" | "celSearch" | "tagSearch"; value: string }>,
+  filters: [] as MemoFilter[],
   setFilters: vi.fn(),
   setMemoView: vi.fn(),
   removeFilter: vi.fn(),
@@ -195,6 +196,41 @@ describe("Quick Find navigation", () => {
     expect(screen.getByTestId("path")).toHaveTextContent("/setting");
   });
 
+  it.each([
+    ["/", "/archived", "search.unarchived", "common.archived"],
+    ["/archived", "/", "common.archived", "search.unarchived"],
+  ])("can switch the search scope from %s to %s", async (from, to, defaultLabel, targetLabel) => {
+    const facets: MemoFilter[] = [
+      { factor: "tagSearch", value: "work/2026" },
+      { factor: "displayTime", value: "2026-11-21" },
+    ];
+    state.filters = [...facets, { factor: "contentSearch", value: "previous" }];
+    const initialEntry = `${from}${getFilterSearch(state.filters)}`;
+    const router = renderSearch(initialEntry);
+
+    openQuickFind();
+    const group = within(await screen.findByRole("group", { name: "search.scope" }));
+    expect(group.getByRole("button", { name: defaultLabel })).toHaveAttribute("aria-pressed", "true");
+    const input = screen.getByRole("textbox");
+    fireEvent.change(input, { target: { value: "roadmap" } });
+    fireEvent.click(group.getByRole("button", { name: targetLabel }));
+    expect(input).toHaveValue("roadmap");
+    fireEvent.keyDown(input, { key: "Enter" });
+
+    expect(router.state.location.pathname).toBe(to);
+    expect(parseFilterQuery(new URLSearchParams(router.state.location.search).get("filter"))).toEqual([
+      ...facets,
+      { factor: "contentSearch", value: "roadmap" },
+    ]);
+    expect(state.setFilters).not.toHaveBeenCalled();
+    expect(state.setMemoView).not.toHaveBeenCalled();
+
+    await act(async () => {
+      await router.navigate(-1);
+    });
+    expect(screen.getByTestId("path")).toHaveTextContent(initialEntry);
+  });
+
   it("preserves an anonymous global page in history", async () => {
     state.currentUser = undefined;
 
@@ -202,6 +238,7 @@ describe("Quick Find navigation", () => {
 
     openQuickFind();
     const input = await screen.findByRole("textbox");
+    expect(screen.queryByRole("group", { name: "search.scope" })).not.toBeInTheDocument();
     fireEvent.change(input, { target: { value: "roadmap" } });
     fireEvent.submit(input.closest("form")!);
 

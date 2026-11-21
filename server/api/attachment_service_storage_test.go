@@ -44,7 +44,8 @@ func TestSaveLocalAttachmentConcurrentSameFilename(t *testing.T) {
 		cancel()
 		workers.Wait()
 	}()
-	instanceProfile := &profile.Profile{Data: t.TempDir()}
+	service := newIntegrationService(t)
+	instanceProfile := service.Profile
 	setting := localAttachmentTestSetting("assets/{filename}")
 	attachments := []store.Attachment{
 		{UID: "first", Filename: "image.jpg"},
@@ -70,7 +71,7 @@ func TestSaveLocalAttachmentConcurrentSameFilename(t *testing.T) {
 				}
 				return content.Read(buffer)
 			})
-			results <- saveAttachmentContent(ctx, instanceProfile, nil, &attachments[i], setting, reader)
+			results <- saveAttachmentContent(ctx, instanceProfile, service.Store, &attachments[i], setting, reader, 0)
 		})
 	}
 	for range attachments {
@@ -105,10 +106,11 @@ func TestSaveLocalAttachmentConcurrentSameFilename(t *testing.T) {
 
 func TestSaveLocalAttachmentReferenceSurvivesDataDirectoryRelocation(t *testing.T) {
 	ctx := t.Context()
-	dataDir, newDataDir := t.TempDir(), t.TempDir()
+	service := newIntegrationService(t)
+	dataDir, newDataDir := service.Profile.Data, t.TempDir()
 	attachment := &store.Attachment{UID: "portable", Filename: "note.txt"}
 	setting := localAttachmentTestSetting("assets")
-	err := saveAttachmentContent(ctx, &profile.Profile{Data: dataDir}, nil, attachment, setting, strings.NewReader("test content"))
+	err := saveAttachmentContent(ctx, service.Profile, service.Store, attachment, setting, strings.NewReader("test content"), 0)
 	require.NoError(t, err)
 	require.Equal(t, "assets/note.txt", attachment.Reference)
 	require.NoError(t, os.Rename(filepath.Join(dataDir, "assets"), filepath.Join(newDataDir, "assets")))
@@ -122,7 +124,8 @@ func TestSaveLocalAttachmentReferenceSurvivesDataDirectoryRelocation(t *testing.
 func TestSaveLocalAttachmentCancellationRemovesStagedFile(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
-	dataDir := t.TempDir()
+	service := newIntegrationService(t)
+	dataDir := service.Profile.Data
 	attachment := &store.Attachment{UID: "canceled", Filename: "note.txt"}
 	content := strings.NewReader("complete content")
 	reader := attachmentReadFunc(func(buffer []byte) (int, error) {
@@ -132,7 +135,7 @@ func TestSaveLocalAttachmentCancellationRemovesStagedFile(t *testing.T) {
 		}
 		return n, err
 	})
-	err := saveAttachmentContent(ctx, &profile.Profile{Data: dataDir}, nil, attachment, localAttachmentTestSetting("assets"), reader)
+	err := saveAttachmentContent(ctx, service.Profile, service.Store, attachment, localAttachmentTestSetting("assets"), reader, 0)
 	require.ErrorIs(t, err, context.Canceled)
 	require.Empty(t, attachment.Reference)
 	files, err := os.ReadDir(filepath.Join(dataDir, "assets"))
@@ -144,7 +147,7 @@ func TestPublishLocalAttachmentFailureRemovesReservation(t *testing.T) {
 	dir := t.TempDir()
 	destination := filepath.Join(dir, "note.txt")
 	require.NoError(t, os.WriteFile(destination, []byte("original"), 0o600))
-	_, err := publishLocalAttachment(filepath.Join(dir, "missing-staged-file"), destination, "new-uid")
+	_, err := publishLocalAttachment(filepath.Join(dir, "missing-staged-file"), destination, "new-uid", nil)
 	require.Error(t, err)
 	files, err := os.ReadDir(dir)
 	require.NoError(t, err)

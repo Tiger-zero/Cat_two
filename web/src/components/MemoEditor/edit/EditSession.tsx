@@ -1,14 +1,16 @@
+import copy from "copy-to-clipboard";
 import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { DrawingSheet } from "@/components/DrawingSheet";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSourceMode } from "@/hooks/useSourceMode";
-import { showErrorToast } from "@/lib/toast";
+import { showErrorToast, toast } from "@/lib/toast";
 import { cn } from "@/lib/utils";
 import { useTranslate } from "@/utils/i18n";
 
 import { AudioRecorderPanel, EditorContent, EditorMetadata, FocusModeExitButton, FocusModeOverlay, TimestampPopover } from "./components";
 import { EditorSuggestions } from "./components/EditorSuggestions";
 import { COMPOSER_PANEL_CLASSES, FOCUS_MODE_STYLES } from "./constants";
+import { draftCalendarDay } from "./draftRevision";
 import type { EditorFileOrigin } from "./extensions";
 import {
   splitInlineLocalFiles,
@@ -22,6 +24,7 @@ import {
   useMemoInit,
   useMemoSave,
 } from "./hooks";
+import { useStagedDraftFiles } from "./hooks/useStagedDraftFiles";
 import { cacheService } from "./services";
 import { useEditorContext, useEditorSelector } from "./state";
 import { EditorToolbar } from "./Toolbar";
@@ -39,6 +42,7 @@ import type { EditorController, EditorPosition } from "./types/editorController"
 export const EditSession: React.FC<EditSessionProps> = ({
   className,
   draftKey,
+  initialDraftRaw,
   frameless,
   timestampLead,
   memo,
@@ -86,33 +90,56 @@ export const EditSession: React.FC<EditSessionProps> = ({
   const sourceMode = { isSourceMode, onToggle: () => setEditorMode(isSourceMode ? "rich" : "source") };
 
   const { isInitialized } = useMemoInit({ editorRef, draftKey, autoFocus, mode: editorMode });
-  // An edit starts from the memo and never persists a draft; only new memos and comments do.
-  const isDraftCacheEnabled = !memo;
-
   useEffect(() => {
     onSavingChange?.(isSaving);
   }, [isSaving, onSavingChange]);
 
-  // Auto-save content to localStorage (subscribes to the store internally).
-  const { discardDraft } = useAutoSave(draftKey, isInitialized && isDraftCacheEnabled);
+  const reportDraftStorageError = useCallback(() => showErrorToast(t("editor.draft.storage-failed")), [t]);
+  const {
+    discardDraft: discardText,
+    getBaseRevision,
+    rebaseDraft,
+  } = useAutoSave(draftKey, isInitialized, memo, reportDraftStorageError, initialDraftRaw);
+  const warnedAboutStaleDraft = useRef(false);
+  const notifyStaleDraft = useCallback(() => {
+    if (warnedAboutStaleDraft.current) return;
+    warnedAboutStaleDraft.current = true;
+    const stored = cacheService.loadDraft(draftKey);
+    const canCopy = stored.content && stored.baseRevision !== getBaseRevision();
+    toast.add({
+      title: t("editor.draft.outdated"),
+      type: "warning",
+      timeout: 0,
+      actionProps: canCopy ? { children: t("editor.draft.copy-text"), onClick: () => copy(stored.content) } : undefined,
+    });
+  }, [draftKey, getBaseRevision, t]);
+
+  const discardFiles = useStagedDraftFiles({
+    key: draftKey,
+    enabled: isInitialized,
+    getBaseRevision,
+    createBlobUrl,
+    onStorageError: reportDraftStorageError,
+    onStaleDraft: notifyStaleDraft,
+  });
+  const discardDraft = useCallback(async () => {
+    discardText();
+    await discardFiles();
+  }, [discardText, discardFiles]);
+  useEffect(() => {
+    const baseRevision = getBaseRevision();
+    const stored = cacheService.loadDraft(draftKey);
+    if (baseRevision && stored.baseRevision && stored.baseRevision !== baseRevision) notifyStaleDraft();
+  }, [draftKey, getBaseRevision, notifyStaleDraft]);
 
   const { containerRef: editorContainerRef, placeholderHeight, animateFocusMode } = useFocusMode(isFocusMode);
 
-  // Live-sync the draft's createTime/updateTime to the calendar-derived prop.
-  // Only applies in create mode; edit mode owns its own timestamps. Runs after
-  // initial mount (the seed value is set in useMemoInit), and again whenever
-  // the prop changes — e.g., when the user picks a different calendar date
-  // while the editor is open.
+  // Initial state restores manual times for the selected day. Only an actual
+  // day change, including clearing the filter, resets the calendar defaults.
   useEffect(() => {
-    if (memo) return;
-    if (!isInitialized) return;
-    dispatch(
-      actions.setTimestamps({
-        createTime: defaultCreateTime,
-        updateTime: defaultCreateTime,
-      }),
-    );
-  }, [defaultCreateTime, memo, isInitialized, actions, dispatch]);
+    if (memo || !isInitialized || draftCalendarDay(getState().calendarDefault) === draftCalendarDay(defaultCreateTime)) return;
+    dispatch(actions.setCalendarDefault(defaultCreateTime));
+  }, [defaultCreateTime, memo, isInitialized, actions, dispatch, getState]);
 
   const audioRecorder = useAudioRecorder({
     onRecordingComplete: (localFile) => {
@@ -158,10 +185,11 @@ export const EditSession: React.FC<EditSessionProps> = ({
     animateFocusMode(() => dispatch(actions.toggleFocusMode()));
   };
 
-  const handleCancel = useCallback(() => {
-    rememberCursor();
+  const handleCancel = useCallback(async () => {
+    if (memoName) await discardDraft();
+    else rememberCursor();
     onCancel?.();
-  }, [onCancel, rememberCursor]);
+  }, [discardDraft, memoName, onCancel, rememberCursor]);
 
   const handleStartAudioRecording = async () => {
     setIsAudioRecorderOpen(true);
@@ -183,7 +211,8 @@ export const EditSession: React.FC<EditSessionProps> = ({
    */
   const handleFiles = useCallback(
     (files: File[], placement: { inline: false } | { inline: true; position?: EditorPosition | null }) => {
-      if (getState().ui.isLoading.saving) return;
+      const { saving, loading } = getState().ui.isLoading;
+      if (saving || loading) return;
       const localFiles = toLocalFiles(files, { createBlobUrl, saveMediaMetadata });
       const { inline, attachments } = placement.inline ? splitInlineLocalFiles(localFiles) : { inline: [], attachments: localFiles };
       attachments.forEach((file) => dispatch(actions.addLocalFile(file)));
@@ -224,6 +253,8 @@ export const EditSession: React.FC<EditSessionProps> = ({
     parentMemoName,
     defaultCreateTime,
     discardDraft,
+    getBaseRevision,
+    rebaseDraft,
     onConfirm,
     onCancel: onCancel ? handleCancel : undefined,
   });

@@ -8,7 +8,9 @@ import { userKeys } from "@/hooks/useUserQueries";
 import { handleError } from "@/lib/error";
 import { showErrorToast, toast } from "@/lib/toast";
 import type { Attachment } from "@/types/proto/api/attachment_service_pb";
+import type { Memo } from "@/types/proto/api/memo_service_pb";
 import { useTranslate } from "@/utils/i18n";
+import { memoDraftRevision } from "../draftRevision";
 import { errorService, memoService, validationService } from "../services";
 import { DrawingNotSavedError, DrawingSavedError, type MemoSaveOperations, mergeUploadedAttachments } from "../services/memoService";
 import { useEditorContext } from "../state";
@@ -19,10 +21,14 @@ interface UseMemoSaveOptions {
   memoName?: string;
   parentMemoName?: string;
   defaultCreateTime?: Date;
-  discardDraft: () => void;
+  discardDraft: () => void | Promise<void>;
+  getBaseRevision?: () => string | undefined;
+  rebaseDraft?: (memo: Memo) => void;
   onConfirm?: (memoName: string) => void;
   onCancel?: () => void;
 }
+
+class MemoChangedError extends Error {}
 
 /**
  * Owns the editor's save transaction and its post-save state. The memo itself is
@@ -35,6 +41,8 @@ export function useMemoSave({
   parentMemoName,
   defaultCreateTime,
   discardDraft,
+  getBaseRevision,
+  rebaseDraft,
   onConfirm,
   onCancel,
 }: UseMemoSaveOptions): () => Promise<void> {
@@ -83,9 +91,15 @@ export function useMemoSave({
       getMemo: async (name) => {
         const memo = await queryClient.fetchQuery({ ...memoDetailQueryOptions(name), staleTime: 0 });
         if (!memo) throw new ConnectError("memo not found", Code.NotFound);
+        const baseRevision = getBaseRevision?.();
+        if (baseRevision && baseRevision !== memoDraftRevision(memo)) throw new MemoChangedError();
         return memo;
       },
-      updateMemo: (update, updateMask) => updateMemo({ update, updateMask }),
+      updateMemo: async (update, updateMask) => {
+        const updated = await updateMemo({ update, updateMask });
+        rebaseDraft?.(updated);
+        return updated;
+      },
       createMemo: (memo, parent) => createMemo({ memo, parent }),
     };
 
@@ -93,11 +107,12 @@ export function useMemoSave({
       // A new memo composed on a selected day keeps the day but is stamped with
       // the time of saving, so consecutive memos do not share one createTime.
       const now = new Date();
+      const calendarDefault = state.calendarDefault ?? defaultCreateTime;
       const timestamps = memoName
         ? state.timestamps
         : {
-            createTime: restampDefaultCreateTime(state.timestamps.createTime, defaultCreateTime, now),
-            updateTime: restampDefaultCreateTime(state.timestamps.updateTime, defaultCreateTime, now),
+            createTime: restampDefaultCreateTime(state.timestamps.createTime, calendarDefault, now),
+            updateTime: restampDefaultCreateTime(state.timestamps.updateTime, calendarDefault, now),
           };
       const result = await memoService.save(
         { ...state, timestamps },
@@ -120,7 +135,7 @@ export function useMemoSave({
       }
 
       // Prevent the autosave unmount flush from restoring the saved draft.
-      discardDraft();
+      await discardDraft();
       // A moved memo may leave the feed it was edited in; say where it went.
       if (result.moved) {
         toast.add({ title: t("memo.moved"), type: "success" });
@@ -130,7 +145,7 @@ export function useMemoSave({
       // Reset creates a fresh editor state, so restore calendar-derived values
       // for the next memo created without remounting this composer.
       if (!memoName && defaultCreateTime) {
-        dispatch(actions.setTimestamps({ createTime: defaultCreateTime, updateTime: defaultCreateTime }));
+        dispatch(actions.setCalendarDefault(defaultCreateTime));
       }
 
       if (!memoName && !parentMemoName) {
@@ -145,6 +160,10 @@ export function useMemoSave({
         // The uploads landed even though the save did not.
         void queryClient.invalidateQueries({ queryKey: attachmentKeys.lists() });
         void queryClient.invalidateQueries({ queryKey: userKeys.stats() });
+      }
+      if (error instanceof MemoChangedError) {
+        showErrorToast(t("editor.draft.conflict"));
+        return;
       }
       if (error instanceof DrawingSavedError) {
         dispatch(actions.setDrawingSaveError("editor.drawing.saved-needs-update"));
@@ -172,12 +191,14 @@ export function useMemoSave({
     discardDraft,
     dispatch,
     getState,
+    getBaseRevision,
     markNewMemo,
     memoName,
     onCancel,
     onConfirm,
     parentMemoName,
     queryClient,
+    rebaseDraft,
     t,
     updateMemo,
   ]);

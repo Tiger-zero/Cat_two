@@ -61,7 +61,7 @@ func (s *APIService) CreateMemoComment(ctx context.Context, request *apipb.Creat
 	if err != nil {
 		return nil, err
 	}
-	if err := s.createMemoWithMutation(ctx, user, prepared.memo, &relatedMemo.ID, prepared.attachments, prepared.requiredAttachmentIDs, prepared.referenceRelations); err != nil {
+	if err := s.createMemoWithMutation(ctx, user, prepared.memo, &relatedMemo.ID, prepared.attachments, prepared.requiredAttachmentIDs, prepared.referenceRelations, false); err != nil {
 		return nil, mapMemoCreateError(err, memoUID, "failed to create memo comment")
 	}
 	memo := prepared.memo

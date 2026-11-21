@@ -31,8 +31,11 @@ type MemoMutation struct {
 	// MemoCreate requests that the memo row be created in this same transaction
 	// before attachments and relations are applied. CommentContextMemoID creates
 	// one immutable COMMENT relation from the new memo to the named context memo.
-	MemoCreate                *Memo
-	CommentContextMemoID      *int32
+	MemoCreate           *Memo
+	CommentContextMemoID *int32
+	// RestoreArchivedComment allows archive imports to restore a comment
+	// under an archived memo owned by its author.
+	RestoreArchivedComment    bool
 	MemoID                    int32
 	MemoCreatorID             int32
 	ExpectedMemoContent       string

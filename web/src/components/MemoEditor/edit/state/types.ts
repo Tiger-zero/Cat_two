@@ -25,6 +25,8 @@ export interface EditorState {
     createTime?: Date;
     updateTime?: Date;
   };
+  /** The current calendar default for a new memo, compared by reference to detect overrides. */
+  calendarDefault?: Date;
   localFiles: LocalFile[];
   /** The order of saved attachments and new files together, as keys (see utils/attachmentOrder).
    *  Empty until the user reorders; the save keeps it. */
@@ -50,6 +52,7 @@ export type EditorAction =
   | { type: "SET_LOADING"; payload: { key: LoadingKey; value: boolean } }
   | { type: "SET_PENDING_INLINE_IMAGE_INSERTIONS"; payload: number }
   | { type: "SET_TIMESTAMPS"; payload: Partial<EditorState["timestamps"]> }
+  | { type: "SET_CALENDAR_DEFAULT"; payload: Date | undefined }
   | { type: "SET_RECORDER_BUSY"; payload: boolean }
   | { type: "ACCEPT_SUGGESTION"; payload: string }
   | { type: "SET_DRAWING_SAVE_ERROR"; payload: EditorState["drawingSaveError"] }

@@ -32,6 +32,7 @@ vi.mock("@/components/MemoEditor/edit/state", () => ({
       setLoading: (key: string, value: boolean) => ({ type: "set-loading", key, value }),
       setMetadata: () => ({ type: "set-metadata" }),
       setTimestamps: () => ({ type: "set-timestamps" }),
+      setCalendarDefault: () => ({ type: "set-timestamps" }),
     },
     dispatch: mocks.dispatch,
     getState: () => ({ ui: { isLoading: { saving: mocks.saving } }, timestamps: mocks.timestamps }),

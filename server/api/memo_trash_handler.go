@@ -155,29 +155,60 @@ func (s *APIService) handleMemoTrashMutation(action store.MemoTrashAction) func(
 		if memo == nil {
 			return status.Error(codes.NotFound, "deleted memo not found")
 		}
+		now := time.Now()
 		attachments, err := s.Store.ApplyMemoTrash(ctx, &store.MemoTrashMutation{
-			MemoID: memo.ID, ActorUserID: user.ID, Action: action, NowTs: time.Now().Unix(),
+			MemoID: memo.ID, ActorUserID: user.ID, Action: action, NowTs: now.Unix(),
 		})
 		if err != nil {
 			return mapMemoWriteError(err, "failed to change deleted memo")
 		}
 		s.SSEHub.publishMemoChanged()
-		if err := s.cleanupPurgedMemoTrash(ctx, attachments); err != nil {
-			return status.Error(codes.Internal, "memo was permanently deleted but attachment storage cleanup failed")
+		if len(attachments) != 0 {
+			// Storage cleanup can fail after the memo is gone. The jobs are
+			// already durable, so the response reports the committed purge.
+			cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
+			defer cancel()
+			s.cleanupPurgedMemoAttachments(cleanupCtx, attachments, now)
 		}
 		w.WriteHeader(http.StatusNoContent)
 		return nil
 	}
 }
 
-func (s *APIService) cleanupPurgedMemoTrash(ctx context.Context, attachments []*store.Attachment) error {
-	cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
-	defer cancel()
-	return s.cleanupDeletedAttachmentStorage(cleanupCtx, attachments)
+func (s *APIService) cleanupPurgedMemoAttachments(ctx context.Context, attachments []*store.Attachment, now time.Time) {
+	for _, attachment := range attachments {
+		if ctx.Err() != nil {
+			return
+		}
+		if err := s.Store.RunMemoTrashAttachmentCleanup(ctx, attachment, now); err != nil && ctx.Err() == nil {
+			slog.Error("failed to clean purged memo attachment; retrying", "attachment", attachment.ID, "error", err)
+		}
+	}
 }
 
-// PurgeExpiredMemoTrash permanently removes expired entries in bounded batches.
+// PurgeExpiredMemoTrash removes expired entries and retries attachment cleanup.
 func (s *APIService) PurgeExpiredMemoTrash(ctx context.Context, now time.Time) error {
+	purgeErr := s.purgeExpiredTrashMemos(ctx, now)
+	return stderrors.Join(purgeErr, s.retryPurgedMemoAttachments(ctx, now))
+}
+
+func (s *APIService) retryPurgedMemoAttachments(ctx context.Context, now time.Time) error {
+	const batchSize = 100
+	var afterID int32
+	for {
+		attachments, err := s.Store.ListMemoTrashAttachmentCleanup(ctx, afterID, now, batchSize)
+		if err != nil {
+			return err
+		}
+		s.cleanupPurgedMemoAttachments(ctx, attachments, now)
+		if len(attachments) < batchSize {
+			return ctx.Err()
+		}
+		afterID = attachments[len(attachments)-1].ID
+	}
+}
+
+func (s *APIService) purgeExpiredTrashMemos(ctx context.Context, now time.Time) error {
 	const batchSize = 100
 	cutoff := now.Add(-store.MemoTrashRetention).Unix()
 	limit := batchSize
@@ -195,7 +226,7 @@ func (s *APIService) PurgeExpiredMemoTrash(ctx context.Context, now time.Time) e
 			return err
 		}
 		for _, memo := range memos {
-			attachments, err := s.Store.ApplyMemoTrash(ctx, &store.MemoTrashMutation{
+			_, err := s.Store.ApplyMemoTrash(ctx, &store.MemoTrashMutation{
 				MemoID: memo.ID, Action: store.MemoTrashPurge, NowTs: now.Unix(),
 			})
 			if stderrors.Is(err, store.ErrMemoMutationConflict) {
@@ -205,9 +236,6 @@ func (s *APIService) PurgeExpiredMemoTrash(ctx context.Context, now time.Time) e
 				return err
 			}
 			changed = true
-			if err := s.cleanupPurgedMemoTrash(ctx, attachments); err != nil {
-				slog.Error("failed to clean expired memo storage", "memo", memo.UID, "error", err)
-			}
 		}
 		if len(memos) < batchSize {
 			return nil

@@ -56,6 +56,8 @@ export const editorActions = {
     payload: timestamps,
   }),
 
+  setCalendarDefault: (time: Date | undefined): EditorAction => ({ type: "SET_CALENDAR_DEFAULT", payload: time }),
+
   setRecorderBusy: (value: boolean): EditorAction => ({
     type: "SET_RECORDER_BUSY",
     payload: value,

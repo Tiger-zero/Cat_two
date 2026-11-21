@@ -231,7 +231,7 @@ func listDeleteUserAttachments(ctx context.Context, tx *sql.Tx, userID int32, me
 	return attachments, nil
 }
 
-func appendDeleteUserAttachments(ctx context.Context, tx *sql.Tx, query string, args []any, seen map[int32]struct{}, attachments *[]*store.Attachment) error {
+func appendDeleteUserAttachments(ctx context.Context, tx dbExecutor, query string, args []any, seen map[int32]struct{}, attachments *[]*store.Attachment) error {
 	rows, err := tx.QueryContext(ctx, query, args...)
 	if err != nil {
 		return err

@@ -69,8 +69,8 @@ func ValidateMemoTrashState(m *MemoTrashMutation, creatorID int32, deletedTs *in
 	return nil
 }
 
-// ApplyMemoTrash atomically changes a memo's recycle-bin state and returns any
-// attachments removed by permanent deletion for external storage cleanup.
+// ApplyMemoTrash atomically changes a memo's recycle-bin state. Permanent
+// deletion queues storage cleanup and returns the affected attachments.
 func (s *Store) ApplyMemoTrash(ctx context.Context, mutation *MemoTrashMutation) ([]*Attachment, error) {
 	if mutation == nil || mutation.MemoID <= 0 || mutation.NowTs <= 0 || mutation.ActorUserID < 0 {
 		return nil, errors.New("invalid memo recycle-bin mutation")

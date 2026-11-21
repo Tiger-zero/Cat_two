@@ -288,6 +288,12 @@
     },
     "new-memo": "New memo",
     "no-changes-detected": "No changes detected",
+    "draft": {
+      "storage-failed": "Couldn't save the local draft. Save the memo before leaving this page.",
+      "outdated": "This memo has a newer version. The older draft wasn't applied.",
+      "copy-text": "Copy draft text",
+      "conflict": "This memo changed while you were editing. Copy your changes before reopening it."
+    },
     "save": "Save",
     "saving": "Saving…",
     "updating": "Updating…",
@@ -501,8 +507,10 @@
     "load-error": "Couldn’t load memos",
     "mode": "Search mode",
     "retry": "Retry",
+    "scope": "Search scope",
     "syntax-help": "Search syntax",
-    "text": "Text"
+    "text": "Text",
+    "unarchived": "Unarchived"
   },
   "setting": {
     "access-token": {

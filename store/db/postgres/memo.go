@@ -304,6 +304,14 @@ func (d *DB) GetMemo(ctx context.Context, find *store.FindMemo) (*store.Memo, er
 	return memo, nil
 }
 
+func (d *DB) QueryActiveMemoTags(ctx context.Context, creatorID int32) (*sql.Rows, error) {
+	var args []any
+	owner := postgresMemoAccessPredicate(&store.MemoAccessScope{UserID: &creatorID, OwnerOnly: true}, "memo", "access_member", &args)
+	return d.db.QueryContext(ctx, `SELECT memo.payload->'tags' FROM memo
+		WHERE memo.row_status = 'NORMAL' AND memo.deleted_ts IS NULL AND `+owner+`
+		AND NOT EXISTS (SELECT 1 FROM memo_relation AS r WHERE r.memo_id = memo.id AND r.type = 'COMMENT')`, args...)
+}
+
 // CountUserMemos counts the memos a user created, comments included, in every
 // row status and Space.
 func (d *DB) CountUserMemos(ctx context.Context, creatorID int32) (int64, error) {

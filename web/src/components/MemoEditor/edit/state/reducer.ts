@@ -99,6 +99,13 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
         },
       };
 
+    case "SET_CALENDAR_DEFAULT":
+      return {
+        ...state,
+        calendarDefault: action.payload,
+        timestamps: { createTime: action.payload, updateTime: action.payload },
+      };
+
     case "SET_RECORDER_BUSY":
       return {
         ...state,

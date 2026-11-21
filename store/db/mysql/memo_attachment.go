@@ -38,7 +38,7 @@ func (d *DB) ApplyMemoMutation(ctx context.Context, mutation *store.MemoMutation
 			return err
 		}
 		if mutation.CommentContextMemoID != nil {
-			if err := authorizeMySQLMemoComment(ctx, tx, *mutation.CommentContextMemoID, create.CreatorID, mutation.PersonalCreation); err != nil {
+			if err := authorizeMySQLMemoComment(ctx, tx, mutation); err != nil {
 				return err
 			}
 		}

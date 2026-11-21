@@ -126,6 +126,8 @@ export const memoService = {
     },
     operations: MemoSaveOperations,
   ): Promise<{ memoName: string; hasChanges: boolean; moved?: boolean }> {
+    // Verify the edit's baseline before uploading files for a stale draft.
+    let prevMemo = options.memoName ? await operations.getMemo(options.memoName) : undefined;
     // 1. Upload new files first. Edits of saved drawings (`replaces`) upload over
     // their attachment, which is visible at once, so they wait until the memo
     // itself is saved: a refused save then leaves every saved drawing as it was.
@@ -141,8 +143,12 @@ export const memoService = {
     );
 
     // 2. Update existing memo
-    if (options.memoName) {
-      const prevMemo = await operations.getMemo(options.memoName);
+    if (options.memoName && additions.length > 0) {
+      // Uploads can take time. Recheck the revision before updating the memo
+      // so a concurrent edit during an upload is still caught.
+      prevMemo = await operations.getMemo(options.memoName);
+    }
+    if (prevMemo) {
       const { mask, patch } = buildUpdateMask(prevMemo, state, allAttachments);
 
       if (mask.size === 0 && replacements.length === 0) {

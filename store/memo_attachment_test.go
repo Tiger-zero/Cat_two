@@ -9,6 +9,26 @@ import (
 	"github.com/usememos/memos/store"
 )
 
+func TestArchivedCommentRestorationRequiresActiveOwner(t *testing.T) {
+	snapshot := &store.MemoCommentAuthorizationSnapshot{
+		ActorUserID:       1,
+		Actor:             store.MemoActorState{Active: true, Admin: true},
+		ContextID:         10,
+		ContextCreatorID:  1,
+		ContextRowStatus:  store.Archived,
+		ContextVisibility: store.Public,
+	}
+	require.ErrorIs(t, store.ValidateMemoCommentAuthorization(snapshot), store.ErrMemoSpaceNotWritable)
+
+	restore := &store.MemoMutation{RestoreArchivedComment: true}
+	require.NoError(t, restore.AuthorizeCommentContext(snapshot))
+	snapshot.ContextCreatorID = 2
+	require.ErrorIs(t, restore.AuthorizeCommentContext(snapshot), store.ErrMemoPermissionDenied)
+	snapshot.ContextCreatorID = 1
+	snapshot.Actor.Active = false
+	require.ErrorIs(t, restore.AuthorizeCommentContext(snapshot), store.ErrMemoPermissionDenied)
+}
+
 func TestMemoMutationRejectsInvalidInputBeforeWriting(t *testing.T) {
 	creation := func() *store.MemoMutation {
 		return &store.MemoMutation{MemoCreate: &store.Memo{UID: "new-memo", CreatorID: 1, Visibility: store.Private}}

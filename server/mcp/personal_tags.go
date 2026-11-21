@@ -16,7 +16,6 @@ import (
 const (
 	defaultTagPageSize = 50
 	maxTagPageSize     = 200
-	tagMemoBatchSize   = 500
 )
 
 type personalTagPagination struct {
@@ -79,7 +78,8 @@ func listPersonalTags(ctx context.Context, db *store.Store, query string, page p
 		pageSize = defaultTagPageSize
 	}
 
-	counts, err := personalTagMemoCounts(ctx, db, userID)
+	counts := make(map[string]int)
+	err := db.VisitActiveMemoTags(ctx, userID, func(tags []string) { countMemoTagPaths(counts, tags) })
 	if err != nil {
 		return personalTagResults{}, errors.Wrap(err, "failed to list tags")
 	}
@@ -107,33 +107,6 @@ func listPersonalTags(ctx context.Context, db *store.Store, query string, page p
 		result.NextOffset = end
 	}
 	return result, nil
-}
-
-func personalTagMemoCounts(ctx context.Context, db *store.Store, userID int32) (map[string]int, error) {
-	normal, limit := store.Normal, tagMemoBatchSize
-	find := store.FindMemo{
-		Access:          &store.MemoAccessScope{UserID: &userID, OwnerOnly: true},
-		RowStatus:       &normal,
-		Trash:           store.MemoTrashExclude,
-		ExcludeComments: true,
-		ExcludeContent:  true,
-		Limit:           &limit,
-	}
-
-	counts := make(map[string]int)
-	for offset := 0; ; offset += limit {
-		find.Offset = &offset
-		memos, err := db.ListMemos(ctx, &find)
-		if err != nil {
-			return nil, err
-		}
-		for _, memo := range memos {
-			countMemoTagPaths(counts, memo.Payload.GetTags())
-		}
-		if len(memos) < limit {
-			return counts, nil
-		}
-	}
 }
 
 func countMemoTagPaths(counts map[string]int, tags []string) {

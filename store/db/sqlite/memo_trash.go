@@ -83,6 +83,11 @@ func (d *DB) ApplyMemoTrash(ctx context.Context, mutation *store.MemoTrashMutati
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to permanently delete memo")
 	}
+	if err := store.EnqueueMemoTrashAttachmentCleanup(ctx, tx, attachments, `
+        INSERT INTO attachment_storage_cleanup (attachment_id, uid, creator_id, memo_id, storage_type, reference, payload)
+        VALUES (?, ?, ?, ?, ?, ?, ?)`); err != nil {
+		return nil, errors.Wrap(err, "failed to queue recycle-bin attachment storage cleanup")
+	}
 	if err := tx.Commit(); err != nil {
 		return nil, errors.Wrap(err, "failed to commit permanent memo deletion")
 	}

@@ -1,7 +1,7 @@
 import { Checkbox } from "@usememos/ui";
 import { useMemo, useState } from "react";
 import { MemoEditor } from "@/components/MemoEditor";
-import { deriveDefaultCreateTimeFromFilters } from "@/components/MemoEditor/edit/utils/deriveDefaultCreateTime";
+import { deriveDefaultCreateTimeFromDate } from "@/components/MemoEditor/edit/utils/deriveDefaultCreateTime";
 import MemoFeedMenu from "@/components/MemoFeedMenu";
 import MemoView from "@/components/MemoView";
 import PagedMemoList, { EmptyLine, getMemoKey } from "@/components/PagedMemoList";
@@ -28,7 +28,8 @@ const Home = () => {
   const { claimHomeAutoFocus } = useGlobalMemoEditor();
   const { filters } = useMemoFilterContext();
   const contextFilter = user && buildMemoCreatorFilter(user.name);
-  const defaultCreateTime = useMemo(() => deriveDefaultCreateTimeFromFilters(filters), [filters]);
+  const calendarDay = filters.find((filter) => filter.factor === "displayTime")?.value;
+  const defaultCreateTime = useMemo(() => (calendarDay ? deriveDefaultCreateTimeFromDate(calendarDay) : undefined), [calendarDay]);
 
   const memoFilter = useMemoFilters({
     includeMemoViews: true,

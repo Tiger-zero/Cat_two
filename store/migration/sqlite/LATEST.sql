@@ -100,6 +100,9 @@ CREATE INDEX idx_memo_space_id ON memo(space_id, row_status, created_ts DESC, id
 CREATE INDEX idx_memo_trash_expiry ON memo(deleted_ts, id);
 CREATE INDEX idx_memo_trash_creator ON memo(creator_id, deleted_ts, id);
 CREATE INDEX idx_memo_trash_root ON memo(trash_root_id);
+CREATE INDEX idx_memo_owner_pinned_created
+  ON memo(creator_id, row_status, pinned DESC, created_ts DESC, id DESC)
+  WHERE deleted_ts IS NULL;
 
 -- memo_relation
 CREATE TABLE memo_relation (
@@ -131,6 +134,18 @@ CREATE TABLE attachment (
 
 CREATE INDEX idx_attachment_creator_id ON attachment(creator_id);
 CREATE INDEX idx_attachment_memo_id_type ON attachment(memo_id, type);
+
+-- Removed attachment metadata for retrying trash storage cleanup after commit.
+CREATE TABLE attachment_storage_cleanup (
+  attachment_id INTEGER PRIMARY KEY,
+  uid TEXT NOT NULL,
+  creator_id INTEGER NOT NULL,
+  memo_id INTEGER,
+  storage_type TEXT NOT NULL,
+  reference TEXT NOT NULL,
+  payload TEXT NOT NULL,
+  next_attempt_ts BIGINT NOT NULL DEFAULT 0
+);
 
 -- idp
 CREATE TABLE idp (

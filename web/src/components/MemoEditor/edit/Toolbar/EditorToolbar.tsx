@@ -31,6 +31,7 @@ export const EditorToolbar: FC<EditorToolbarProps> = ({
   const isSaving = useEditorSelector((s) => s.ui.isLoading.saving);
   const drawingSaveError = useEditorSelector((s) => s.drawingSaveError);
   const isUploading = useEditorSelector((s) => s.ui.isLoading.uploading);
+  const isRestoringDraft = useEditorSelector((s) => s.ui.isLoading.loading);
   const blockedMessage =
     valid || isSaving
       ? undefined
@@ -80,7 +81,7 @@ export const EditorToolbar: FC<EditorToolbarProps> = ({
       <div className="flex min-w-0 flex-wrap items-center gap-1">
         <InsertMenu
           isUploading={isUploading}
-          isSaving={isSaving}
+          isSaving={isSaving || isRestoringDraft}
           memoName={memoName}
           onAudioRecorderClick={onAudioRecorderClick}
           viewToggles={viewToggles}

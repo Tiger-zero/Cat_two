@@ -12,12 +12,14 @@ export interface EditSessionProps {
   className?: string;
   /** The draft and caret storage key, derived from what is edited; see `draftKeyFor`. */
   draftKey: string;
+  /** Cached snapshot the editor started from, used to guard writes from competing tabs. */
+  initialDraftRaw: string | null;
   /** Inside a card that is the frame already: no background, border or padding of its own outside focus mode. */
   frameless?: boolean;
   /** Leads the timestamp row, before the time: the card's creator while it edits in place. */
   timestampLead?: ReactNode;
   placeholder?: string;
-  /** Existing memo to edit; the session starts from it and persists no draft. */
+  /** Existing memo to edit; the session restores drafts for its current revision. */
   memo?: Memo;
   parentMemoName?: string;
   /** Context-derived suggestions for a new top-level memo. */

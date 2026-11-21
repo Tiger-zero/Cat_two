@@ -197,6 +197,12 @@
     },
     "new-memo": "新建备忘录",
     "no-changes-detected": "未检测到更改",
+    "draft": {
+      "storage-failed": "无法在本机保留草稿。请在离开页面前保存笔记。",
+      "outdated": "这条笔记已有更新版本，旧草稿未应用。",
+      "copy-text": "复制草稿正文",
+      "conflict": "这条笔记在编辑期间已更新。请先复制修改的正文，再重新打开笔记。"
+    },
     "save": "保存",
     "saving": "正在保存…",
     "updating": "正在更新…",
@@ -916,8 +922,10 @@
     "keyboard-hint": "按 Enter 键搜索 · 按 Shift+Enter 键换行",
     "load-error": "无法加载备忘录",
     "mode": "搜索模式",
+    "scope": "搜索范围",
     "syntax-help": "搜索语法",
-    "text": "文本"
+    "text": "文本",
+    "unarchived": "未归档"
   },
   "welcome": {
     "title": "欢迎使用 Memos",

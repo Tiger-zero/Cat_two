@@ -95,7 +95,10 @@ func (w *Writer) WriteAttachment(path string, content io.Reader) (string, int64,
 	if !strings.HasPrefix(path, AttachmentsDir) {
 		return "", 0, errors.Errorf("attachment entry %q must be under %s", path, AttachmentsDir)
 	}
-	entry, err := w.create(path, zip.Deflate)
+	// A highly compressible attachment can exceed the reader's archive
+	// expansion limit. Store attachment bytes verbatim so exported files stay
+	// within that limit without weakening it for imports.
+	entry, err := w.create(path, zip.Store)
 	if err != nil {
 		return "", 0, err
 	}
