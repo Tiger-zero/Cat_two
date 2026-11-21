@@ -2,9 +2,9 @@
 
 set -euo pipefail
 
-# Application releases use YY.MM.N[-rc.K]; .agents/skills/release/SKILL.md says
-# how N and K are chosen. Bare YY.MM is only an image tag that follows the newest
-# stable of its month. Database migration sequences are separate.
+# Upstream application releases use YY.MM.N[-rc.K]. Bare YY.MM follows the newest
+# stable image of its month. Cat_two Docker Hub numbering is handled by
+# scripts/cat_two_docker_release.py. Database migration sequences are separate.
 parse_release_tag() {
   local tag="$1"
   if [[ ! "$tag" =~ ^([1-9][0-9]\.(0[1-9]|1[0-2]))\.(0|[1-9][0-9]*)(-rc\.([1-9][0-9]*))?$ ]]; then

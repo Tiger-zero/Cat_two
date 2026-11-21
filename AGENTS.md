@@ -5,7 +5,7 @@ repo. If a fact here conflicts with source files or CI config, trust the source 
 
 ## Project Snapshot
 
-Memos is a self-hosted note-taking app.
+Cat_two is a self-hosted personal note-taking app based on Fumos and Memos.
 
 - Backend: Go 1.27.4, net/http, Connect RPC, gRPC-Gateway, Protocol Buffers.
 - Frontend: React 19, TypeScript 7, Vite 8, Tailwind CSS v4, `@usememos/ui` on Base UI, React Query v5.
@@ -20,6 +20,8 @@ Memos is a self-hosted note-taking app.
 - Add migrations for all database drivers when schema changes, and update each driver's `LATEST.sql`.
 - Add public API endpoints to `server/api/acl_config.go`.
 - Ask before adding heavy dependencies, changing auth/token behavior, or altering Docker/release workflows.
+- Use the [Cat_two development skill](.agents/skills/cat-two-development/SKILL.md) for repository development and the
+  [Cat_two MCP skill](.agents/skills/cat-two-mcp/SKILL.md) for connecting to a deployed instance and organizing notes.
 
 ## Documentation
 
@@ -27,7 +29,7 @@ Memos is a self-hosted note-taking app.
 - Design documents in `docs/design/` stay editable until the feature ships in a tagged release; keep a merged-but-unreleased design in step
   with its implementation. After release the body is frozen: record later design changes in a dated `## Amendments` section at the end, never by
   rewriting the body. See `docs/design/README.md`. Verify current behavior in source code and tests, not in design documents.
-- Brand copy (tagline, descriptions, README intro) comes verbatim from [`BRAND.md`](https://github.com/usememos/.github/blob/main/BRAND.md) in `usememos/.github`. Change it there first; do not keep brand guidelines in this repo.
+- Keep the Cat_two [README](README.md) and [feature guide](docs/cat-two-guide.md) aligned with the app users deploy.
 - Keep contributor guidance in this file and package-local `README.md` or `doc.go` files current when relevant code changes.
 
 ## Commands
@@ -169,9 +171,9 @@ Black-box service tests live in `server/api/test/`, unit tests next to the code.
 
 ## CI Reference
 
-- Releases are cut by pushing a `YY.MM.N[-rc.K]` tag. To cut, promote, or check a release, follow
-  `.agents/skills/release/SKILL.md`.
-- Development builds use the HEAD committer date in UTC as `YY.MM.D-dev.<sha7>`; release builds inject the CalVer tag.
+- The [Cat_two Container workflow](.github/workflows/cat-two-container.yml) publishes numbered Docker Hub tags and
+  `latest`. See the [development skill](.agents/skills/cat-two-development/SKILL.md) for publication and verification.
+- Development builds use the HEAD committer date in UTC as `YY.MM.D-dev.<sha7>`. Docker Hub uses a separate image tag.
 - `go build` embeds Git metadata automatically; `go run` needs `-buildvcs=true`. Builds without Git metadata must inject
   `github.com/usememos/memos/internal/version.Version` through `-ldflags`.
 - Docker excludes `.git`; pass `--build-arg VERSION="$(bash scripts/release_version.sh development-version)"` and
@@ -183,4 +185,4 @@ Black-box service tests live in `server/api/test/`, unit tests next to the code.
   `store`, `server`, `internal`, `other` (`cmd`, `core`, `markdown`, `filter`, `provider`, `proto`).
 - Frontend CI: Node 24, pnpm 11.0.1, `pnpm lint`, `pnpm test`, `pnpm build`.
 - Proto CI: `buf lint` and `buf format` check.
-- Docker: `scripts/Dockerfile`, Alpine 3.21 runtime, non-root user, port 5230, multi-arch amd64/arm64/arm/v7.
+- Docker: `scripts/Dockerfile`, Alpine 3.21 runtime, non-root app process, port 5230. Cat_two publishes amd64 and arm64.
