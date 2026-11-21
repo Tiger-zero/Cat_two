@@ -2,6 +2,8 @@ package test
 
 import (
 	"context"
+	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -36,6 +38,7 @@ func TestMigrationRejectsUnsupportedSchema(t *testing.T) {
 	for _, tc := range []struct {
 		name, schema, message string
 		missingBasic          bool
+		newerSchema           bool
 	}{
 		{name: "pre-v0.22", schema: "0.21.0", message: "First upgrade to v0.25.3"},
 		{name: "v0.22", schema: "0.22.0", message: "First upgrade to v0.31.0"},
@@ -45,7 +48,7 @@ func TestMigrationRejectsUnsupportedSchema(t *testing.T) {
 		{name: "zero", schema: "0.0.0", message: "First upgrade to v0.25.3"},
 		{name: "missing-basic", missingBasic: true, message: "First upgrade to v0.25.3"},
 		{name: "invalid-month", schema: "26.13.1", message: "invalid database schema version"},
-		{name: "calver-newer", schema: "26.11.4", message: "cannot downgrade schema version"},
+		{name: "calver-newer", newerSchema: true, message: "cannot downgrade schema version"},
 		{name: "invalid", schema: "unknown", message: "invalid database schema version"},
 		{name: "incomplete", schema: "0.31", message: "invalid database schema version"},
 		{name: "prerelease", schema: "0.31.8-rc.1", message: "invalid database schema version"},
@@ -68,7 +71,17 @@ func TestMigrationRejectsUnsupportedSchema(t *testing.T) {
 			if tc.missingBasic {
 				require.NoError(t, ts.DeleteInstanceSetting(ctx, &store.DeleteInstanceSetting{Name: "BASIC"}))
 			} else {
-				setSchemaVersion(ctx, t, ts, tc.schema)
+				schemaVersion := tc.schema
+				if tc.newerSchema {
+					currentVersion, err := ts.GetCurrentSchemaVersion()
+					require.NoError(t, err)
+					separator := strings.LastIndexByte(currentVersion, '.')
+					require.NotEqual(t, -1, separator)
+					revision, err := strconv.Atoi(currentVersion[separator+1:])
+					require.NoError(t, err)
+					schemaVersion = currentVersion[:separator+1] + strconv.Itoa(revision+1)
+				}
+				setSchemaVersion(ctx, t, ts, schemaVersion)
 			}
 			require.NoError(t, ts.DeleteInstanceSetting(ctx, &store.DeleteInstanceSetting{Name: "ACCESS"}))
 			before, err := ts.GetDriver().ListInstanceSettings(ctx, &store.FindInstanceSetting{})

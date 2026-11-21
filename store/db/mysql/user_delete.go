@@ -4,14 +4,20 @@ import (
 	"context"
 	"database/sql"
 	"strings"
+	"time"
 
+	"github.com/go-sql-driver/mysql"
 	"github.com/pkg/errors"
 
 	storepb "github.com/usememos/memos/proto/gen/store"
 	"github.com/usememos/memos/store"
 )
 
-const deleteUserBatchSize = 500
+const (
+	deleteUserBatchSize   = 500
+	deleteUserMaxAttempts = 5
+	mySQLNeedReprepare    = 1615
+)
 
 type deleteUserTargetSet struct {
 	memoIDs         []int32
@@ -22,6 +28,23 @@ type deleteUserTargetSet struct {
 }
 
 func (d *DB) DeleteUser(ctx context.Context, delete *store.DeleteUser) (*store.DeleteUserResult, error) {
+	for attempt := 1; ; attempt++ {
+		result, err := d.deleteUserOnce(ctx, delete)
+		var mysqlErr *mysql.MySQLError
+		if attempt == deleteUserMaxAttempts || !errors.As(err, &mysqlErr) || mysqlErr.Number != mySQLNeedReprepare {
+			return result, err
+		}
+		// Metadata changes can invalidate a prepared statement. The failed
+		// transaction has rolled back, so retry from the first read and lock.
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-time.After(time.Duration(attempt) * 10 * time.Millisecond):
+		}
+	}
+}
+
+func (d *DB) deleteUserOnce(ctx context.Context, delete *store.DeleteUser) (*store.DeleteUserResult, error) {
 	tx, err := d.db.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to begin delete user transaction")
