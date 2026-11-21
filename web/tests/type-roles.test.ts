@@ -45,12 +45,8 @@ describe("type roles", () => {
   it("uses Tailwind text sizes only for the documented exceptions", () => {
     expect(filesUsing(/\btext-(xs|sm|base|lg|xl|2xl|3xl|\[\d+(\.\d+)?(px|rem|em)\])(?![\w-])/)).toEqual(
       [
-        // Emoji and custom icons, whose font size is the icon box.
-        "components/AppSidebar/ViewsSection.tsx",
-        "components/CustomIconPicker.tsx",
-        "components/MemoFilters.tsx",
+        // Emoji uses the font size of its icon box.
         "components/MemoReactionListView/ReactionSelector.tsx",
-        "pages/MemoViews.tsx",
         // The serif wordmark.
         "components/IdentityLabel.tsx",
         // Sizes relative to memo text (inline code, tag pills, the welcome guide's memo specimen).

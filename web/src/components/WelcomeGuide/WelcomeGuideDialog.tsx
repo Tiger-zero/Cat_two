@@ -3,7 +3,6 @@ import {
   CalendarDaysIcon,
   CodeXmlIcon,
   HashIcon,
-  ListChecksIcon,
   type LucideIcon,
   MessageSquareIcon,
   PaperclipIcon,
@@ -80,7 +79,6 @@ const WelcomeGuideDialog = ({ open, onOpenChange }: Props) => {
       rows: [
         { icon: CalendarDaysIcon, label: t("common.calendar"), text: t("welcome.calendar-text") },
         { icon: HashIcon, label: t("common.tags"), text: t("welcome.tags-text") },
-        { icon: ListChecksIcon, label: t("common.views"), text: t("welcome.views-text") },
       ],
     },
     {

@@ -8,12 +8,16 @@ import "google/type/color.proto";
 option go_package = "gen/store";
 
 message UserSetting {
+  reserved 4;
+  reserved "memo_views";
+
   enum Key {
+    reserved 2;
+    reserved "MEMO_VIEWS";
+
     KEY_UNSPECIFIED = 0;
     // General user settings.
     GENERAL = 1;
-    // The memo views of the user.
-    MEMO_VIEWS = 2;
     // The webhooks of the user.
     WEBHOOKS = 3;
     // Refresh tokens for the user.
@@ -31,7 +35,6 @@ message UserSetting {
   Key key = 2;
   oneof value {
     GeneralUserSetting general = 3;
-    MemoViewsUserSetting memo_views = 4;
     WebhooksUserSetting webhooks = 5;
     RefreshTokensUserSetting refresh_tokens = 6;
     PersonalAccessTokensUserSetting personal_access_tokens = 7;
@@ -119,25 +122,6 @@ message PersonalAccessTokensUserSetting {
     google.protobuf.Timestamp last_used_at = 6;
   }
   repeated PersonalAccessToken tokens = 1;
-}
-
-message MemoViewsUserSetting {
-  message MemoView {
-    string id = 1;
-    string title = 2;
-    string filter = 3;
-    Icon icon = 4;
-
-    message Icon {
-      oneof value {
-        // A Unicode emoji sequence.
-        string emoji = 1;
-        // A canonical Lucide icon name, such as "leaf".
-        string lucide = 2;
-      }
-    }
-  }
-  repeated MemoView memo_views = 1;
 }
 
 message WebhooksUserSetting {

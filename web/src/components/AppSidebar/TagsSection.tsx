@@ -1,7 +1,8 @@
 import { Button, Menu, Tooltip } from "@usememos/ui";
 import { HashIcon, ListTreeIcon, MoreHorizontalIcon, PencilIcon, PinIcon, PinOffIcon } from "lucide-react";
 import { forwardRef, type ReactNode, useMemo, useState } from "react";
-import { replaceFiltersByFactor, useMemoFilterContext } from "@/contexts/MemoFilterContext";
+import { useNavigate } from "react-router-dom";
+import { getFilterSearch, replaceFiltersByFactor, useMemoFilterContext } from "@/contexts/MemoFilterContext";
 import { useLocalStorage, useOverflowTitle } from "@/hooks";
 import useCurrentUser from "@/hooks/useCurrentUser";
 import { cn } from "@/lib/utils";
@@ -21,7 +22,8 @@ import TagRenameDialog from "./TagRenameDialog";
 interface Props {
   tagCount: Record<string, number>;
   onSelect?: () => void;
-  /** Whose tags these are; keeps tree expansion state from bleeding between users and views. */
+  destination?: string;
+  /** Whose tags these are; keeps tree expansion state separate for each account and collection. */
   scope: string;
 }
 
@@ -32,7 +34,7 @@ const TagPath = forwardRef<HTMLSpanElement, { tag: string }>(({ tag }, ref) => {
     <span ref={ref} className="min-w-0 flex-1 truncate text-start">
       {segments.map((segment, index) => (
         <span key={`${segment}-${index}`}>
-          {index > 0 && <span className="px-0.5 text-mu-text-secondary">/</span>}
+          {index > 0 && <span className="px-0.5 text-mu-text-secondary group-data-checked:text-white">/</span>}
           {segment}
         </span>
       ))}
@@ -57,7 +59,10 @@ const FlatTagRow = ({ tag, amount, active, ariaLabel, onClick, pinned, actions }
   const state = active ? "checked" : "idle";
 
   return (
-    <div {...sidebarRowStateAttributes(state)} className={cn(SIDEBAR_ROW_BOX_CLASSES, sidebarRowStateClasses(state), "text-mu-text")}>
+    <div
+      {...sidebarRowStateAttributes(state)}
+      className={cn(SIDEBAR_ROW_BOX_CLASSES, sidebarRowStateClasses(state), !active && "text-mu-text")}
+    >
       <button
         type="button"
         aria-label={ariaLabel}
@@ -77,8 +82,9 @@ const FlatTagRow = ({ tag, amount, active, ariaLabel, onClick, pinned, actions }
 
 const NO_PINS: string[] = [];
 
-const TagsSectionForAccount = ({ tagCount, onSelect, scope, account }: Props & { account?: string }) => {
+const TagsSectionForAccount = ({ tagCount, onSelect, destination, scope, account }: Props & { account?: string }) => {
   const t = useTranslate();
+  const navigate = useNavigate();
   const { filters, setFilters } = useMemoFilterContext();
   const [treeMode, setTreeMode] = useLocalStorage<boolean>("tag-view-as-tree", true);
   const [pinnedPaths, setPinnedPaths] = useLocalStorage<string[]>(`memos-pinned-tags:${account ?? "guest"}`, NO_PINS);
@@ -94,11 +100,12 @@ const TagsSectionForAccount = ({ tagCount, onSelect, scope, account }: Props & {
   }
 
   const handleTagClick = (tag: string) => {
-    setFilters(
-      activeTags.has(tag)
+    const nextFilters =
+      !destination && activeTags.has(tag)
         ? filters.filter((filter) => filter.factor !== "tagSearch" || filter.value !== tag)
-        : replaceFiltersByFactor(filters, "tagSearch", [{ factor: "tagSearch", value: tag }]),
-    );
+        : replaceFiltersByFactor(filters, "tagSearch", [{ factor: "tagSearch", value: tag }]);
+    if (destination) void navigate({ pathname: destination, search: getFilterSearch(nextFilters) });
+    else setFilters(nextFilters);
     onSelect?.();
   };
 
@@ -123,7 +130,14 @@ const TagsSectionForAccount = ({ tagCount, onSelect, scope, account }: Props & {
       <Menu.Root modal={false}>
         <Menu.Trigger
           aria-label={t("setting.tags.actions", { tag: `#${tag}` })}
-          render={<Button variant="ghost" size="xs" icon={<MoreHorizontalIcon />} />}
+          render={
+            <Button
+              variant="ghost"
+              size="xs"
+              icon={<MoreHorizontalIcon />}
+              className="group-data-checked:text-white group-data-checked:hover:bg-white/15"
+            />
+          }
         />
         <Menu.Popup align="end">
           <Menu.Item icon={pinned ? <PinOffIcon /> : <PinIcon />} onClick={() => togglePin(tag)}>

@@ -51,6 +51,7 @@ describe("router configuration", () => {
     "/home",
     "/explore",
     "/inbox",
+    "/views",
     "/spaces/product",
     "/spaces/product/explore",
     "/u/alice",
@@ -126,15 +127,13 @@ describe("router configuration", () => {
   });
 
   it("wraps authenticated-only pages in RequireAuthRoute", () => {
-    for (const path of [ROUTES.ARCHIVED, ROUTES.TRASH, ROUTES.VIEWS, ROUTES.SETTING, "memos/:uid"]) {
+    for (const path of [ROUTES.ARCHIVED, ROUTES.TRASH, ROUTES.SETTING, "memos/:uid"]) {
       expect(hasAncestorOfType(routeConfig, path, RequireAuthRoute)).toBe(true);
     }
   });
 
   it("keeps non-feed pages behind their full initialization requirements", () => {
-    for (const path of [ROUTES.VIEWS, ROUTES.SETTING]) {
-      expect(hasAncestorOfType(routeConfig, path, RequireFullInitializationRoute)).toBe(true);
-    }
+    expect(hasAncestorOfType(routeConfig, ROUTES.SETTING, RequireFullInitializationRoute)).toBe(true);
   });
 
   it("preserves the Settings section in links from before the modal", async () => {

@@ -8,6 +8,7 @@ import { MonthNavigator } from "./MonthNavigator";
 
 interface Props {
   statisticsData: StatisticsData;
+  destination?: string;
   onDateSelect?: () => void;
 }
 
@@ -15,7 +16,7 @@ const StatisticsView = (props: Props) => {
   const { statisticsData } = props;
   const { activityStats, timeBasis } = statisticsData;
   const { filters } = useMemoFilterContext();
-  const navigateToDateFilter = useDateFilterNavigation();
+  const navigateToDateFilter = useDateFilterNavigation(props.destination);
   const dateFilter = filters.find((filter) => filter.factor === "displayTime")?.value;
   const selectedDate = dateFilter && parseLocalDate(dateFilter) ? dateFilter : undefined;
   const selectedMonth = selectedDate?.slice(0, 7);

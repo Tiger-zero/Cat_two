@@ -4,12 +4,13 @@ import { describe, expect, it } from "vitest";
 import { MemoFilterProvider } from "@/contexts/MemoFilterContext";
 import { useDateFilterNavigation } from "@/hooks/useDateFilterNavigation";
 
-const Harness = () => {
+const Harness = ({ destination }: { destination?: string }) => {
   const location = useLocation();
-  const navigateToDate = useDateFilterNavigation();
+  const navigateToDate = useDateFilterNavigation(destination);
   return (
     <>
       <output data-testid="search">{location.search}</output>
+      <output data-testid="pathname">{location.pathname}</output>
       <button type="button" onClick={() => navigateToDate("2026-08-02")}>
         Select date
       </button>
@@ -36,5 +37,18 @@ describe("useDateFilterNavigation", () => {
       expect(params.get("filter")).toContain("tagSearch:work");
       expect(params.get("filter")).toContain("displayTime:2026-08-02");
     });
+  });
+
+  it.each(["/", "/archived"])("opens %s with the selected date from the trash", (destination) => {
+    render(
+      <MemoryRouter initialEntries={["/trash"]}>
+        <MemoFilterProvider>
+          <Harness destination={destination} />
+        </MemoFilterProvider>
+      </MemoryRouter>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Select date" }));
+    expect(screen.getByTestId("pathname")).toHaveTextContent(destination);
+    expect(screen.getByTestId("search")).toHaveTextContent("?filter=displayTime%3A2026-08-02");
   });
 });

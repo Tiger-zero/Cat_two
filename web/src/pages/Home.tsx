@@ -30,7 +30,6 @@ const Home = () => {
   const defaultCreateTime = useMemo(() => (calendarDay ? deriveDefaultCreateTimeFromDate(calendarDay) : undefined), [calendarDay]);
 
   const memoFilter = useMemoFilters({
-    includeMemoViews: true,
     includePinned: true,
   });
   const welcomeGuide = useWelcomeGuide(Boolean(user));

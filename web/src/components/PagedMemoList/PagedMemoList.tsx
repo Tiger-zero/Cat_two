@@ -132,7 +132,7 @@ function useAutoFetchWhenNotScrollable({
 const PagedMemoList = (props: Props) => {
   const t = useTranslate();
   const { isUserSettingsInitialized } = useAuth();
-  const { filters, memoView, removeFilter, setFilters, setMemoView } = useMemoFilterContext();
+  const { filters, removeFilter, setFilters } = useMemoFilterContext();
   const { setQuickFindOpen } = useAppSidebar();
   const { maxColumns, compactMode, fullWidth } = useView();
   // maxColumns is a ceiling: 1 = single reading column, 0 = as many as fit. The single
@@ -173,7 +173,7 @@ const PagedMemoList = (props: Props) => {
     );
 
   // Tag settings decide whether sensitive memo content must be blurred. Keep that
-  // privacy boundary, but do not wait for unrelated memo views or instance settings.
+  // privacy boundary independently of instance settings.
   const isDisplayPending = isLoading || !isUserSettingsInitialized;
   // A failed first page leaves nothing to show; a failed later page keeps what already
   // loaded. Either way, automatic pagination pauses until the user retries.
@@ -241,11 +241,10 @@ const PagedMemoList = (props: Props) => {
     [props.showCreator, displayMemoList],
   );
 
-  const hasFilters = filters.length > 0 || memoView !== undefined;
+  const hasFilters = filters.length > 0;
   const isEmpty = !isDisplayPending && !isError && !isFetchingNextPage && !hasNextPage && displayMemoList.length === 0;
   const clearFilters = () => {
     setFilters([]);
-    setMemoView(undefined);
   };
   // No results is neutral and offers the way out; first use belongs to the route.
   const emptyPlaceholder = !isEmpty ? null : hasFilters ? (

@@ -138,17 +138,13 @@
     "edit": "Edit",
     "email": "Email",
     "expand": "Expand",
-    "filter": "Filter",
     "language": "Language",
     "last-updated-at": "Last updated at",
     "learn-more": "Learn more",
-    "manage": "Manage",
     "memo": "Memo",
     "memos": "Memos",
     "month-navigation": "Month navigation",
     "more": "More",
-    "move-down": "Move down",
-    "move-up": "Move up",
     "next-month": "Next month",
     "nickname": "Nickname",
     "notes": "Notes",
@@ -177,7 +173,6 @@
     "unpin": "Unpin",
     "update": "Update",
     "username": "Username",
-    "views": "Views",
     "open-navigation": "Open navigation",
     "navigation": "Navigation",
     "primary-navigation": "Primary",
@@ -189,7 +184,6 @@
     "previous": "Previous",
     "next": "Next",
     "retry": "Retry",
-    "docs": "Docs",
     "calendar-for-month": "Calendar for {{month}}",
     "unknown-error": "Unknown error",
     "error-occurred": "An error occurred"
@@ -484,7 +478,6 @@
     "succeed-copy-content": "Content copied successfully.",
     "succeed-copy-link": "Link copied successfully.",
     "update-succeed": "Update succeeded",
-    "not-signed-in": "You're not signed in.",
     "invalid-datetime": "Invalid date and time. Use the format 2023-12-31 23:59:59."
   },
   "reference": {
@@ -693,115 +686,6 @@
       "label": "Editor",
       "markdown-mode-description": "Write and edit memos as Markdown text instead of formatted text."
     },
-    "memo-view": {
-      "create": "Create view",
-      "change-icon": "Change view icon",
-      "delete-confirm": "Are you sure you want to delete view `{{title}}`?",
-      "delete-success": "View `{{title}}` deleted successfully",
-      "page-description": "Create reusable views with fields, operators, time helpers, and tag matching. Use examples as starting points, then validate before saving.",
-      "edit": "Edit view",
-      "form-description": "Name the view and define the memo filter expression it should apply.",
-      "title-placeholder": "Pinned, Recent notes, Work",
-      "filter-help": "Combine expressions with {{and}}, {{or}}, and {{not}}. Time fields are timestamps — use {{now}}, {{duration}}, {{timestamp}}, and accessors like {{year}}. Tags support {{sets}}, and {{size}} measures length.",
-      "validate": "Validate",
-      "all": "All views",
-      "loading": "Loading views…",
-      "load-failed": "Couldn’t load views.",
-      "empty-title": "No views yet",
-      "empty-description": "Save a filter to quickly return to the memos you need.",
-      "examples-title": "Expression examples",
-      "fields-title": "Supported fields",
-      "title-filter-required": "Title and filter cannot be empty",
-      "filter-valid": "Filter expression looks valid",
-      "create-success": "View created",
-      "update-success": "View updated",
-      "examples": {
-        "pinned": {
-          "title": "Pinned",
-          "description": "Only pinned memos."
-        },
-        "recent": {
-          "title": "Recent notes",
-          "description": "Memos created in the last hour."
-        },
-        "project-tags": {
-          "title": "Project tags",
-          "description": "Match one or more exact tags."
-        },
-        "untagged": {
-          "title": "Untagged",
-          "description": "Memos without any tags."
-        },
-        "archive-tree": {
-          "title": "Archive tree",
-          "description": "Match hierarchical tags by prefix."
-        },
-        "unassigned": {
-          "title": "Unassigned",
-          "description": "Memos that are not placed in any space."
-        },
-        "one-space": {
-          "title": "In one space",
-          "description": "Memos placed in a space. Use the space ID from its URL or settings."
-        },
-        "open-tasks": {
-          "title": "Open tasks",
-          "description": "Memos with unfinished tasks."
-        },
-        "links-or-code": {
-          "title": "Links or code",
-          "description": "Memos containing links or code blocks."
-        },
-        "with-attachments": {
-          "title": "With attachments",
-          "description": "Memos with at least one attached file."
-        },
-        "photos": {
-          "title": "Photos",
-          "description": "Memos that show an image, in the content or as an attached file."
-        },
-        "content-search": {
-          "title": "Content search",
-          "description": "Search text inside memo content."
-        },
-        "starts-with": {
-          "title": "Starts with",
-          "description": "Memos whose content begins with text (also endsWith)."
-        },
-        "regex": {
-          "title": "Regex match",
-          "description": "Match content with a regular expression."
-        },
-        "all-tags-complete": {
-          "title": "All tags complete",
-          "description": "Every tag ends in -done (tagged memos only)."
-        },
-        "one-project-tag": {
-          "title": "One project tag",
-          "description": "Exactly one tag matches the predicate."
-        },
-        "any-tags": {
-          "title": "Any of these tags",
-          "description": "Tags intersect the given set."
-        },
-        "exact-tags": {
-          "title": "Exactly these tags",
-          "description": "Tagged with exactly this set, nothing more."
-        },
-        "year-2024": {
-          "title": "Memos from 2024",
-          "description": "Filter by calendar year."
-        },
-        "weekend": {
-          "title": "Weekend notes",
-          "description": "Created on a Sunday or Saturday (0 = Sunday)."
-        },
-        "long": {
-          "title": "Long notes",
-          "description": "Memos longer than 280 characters."
-        }
-      }
-    },
     "storage": {
       "accesskey": "Access key",
       "accesskey-description": "Access key ID for the bucket or S3-compatible service.",
@@ -912,15 +796,9 @@
   },
   "space": {
     "icon": {
-      "kind": "Icon type",
-      "icons": "Icons",
       "emoji": "Emoji",
-      "search-icons": "Search icons…",
       "search-emoji": "Search or paste emoji…",
-      "no-results": "No matches",
-      "emoji-help": "Choose a common emoji or paste your own.",
-      "reset": "Use default icon",
-      "use-emoji": "Use {{emoji}}"
+      "no-results": "No matches"
     },
     "spaces": "Spaces"
   },
@@ -946,7 +824,6 @@
     "keep-sub": "Each memo stays with the day you wrote it.",
     "calendar-text": "Pick a day in the sidebar to see notes for that date.",
     "tags-text": "A word after # becomes a tag you can use to filter notes.",
-    "views-text": "A custom view saves a filter.",
     "share": "Personal notes",
     "share-sub": "Organize topics in Spaces and add follow-up thoughts to your notes.",
     "spaces-text": "Organize notes by topic in Spaces.",
@@ -970,7 +847,6 @@
       "write-strong": "Reveal the details",
       "write-tail": "when they’re needed.",
       "write-task": "Write a short changelog",
-      "view": "Unfinished tasks",
       "space": "Product",
       "share-memo": "Try showing the result before asking people to sign up.",
       "comment": "Agreed. The preview did the convincing.",

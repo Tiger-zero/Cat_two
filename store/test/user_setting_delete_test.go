@@ -26,10 +26,8 @@ func TestDeleteUserSettingsInvalidatesOnlyMatchingCacheEntries(t *testing.T) {
 				settings = append(settings,
 					&storepb.UserSetting{UserId: user.ID, Key: storepb.UserSetting_GENERAL,
 						Value: &storepb.UserSetting_General{General: &storepb.GeneralUserSetting{Locale: user.Username}}},
-					&storepb.UserSetting{UserId: user.ID, Key: storepb.UserSetting_MEMO_VIEWS,
-						Value: &storepb.UserSetting_MemoViews{MemoViews: &storepb.MemoViewsUserSetting{
-							MemoViews: []*storepb.MemoViewsUserSetting_MemoView{{Id: "saved", Title: user.Username}},
-						}}})
+					&storepb.UserSetting{UserId: user.ID, Key: storepb.UserSetting_EDITOR,
+						Value: &storepb.UserSetting_Editor{Editor: &storepb.EditorUserSetting{SourceMode: true}}})
 			}
 			for _, setting := range settings {
 				_, err := ts.UpsertUserSetting(ctx, setting)

@@ -32,12 +32,6 @@ const (
 	UserService_ListUserStats_FullMethodName               = "/memos.api.UserService/ListUserStats"
 	UserService_GetUserStats_FullMethodName                = "/memos.api.UserService/GetUserStats"
 	UserService_GetUserUsage_FullMethodName                = "/memos.api.UserService/GetUserUsage"
-	UserService_ListMemoViews_FullMethodName               = "/memos.api.UserService/ListMemoViews"
-	UserService_GetMemoView_FullMethodName                 = "/memos.api.UserService/GetMemoView"
-	UserService_CreateMemoView_FullMethodName              = "/memos.api.UserService/CreateMemoView"
-	UserService_UpdateMemoView_FullMethodName              = "/memos.api.UserService/UpdateMemoView"
-	UserService_DeleteMemoView_FullMethodName              = "/memos.api.UserService/DeleteMemoView"
-	UserService_ReorderMemoViews_FullMethodName            = "/memos.api.UserService/ReorderMemoViews"
 	UserService_ListUserNotifications_FullMethodName       = "/memos.api.UserService/ListUserNotifications"
 	UserService_UpdateUserNotification_FullMethodName      = "/memos.api.UserService/UpdateUserNotification"
 	UserService_DeleteUserNotification_FullMethodName      = "/memos.api.UserService/DeleteUserNotification"
@@ -61,8 +55,8 @@ const (
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 //
 // UserService manages users and the resources they own: settings, statistics,
-// memo views, notifications, webhooks, linked identities, personal access
-// tokens, and memo export files.
+// notifications, webhooks, linked identities, personal access tokens, and memo
+// export files.
 type UserServiceClient interface {
 	// ListUsers lists users in every state. Only admins may call it.
 	ListUsers(ctx context.Context, in *ListUsersRequest, opts ...grpc.CallOption) (*ListUsersResponse, error)
@@ -100,21 +94,6 @@ type UserServiceClient interface {
 	// GetUserUsage returns a user's usage and the usage limits in effect for the
 	// user. Only the user or an admin may call it.
 	GetUserUsage(ctx context.Context, in *GetUserUsageRequest, opts ...grpc.CallOption) (*UserUsage, error)
-	// ListMemoViews lists a user's memo views. Each view is a named, reusable
-	// CEL filter (see MemoView.filter); pass its filter string directly to the
-	// ListMemos `filter` argument. Only the user may call it.
-	ListMemoViews(ctx context.Context, in *ListMemoViewsRequest, opts ...grpc.CallOption) (*ListMemoViewsResponse, error)
-	// GetMemoView gets a memo view. Only the owner may call it.
-	GetMemoView(ctx context.Context, in *GetMemoViewRequest, opts ...grpc.CallOption) (*MemoView, error)
-	// CreateMemoView creates a memo view for a user. Only the user may call it.
-	CreateMemoView(ctx context.Context, in *CreateMemoViewRequest, opts ...grpc.CallOption) (*MemoView, error)
-	// UpdateMemoView updates a memo view. Only the owner may call it.
-	UpdateMemoView(ctx context.Context, in *UpdateMemoViewRequest, opts ...grpc.CallOption) (*MemoView, error)
-	// DeleteMemoView deletes a memo view. Only the owner may call it.
-	DeleteMemoView(ctx context.Context, in *DeleteMemoViewRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
-	// ReorderMemoViews sets the order of a user's memo views, which is the order
-	// ListMemoViews returns them in. Only the user may call it.
-	ReorderMemoViews(ctx context.Context, in *ReorderMemoViewsRequest, opts ...grpc.CallOption) (*ReorderMemoViewsResponse, error)
 	// ListUserNotifications lists a user's notifications. Only the user may call
 	// it. Notifications whose memos or space invitation the user can no longer
 	// read are left out.
@@ -300,66 +279,6 @@ func (c *userServiceClient) GetUserUsage(ctx context.Context, in *GetUserUsageRe
 	return out, nil
 }
 
-func (c *userServiceClient) ListMemoViews(ctx context.Context, in *ListMemoViewsRequest, opts ...grpc.CallOption) (*ListMemoViewsResponse, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(ListMemoViewsResponse)
-	err := c.cc.Invoke(ctx, UserService_ListMemoViews_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *userServiceClient) GetMemoView(ctx context.Context, in *GetMemoViewRequest, opts ...grpc.CallOption) (*MemoView, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(MemoView)
-	err := c.cc.Invoke(ctx, UserService_GetMemoView_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *userServiceClient) CreateMemoView(ctx context.Context, in *CreateMemoViewRequest, opts ...grpc.CallOption) (*MemoView, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(MemoView)
-	err := c.cc.Invoke(ctx, UserService_CreateMemoView_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *userServiceClient) UpdateMemoView(ctx context.Context, in *UpdateMemoViewRequest, opts ...grpc.CallOption) (*MemoView, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(MemoView)
-	err := c.cc.Invoke(ctx, UserService_UpdateMemoView_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *userServiceClient) DeleteMemoView(ctx context.Context, in *DeleteMemoViewRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(emptypb.Empty)
-	err := c.cc.Invoke(ctx, UserService_DeleteMemoView_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *userServiceClient) ReorderMemoViews(ctx context.Context, in *ReorderMemoViewsRequest, opts ...grpc.CallOption) (*ReorderMemoViewsResponse, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(ReorderMemoViewsResponse)
-	err := c.cc.Invoke(ctx, UserService_ReorderMemoViews_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
 func (c *userServiceClient) ListUserNotifications(ctx context.Context, in *ListUserNotificationsRequest, opts ...grpc.CallOption) (*ListUserNotificationsResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(ListUserNotificationsResponse)
@@ -525,8 +444,8 @@ func (c *userServiceClient) ImportMemos(ctx context.Context, in *ImportMemosRequ
 // for forward compatibility.
 //
 // UserService manages users and the resources they own: settings, statistics,
-// memo views, notifications, webhooks, linked identities, personal access
-// tokens, and memo export files.
+// notifications, webhooks, linked identities, personal access tokens, and memo
+// export files.
 type UserServiceServer interface {
 	// ListUsers lists users in every state. Only admins may call it.
 	ListUsers(context.Context, *ListUsersRequest) (*ListUsersResponse, error)
@@ -564,21 +483,6 @@ type UserServiceServer interface {
 	// GetUserUsage returns a user's usage and the usage limits in effect for the
 	// user. Only the user or an admin may call it.
 	GetUserUsage(context.Context, *GetUserUsageRequest) (*UserUsage, error)
-	// ListMemoViews lists a user's memo views. Each view is a named, reusable
-	// CEL filter (see MemoView.filter); pass its filter string directly to the
-	// ListMemos `filter` argument. Only the user may call it.
-	ListMemoViews(context.Context, *ListMemoViewsRequest) (*ListMemoViewsResponse, error)
-	// GetMemoView gets a memo view. Only the owner may call it.
-	GetMemoView(context.Context, *GetMemoViewRequest) (*MemoView, error)
-	// CreateMemoView creates a memo view for a user. Only the user may call it.
-	CreateMemoView(context.Context, *CreateMemoViewRequest) (*MemoView, error)
-	// UpdateMemoView updates a memo view. Only the owner may call it.
-	UpdateMemoView(context.Context, *UpdateMemoViewRequest) (*MemoView, error)
-	// DeleteMemoView deletes a memo view. Only the owner may call it.
-	DeleteMemoView(context.Context, *DeleteMemoViewRequest) (*emptypb.Empty, error)
-	// ReorderMemoViews sets the order of a user's memo views, which is the order
-	// ListMemoViews returns them in. Only the user may call it.
-	ReorderMemoViews(context.Context, *ReorderMemoViewsRequest) (*ReorderMemoViewsResponse, error)
 	// ListUserNotifications lists a user's notifications. Only the user may call
 	// it. Notifications whose memos or space invitation the user can no longer
 	// read are left out.
@@ -679,24 +583,6 @@ func (UnimplementedUserServiceServer) GetUserStats(context.Context, *GetUserStat
 }
 func (UnimplementedUserServiceServer) GetUserUsage(context.Context, *GetUserUsageRequest) (*UserUsage, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetUserUsage not implemented")
-}
-func (UnimplementedUserServiceServer) ListMemoViews(context.Context, *ListMemoViewsRequest) (*ListMemoViewsResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method ListMemoViews not implemented")
-}
-func (UnimplementedUserServiceServer) GetMemoView(context.Context, *GetMemoViewRequest) (*MemoView, error) {
-	return nil, status.Error(codes.Unimplemented, "method GetMemoView not implemented")
-}
-func (UnimplementedUserServiceServer) CreateMemoView(context.Context, *CreateMemoViewRequest) (*MemoView, error) {
-	return nil, status.Error(codes.Unimplemented, "method CreateMemoView not implemented")
-}
-func (UnimplementedUserServiceServer) UpdateMemoView(context.Context, *UpdateMemoViewRequest) (*MemoView, error) {
-	return nil, status.Error(codes.Unimplemented, "method UpdateMemoView not implemented")
-}
-func (UnimplementedUserServiceServer) DeleteMemoView(context.Context, *DeleteMemoViewRequest) (*emptypb.Empty, error) {
-	return nil, status.Error(codes.Unimplemented, "method DeleteMemoView not implemented")
-}
-func (UnimplementedUserServiceServer) ReorderMemoViews(context.Context, *ReorderMemoViewsRequest) (*ReorderMemoViewsResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method ReorderMemoViews not implemented")
 }
 func (UnimplementedUserServiceServer) ListUserNotifications(context.Context, *ListUserNotificationsRequest) (*ListUserNotificationsResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListUserNotifications not implemented")
@@ -979,114 +865,6 @@ func _UserService_GetUserUsage_Handler(srv interface{}, ctx context.Context, dec
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(UserServiceServer).GetUserUsage(ctx, req.(*GetUserUsageRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _UserService_ListMemoViews_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(ListMemoViewsRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(UserServiceServer).ListMemoViews(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: UserService_ListMemoViews_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(UserServiceServer).ListMemoViews(ctx, req.(*ListMemoViewsRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _UserService_GetMemoView_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(GetMemoViewRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(UserServiceServer).GetMemoView(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: UserService_GetMemoView_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(UserServiceServer).GetMemoView(ctx, req.(*GetMemoViewRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _UserService_CreateMemoView_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(CreateMemoViewRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(UserServiceServer).CreateMemoView(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: UserService_CreateMemoView_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(UserServiceServer).CreateMemoView(ctx, req.(*CreateMemoViewRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _UserService_UpdateMemoView_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(UpdateMemoViewRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(UserServiceServer).UpdateMemoView(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: UserService_UpdateMemoView_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(UserServiceServer).UpdateMemoView(ctx, req.(*UpdateMemoViewRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _UserService_DeleteMemoView_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(DeleteMemoViewRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(UserServiceServer).DeleteMemoView(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: UserService_DeleteMemoView_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(UserServiceServer).DeleteMemoView(ctx, req.(*DeleteMemoViewRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _UserService_ReorderMemoViews_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(ReorderMemoViewsRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(UserServiceServer).ReorderMemoViews(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: UserService_ReorderMemoViews_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(UserServiceServer).ReorderMemoViews(ctx, req.(*ReorderMemoViewsRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -1433,30 +1211,6 @@ var UserService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetUserUsage",
 			Handler:    _UserService_GetUserUsage_Handler,
-		},
-		{
-			MethodName: "ListMemoViews",
-			Handler:    _UserService_ListMemoViews_Handler,
-		},
-		{
-			MethodName: "GetMemoView",
-			Handler:    _UserService_GetMemoView_Handler,
-		},
-		{
-			MethodName: "CreateMemoView",
-			Handler:    _UserService_CreateMemoView_Handler,
-		},
-		{
-			MethodName: "UpdateMemoView",
-			Handler:    _UserService_UpdateMemoView_Handler,
-		},
-		{
-			MethodName: "DeleteMemoView",
-			Handler:    _UserService_DeleteMemoView_Handler,
-		},
-		{
-			MethodName: "ReorderMemoViews",
-			Handler:    _UserService_ReorderMemoViews_Handler,
 		},
 		{
 			MethodName: "ListUserNotifications",

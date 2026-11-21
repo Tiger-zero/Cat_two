@@ -42,42 +42,38 @@ describe("tag suggestion extraction", () => {
 });
 
 describe("memo suggestions", () => {
-  it("ranks selection before search before View, deduplicates, and leaves the visible limit to the editor", () => {
-    const suggestions = getMemoSuggestions(
-      [
-        { factor: "celSearch", value: 'tag in ["search", "selected"]' },
-        { factor: "tagSearch", value: "selected" },
-        { factor: "tagSearch", value: "second" },
-      ],
-      'tag in ["view", "search", "selected"]',
-    );
+  it("ranks selection before search, deduplicates, and leaves the visible limit to the editor", () => {
+    const suggestions = getMemoSuggestions([
+      { factor: "celSearch", value: 'tag in ["search", "selected", "extra"]' },
+      { factor: "tagSearch", value: "selected" },
+      { factor: "tagSearch", value: "second" },
+    ]);
     expect(suggestions.map(({ id, source }) => [id, source])).toEqual([
       ["tag:selected", "selection"],
       ["tag:second", "selection"],
       ["tag:search", "search"],
-      ["tag:view", "view"],
+      ["tag:extra", "search"],
     ]);
     expect(suggestions[0]).toMatchObject({ kind: "tag", tag: "selected" });
   });
 
   it("applies exclusions across sources and ignores plain-text searches", () => {
     expect(
-      getMemoSuggestions(
-        [
-          { factor: "tagSearch", value: "archived" },
-          { factor: "celSearch", value: '!("work" in tags)' },
-          { factor: "contentSearch", value: "#personal" },
-        ],
-        '!("archived" in tags) && tag in ["work", "release"]',
-      ).map((suggestion) => suggestion.id),
+      getMemoSuggestions([
+        { factor: "tagSearch", value: "archived" },
+        { factor: "celSearch", value: '!("work" in tags)' },
+        { factor: "contentSearch", value: "#personal" },
+        { factor: "celSearch", value: '!("archived" in tags) && tag in ["work", "release"]' },
+      ]).map((suggestion) => suggestion.id),
     ).toEqual(["tag:release"]);
   });
 
   it("does not exclude a selected tag merely because one alternative negates it", () => {
     expect(
-      getMemoSuggestions([{ factor: "tagSearch", value: "work" }], '!("work" in tags) || "personal" in tags').map(
-        (suggestion) => suggestion.id,
-      ),
+      getMemoSuggestions([
+        { factor: "tagSearch", value: "work" },
+        { factor: "celSearch", value: '!("work" in tags) || "personal" in tags' },
+      ]).map((suggestion) => suggestion.id),
     ).toEqual(["tag:work", "tag:personal"]);
   });
 
@@ -109,22 +105,25 @@ describe("checklist suggestions", () => {
 
   it("ranks and deduplicates across kinds and applies exclusions across contexts", () => {
     expect(
-      getMemoSuggestions(
-        [
-          { factor: "property.hasTaskList", value: "true" },
-          { factor: "celSearch", value: 'has_task_list && "work" in tags' },
-        ],
-        'has_task_list && "view" in tags',
-      ).map(({ id, source }) => [id, source]),
+      getMemoSuggestions([
+        { factor: "property.hasTaskList", value: "true" },
+        { factor: "celSearch", value: 'has_task_list && "work" in tags' },
+      ]).map(({ id, source }) => [id, source]),
     ).toEqual([
       ["checklist", "selection"],
       ["tag:work", "search"],
-      ["tag:view", "view"],
     ]);
-    expect(getMemoSuggestions([{ factor: "property.hasTaskList", value: "true" }], "!has_task_list")).toEqual([]);
+    expect(
+      getMemoSuggestions([
+        { factor: "property.hasTaskList", value: "true" },
+        { factor: "celSearch", value: "!has_task_list" },
+      ]),
+    ).toEqual([]);
   });
 });
 
-it("does not suggest alternate visibility from a legacy view", () => {
-  expect(getMemoSuggestions([], 'visibility == "PUBLIC" && "work" in tags')).toMatchObject([{ id: "tag:work", source: "view" }]);
+it("does not suggest alternate visibility from a legacy expression", () => {
+  expect(getMemoSuggestions([{ factor: "celSearch", value: 'visibility == "PUBLIC" && "work" in tags' }])).toMatchObject([
+    { id: "tag:work", source: "search" },
+  ]);
 });

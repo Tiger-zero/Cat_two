@@ -10,7 +10,6 @@ const state = vi.hoisted(() => ({
   currentUser: { name: "users/alice" } as { name: string } | undefined,
   filters: [] as MemoFilter[],
   setFilters: vi.fn(),
-  setMemoView: vi.fn(),
   removeFilter: vi.fn(),
 }));
 
@@ -20,9 +19,7 @@ vi.mock("@/contexts/MemoFilterContext", async (importOriginal) => {
     ...actual,
     useMemoFilterContext: () => ({
       filters: state.filters,
-      memoView: undefined,
       setFilters: state.setFilters,
-      setMemoView: state.setMemoView,
       removeFilter: state.removeFilter,
     }),
   };
@@ -30,10 +27,6 @@ vi.mock("@/contexts/MemoFilterContext", async (importOriginal) => {
 
 vi.mock("@/hooks/useCurrentUser", () => ({
   default: () => state.currentUser,
-}));
-
-vi.mock("@/hooks/useUserQueries", () => ({
-  useMemoViews: () => ({ data: [] }),
 }));
 
 vi.mock("@/utils/i18n", () => ({
@@ -62,7 +55,6 @@ describe("Quick Find navigation", () => {
     state.currentUser = { name: "users/alice" };
     state.filters = [];
     state.setFilters.mockClear();
-    state.setMemoView.mockClear();
   });
 
   const renderSearch = (initialEntry = "/") => {
@@ -223,7 +215,6 @@ describe("Quick Find navigation", () => {
       { factor: "contentSearch", value: "roadmap" },
     ]);
     expect(state.setFilters).not.toHaveBeenCalled();
-    expect(state.setMemoView).not.toHaveBeenCalled();
 
     await act(async () => {
       await router.navigate(-1);

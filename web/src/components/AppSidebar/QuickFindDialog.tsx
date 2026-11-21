@@ -5,8 +5,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { useAppSidebar } from "@/contexts/AppSidebarContext";
 import { getFilterSearch, isSearchFilter, type MemoFilter, useMemoFilterContext } from "@/contexts/MemoFilterContext";
 import useCurrentUser from "@/hooks/useCurrentUser";
-import { useMemoViews } from "@/hooks/useUserQueries";
-import { getMemoViewId, isMemoCollectionRoute, type MemoScope, resolveMemoScope } from "@/lib/memo-views";
+import { type MemoScope, resolveMemoScope } from "@/lib/memo-collection";
 import { ROUTES } from "@/router/routes";
 import { useTranslate } from "@/utils/i18n";
 import { getRouteActionPolicy } from "./routes";
@@ -69,18 +68,15 @@ const QuickFindDialog = () => {
   const { pathname } = useLocation();
   const navigate = useNavigate();
   const currentUser = useCurrentUser();
-  const { data: memoViews = [] } = useMemoViews(currentUser?.name);
-  const { filters, setFilters, setMemoView, memoView } = useMemoFilterContext();
+  const { filters, setFilters } = useMemoFilterContext();
   const { quickFindOpen, setQuickFindOpen } = useAppSidebar();
   const [query, setQuery] = useState("");
   const [mode, setMode] = useState<QuickFindMode>("text");
   const [scope, setScope] = useState<MemoScope>(() => resolveMemoScope(pathname));
   const [autoFocusField, setAutoFocusField] = useState(true);
   const hintId = useId();
-  const viewApplies = isMemoCollectionRoute(pathname);
-  const selectedMemoView = viewApplies ? memoViews.find((item) => getMemoViewId(item.name) === memoView) : undefined;
   const effectiveScope = currentUser ? scope : "home";
-  const scopeLabel = selectedMemoView?.title || t(effectiveScope === "archived" ? "common.archived" : "common.memos");
+  const scopeLabel = t(effectiveScope === "archived" ? "common.archived" : "common.memos");
 
   useEffect(() => {
     if (quickFindOpen) setScope(resolveMemoScope(pathname));
@@ -98,7 +94,6 @@ const QuickFindDialog = () => {
     const submission = resolveQuickFindSubmission(pathname, query, filters, mode, effectiveScope);
 
     if (submission.destination) {
-      if (!viewApplies) setMemoView(undefined);
       navigate(submission.destination);
     } else {
       setFilters(submission.filters);
@@ -173,11 +168,6 @@ const QuickFindDialog = () => {
                 </Toggle>
               ))}
             </ToggleGroup>
-            {selectedMemoView && (
-              <span className="w-full truncate mu-caption text-mu-text-secondary" title={selectedMemoView.title}>
-                {selectedMemoView.title}
-              </span>
-            )}
           </div>
           {mode === "cel" ? (
             <div className="space-y-3 p-4">

@@ -28,9 +28,7 @@ var curatedOperationIDs = []string{
 	"AttachmentService_CreateAttachment",
 	"AttachmentService_GetAttachment",
 	"AttachmentService_DeleteAttachment",
-	"UserService_ListMemoViews",
-	// The only allowed auth/identity operation: a read-only "whoami" so agents
-	// can resolve the current user (e.g. for UserService_ListMemoViews).
+	// The only allowed auth/identity operation is a read-only "whoami".
 	"AuthService_GetCurrentUser",
 	// Spaces: memos carry a placement (Memo.space) and a SPACE audience, so an
 	// agent needs to discover, create, and administer the spaces it can place

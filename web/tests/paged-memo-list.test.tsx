@@ -20,7 +20,6 @@ const filterContext = vi.hoisted(() => ({
   filters: [{ factor: "celSearch", value: "pinned" }],
   removeFilter: vi.fn(),
   setFilters: vi.fn(),
-  setMemoView: vi.fn(),
 }));
 const readiness = vi.hoisted(() => ({ userSettings: true }));
 const memoQuery = vi.hoisted(() => ({ request: undefined as Record<string, unknown> | undefined }));
@@ -49,7 +48,6 @@ vi.mock("@/contexts/MemoFilterContext", async (importOriginal) => ({
     filters: filterContext.filters,
     removeFilter: filterContext.removeFilter,
     setFilters: filterContext.setFilters,
-    setMemoView: filterContext.setMemoView,
   }),
 }));
 
@@ -256,7 +254,6 @@ describe("<PagedMemoList>", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "memo.clear-filters" }));
     expect(filterContext.setFilters).toHaveBeenCalledWith([]);
-    expect(filterContext.setMemoView).toHaveBeenCalledWith(undefined);
   });
 
   it("uses the blank memo illustration for an unfiltered empty list without route content", () => {

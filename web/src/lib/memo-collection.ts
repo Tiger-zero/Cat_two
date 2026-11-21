@@ -2,17 +2,12 @@ import { ROUTES } from "@/router/routes";
 
 export type MemoScope = "home" | "archived";
 
-export const getMemoViewId = (name: string): string => {
-  const parts = name.split("/");
-  return parts.length === 4 ? parts[3] : name;
-};
-
 const cleanPathname = (value: string): string => {
   const pathname = value.split(/[?#]/, 1)[0] || ROUTES.HOME;
   return (pathname.replace(/\/+$/, "") || ROUTES.HOME).toLowerCase();
 };
 
-/** Routes that display a memo list with the sidebar's view, date and tag filters. */
+/** Routes that display a memo list with the sidebar's date and tag filters. */
 export const isMemoCollectionRoute = (pathname: string): boolean => {
   const cleanPath = cleanPathname(pathname);
   return cleanPath === ROUTES.HOME || cleanPath === ROUTES.ARCHIVED;

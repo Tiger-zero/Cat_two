@@ -34,7 +34,6 @@ const dynamicKeyParts: Record<string, readonly string[]> = {
   "live-update.${}": ["connected", "connecting", "disconnected"],
   "memo.${}": ["layout-auto", "layout-columns", "layout-list"],
   "memo.${}-description": ["layout-auto", "layout-columns", "layout-list"],
-  "space.icon.${}": ["emoji", "icons"],
 };
 
 const collectReferences = (files: Record<string, string>) => {

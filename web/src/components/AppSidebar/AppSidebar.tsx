@@ -11,14 +11,15 @@ import { useInstance } from "@/contexts/InstanceContext";
 import useCurrentUser from "@/hooks/useCurrentUser";
 import { useFilteredMemoStats } from "@/hooks/useFilteredMemoStats";
 import useMediaQuery from "@/hooks/useMediaQuery";
+import type { MemoScope } from "@/lib/memo-collection";
 import { buildMemoCreatorFilter } from "@/lib/resource-names";
 import { cn } from "@/lib/utils";
 import { ROUTES } from "@/router/routes";
 import { useTranslate } from "@/utils/i18n";
 import AccountMenu from "./AccountMenu";
 import CollectionStats from "./CollectionStats";
-import { getSidebarRouteKind, type SidebarRouteKind } from "./routes";
-import { SIDEBAR_ROW_CLASSES, SidebarRowIconSlot, sidebarRowStateClasses } from "./SidebarRow";
+import { getSidebarRouteKind } from "./routes";
+import { SIDEBAR_ROW_CLASSES, SIDEBAR_ROW_SELECTION_CLASSES, SidebarRowIconSlot, sidebarRowStateClasses } from "./SidebarRow";
 import SidebarSection, { SIDEBAR_SECTION_STACK_CLASSES } from "./SidebarSection";
 import {
   SIDEBAR_LEADING_SLOT_CLASSES,
@@ -28,9 +29,8 @@ import {
 } from "./sidebar-layout";
 import TagsSection from "./TagsSection";
 import ThemeToggle from "./ThemeToggle";
-import ViewsSection from "./ViewsSection";
 
-const CollectionSidebarContent = ({ context, desktop }: { context: "home" | "archived"; desktop: boolean }) => {
+const CollectionSidebarContent = ({ context, desktop, destination }: { context: MemoScope; desktop: boolean; destination?: string }) => {
   const t = useTranslate();
   const currentUser = useCurrentUser();
   const md = useMediaQuery("md");
@@ -47,11 +47,15 @@ const CollectionSidebarContent = ({ context, desktop }: { context: "home" | "arc
     <div className={cn(SIDEBAR_SECTION_STACK_CLASSES, desktop && "gap-6")}>
       {context === "home" && currentUser && <CollectionStats summary={summary} loading={loading} desktop={desktop} />}
       <SidebarSection ariaLabel={t("common.calendar")}>
-        <StatisticsView statisticsData={statistics} onDateSelect={() => setMobileOpen(false)} />
+        <StatisticsView statisticsData={statistics} destination={destination} onDateSelect={() => setMobileOpen(false)} />
       </SidebarSection>
       <div className="contents" data-sidebar-collection-list={desktop || undefined}>
-        {currentUser && <ViewsSection />}
-        <TagsSection tagCount={tags} scope={`${currentUser?.name ?? "anonymous"}:${context}`} onSelect={() => setMobileOpen(false)} />
+        <TagsSection
+          tagCount={tags}
+          scope={`${currentUser?.name ?? "anonymous"}:${context}`}
+          destination={destination}
+          onSelect={() => setMobileOpen(false)}
+        />
       </div>
     </div>
   );
@@ -77,15 +81,6 @@ const MemoDetailSidebarContent = () => {
       className="pb-2"
     />
   );
-};
-
-const RouteSidebarContent = ({ kind, desktopCollection }: { kind: SidebarRouteKind; desktopCollection: boolean }) => {
-  if (kind === "home" || kind === "archived") {
-    return <CollectionSidebarContent context={kind} desktop={desktopCollection} />;
-  }
-  if (kind === "views") return <ViewsSection manageActive />;
-  if (kind === "memo") return <MemoDetailSidebarContent />;
-  return null;
 };
 
 interface NavPillProps {
@@ -153,13 +148,11 @@ const NavPill = ({ label, icon: Icon, to, onClick, active = false, expanded = fa
   );
 };
 
-const GlobalNavigation = () => {
+const GlobalNavigation = ({ calendarActive, showDisplayOptions }: { calendarActive: boolean; showDisplayOptions: boolean }) => {
   const t = useTranslate();
   const calendarRef = useRef<HTMLDivElement>(null);
   const location = useLocation();
   const { setQuickFindOpen } = useAppSidebar();
-  const routeKind = getSidebarRouteKind(location.pathname);
-  const calendarActive = routeKind === "home";
 
   return (
     <Tooltip.Provider>
@@ -177,9 +170,9 @@ const GlobalNavigation = () => {
             icon={CalendarDaysIcon}
             active={calendarActive}
             expanded
-            className={cn(calendarActive && "rounded-e-none pe-0")}
+            className={cn(showDisplayOptions && "rounded-e-none pe-0")}
           />
-          {calendarActive && <MemoDisplaySettingMenu anchor={calendarRef} />}
+          {showDisplayOptions && <MemoDisplaySettingMenu anchor={calendarRef} />}
         </div>
         <NavPill label={t("common.search")} icon={SearchIcon} onClick={() => setQuickFindOpen(true)} className="ms-auto bg-mu-well" />
       </nav>
@@ -190,9 +183,14 @@ const GlobalNavigation = () => {
 const AppSidebar = ({ className, mobile = false }: { className?: string; mobile?: boolean }) => {
   const t = useTranslate();
   const currentUser = useCurrentUser();
-  const { pathname } = useLocation();
+  const { pathname, state } = useLocation();
   const routeKind = getSidebarRouteKind(pathname);
-  const desktopCollection = !mobile && (routeKind === "home" || routeKind === "archived");
+  const inTrash = routeKind === "trash";
+  const showArchived = routeKind === "archived" || (inTrash && state?.trashFrom === ROUTES.ARCHIVED);
+  const hasCollection = showArchived || routeKind === "home" || inTrash;
+  const collectionScope = showArchived ? "archived" : "home";
+  const desktopCollection = !mobile && hasCollection;
+  const collectionDestination = inTrash ? (showArchived ? ROUTES.ARCHIVED : ROUTES.HOME) : undefined;
   const { setMobileOpen } = useAppSidebar();
   return (
     <aside
@@ -206,7 +204,7 @@ const AppSidebar = ({ className, mobile = false }: { className?: string; mobile?
         <AccountMenu className="min-w-0" size="header" />
         {!mobile && <ThemeToggle />}
       </div>
-      <GlobalNavigation />
+      <GlobalNavigation calendarActive={routeKind === "home"} showDisplayOptions={hasCollection && !showArchived} />
       <div className={cn("mx-3 border-t border-mu-line/70", desktopCollection ? "mt-3" : "mt-2")} />
       <div
         className={cn(
@@ -215,15 +213,20 @@ const AppSidebar = ({ className, mobile = false }: { className?: string; mobile?
           SIDEBAR_RAIL_CLASSES,
         )}
       >
-        <RouteSidebarContent kind={routeKind} desktopCollection={desktopCollection} />
+        {hasCollection ? (
+          <CollectionSidebarContent context={collectionScope} desktop={desktopCollection} destination={collectionDestination} />
+        ) : routeKind === "memo" ? (
+          <MemoDetailSidebarContent />
+        ) : null}
       </div>
       {currentUser && (
         <div className={cn("shrink-0", mobile ? "border-t border-mu-line/70 py-2" : "pt-1 pb-4", SIDEBAR_RAIL_CLASSES)}>
           <Link
             to={ROUTES.TRASH}
+            state={showArchived ? { trashFrom: ROUTES.ARCHIVED } : undefined}
             onClick={() => setMobileOpen(false)}
-            aria-current={pathname === ROUTES.TRASH ? "page" : undefined}
-            className={cn(SIDEBAR_ROW_CLASSES, !mobile && "h-8", sidebarRowStateClasses(pathname === ROUTES.TRASH ? "current" : "idle"))}
+            aria-current={inTrash ? "page" : undefined}
+            className={cn(SIDEBAR_ROW_CLASSES, !mobile && "h-8", inTrash ? SIDEBAR_ROW_SELECTION_CLASSES : sidebarRowStateClasses())}
           >
             <SidebarRowIconSlot icon={Trash2Icon} />
             <span className="truncate">{t("trash.title")}</span>

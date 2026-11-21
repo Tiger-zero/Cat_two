@@ -208,8 +208,8 @@ fails authentication. The legacy
 
 ## Tool surface
 
-Cat_two personal mode retains `auth_get_current_user`, `user_list_memo_views`,
-`memo_list_memos`, `memo_get_memo`, `memo_create_memo` and
+Cat_two personal mode retains `auth_get_current_user`, `memo_list_memos`,
+`memo_get_memo`, `memo_create_memo` and
 `memo_update_memo`.
 
 The following read-only tools use the connection owner's notes.
@@ -223,7 +223,7 @@ The following read-only tools use the connection owner's notes.
 
 For example, call `memo_search` with
 `{"tag":"project/cat_two","startDate":"2026-11-01","endDate":"2026-11-20","hasIncompleteTasks":true}`.
-For a saved view's CEL expression or archived search, use `memo_list_memos`.
+For a CEL filter expression or archived search, use `memo_list_memos`.
 Clients connected to older images can also use `memo_list_memos` and
 `memo_get_memo` when the new tools are absent from discovery.
 
@@ -256,7 +256,6 @@ includes the following operations.
 | `AttachmentService_CreateAttachment` | `attachment_create_attachment` |
 | `AttachmentService_GetAttachment` | `attachment_get_attachment` |
 | `AttachmentService_DeleteAttachment` | `attachment_delete_attachment` |
-| `UserService_ListMemoViews` | `user_list_memo_views` |
 | `AuthService_GetCurrentUser` | `auth_get_current_user` |
 | `SpaceService_ListSpaces` | `space_list_spaces` |
 | `SpaceService_GetSpace` | `space_get_space` |

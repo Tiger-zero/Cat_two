@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { buildMemoFilter } from "@/hooks/useMemoFilters";
 import { combineCELFilters } from "@/lib/cel-filter";
-import { getMemoViewId, isMemoCollectionRoute, resolveMemoScope } from "@/lib/memo-views";
+import { isMemoCollectionRoute, resolveMemoScope } from "@/lib/memo-collection";
 
 describe("memo scopes", () => {
   it("resolves collection and detail routes", () => {
@@ -11,7 +11,7 @@ describe("memo scopes", () => {
     expect(resolveMemoScope("/settings", { fallback: "archived" })).toBe("archived");
   });
 
-  it("applies sidebar views and filters to the note collections", () => {
+  it("applies sidebar filters to the note collections", () => {
     expect(isMemoCollectionRoute("/")).toBe(true);
     expect(isMemoCollectionRoute("/explore")).toBe(false);
     expect(isMemoCollectionRoute("/archived")).toBe(true);
@@ -22,7 +22,7 @@ describe("memo scopes", () => {
   });
 });
 
-describe("memo views", () => {
+describe("memo filters", () => {
   it("combines the creation-channel facet with the search and ignores unsupported channel inputs", () => {
     expect(
       buildMemoFilter({
@@ -36,11 +36,10 @@ describe("memo views", () => {
     expect(buildMemoFilter({ filters: [{ factor: "source", value: "not-supported" }], includePinned: false })).toBeUndefined();
   });
 
-  it("keeps OR expressions inside the author, Space, view, and facet constraints", () => {
+  it("keeps OR expressions inside the author, Space, and facet constraints", () => {
     const query = 'content.contains("plan") || pinned';
     const filter = buildMemoFilter({
       creatorName: "users/steven",
-      selectedMemoViewFilter: "has_link || has_code",
       filters: [
         { factor: "celSearch", value: query },
         { factor: "tagSearch", value: "work" },
@@ -48,27 +47,9 @@ describe("memo views", () => {
       includePinned: true,
     });
     expect(combineCELFilters('space == "spaces/product"', filter)).toBe(
-      '(space == "spaces/product") && ((creator == "users/steven") && (has_link || has_code) && (content.contains("plan") || pinned) && (tag in ["work"]))',
+      '(space == "spaces/product") && ((creator == "users/steven") && (content.contains("plan") || pinned) && (tag in ["work"]))',
     );
   });
-  it("extracts the saved view ID", () => {
-    expect(getMemoViewId("users/steven/views/work")).toBe("work");
-  });
-
-  it("composes a saved task view with search, tags, and creator", () => {
-    expect(
-      buildMemoFilter({
-        creatorName: "users/steven",
-        selectedMemoViewFilter: "has_task_list && has_incomplete_tasks",
-        filters: [
-          { factor: "contentSearch", value: "plan" },
-          { factor: "tagSearch", value: "work" },
-        ],
-        includePinned: false,
-      }),
-    ).toBe('(creator == "users/steven") && (has_task_list && has_incomplete_tasks) && (content.contains("plan")) && (tag in ["work"])');
-  });
-
   it("maps property filter factors to their CEL flags", () => {
     expect(
       buildMemoFilter({
@@ -82,16 +63,6 @@ describe("memo views", () => {
         includePinned: false,
       }),
     ).toBe("(has_link) && (has_task_list) && (has_code) && (has_attachments) && (has_image)");
-  });
-
-  it("uses a saved memo view filter", () => {
-    expect(
-      buildMemoFilter({
-        filters: [],
-        includePinned: false,
-        selectedMemoViewFilter: 'tag in ["work"]',
-      }),
-    ).toBe('(tag in ["work"])');
   });
 
   it("builds display-time filters from Shanghai calendar-day boundaries", () => {

@@ -58,11 +58,18 @@ func requireUpgradePreservesData(ctx context.Context, t *testing.T, previous *st
 	require.NoError(t, err)
 	memo.Pinned = true
 	require.NoError(t, previous.UpdateMemo(ctx, &store.UpdateMemo{ID: memo.ID, Pinned: &memo.Pinned, UpdatedTs: &memo.UpdatedTs}))
-	view, err := previous.UpsertUserSetting(ctx, &storepb.UserSetting{
-		UserId: user.ID, Key: storepb.UserSetting_MEMO_VIEWS,
-		Value: &storepb.UserSetting_MemoViews{MemoViews: &storepb.MemoViewsUserSetting{
-			MemoViews: []*storepb.MemoViewsUserSetting_MemoView{{Id: "upgrade", Title: "Upgrade sentinel", Filter: "has_incomplete_tasks"}},
-		}},
+	const legacyView = `{"memoViews":[{"id":"upgrade","title":"Upgrade sentinel","filter":"has_incomplete_tasks"}]}`
+	insertView := "INSERT INTO user_setting (user_id, `key`, `value`) VALUES (?, 'MEMO_VIEWS', ?)"
+	readView := "SELECT `value` FROM user_setting WHERE user_id = ? AND `key` = 'MEMO_VIEWS'"
+	if candidateProfile.Driver == "postgres" {
+		insertView = "INSERT INTO user_setting (user_id, key, value) VALUES ($1, 'MEMO_VIEWS', $2)"
+		readView = "SELECT value FROM user_setting WHERE user_id = $1 AND key = 'MEMO_VIEWS'"
+	}
+	_, err = previous.GetDriver().GetDB().ExecContext(ctx, insertView, user.ID, legacyView)
+	require.NoError(t, err)
+	editor, err := previous.UpsertUserSetting(ctx, &storepb.UserSetting{
+		UserId: user.ID, Key: storepb.UserSetting_EDITOR,
+		Value: &storepb.UserSetting_Editor{Editor: &storepb.EditorUserSetting{SourceMode: true}},
 	})
 	require.NoError(t, err)
 	access, err := previous.UpsertInstanceSetting(ctx, &storepb.InstanceSetting{
@@ -87,9 +94,14 @@ func requireUpgradePreservesData(ctx context.Context, t *testing.T, previous *st
 		preservedMemo, err := candidate.GetMemo(ctx, &store.FindMemo{UID: &memo.UID})
 		require.NoError(t, err)
 		require.EqualExportedValues(t, memo, preservedMemo)
-		preservedView, err := candidate.GetUserSetting(ctx, &store.FindUserSetting{UserID: &user.ID, Key: storepb.UserSetting_MEMO_VIEWS})
+		var preservedView string
+		err = candidate.GetDriver().GetDB().QueryRowContext(ctx, readView, user.ID).Scan(&preservedView)
 		require.NoError(t, err)
-		require.True(t, proto.Equal(view, preservedView), "saved Views must survive the upgrade")
+		require.Equal(t, legacyView, preservedView, "legacy saved view data must survive the upgrade")
+		settings, err := candidate.ListUserSettings(ctx, &store.FindUserSetting{UserID: &user.ID})
+		require.NoError(t, err)
+		require.Len(t, settings, 1, "retired views must not appear in current settings")
+		require.True(t, proto.Equal(editor, settings[0]), "editor preferences must survive the upgrade")
 		preservedAccess, err := candidate.GetInstanceAccessSetting(ctx)
 		require.NoError(t, err)
 		require.True(t, proto.Equal(access.GetAccessSetting(), preservedAccess), "explicit access mode must not be reset")

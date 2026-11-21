@@ -139,3 +139,15 @@ func valueReferencesSpace(value filterpkg.ValueExpr) bool {
 	}
 	return false
 }
+
+// filterDialect maps the configured database driver onto the filter engine dialect.
+func (s *APIService) filterDialect() filterpkg.DialectName {
+	switch s.Profile.Driver {
+	case "mysql":
+		return filterpkg.DialectMySQL
+	case "postgres":
+		return filterpkg.DialectPostgres
+	default:
+		return filterpkg.DialectSQLite
+	}
+}

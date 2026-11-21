@@ -1,5 +1,5 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { createMemoryRouter, MemoryRouter, RouterProvider, useLocation } from "react-router-dom";
+import { createMemoryRouter, RouterProvider, useLocation } from "react-router-dom";
 import { describe, expect, it } from "vitest";
 import {
   type MemoFilter,
@@ -12,21 +12,14 @@ import {
 const expression = 'tags.exists(t, t.contains("50%, café & C++"))\n || space == null';
 
 const Harness = () => {
-  const { filters, setFilters, setMemoView, memoView } = useMemoFilterContext();
+  const { filters, setFilters } = useMemoFilterContext();
   const location = useLocation();
   return (
     <div>
       <output data-testid="filters">{JSON.stringify(filters)}</output>
-      <output data-testid="memoView">{memoView}</output>
       <output data-testid="url">{location.search}</output>
       <button type="button" onClick={() => setFilters([{ factor: "celSearch", value: expression }])}>
         Search CEL
-      </button>
-      <button type="button" onClick={() => setFilters([{ factor: "contentSearch", value: "plan" }])}>
-        Search plan
-      </button>
-      <button type="button" onClick={() => setMemoView("abc")}>
-        Select view
       </button>
     </div>
   );
@@ -79,7 +72,6 @@ describe("MemoFilterProvider", () => {
       { initialEntries: [origin] },
     );
     render(<RouterProvider router={router} />);
-    fireEvent.click(screen.getByRole("button", { name: "Select view" }));
     const state = { from: origin };
     await act(() => router.navigate("/memos/1", { state }));
     await waitFor(() => expect(screen.getByTestId("filters")).toHaveTextContent("[]"));
@@ -88,29 +80,11 @@ describe("MemoFilterProvider", () => {
     await act(() => router.navigate(-1));
     expect(router.state.location.pathname + router.state.location.search).toBe(origin);
     expect(screen.getByTestId("filters")).toHaveTextContent('"work"');
-    await act(() => router.navigate("/spaces/research?filter=tagSearch%3Awork"));
-    expect(screen.getByTestId("memoView")).toHaveTextContent("abc");
   });
 
   it("keeps encoded values containing colons intact", () => {
     expect(parseFilterQuery("contentSearch:https://example.com:8080/path")).toEqual([
       { factor: "contentSearch", value: "https://example.com:8080/path" },
     ]);
-  });
-
-  it("keeps search filters when selecting a view", () => {
-    render(
-      <MemoryRouter>
-        <MemoFilterProvider>
-          <Harness />
-        </MemoFilterProvider>
-      </MemoryRouter>,
-    );
-
-    fireEvent.click(screen.getByRole("button", { name: "Search plan" }));
-    fireEvent.click(screen.getByRole("button", { name: "Select view" }));
-
-    expect(screen.getByTestId("filters")).toHaveTextContent('[{"factor":"contentSearch","value":"plan"}]');
-    expect(screen.getByTestId("memoView")).toHaveTextContent("abc");
   });
 });

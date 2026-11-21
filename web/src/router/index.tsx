@@ -17,7 +17,6 @@ const Home = lazyWithReload(() => Promise.all([import("@/pages/Home"), preloadMe
 const MemoDetail = lazyWithReload(() => import("@/pages/MemoDetail"));
 const NotFound = lazyWithReload(() => import("@/pages/NotFound"));
 const PermissionDenied = lazyWithReload(() => import("@/pages/PermissionDenied"));
-const MemoViews = lazyWithReload(() => import("@/pages/MemoViews"));
 const SignIn = lazyWithReload(() => import("@/pages/SignIn"));
 const SignUp = lazyWithReload(() => import("@/pages/SignUp"));
 const Trash = lazyWithReload(() => import("@/pages/Trash"));
@@ -79,6 +78,7 @@ export const routeConfig: RouteObject[] = [
           { path: "home", element: <HomeRoute /> },
           { path: "explore", element: <HomeRoute /> },
           { path: "inbox", element: <HomeRoute /> },
+          { path: "views", element: <HomeRoute /> },
           { path: "u/:username", element: <HomeRoute /> },
           {
             path: "spaces/:spaceUid",
@@ -98,10 +98,6 @@ export const routeConfig: RouteObject[] = [
                   { index: true, element: <HomeRoute /> },
                   { path: Routes.ARCHIVED, element: <Archived /> },
                   { path: Routes.TRASH, element: <Trash /> },
-                  {
-                    element: <RequireFullInitializationRoute />,
-                    children: [{ path: Routes.VIEWS, element: <MemoViews /> }],
-                  },
                 ],
               },
               { path: "memos/:uid", element: <MemoDetail /> },

@@ -32,15 +32,6 @@ func TestListUserSettingsOmitsInternalStoreSettings(t *testing.T) {
 
 	_, err = ts.Store.UpsertUserSetting(ctx, &storepb.UserSetting{
 		UserId: user.ID,
-		Key:    storepb.UserSetting_MEMO_VIEWS,
-		Value: &storepb.UserSetting_MemoViews{
-			MemoViews: &storepb.MemoViewsUserSetting{},
-		},
-	})
-	require.NoError(t, err)
-
-	_, err = ts.Store.UpsertUserSetting(ctx, &storepb.UserSetting{
-		UserId: user.ID,
 		Key:    storepb.UserSetting_GENERAL,
 		Value: &storepb.UserSetting_General{
 			General: &storepb.GeneralUserSetting{
@@ -50,6 +41,12 @@ func TestListUserSettingsOmitsInternalStoreSettings(t *testing.T) {
 	})
 	require.NoError(t, err)
 
+	// Keep a legacy SQLite row to verify it is ignored on settings reads.
+	const savedView = `{"memoViews":[{"id":"work","title":"Work","filter":"pinned"}]}`
+	db := ts.Store.GetDriver().GetDB()
+	_, err = db.ExecContext(ctx, "INSERT INTO user_setting (user_id, key, value) VALUES (?, 'MEMO_VIEWS', ?)", user.ID, savedView)
+	require.NoError(t, err)
+
 	resp, err := ts.Service.ListUserSettings(ts.CreateUserContext(ctx, user.ID), &apipb.ListUserSettingsRequest{
 		Parent: api.BuildUserName(user.Username),
 	})
@@ -57,6 +54,9 @@ func TestListUserSettingsOmitsInternalStoreSettings(t *testing.T) {
 	require.Len(t, resp.UserSettings, 1)
 	require.Equal(t, "users/locale-user/settings/GENERAL", resp.UserSettings[0].Name)
 	require.Equal(t, "ja", resp.UserSettings[0].GetGeneralSetting().Locale)
+	var storedView string
+	require.NoError(t, db.QueryRowContext(ctx, "SELECT value FROM user_setting WHERE user_id = ? AND key = 'MEMO_VIEWS'", user.ID).Scan(&storedView))
+	require.Equal(t, savedView, storedView)
 }
 
 func TestGeneralUserSettingSaveMediaMetadata(t *testing.T) {

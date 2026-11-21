@@ -51,13 +51,12 @@ function readConditions(source: string): ContextConditions {
 }
 
 /** Checklist suggestions use the same Boolean reader as tag suggestions. */
-export function getContextSuggestionCandidates(filters: MemoFilter[], viewFilter?: string): MemoSuggestion[] {
+export function getContextSuggestionCandidates(filters: MemoFilter[]): MemoSuggestion[] {
   const conditions = filters.flatMap<ContextConditions & { source: SuggestionSource }>((filter) => {
     if (filter.factor === "celSearch") return [{ ...readConditions(filter.value), source: "search" as const }];
     if (filter.factor === "property.hasTaskList") return [{ ...readConditions("has_task_list"), source: "selection" as const }];
     return [];
   });
-  if (viewFilter) conditions.push({ ...readConditions(viewFilter), source: "view" });
   if (conditions.some((condition) => condition.excludesChecklist)) return [];
   return conditions.filter((condition) => condition.checklist).map(({ source }) => ({ id: "checklist", kind: "checklist", source }));
 }

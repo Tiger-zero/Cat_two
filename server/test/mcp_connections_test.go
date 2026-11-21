@@ -219,7 +219,7 @@ func TestPersonalMCPConnectionImmediateAccess(t *testing.T) {
 		}
 	}
 	existingTools := []string{
-		"auth_get_current_user", "user_list_memo_views", "memo_list_memos", "memo_get_memo", "memo_create_memo", "memo_update_memo",
+		"auth_get_current_user", "memo_list_memos", "memo_get_memo", "memo_create_memo", "memo_update_memo",
 	}
 	require.ElementsMatch(t, append(existingTools, newReadTools...), names)
 

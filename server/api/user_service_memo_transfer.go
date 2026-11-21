@@ -39,8 +39,15 @@ func (s *APIService) resolveMemoTransferOwner(ctx context.Context, name string) 
 	if user == nil {
 		return nil, status.Errorf(codes.NotFound, "user not found")
 	}
-	if err := s.requireCallerIs(ctx, user); err != nil {
-		return nil, err
+	currentUser, err := s.fetchCurrentUser(ctx)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to get current user: %v", err)
+	}
+	if currentUser == nil {
+		return nil, status.Error(codes.Unauthenticated, "user not authenticated")
+	}
+	if currentUser.ID != user.ID {
+		return nil, status.Error(codes.PermissionDenied, "permission denied")
 	}
 	return user, nil
 }

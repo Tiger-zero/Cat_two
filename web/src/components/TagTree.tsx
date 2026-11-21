@@ -117,7 +117,7 @@ const Chevron = ({ open, className }: { open: boolean; className?: string }) => 
     aria-hidden="true"
     className={cn(
       "mu-icon-sm",
-      "me-auto shrink-0 text-mu-text-secondary/70 transition-transform",
+      "me-auto shrink-0 text-mu-text-secondary/70 transition-transform group-data-checked:text-white",
       open ? "rotate-90" : "rtl:rotate-180",
       className,
     )}
@@ -153,7 +153,7 @@ const TagItem = ({ tag, depth, activeTag, expanded, onTagClick, onToggle, pinned
         aria-selected={isActive || undefined}
         aria-expanded={hasSubTags ? open : undefined}
         {...sidebarRowStateAttributes(state)}
-        className={cn(SIDEBAR_ROW_BOX_CLASSES, sidebarRowStateClasses(state), "text-mu-text")}
+        className={cn(SIDEBAR_ROW_BOX_CLASSES, sidebarRowStateClasses(state), !isActive && "text-mu-text")}
         // Overrides the start half of the box's `px-2`, leaving the trailing 8px intact.
         style={{ paddingInlineStart }}
       >

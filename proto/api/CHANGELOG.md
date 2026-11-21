@@ -16,7 +16,7 @@ instead, and update `core/configuration/testdata/compat/` in the same change. Af
 
 ### Breaking
 
-- `MemoService.ListShortcuts`: removed. Use `UserService.ListMemoViews`.
+- `MemoService.ListShortcuts` is removed. Use `MemoService.ListMemos` with a filter.
 - `InstanceSetting.StorageSetting.upload_size_limit_mb`: removed. Configuration files that set `uploadSizeLimitMb` are
   rejected from this release; set the `UPLOAD_BYTES` usage limit instead.
 
@@ -32,6 +32,9 @@ instead, and update `core/configuration/testdata/compat/` in the same change. Af
 - Cat_two uses private instance access with one-time web administrator setup. `CreateUser` rejects additional
   registrations, and `UpdateInstanceSetting` rejects access-policy changes. Administrator password changes require an
   interactive sign-in session.
+- Cat_two removes the saved memo view RPCs from `UserService`, the `/api/users/{user}/views` routes, and the
+  `user_list_memo_views` MCP tool. Existing saved view records remain in the database. Pass a CEL expression to
+  `MemoService.ListMemos` to filter notes.
 - Cat_two retires the Space, identity provider, linked identity, notification, webhook and configuration status APIs.
   Affected REST and Connect calls return `UNIMPLEMENTED`. An existing note's author can still use notes that belonged
   to a Space.

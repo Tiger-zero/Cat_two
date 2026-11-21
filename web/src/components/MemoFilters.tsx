@@ -14,16 +14,10 @@ import {
   SearchIcon,
   XIcon,
 } from "lucide-react";
-import type { ReactNode } from "react";
-import { useLocation } from "react-router-dom";
-import MemoViewIcon from "@/components/MemoViewIcon";
 import { useAppSidebar } from "@/contexts/AppSidebarContext";
 import { type FilterFactor, getMemoFilterKey, type MemoFilter, useMemoFilterContext } from "@/contexts/MemoFilterContext";
-import useCurrentUser from "@/hooks/useCurrentUser";
-import { useMemoViews } from "@/hooks/useUserQueries";
 import i18n from "@/i18n";
 import { parseLocalDate } from "@/lib/calendar-utils";
-import { getMemoViewId, isMemoCollectionRoute } from "@/lib/memo-views";
 import { APP_TIME_ZONE } from "@/lib/time-zone";
 import { cn } from "@/lib/utils";
 import { useTranslate } from "@/utils/i18n";
@@ -88,19 +82,18 @@ const FILTER_CONFIGS: Record<FilterFactor, FilterConfig> = {
 
 interface FilterChipProps {
   icon?: LucideIcon;
-  customIcon?: ReactNode;
   label: string;
   onRemove: () => void;
   /** When set, the label is a button that edits the filter; the label is also shown in full as a tooltip. */
   onEdit?: { label: string; onClick: () => void };
 }
 
-/** One chip for anything narrowing the list, so a view, a tag and a day are announced the same way. */
-const FilterChip = ({ icon: Icon, customIcon, label, onRemove, onEdit }: FilterChipProps) => {
+/** Presents each active filter with consistent labeling and a remove action. */
+const FilterChip = ({ icon: Icon, label, onRemove, onEdit }: FilterChipProps) => {
   const t = useTranslate();
   const body = (
     <>
-      {customIcon ?? (Icon && <Icon className="mu-icon-sm text-mu-text-secondary shrink-0" />)}
+      {Icon && <Icon className="mu-icon-sm text-mu-text-secondary shrink-0" />}
       <span className={cn("text-mu-text/80 truncate", onEdit ? "font-mono mu-caption max-w-64" : "font-medium max-w-32")}>{label}</span>
     </>
   );
@@ -138,13 +131,8 @@ const FilterChip = ({ icon: Icon, customIcon, label, onRemove, onEdit }: FilterC
 
 const MemoFilters = ({ className }: { className?: string }) => {
   const t = useTranslate();
-  const location = useLocation();
-  const currentUser = useCurrentUser();
-  const { filters, memoView, removeFilter, setMemoView } = useMemoFilterContext();
+  const { filters, removeFilter } = useMemoFilterContext();
   const { setQuickFindOpen } = useAppSidebar();
-  // A remembered view only narrows the collection routes; elsewhere it is dormant and must not be echoed.
-  const viewApplies = memoView !== undefined && isMemoCollectionRoute(location.pathname);
-  const { data: memoViews = [] } = useMemoViews(viewApplies ? currentUser?.name : undefined);
 
   const handleRemoveFilter = (filter: MemoFilter) => {
     removeFilter((f: MemoFilter) => isEqual(f, filter));
@@ -158,24 +146,12 @@ const MemoFilters = ({ className }: { className?: string }) => {
     return config.getLabel(filter.value, t);
   };
 
-  const viewChip = (() => {
-    if (!viewApplies) return null;
-    const view = memoViews.find((item) => getMemoViewId(item.name) === memoView);
-    return view?.title
-      ? {
-          customIcon: <MemoViewIcon icon={view.icon} className="mu-icon-sm text-sm text-mu-text-secondary" />,
-          label: view.title,
-        }
-      : null;
-  })();
-
-  if (filters.length === 0 && !viewChip) {
+  if (filters.length === 0) {
     return null;
   }
 
   return (
     <div className={cn("w-full flex flex-row justify-start items-center flex-wrap gap-2", className)}>
-      {viewChip && <FilterChip customIcon={viewChip.customIcon} label={viewChip.label} onRemove={() => setMemoView(undefined)} />}
       {filters.map((filter) => (
         <FilterChip
           key={getMemoFilterKey(filter)}

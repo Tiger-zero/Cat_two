@@ -368,6 +368,19 @@ func TestStartupFreshInstallRoundTrip(t *testing.T) {
 	token := inst.signIn(t)
 	inst.createMemo(t, token, "startup-fresh", "fresh install sentinel")
 	inst.requireMemo(t, token, "startup-fresh", "fresh install sentinel")
+
+	viewPath := "/api/users/" + testAdminUsername + "/views"
+	for _, retired := range []struct {
+		method string
+		path   string
+	}{
+		{http.MethodGet, viewPath},
+		{http.MethodPost, viewPath},
+		{http.MethodPost, "/memos.api.UserService/ListMemoViews"},
+	} {
+		status, body := inst.do(t, retired.method, retired.path, token, nil)
+		require.Equal(t, http.StatusNotFound, status, "%s %s: %s", retired.method, retired.path, body)
+	}
 }
 
 func TestStartupRetiredTranscriptionAcceptsLegacyConfiguration(t *testing.T) {

@@ -65,12 +65,6 @@ func TestUserResourceName(t *testing.T) {
 		})
 		require.NoError(t, err)
 		require.NotNil(t, settings)
-
-		memoViews, err := ts.Service.ListMemoViews(userCtx, &apipb.ListMemoViewsRequest{
-			Parent: currentUser.GetUser().Name,
-		})
-		require.NoError(t, err)
-		require.NotNil(t, memoViews)
 	})
 
 	t.Run("BatchGetUsers preserves mixed-case usernames", func(t *testing.T) {

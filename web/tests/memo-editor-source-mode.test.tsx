@@ -204,8 +204,8 @@ describe("MemoEditor source mode", () => {
       attachments: [],
     });
     const { container } = mount([
-      { id: "tag:food", source: "view", kind: "tag", tag: "food" },
-      { id: "checklist", source: "view", kind: "checklist" },
+      { id: "tag:food", source: "search", kind: "tag", tag: "food" },
+      { id: "checklist", source: "search", kind: "checklist" },
     ]);
 
     await waitFor(() => expect(screen.getByRole("button", { name: "common.add #food" })).toBeInTheDocument());

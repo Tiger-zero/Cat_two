@@ -42,18 +42,13 @@ export function extractTagConditions(source: string): TagConditions {
 }
 
 /** Tag provider: extraction and tag-specific exclusions, without presentation policy. */
-export function getTagSuggestionCandidates(filters: MemoFilter[], viewFilter?: string): { tag: string; source: SuggestionSource }[] {
-  const conditions = [
-    ...filters
-      .filter((filter) => filter.factor === "celSearch")
-      .map((filter) => ({ source: "search" as const, ...extractTagConditions(filter.value) })),
-    ...(viewFilter ? [{ source: "view" as const, ...extractTagConditions(viewFilter) }] : []),
-  ];
+export function getTagSuggestionCandidates(filters: MemoFilter[]): { tag: string; source: SuggestionSource }[] {
+  const conditions = filters.filter((filter) => filter.factor === "celSearch").map((filter) => extractTagConditions(filter.value));
   const excluded = new Set(conditions.flatMap((condition) => [...condition.excluded]));
-  // Emission order is priority order: explicit selection, then search, then the saved View.
+  // Explicit selections take precedence over tags from search.
   const candidates = [
     ...filters.filter((filter) => filter.factor === "tagSearch").map((filter) => ({ tag: filter.value, source: "selection" as const })),
-    ...conditions.flatMap((condition) => condition.candidates.map((tag) => ({ tag, source: condition.source }))),
+    ...conditions.flatMap((condition) => condition.candidates.map((tag) => ({ tag, source: "search" as const }))),
   ];
   return candidates.filter(({ tag }) => !excluded.has(tag) && isCompleteTagValue(tag));
 }

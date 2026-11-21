@@ -127,7 +127,7 @@ func NewMCPService(profile *profile.Profile, handler http.Handler, db *store.Sto
 
 func isPersonalMCPOperation(id string) bool {
 	switch id {
-	case "AuthService_GetCurrentUser", "UserService_ListMemoViews",
+	case "AuthService_GetCurrentUser",
 		"MemoService_ListMemos", "MemoService_GetMemo", "MemoService_CreateMemo", "MemoService_UpdateMemo":
 		return true
 	default:

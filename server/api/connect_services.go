@@ -325,60 +325,6 @@ func (s *ConnectServiceHandler) DeleteUserNotification(ctx context.Context, req 
 	return connect.NewResponse(resp), nil
 }
 
-// ListMemoViews lists the saved memo views owned by a user.
-func (s *ConnectServiceHandler) ListMemoViews(ctx context.Context, req *connect.Request[apipb.ListMemoViewsRequest]) (*connect.Response[apipb.ListMemoViewsResponse], error) {
-	resp, err := s.APIService.ListMemoViews(ctx, req.Msg)
-	if err != nil {
-		return nil, convertGRPCError(err)
-	}
-	return connect.NewResponse(resp), nil
-}
-
-// GetMemoView returns a saved memo view by resource name.
-func (s *ConnectServiceHandler) GetMemoView(ctx context.Context, req *connect.Request[apipb.GetMemoViewRequest]) (*connect.Response[apipb.MemoView], error) {
-	resp, err := s.APIService.GetMemoView(ctx, req.Msg)
-	if err != nil {
-		return nil, convertGRPCError(err)
-	}
-	return connect.NewResponse(resp), nil
-}
-
-// CreateMemoView creates a saved memo view for a user.
-func (s *ConnectServiceHandler) CreateMemoView(ctx context.Context, req *connect.Request[apipb.CreateMemoViewRequest]) (*connect.Response[apipb.MemoView], error) {
-	resp, err := s.APIService.CreateMemoView(ctx, req.Msg)
-	if err != nil {
-		return nil, convertGRPCError(err)
-	}
-	return connect.NewResponse(resp), nil
-}
-
-// UpdateMemoView updates the selected fields of a saved memo view.
-func (s *ConnectServiceHandler) UpdateMemoView(ctx context.Context, req *connect.Request[apipb.UpdateMemoViewRequest]) (*connect.Response[apipb.MemoView], error) {
-	resp, err := s.APIService.UpdateMemoView(ctx, req.Msg)
-	if err != nil {
-		return nil, convertGRPCError(err)
-	}
-	return connect.NewResponse(resp), nil
-}
-
-// DeleteMemoView deletes a saved memo view by resource name.
-func (s *ConnectServiceHandler) DeleteMemoView(ctx context.Context, req *connect.Request[apipb.DeleteMemoViewRequest]) (*connect.Response[emptypb.Empty], error) {
-	resp, err := s.APIService.DeleteMemoView(ctx, req.Msg)
-	if err != nil {
-		return nil, convertGRPCError(err)
-	}
-	return connect.NewResponse(resp), nil
-}
-
-// ReorderMemoViews sets the order of the saved memo views owned by a user.
-func (s *ConnectServiceHandler) ReorderMemoViews(ctx context.Context, req *connect.Request[apipb.ReorderMemoViewsRequest]) (*connect.Response[apipb.ReorderMemoViewsResponse], error) {
-	resp, err := s.APIService.ReorderMemoViews(ctx, req.Msg)
-	if err != nil {
-		return nil, convertGRPCError(err)
-	}
-	return connect.NewResponse(resp), nil
-}
-
 // MemoService
 
 func (s *ConnectServiceHandler) CreateMemo(ctx context.Context, req *connect.Request[apipb.CreateMemoRequest]) (*connect.Response[apipb.Memo], error) {

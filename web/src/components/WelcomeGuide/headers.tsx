@@ -4,7 +4,6 @@ import {
   CalendarDaysIcon,
   ChevronDownIcon,
   HashIcon,
-  ListChecksIcon,
   MoreVerticalIcon,
   PaperclipIcon,
   PlusIcon,
@@ -119,7 +118,7 @@ const currentMonth = () => {
   return { month: now.format("YYYY-MM"), today: now.date() };
 };
 
-/** Keep: this month's calendar beside the sidebar's tool row, Views and Tags. */
+/** Keep: this month's calendar beside the sidebar's tool row and tags. */
 export const KeepHeader = () => {
   const t = useTranslate();
   const { month, today } = currentMonth();
@@ -143,12 +142,6 @@ export const KeepHeader = () => {
           <PaperclipIcon className="mu-icon text-mu-text-secondary" />
           <SearchIcon className="mu-icon text-mu-text-secondary" />
         </div>
-        <SidebarSection label={t("common.views")}>
-          <span className={cn(SIDEBAR_ROW_CLASSES, sidebarRowStateClasses("idle"))}>
-            <SidebarRowIconSlot icon={ListChecksIcon} />
-            <span className="min-w-0 flex-1 truncate">{t("welcome.sample.view")}</span>
-          </span>
-        </SidebarSection>
         <SidebarSection label={t("common.tags")}>
           {[
             [t("welcome.sample.tag-ideas"), 1],

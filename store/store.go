@@ -17,7 +17,6 @@ type Store struct {
 	authConfigMu   sync.Mutex
 	refreshTokenMu sync.Mutex
 	patMu          sync.Mutex
-	memoViewMu     sync.Mutex
 
 	// Cache settings
 	cacheConfig cache.Config

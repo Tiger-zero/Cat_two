@@ -1,18 +1,14 @@
 import { useMemo } from "react";
 import { type MemoFilter, useMemoFilterContext } from "@/contexts/MemoFilterContext";
 import { type MemoTimeBasis, useView } from "@/contexts/ViewContext";
-import useCurrentUser from "@/hooks/useCurrentUser";
-import { useMemoViews } from "@/hooks/useUserQueries";
 import { buildTimestampRangeFilter, getLocalDayTimestampRange, getTimeBasisField } from "@/lib/calendar-utils";
 import { combineCELFilters } from "@/lib/cel-filter";
-import { getMemoViewId } from "@/lib/memo-views";
 import { buildMemoCreatorFilter } from "@/lib/resource-names";
 
 const escapeFilterValue = (value: string): string => JSON.stringify(value);
 
 export interface UseMemoFiltersOptions {
   creatorName?: string;
-  includeMemoViews?: boolean;
   includePinned?: boolean;
 }
 
@@ -20,7 +16,6 @@ interface BuildMemoFilterOptions {
   creatorName?: string;
   filters: MemoFilter[];
   includePinned: boolean;
-  selectedMemoViewFilter?: string;
   /** Which timestamp a `displayTime` day filter selects on; defaults to creation time. */
   timeBasis?: MemoTimeBasis;
 }
@@ -29,7 +24,6 @@ export const buildMemoFilter = ({
   creatorName,
   filters,
   includePinned,
-  selectedMemoViewFilter,
   timeBasis = "create_time",
 }: BuildMemoFilterOptions): string | undefined => {
   const conditions: string[] = [];
@@ -39,10 +33,6 @@ export const buildMemoFilter = ({
     if (creatorFilter) {
       conditions.push(creatorFilter);
     }
-  }
-
-  if (selectedMemoViewFilter) {
-    conditions.push(selectedMemoViewFilter);
   }
 
   for (const filter of filters) {
@@ -79,21 +69,10 @@ export const buildMemoFilter = ({
   return combineCELFilters(...conditions);
 };
 
-/** Stored CEL filter of the saved View selected in the sidebar. */
-export const useSelectedMemoViewFilter = (): string | undefined => {
-  const currentUser = useCurrentUser();
-  const { memoView } = useMemoFilterContext();
-  const { data: memoViews = [] } = useMemoViews(currentUser?.name);
-  return useMemo(() => {
-    return memoViews.find((view) => getMemoViewId(view.name) === memoView)?.filter;
-  }, [memoView, memoViews]);
-};
-
 export const useMemoFilters = (options: UseMemoFiltersOptions = {}): string | undefined => {
-  const { creatorName, includeMemoViews = false, includePinned = false } = options;
+  const { creatorName, includePinned = false } = options;
 
   const { filters } = useMemoFilterContext();
-  const selectedMemoViewFilter = useSelectedMemoViewFilter();
   // The sidebar calendar buckets days by this basis, so a picked day must select on it too.
   const { timeBasis } = useView();
 
@@ -103,9 +82,8 @@ export const useMemoFilters = (options: UseMemoFiltersOptions = {}): string | un
         creatorName,
         filters,
         includePinned,
-        selectedMemoViewFilter: includeMemoViews ? selectedMemoViewFilter : undefined,
         timeBasis,
       }),
-    [creatorName, filters, includePinned, includeMemoViews, selectedMemoViewFilter, timeBasis],
+    [creatorName, filters, includePinned, timeBasis],
   );
 };

@@ -26,7 +26,7 @@ Answers are pinned to the deterministic seed in
   and `sam` administer `dev`, `travel`, and `reading` respectively. Two
   top-level memos (`sam`'s ramen recipe and movie watchlist) are unassigned.
 - One attachment, owned by `bob` and bound to `memos/goldenhour0001`.
-- No saved memo views and no pending invitations.
+- No pending invitations.
 
 The public demo (`demo.usememos.com`) signs everyone into the **same shared
 account**, so visitors continually add/edit/delete memos, reactions, and spaces.
@@ -120,6 +120,4 @@ content to the declared `steven` instead of creating a second one.
   `space_list_user_space_invitations` lists the caller's own pending invitations.
 - `attachment_list_attachments` lists the caller's own attachments, so it is
   empty for the demo account; the seed's one attachment is reachable through
-  `memo_list_memo_attachments` on `memos/goldenhour0001`. `user_list_memo_views`
-  returns an empty set against a fresh seed. Add seed rows before writing
-  questions that depend on them.
+  `memo_list_memo_attachments` on `memos/goldenhour0001`.

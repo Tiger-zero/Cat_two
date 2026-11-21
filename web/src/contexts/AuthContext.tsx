@@ -78,7 +78,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
 
     // Tag settings control sensitive-content blurring. Publish them as soon as
-    // this request settles; memo views are managed separately by React Query.
+    // this request settles.
     setState((prev) =>
       prev.currentUser?.name === userName
         ? {

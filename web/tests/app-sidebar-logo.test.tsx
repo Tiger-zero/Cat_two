@@ -1,13 +1,12 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, screen, render as testingLibraryRender, within } from "@testing-library/react";
-import { MemoryRouter, useLocation } from "react-router-dom";
+import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import AppSidebar, { MobileAppHeader, MobileAppSidebar } from "@/components/AppSidebar";
 import { User_Role } from "@/types/proto/api/user_service_pb";
 
 const authState = vi.hoisted(() => ({
   currentUser: undefined as { name: string; username: string; displayName?: string; avatarUrl?: string; role?: User_Role } | undefined,
-  memoViews: [] as Array<{ name: string; title: string }>,
 }));
 const sidebarState = vi.hoisted(() => ({
   mobileOpen: false,
@@ -63,15 +62,6 @@ vi.mock("@/contexts/InstanceContext", () => ({
   useInstance: () => ({ isInitialized: true }),
 }));
 
-vi.mock("@/contexts/MemoFilterContext", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@/contexts/MemoFilterContext")>()),
-  useMemoFilterContext: () => ({
-    filters: [],
-    memoView: undefined,
-    setMemoView: vi.fn(),
-  }),
-}));
-
 vi.mock("@/hooks/useCurrentUser", () => ({
   default: () => authState.currentUser,
 }));
@@ -93,10 +83,6 @@ vi.mock("@/hooks/useMediaQuery", () => ({
 }));
 
 vi.mock("@/hooks/useUserQueries", () => ({
-  userKeys: {
-    memoViews: (parent?: string) => ["users", "memoViews", parent],
-  },
-  useMemoViews: () => ({ data: authState.memoViews }),
   useUpdateUserGeneralSetting: () => ({ mutate: vi.fn() }),
 }));
 
@@ -135,7 +121,6 @@ const expectDefaultNavPill = (pill: HTMLElement, label: string) => {
 describe("App sidebar", () => {
   beforeEach(() => {
     authState.currentUser = { name: "users/test", username: "test" };
-    authState.memoViews = [];
     sidebarState.mobileOpen = false;
     sidebarState.setMobileOpen.mockClear();
     sidebarState.setQuickFindOpen.mockClear();
@@ -276,7 +261,7 @@ describe("App sidebar", () => {
     expect(screen.queryByRole("contentinfo")).not.toBeInTheDocument();
   });
 
-  it("places statistics above the calendar and views below it, with a separate action for display options", () => {
+  it("places statistics above the calendar and tags below it, with a separate action for display options", () => {
     render(
       <MemoryRouter initialEntries={["/"]}>
         <AppSidebar />
@@ -285,7 +270,6 @@ describe("App sidebar", () => {
 
     const sidebar = screen.getByRole("complementary");
     const calendar = screen.getByText("Calendar");
-    const views = screen.getByText("common.views");
     const tags = screen.getByText("Tags");
     const statistics = screen.getByRole("region", { name: "common.statistics" });
     const trash = screen.getByRole("link", { name: "trash.title" });
@@ -294,20 +278,18 @@ describe("App sidebar", () => {
     expect(tags.compareDocumentPosition(trash) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(trash.parentElement).not.toHaveClass("border-t");
     expect(statistics.parentElement).toHaveClass("gap-6");
-    expect(views.closest("[data-sidebar-collection-list]")).toContainElement(tags);
+    expect(tags.closest("[data-sidebar-collection-list]")).not.toBeNull();
     expect(calendar.closest("[data-sidebar-collection-list]")).toBeNull();
     const counts = within(statistics).getAllByRole("definition");
     expect(counts.map((count) => count.textContent)).toEqual(["3", "2", "1"]);
     expect(statistics.compareDocumentPosition(calendar) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(screen.getByRole("heading", { name: "common.views", level: 2 })).toBeInTheDocument();
-    expect(calendar.compareDocumentPosition(views) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(calendar.compareDocumentPosition(tags) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     const viewOptions = screen.getByRole("button", { name: "memo.view-options" });
-    const createView = screen.getByRole("button", { name: "setting.memo-view.create" });
     expect(viewOptions.closest("nav")).toBe(screen.getByRole("navigation", { name: "common.primary-navigation" }));
     expect(screen.getByRole("link", { name: "common.calendar" }).nextElementSibling).toBe(viewOptions);
     expect(viewOptions.parentElement).toHaveClass("bg-mu-hover", "rounded-mu-md");
     expect(viewOptions.closest("a")).toBeNull();
-    expect(createView).toHaveTextContent("setting.memo-view.create");
+    expect(screen.queryByRole("button", { name: "setting.memo-view.create" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "common.tasks" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "common.explore" })).not.toBeInTheDocument();
 
@@ -328,7 +310,7 @@ describe("App sidebar", () => {
     ).toBeInTheDocument();
   });
 
-  it.each(["/setting", "/views", "/archived", "/trash"])("hides Calendar display settings on other views: %s", (path) => {
+  it.each(["/setting", "/views", "/archived"])("hides Calendar display settings off the personal feed and its trash: %s", (path) => {
     render(
       <MemoryRouter initialEntries={[path]}>
         <AppSidebar />
@@ -337,40 +319,25 @@ describe("App sidebar", () => {
     expect(screen.queryByRole("button", { name: "memo.view-options" })).not.toBeInTheDocument();
   });
 
-  it("opens the create form from the empty Views section and closes the mobile sidebar", () => {
-    const LocationProbe = () => {
-      const location = useLocation();
-      return <output data-testid="view-destination">{JSON.stringify({ pathname: location.pathname, state: location.state })}</output>;
-    };
+  it.each([
+    ["/", "collection"],
+    ["/archived", "archived"],
+  ])("keeps the %s calendar and tag list mounted when opening trash", (path, context) => {
     render(
-      <MemoryRouter initialEntries={["/"]}>
-        <AppSidebar />
-        <LocationProbe />
-      </MemoryRouter>,
-    );
-    expect(screen.getAllByRole("button", { name: "setting.memo-view.create" })).toHaveLength(1);
-    fireEvent.click(screen.getByRole("button", { name: "setting.memo-view.create" }));
-    expect(screen.getByTestId("view-destination")).toHaveTextContent(JSON.stringify({ pathname: "/views", state: { openCreate: true } }));
-    expect(sidebarState.setMobileOpen).toHaveBeenCalledWith(false);
-  });
-
-  it("uses fixed-density text-only actions for a saved view", async () => {
-    authState.memoViews = [{ name: "memoViews/1", title: "testgp" }];
-    render(
-      <MemoryRouter initialEntries={["/"]}>
+      <MemoryRouter initialEntries={[path]}>
         <AppSidebar />
       </MemoryRouter>,
     );
-
-    fireEvent.click(screen.getByRole("button", { name: "common.edit testgp" }));
-
-    const menu = await screen.findByRole("menu");
-    expect(menu).toHaveClass("mu-s-sm");
-    const editItem = screen.getByRole("menuitem", { name: "common.edit" });
-    const deleteItem = screen.getByRole("menuitem", { name: "common.delete" });
-    expect(editItem.querySelector("svg")).toBeNull();
-    expect(deleteItem.querySelector("svg")).toBeNull();
-    expect(deleteItem).toHaveClass("mu-menu-item-danger");
+    const calendar = screen.getByText("Calendar");
+    const tags = screen.getByText("Tags");
+    const trash = screen.getByRole("link", { name: "trash.title" });
+    fireEvent.click(trash);
+    expect(trash).toHaveAttribute("aria-current", "page");
+    expect(trash).toHaveClass("bg-[#397354]", "text-white");
+    expect(screen.getByText("Calendar")).toBe(calendar);
+    expect(screen.getByText("Tags")).toBe(tags);
+    expect(filteredStatsHook).toHaveBeenLastCalledWith(expect.objectContaining({ context }));
+    expect(tagsSectionHook).toHaveBeenLastCalledWith(expect.objectContaining({ destination: path }));
   });
 
   it("keeps Settings navigation out of the main sidebar on a legacy Settings URL", () => {

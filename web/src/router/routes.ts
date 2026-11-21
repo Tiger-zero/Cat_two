@@ -2,7 +2,6 @@ export const ROUTES = {
   HOME: "/",
   ARCHIVED: "/archived",
   TRASH: "/trash",
-  VIEWS: "/views",
   SETTING: "/setting",
   AUTH: "/auth",
   AUTH_SIGNUP: "/auth/signup",

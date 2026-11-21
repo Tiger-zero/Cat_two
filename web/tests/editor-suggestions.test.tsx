@@ -118,7 +118,7 @@ describe("editor suggestions", () => {
   });
 });
 
-const checklist: MemoSuggestion = { id: "checklist", kind: "checklist", source: "view" };
+const checklist: MemoSuggestion = { id: "checklist", kind: "checklist", source: "search" };
 
 describe("checklist acceptance", () => {
   it("formats the remembered cursor block and retains acceptance after removal", async () => {

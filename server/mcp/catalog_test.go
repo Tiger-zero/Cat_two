@@ -12,7 +12,7 @@ import (
 )
 
 func TestCuratedOperationIDsStayMemoFocused(t *testing.T) {
-	require.Len(t, curatedOperationIDs, 36)
+	require.Len(t, curatedOperationIDs, 35)
 
 	for _, operationID := range curatedOperationIDs {
 		require.NotContains(t, operationID, "Admin")
@@ -21,10 +21,7 @@ func TestCuratedOperationIDsStayMemoFocused(t *testing.T) {
 		if operationID != "AuthService_GetCurrentUser" {
 			require.NotContains(t, operationID, "AuthService_")
 		}
-		// Saved memo views are the only user resource exposed through MCP.
-		if operationID != "UserService_ListMemoViews" {
-			require.NotContains(t, operationID, "UserService_")
-		}
+		require.NotContains(t, operationID, "UserService_")
 		require.NotContains(t, operationID, "AIService_")
 		require.NotContains(t, operationID, "IdentityProviderService_")
 		require.NotContains(t, operationID, "InstanceService_")
@@ -280,24 +277,6 @@ func TestBuildToolFromOperationExposesCurrentUser(t *testing.T) {
 	require.Equal(t, "auth_get_current_user", tool.Name)
 	require.Equal(t, "GET", operation.Method)
 	require.True(t, tool.Annotations.ReadOnlyHint)
-}
-
-func TestBuildToolFromOperationExposesListMemoViews(t *testing.T) {
-	spec, err := loadOpenAPISpec("../../proto/gen/openapi.yaml")
-	require.NoError(t, err)
-	registry, err := buildOperationRegistry(spec)
-	require.NoError(t, err)
-
-	tool, operation := buildToolFromOperation(registry["UserService_ListMemoViews"])
-	require.Equal(t, "user_list_memo_views", tool.Name)
-	require.Equal(t, "GET", operation.Method)
-	require.True(t, tool.Annotations.ReadOnlyHint)
-
-	input, ok := tool.InputSchema.(jsonSchema)
-	require.True(t, ok)
-	properties, ok := input["properties"].(map[string]any)
-	require.True(t, ok)
-	require.Contains(t, properties, "user")
 }
 
 func TestBuildToolFromOperationMarksSetOperationsIdempotent(t *testing.T) {

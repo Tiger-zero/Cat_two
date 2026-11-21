@@ -33,7 +33,6 @@ export const userKeys = {
     filter ? ([...userKeys.stats(), name, filter] as const) : ([...userKeys.stats(), name] as const),
   allUserStats: (request: Partial<ListUserStatsQuery>) => [...userKeys.stats(), "all", request] as const,
   currentUser: () => [...userKeys.all, "current"] as const,
-  memoViews: (parent?: string) => [...userKeys.all, "memoViews", parent] as const,
   byNames: (names: string[]) => [...userKeys.all, "byNames", ...[...names].sort()] as const,
   byUsernames: (usernames: string[]) => [...userKeys.all, "byUsernames", ...[...usernames].sort()] as const,
 };
@@ -76,18 +75,6 @@ export function useAllUserStats(request: Partial<ListUserStatsQuery> = {}, optio
       return userStats;
     },
     enabled: options?.enabled ?? true,
-  });
-}
-
-export function useMemoViews(parent?: string) {
-  return useQuery({
-    queryKey: userKeys.memoViews(parent),
-    queryFn: async () => {
-      if (!parent) return [];
-      const { memoViews } = await userServiceClient.listMemoViews({ parent });
-      return memoViews;
-    },
-    enabled: !!parent,
   });
 }
 
