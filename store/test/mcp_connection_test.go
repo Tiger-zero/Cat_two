@@ -125,6 +125,42 @@ func TestMCPConnectionFirstUseSkipsInactiveStates(t *testing.T) {
 	}
 }
 
+func TestDeleteMCPConnectionOwnerScope(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	ts := NewTestingStore(ctx, t)
+	t.Cleanup(func() { require.NoError(t, ts.Close()) })
+	owner, err := createTestingHostUser(ctx, ts)
+	require.NoError(t, err)
+	other, err := createTestingUserWithRole(ctx, ts, "other-mcp-owner", store.RoleUser)
+	require.NoError(t, err)
+	connection := &store.MCPConnection{
+		ID: "remove-owned", UserID: owner.ID, Label: "Owned connection", TokenHash: strings.Repeat("de", 32),
+		Status: store.MCPConnectionApproved, CreatedAt: 100,
+	}
+	require.NoError(t, ts.CreateMCPConnection(ctx, connection))
+
+	removed, err := ts.DeleteMCPConnection(ctx, other.ID, connection.ID)
+	require.NoError(t, err)
+	require.False(t, removed)
+	stored, err := ts.GetMCPConnectionByHash(ctx, connection.TokenHash)
+	require.NoError(t, err)
+	require.Equal(t, connection, stored)
+
+	removed, err = ts.DeleteMCPConnection(ctx, owner.ID, connection.ID)
+	require.NoError(t, err)
+	require.True(t, removed)
+	stored, err = ts.GetMCPConnectionByHash(ctx, connection.TokenHash)
+	require.NoError(t, err)
+	require.Nil(t, stored)
+	list, err := ts.ListMCPConnections(ctx, owner.ID)
+	require.NoError(t, err)
+	require.Empty(t, list)
+	removed, err = ts.DeleteMCPConnection(ctx, owner.ID, connection.ID)
+	require.NoError(t, err)
+	require.False(t, removed)
+}
+
 func TestMigrationMCPConnection(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()

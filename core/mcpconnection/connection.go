@@ -21,7 +21,7 @@ var (
 	// ErrInvalidLabel indicates that a connection label is empty or too long.
 	ErrInvalidLabel = errors.New("enter a connection name of 1 to 80 characters")
 	// ErrInvalidDuration indicates that a token lifetime is unknown.
-	ErrInvalidDuration = errors.New("connection duration must be day or permanent")
+	ErrInvalidDuration = errors.New("connection duration must be 7d, 14d, 1y, or permanent")
 	// ErrRevocationConflict indicates that no revocable connection matches the request.
 	ErrRevocationConflict = errors.New("connection cannot be revoked")
 	// ErrInvalidToken indicates that the credential or its account is unavailable.
@@ -31,6 +31,7 @@ var (
 )
 
 // Issue creates an active MCP-only connection token and returns its plaintext once.
+// The token's expiration governs every connection made with it.
 func Issue(ctx context.Context, db *store.Store, userID int32, label, duration string, now time.Time) (*store.MCPConnection, string, error) {
 	label = strings.TrimSpace(label)
 	if label == "" || utf8.RuneCountInString(label) > 80 {
@@ -38,8 +39,12 @@ func Issue(ctx context.Context, db *store.Store, userID int32, label, duration s
 	}
 	var expiresAt int64
 	switch duration {
-	case "", "day":
-		expiresAt = now.Add(24 * time.Hour).Unix()
+	case "", "7d":
+		expiresAt = now.Add(7 * 24 * time.Hour).Unix()
+	case "14d":
+		expiresAt = now.Add(14 * 24 * time.Hour).Unix()
+	case "1y":
+		expiresAt = now.UTC().AddDate(1, 0, 0).Unix()
 	case "permanent":
 		// A zero expiration represents a permanent connection.
 	default:

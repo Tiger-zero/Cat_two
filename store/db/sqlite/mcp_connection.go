@@ -75,6 +75,15 @@ WHERE user_id = ? AND id = ? AND status = ? AND (status <> ? OR expires_ts <> ?)
 	return affected == 1, err
 }
 
+func (d *DB) DeleteMCPConnection(ctx context.Context, userID int32, id string) (bool, error) {
+	result, err := d.db.ExecContext(ctx, `DELETE FROM mcp_connection WHERE user_id = ? AND id = ?`, userID, id)
+	if err != nil {
+		return false, err
+	}
+	affected, err := result.RowsAffected()
+	return affected == 1, err
+}
+
 func scanMCPConnection(row interface{ Scan(...any) error }) (*store.MCPConnection, error) {
 	connection := &store.MCPConnection{}
 	if err := row.Scan(&connection.ID, &connection.UserID, &connection.Label, &connection.TokenHash, &connection.Status,

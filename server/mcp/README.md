@@ -55,9 +55,10 @@ fast on any inconsistency:
 1. `isAllowedMCPOrigin` (`origin.go`) rejects disallowed cross-origin browser requests with `403`.
 2. The request body is capped at 256 MiB before the SDK reads it.
 3. In personal mode, the transport checks the connection token's status and
-   expiry before SDK dispatch. The first authenticated POST records its time
-   and client address. The transport passes the account identity through the
-   in-process context and strips the external token.
+   expiry before SDK dispatch. It records the time and client address on the
+   first authenticated POST when that information has yet to be recorded.
+   The transport passes the account identity through the in-process context
+   and strips the external token.
 4. The SDK streamable handler dispatches the MCP message.
 5. On a `tools/call` request, `newMCPToolHandler` (`service.go`) decodes the JSON
    arguments into a map.
@@ -127,9 +128,9 @@ response has no JSON body, the fallback is:
 - **Request size:** request bodies are limited to 256 MiB before SDK dispatch.
 - **Cat_two personal mode** requires an active MCP connection token on every
   `/mcp` request, including requests from clients with a cached tool catalog.
-  Missing or invalid credentials return `401`. Inactive connections, including
-  old awaiting or pending connections and denied, revoked or expired tokens,
-  return `403`.
+  Missing or invalid credentials, including tokens for deleted connections,
+  return `401`. Inactive connections, including old awaiting or pending
+  connections and denied, revoked or expired tokens, return `403`.
 - **Memos non-personal mode:** the caller's Bearer header is forwarded to the
   API. Mutating tools require a valid personal access token or access token.
   Anonymous reads follow the instance's REST API permissions.
@@ -150,8 +151,9 @@ response has no JSON body, the fallback is:
 
 Point a Streamable HTTP client at `https://<your-instance>/mcp`. In Cat_two
 personal mode, sign in to Cat_two, open **Settings → MCP and API**, and create
-an MCP connection. Choose the default 24-hour lifetime from issuance or a
-permanent token. The token works immediately and is shown once at creation.
+an MCP connection. Choose 7 days (the default), 14 days, one calendar year
+from issuance, or a permanent token. The token works immediately and is
+shown once at creation.
 In Codex, leave the Bearer token environment-variable field blank and set the
 `Authorization` request header to the full copied value. The following JSON
 illustrates the equivalent configuration for clients that use this format.
@@ -170,25 +172,33 @@ illustrates the equivalent configuration for clients that use this format.
 }
 ```
 
-Restart the client if it prompts after saving the connection. To stop access,
-revoke the connection in Cat_two. Replace expired tokens by creating a new
-connection. After upgrading, previously approved tokens retain their original
-expiration. Replace old awaiting or pending tokens with new ones. REST
-integrations continue to use personal access tokens, as do MCP clients in
-non-personal Memos mode.
+Restart the client if it prompts after saving the connection. Settings shows
+the first connection's client IP and the token expiration. The connection
+expires when its token does. Deleting the connection invalidates the token
+for the next request, including from a client that has already connected.
+
+After upgrading, existing active tokens retain their original expiration.
+Connections approved under the old workflow retain the first request's
+recorded address. Replace expired tokens or old awaiting or pending tokens by
+creating a new connection. REST integrations continue to use personal access
+tokens, as do MCP clients in non-personal Memos mode.
 [Codex setup and troubleshooting](../../plugins/cat-two-notes/README.md#连接-nas)
 
 ### Managing Cat_two connections
 
 Management requires a signed-in session. `GET /api/mcpConnections` lists the
-account's connections and their current state. `POST /api/mcpConnections`
-creates a connection from `{"label":"My Codex","duration":"day"}`.
-Use `day` for 24 hours from issuance or `permanent` for a token without
-an expiration date. Omitting `duration` defaults to `day`. The response
-includes the token once.
+account's connections with their current state, token expiration, and first
+connection IP once recorded. `POST /api/mcpConnections` creates a connection
+from `{"label":"My Codex","duration":"7d"}`. The duration starts at issuance.
+Supported values are `7d` (the default), `14d`, `1y` (one calendar year in UTC),
+and `permanent`. The creation response includes the token once.
 
-`POST /api/mcpConnections/{id}/decision` accepts `{"action":"revoke"}`.
-Legacy approval and denial actions return `400`.
+`DELETE /api/mcpConnections/{id}` removes a connection owned by the signed-in
+account and returns `204 No Content` on success. Unknown IDs and connections
+owned by another account return `404`. The next request with the deleted token
+fails authentication. The legacy
+`POST /api/mcpConnections/{id}/decision` endpoint continues to accept
+`{"action":"revoke"}`. Legacy approval and denial actions return `400`.
 
 ## Tool surface
 

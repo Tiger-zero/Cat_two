@@ -54,3 +54,9 @@ func (s *Store) RecordMCPConnectionFirstUse(ctx context.Context, tokenHash strin
 func (s *Store) UpdateMCPConnection(ctx context.Context, userID int32, id string, from MCPConnectionStatus, to MCPConnectionStatus, expiresAt int64) (bool, error) {
 	return s.driver.UpdateMCPConnection(ctx, userID, id, from, to, expiresAt)
 }
+
+// DeleteMCPConnection permanently removes the connection owned by userID and
+// reports whether a row was deleted.
+func (s *Store) DeleteMCPConnection(ctx context.Context, userID int32, id string) (bool, error) {
+	return s.driver.DeleteMCPConnection(ctx, userID, id)
+}

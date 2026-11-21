@@ -104,6 +104,7 @@ type Driver interface {
 	GetMCPConnectionByHash(ctx context.Context, tokenHash string) (*MCPConnection, error)
 	RecordMCPConnectionFirstUse(ctx context.Context, tokenHash string, requestedAt int64, remoteIP string) error
 	UpdateMCPConnection(ctx context.Context, userID int32, id string, from MCPConnectionStatus, to MCPConnectionStatus, expiresAt int64) (bool, error)
+	DeleteMCPConnection(ctx context.Context, userID int32, id string) (bool, error)
 
 	// IdentityProvider model related methods.
 	CreateIdentityProvider(ctx context.Context, create *IdentityProvider) (*IdentityProvider, error)

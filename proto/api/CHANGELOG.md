@@ -36,10 +36,12 @@ instead, and update `core/configuration/testdata/compat/` in the same change. Af
   Affected REST and Connect calls return `UNIMPLEMENTED`. An existing note's author can still use notes that belonged
   to a Space.
 - Cat_two personal mode requires a dedicated connection token for `/mcp`. `POST /api/mcpConnections` accepts
-  `label` and `duration` (`day` or `permanent`). Tokens work immediately. Omitted `duration` defaults to `day`,
-  which lasts 24 hours from issuance. `POST /api/mcpConnections/{id}/decision` now accepts only `revoke`.
-  Previously approved tokens retain their expiration. Replace tokens created under the old awaiting or pending
-  flow. Denied, revoked, and expired tokens remain inactive. Personal access tokens remain valid for REST.
+  `label` and `duration`. Choose `7d` (the default), `14d`, `1y` (one calendar year), or `permanent`.
+  Tokens work immediately and retain their assigned expiration. Owners can delete their connection with
+  `DELETE /api/mcpConnections/{id}`, which returns `204` and invalidates the token on the next MCP request.
+  The legacy `POST /api/mcpConnections/{id}/decision` endpoint still accepts `{"action":"revoke"}`.
+  Replace tokens created under the old awaiting or pending flow. Denied, revoked, and expired tokens remain
+  inactive. Personal access tokens remain valid for REST.
   The personal-mode MCP catalog contains six tools for account, view and note access.
   [MCP setup and upgrade steps](../../plugins/cat-two-notes/README.md#连接-nas)
 - When an account enables two-step verification, password sign-in requires `password_credentials.otp_code`.

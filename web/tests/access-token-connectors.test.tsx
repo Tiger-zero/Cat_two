@@ -20,13 +20,13 @@ const connection = {
   id: "workstation-connection",
   label: "Workstation",
   status: "approved",
-  createdAt: 1795276800,
+  createdAt: Date.parse("2026-11-21T16:00:00Z") / 1_000,
   requestedAt: 0,
   expiresAt: 0,
   remoteIp: "",
 };
 const usedConnection = { ...connection, requestedAt: connection.createdAt + 60, remoteIp: "192.0.2.14" };
-const decisionPath = `${connectionsPath}/${connection.id}/decision`;
+const deletePath = `${connectionsPath}/${connection.id}`;
 
 function renderSettings() {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
@@ -86,11 +86,13 @@ describe("MCP and REST setup in access token settings", () => {
   });
 
   it.each([
-    { choice: "24 hours", duration: "day", expiresAt: connection.createdAt + 86_400 },
-    { choice: "Permanent", duration: "permanent", expiresAt: 0 },
-  ])("creates a $choice credential and only shows it until the dialog closes", async ({ choice, duration, expiresAt }) => {
+    { choice: "7 days", duration: "7d", expiry: "2026-11-28T16:00:00Z", shanghaiExpiry: "2026-11-29 00:00:00" },
+    { choice: "14 days", duration: "14d", expiry: "2026-12-05T16:00:00Z", shanghaiExpiry: "2026-12-06 00:00:00" },
+    { choice: "1 year", duration: "1y", expiry: "2027-11-21T16:00:00Z", shanghaiExpiry: "2027-11-22 00:00:00" },
+    { choice: "Permanent", duration: "permanent", expiry: null, shanghaiExpiry: null },
+  ])("creates a $choice credential and only shows it until the dialog closes", async ({ choice, duration, expiry, shanghaiExpiry }) => {
     const token = "fixture-mcp-token";
-    const issuedConnection = { ...connection, expiresAt };
+    const issuedConnection = { ...connection, expiresAt: expiry ? Date.parse(expiry) / 1_000 : 0 };
     let connections: (typeof connection)[] = [];
     authenticatedFetch.mockImplementation(async (url, init) => {
       expect(url).toBe(connectionsPath);
@@ -109,11 +111,11 @@ describe("MCP and REST setup in access token settings", () => {
     const dialog = await screen.findByRole("dialog");
     const createDialog = within(dialog);
     const durationGroup = within(createDialog.getByRole("radiogroup", { name: "Token duration" }));
-    expect(durationGroup.getByRole("radio", { name: "24 hours" })).toBeChecked();
-    if (duration === "permanent") {
-      const permanent = durationGroup.getByRole("radio", { name: choice });
-      fireEvent.click(permanent);
-      expect(permanent).toBeChecked();
+    expect(durationGroup.getByRole("radio", { name: "7 days" })).toBeChecked();
+    if (duration !== "7d") {
+      const option = durationGroup.getByRole("radio", { name: choice });
+      fireEvent.click(option);
+      expect(option).toBeChecked();
     }
     fireEvent.change(createDialog.getByRole("textbox", { name: "Connection name" }), { target: { value: connection.label } });
     fireEvent.click(createDialog.getByRole("button", { name: "Create" }));
@@ -126,17 +128,18 @@ describe("MCP and REST setup in access token settings", () => {
 
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
     expect(await screen.findByText(connection.label)).toBeVisible();
-    expect(screen.getByText("Active")).toBeVisible();
-    expect(screen.getByText("Not used yet")).toBeVisible();
+    expect(screen.getByText("Not connected yet")).toBeVisible();
+    const validity = shanghaiExpiry ? `Connection valid until ${shanghaiExpiry} (UTC+8)` : "Valid permanently";
+    expect(screen.getByText(validity)).toBeVisible();
     expect(screen.queryByText(`Bearer ${token}`)).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Create MCP connection" }));
     const freshDialog = within(await screen.findByRole("dialog"));
     expect(freshDialog.getByRole("textbox", { name: "Connection name" })).toHaveValue("");
-    expect(freshDialog.getByRole("radio", { name: "24 hours" })).toBeChecked();
+    expect(freshDialog.getByRole("radio", { name: "7 days" })).toBeChecked();
     expect(freshDialog.queryByRole("button", { name: "Copy Authorization value" })).not.toBeInTheDocument();
   });
 
-  it("polls for first use and stops when a permanent token has been used", async () => {
+  it("polls for the first connection and stops when a permanent token connects", async () => {
     vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
     let listedConnection = connection;
     authenticatedFetch.mockImplementation(async (url, init) => {
@@ -147,16 +150,18 @@ describe("MCP and REST setup in access token settings", () => {
     const { unmount } = renderSettings();
 
     try {
-      expect(await screen.findByText("Not used yet")).toBeVisible();
+      expect(await screen.findByText("Not connected yet")).toBeVisible();
+      expect(screen.queryByText(/^First connection IP /)).not.toBeInTheDocument();
       listedConnection = usedConnection;
 
       await act(async () => vi.advanceTimersByTimeAsync(14_999));
       expect(authenticatedFetch).toHaveBeenCalledTimes(1);
       await act(async () => vi.advanceTimersByTimeAsync(1));
 
-      expect(await screen.findByText(usedConnection.remoteIp, { exact: false })).toBeVisible();
-      expect(screen.getByText(/^First request /)).toBeVisible();
-      expect(screen.queryByText("Not used yet")).not.toBeInTheDocument();
+      expect(await screen.findByText("Connected")).toBeVisible();
+      expect(screen.getByText(`First connection IP ${usedConnection.remoteIp}`)).toBeVisible();
+      expect(screen.getByText("First connection 2026-11-22 00:01:00")).toBeVisible();
+      expect(screen.queryByText("Not connected yet")).not.toBeInTheDocument();
       await act(async () => vi.advanceTimersByTimeAsync(15_000));
       expect(authenticatedFetch).toHaveBeenCalledTimes(2);
     } finally {
@@ -165,9 +170,9 @@ describe("MCP and REST setup in access token settings", () => {
     }
   });
 
-  it("continues polling a used 24-hour token until it expires", async () => {
+  it("continues polling a connected 7-day token until it expires", async () => {
     vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
-    let listedConnection = { ...usedConnection, expiresAt: connection.createdAt + 86_400 };
+    let listedConnection = { ...usedConnection, expiresAt: connection.createdAt + 7 * 86_400 };
     authenticatedFetch.mockImplementation(async (url) => {
       expect(url).toBe(connectionsPath);
       return Response.json({ connections: [listedConnection] });
@@ -175,12 +180,12 @@ describe("MCP and REST setup in access token settings", () => {
     const { unmount } = renderSettings();
 
     try {
-      expect(await screen.findByText("Active")).toBeVisible();
+      expect(await screen.findByText("Connected")).toBeVisible();
       listedConnection = { ...listedConnection, status: "expired" };
       await act(async () => vi.advanceTimersByTimeAsync(15_000));
 
       expect(await screen.findByText("Expired")).toBeVisible();
-      expect(screen.queryByRole("button", { name: "Revoke" })).not.toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Delete token" })).toBeEnabled();
       await act(async () => vi.advanceTimersByTimeAsync(15_000));
       expect(authenticatedFetch).toHaveBeenCalledTimes(2);
     } finally {
@@ -190,41 +195,46 @@ describe("MCP and REST setup in access token settings", () => {
   });
 
   it.each([
-    { status: "awaiting", statusLabel: "New token required" },
-    { status: "pending", statusLabel: "New token required" },
-    { status: "approved", statusLabel: "Active" },
-  ])("shows $statusLabel for $status connections and requires confirmation before revoking", async ({ status, statusLabel }) => {
-    let listedConnection = { ...connection, status };
-    const revoke = vi.fn();
+    { row: { ...connection, status: "awaiting" }, statusLabel: "New token required" },
+    { row: { ...connection, status: "pending" }, statusLabel: "New token required" },
+    { row: connection, statusLabel: "Not connected yet" },
+    { row: usedConnection, statusLabel: "Connected" },
+    { row: { ...usedConnection, status: "expired", expiresAt: connection.createdAt + 7 * 86_400 }, statusLabel: "Expired" },
+    { row: { ...connection, status: "revoked" }, statusLabel: "Revoked" },
+    { row: { ...connection, status: "denied" }, statusLabel: "Denied" },
+  ])("shows $statusLabel for $row.status tokens and requires confirmation before deleting", async ({ row, statusLabel }) => {
+    const retainedConnection = { ...usedConnection, id: "retained-connection", label: "Laptop" };
+    let connections = [row, retainedConnection];
+    const deleteToken = vi.fn();
     authenticatedFetch.mockImplementation(async (url, init) => {
-      if (url === decisionPath) {
-        expect(init?.method).toBe("POST");
-        revoke(JSON.parse(String(init?.body)));
-        listedConnection = { ...connection, status: "revoked" };
+      if (url === deletePath) {
+        deleteToken(init?.method, init?.body);
+        connections = [retainedConnection];
         return new Response(null, { status: 204 });
       }
       expect(url).toBe(connectionsPath);
-      return Response.json({ connections: [listedConnection] });
+      return Response.json({ connections });
     });
     renderSettings();
 
-    expect(await screen.findByText(statusLabel)).toBeVisible();
-    expect(screen.queryByRole("button", { name: /approve|deny/i })).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Revoke" }));
-    const dialogName = `Revoke ${connection.label}?`;
+    const tokenRow = within((await screen.findByText(connection.label)).closest("li")!);
+    expect(tokenRow.getByText(statusLabel)).toBeVisible();
+    expect(tokenRow.queryByRole("button", { name: /approve|deny|revoke/i })).not.toBeInTheDocument();
+    fireEvent.click(tokenRow.getByRole("button", { name: "Delete token" }));
+    const dialogName = `Delete token for ${connection.label}?`;
     const confirmation = within(await screen.findByRole("alertdialog", { name: dialogName }));
-    expect(revoke).not.toHaveBeenCalled();
+    expect(deleteToken).not.toHaveBeenCalled();
     fireEvent.click(confirmation.getByRole("button", { name: "Cancel" }));
     await waitFor(() => expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument());
-    expect(revoke).not.toHaveBeenCalled();
+    expect(deleteToken).not.toHaveBeenCalled();
 
-    fireEvent.click(screen.getByRole("button", { name: "Revoke" }));
+    fireEvent.click(tokenRow.getByRole("button", { name: "Delete token" }));
     const confirmedDialog = within(await screen.findByRole("alertdialog", { name: dialogName }));
-    fireEvent.click(confirmedDialog.getByRole("button", { name: "Revoke" }));
+    fireEvent.click(confirmedDialog.getByRole("button", { name: "Delete token" }));
 
-    expect(await screen.findByText("Revoked")).toBeVisible();
+    await waitFor(() => expect(screen.queryByText(connection.label)).not.toBeInTheDocument());
     await waitFor(() => expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument());
-    expect(revoke).toHaveBeenCalledExactlyOnceWith({ action: "revoke" });
-    expect(screen.queryByRole("button", { name: "Revoke" })).not.toBeInTheDocument();
+    expect(deleteToken).toHaveBeenCalledExactlyOnceWith("DELETE", undefined);
+    expect(screen.getByText(retainedConnection.label)).toBeVisible();
   });
 });

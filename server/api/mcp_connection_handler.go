@@ -32,6 +32,7 @@ func (s *APIService) newMCPConnectionHandler(authorizer *Authorizer) http.Handle
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/mcpConnections", authorizeMCPConnectionManagement(authorizer, s.listMCPConnections))
 	mux.HandleFunc("POST /api/mcpConnections", authorizeMCPConnectionManagement(authorizer, s.createMCPConnection))
+	mux.HandleFunc("DELETE /api/mcpConnections/{id}", authorizeMCPConnectionManagement(authorizer, s.deleteMCPConnection))
 	mux.HandleFunc("POST /api/mcpConnections/{id}/decision", authorizeMCPConnectionManagement(authorizer, s.revokeMCPConnection))
 	return mux
 }
@@ -94,6 +95,18 @@ func (s *APIService) createMCPConnection(w http.ResponseWriter, r *http.Request,
 		return status.Error(codes.Internal, "failed to create MCP connection")
 	}
 	return httphandler.JSON(w, http.StatusCreated, map[string]any{"connection": connection, "token": token})
+}
+
+func (s *APIService) deleteMCPConnection(w http.ResponseWriter, r *http.Request, userID int32) error {
+	deleted, err := s.Store.DeleteMCPConnection(r.Context(), userID, r.PathValue("id"))
+	if err != nil {
+		return status.Error(codes.Internal, "failed to delete MCP connection")
+	}
+	if !deleted {
+		return status.Error(codes.NotFound, "MCP connection not found")
+	}
+	w.WriteHeader(http.StatusNoContent)
+	return nil
 }
 
 func (s *APIService) revokeMCPConnection(w http.ResponseWriter, r *http.Request, userID int32) error {
