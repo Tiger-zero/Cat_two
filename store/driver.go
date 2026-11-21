@@ -98,6 +98,13 @@ type Driver interface {
 	// failed, including a stored row that cannot be decoded.
 	GetUserByPATHash(ctx context.Context, tokenHash string) (*PATQueryResult, error)
 
+	// MCP connection requests and authorization states.
+	CreateMCPConnection(ctx context.Context, connection *MCPConnection) error
+	ListMCPConnections(ctx context.Context, userID int32) ([]*MCPConnection, error)
+	GetMCPConnectionByHash(ctx context.Context, tokenHash string) (*MCPConnection, error)
+	MarkMCPConnectionRequested(ctx context.Context, tokenHash string, requestedAt int64, remoteIP string) error
+	UpdateMCPConnection(ctx context.Context, userID int32, id string, from MCPConnectionStatus, to MCPConnectionStatus, expiresAt int64) (bool, error)
+
 	// IdentityProvider model related methods.
 	CreateIdentityProvider(ctx context.Context, create *IdentityProvider) (*IdentityProvider, error)
 	ListIdentityProviders(ctx context.Context, find *FindIdentityProvider) ([]*IdentityProvider, error)

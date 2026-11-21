@@ -36,7 +36,7 @@ Cat_two 从 Fumos 和 Memos 衍生而来，以 `Tiger-zero/Cat_two` 的 `main` �
 ### 11 月 21 日下午
 
 - **验证和恢复说明**　两步验证开始读取数据库里的会话版本后，SSE 测试要先启动客户端并等到响应头，再断开连接。README 重写了部署、备份、升级，以及从运行中的 NAS 容器或 Compose 宿主机重置两步验证的步骤。重置后以原密码重新登录。 [SSE 测试修正](https://github.com/Tiger-zero/Cat_two/commit/636a14e45) · [README 重写](https://github.com/Tiger-zero/Cat_two/commit/4232a6a58)
-- **两个仓库 Skill**　用 Cat_two 开发和 MCP 两个 Skill 取代继承的 Memos 发布 Skill。MCP 沿用容器的 `/mcp`，由可访问 NAS 的客户端配置地址与个人访问令牌。归档当前任务或按标签整理笔记时先预览，确认后再写入。容器发布继续走 Cat_two 的工作流。 [Skill 提交](https://github.com/Tiger-zero/Cat_two/commit/d70023930) · [MCP Skill](../cat-two-mcp/SKILL.md)
+- **两个仓库 Skill**　用 Cat_two 开发和 MCP 两个 Skill 取代继承的 Memos 发布 Skill。当时容器的 `/mcp` 使用个人访问令牌，后续改用专用连接令牌和审批。归档当前任务或按标签整理笔记时先预览，确认后再写入。容器发布继续走 Cat_two 的工作流。 [Skill 提交](https://github.com/Tiger-zero/Cat_two/commit/d70023930) · [MCP Skill](../cat-two-mcp/SKILL.md)
 - **附件和 Markdown 工具栏**　回形针复用现有文件选择和保存流程。PDF、Word 和 Excel 在缺少标准 MIME 信息时按扩展名识别，下载保留原文件名。格式按钮复用编辑器命令，在富文本和 Markdown 源码模式都可用。测试时使用只含附件的笔记、真实文件和中文文件名，核对下载字节，还要验证倒序选区、组合选区及 360px 窄屏。 [提交](https://github.com/Tiger-zero/Cat_two/commit/feb68bc8b) · [编辑器说明](../../../web/src/components/MemoEditor/README.md)
 - **站内文档下载修复**　`0.04` 的原生附件下载依赖刷新 Cookie，网页仍有有效访问令牌时可能出现「笔记能打开，附件无法下载」。在测试容器确认空格、括号及 `&` 的文件名可用，并复现 Cookie 缺失或失效时下载失败。修复后，站内文档用当前网页会话按附件 ID 取文件，保留原文件名，失败时在页面提示 HTTP 状态。后续排查可用状态码区分身份校验和文件存储问题。Chrome 的原生下载可能没有出现在网页的 Network 列表，当次 NAS 请求的错误码未能捕获。 [提交](https://github.com/Tiger-zero/Cat_two/commit/63e4e4c8f) · [下载实现](../../../web/src/lib/attachment-download.ts)
 - **开发记录维护**　将每次修改后更新本文件的要求写入 Skill，并补齐下午的实现经验和已发布版本。验证 Skill 格式、仓库链接和文档差异。
@@ -60,6 +60,11 @@ Cat_two 从 Fumos 和 Memos 衍生而来，以 `Tiger-zero/Cat_two` 的 `main` �
 
 - **Codex 默认读写**　插件升至 `0.1.1`。接入示例提供四个读取工具和两个写入工具，写入仍需先预览并确认。补充 NAS 网页上的令牌入口、Windows 用户环境变量和已有 `[mcp_servers.cat_two]` 的更新方法。默认工具范围来自 Codex 本机配置，升级插件时已有连接也要更新工具列表。隔离环境已验证示例 TOML、插件清单和 CLI 从 `0.1.0` 升级至 `0.1.1`。 [NAS 接入说明](../../../plugins/cat-two-notes/README.md#连接-nas)
 - **验证范围**　从现有 `0.05` 容器网页生成测试令牌，使用接入示例通过 Docker 私有网络调用六个 Codex 工具，创建、修改并筛选合成笔记。本次交付为插件与接入说明，验证环境为 Linux Codex CLI 和测试容器，真实 NAS 和 Windows 桌面接入待本地验证。
+
+### 11 月 21 日 18:36
+
+- **Cat_two MCP 连接审批**　网页签发专用令牌并仅显示一次。Codex 用 `/mcp` 地址和 `Authorization: Bearer …` 发起连接后，设置页显示待审批。可批准 24 小时或永久有效、拒绝或撤销。在 Personal 模式，普通 PAT 用于 REST，原 MCP 接入须更换令牌。批准后服务端提供六个笔记工具，并在每次请求检查有效期和撤销状态。内部分发按工具对应的 API 操作核对网关匹配结果。 [接入说明](../../../plugins/cat-two-notes/README.md#连接-nas)
+- **升级和验证**　数据库结构升至 `26.11.4` 并持久化连接状态。SQLite、MySQL、MariaDB 和 PostgreSQL 通过连接和迁移测试。服务端覆盖并发处理首次请求及审批、审批过期和账号隔离。用独立实例、Chromium 和真实 Codex CLI 实测网页审批、用同一令牌重连、笔记读写及撤销。NAS 使用包含审批功能的镜像后可验证本地连接。
 
 ## 开发和验证
 

@@ -11,10 +11,14 @@ import (
 	"github.com/pkg/errors"
 	"gopkg.in/yaml.v3"
 
+	"github.com/usememos/memos/core/mcpconnection"
+	"github.com/usememos/memos/internal/clientip"
 	"github.com/usememos/memos/internal/httphandler"
 	"github.com/usememos/memos/internal/profile"
 	memosproto "github.com/usememos/memos/proto"
 	"github.com/usememos/memos/server/api"
+	"github.com/usememos/memos/server/auth"
+	"github.com/usememos/memos/store"
 )
 
 // maxMCPRequestBytes caps the /mcp request body. It tracks the API limit because
@@ -31,13 +35,20 @@ const toolCatalogTTL = 24 * time.Hour
 // MCPService serves the OpenAPI-driven MCP endpoint.
 type MCPService struct {
 	profile *profile.Profile
+	store   *store.Store
 
 	operationsByTool map[string]*registeredOperation
 	handler          http.Handler
 }
 
+type connectionUserContextKey struct{}
+
 // NewMCPService creates an MCP service backed by the in-process API routes.
-func NewMCPService(profile *profile.Profile, handler http.Handler) (*MCPService, error) {
+func NewMCPService(profile *profile.Profile, handler http.Handler, db *store.Store) (*MCPService, error) {
+	personal := profile != nil && profile.Personal
+	if personal && db == nil {
+		return nil, errors.New("MCP connection approval requires a store")
+	}
 	spec, err := loadMCPServiceOpenAPISpec()
 	if err != nil {
 		return nil, err
@@ -72,7 +83,7 @@ func NewMCPService(profile *profile.Profile, handler http.Handler) (*MCPService,
 	adapter := newAPIAdapter(handler)
 	for _, tool := range tools {
 		operation := operationsByTool[tool.Name]
-		if profile != nil && profile.Personal && strings.HasPrefix(operation.OperationID, "SpaceService_") {
+		if personal && !isPersonalMCPOperation(operation.OperationID) {
 			delete(operationsByTool, tool.Name)
 			continue
 		}
@@ -97,9 +108,20 @@ func NewMCPService(profile *profile.Profile, handler http.Handler) (*MCPService,
 	})
 	return &MCPService{
 		profile:          profile,
+		store:            db,
 		operationsByTool: operationsByTool,
 		handler:          streamableHandler,
 	}, nil
+}
+
+func isPersonalMCPOperation(id string) bool {
+	switch id {
+	case "AuthService_GetCurrentUser", "UserService_ListMemoViews",
+		"MemoService_ListMemos", "MemoService_GetMemo", "MemoService_CreateMemo", "MemoService_UpdateMemo":
+		return true
+	default:
+		return false
+	}
 }
 
 // catalogCacheMiddleware stamps the static-catalog TTL onto results the SDK
@@ -149,6 +171,10 @@ func newMCPToolHandler(adapter *apiAdapter, operation *registeredOperation) sdkm
 		if request.Extra != nil {
 			authorization = request.Extra.Header.Get("Authorization")
 		}
+		if user, ok := ctx.Value(connectionUserContextKey{}).(*store.User); ok {
+			procedure := "/memos.api." + strings.Replace(operation.OperationID, "_", "/", 1)
+			ctx = api.WithMCPRequest(ctx, user, procedure)
+		}
 		return adapter.execute(ctx, operation.Operation, arguments, authorization)
 	}
 }
@@ -165,6 +191,34 @@ func (s *MCPService) RegisterRoutes(mux *http.ServeMux) {
 			return
 		}
 		r.Body = http.MaxBytesReader(w, r.Body, maxMCPRequestBytes)
+		if s.profile != nil && s.profile.Personal {
+			s.servePersonal(w, r)
+			return
+		}
 		s.handler.ServeHTTP(w, r)
 	})
+}
+
+func (s *MCPService) servePersonal(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "no-store")
+	ctx := r.Context()
+	token := auth.ExtractBearerToken(r.Header.Get("Authorization"))
+	user, err := mcpconnection.Authenticate(ctx, s.store, token, clientip.FromContext(ctx), r.Method == http.MethodPost, time.Now())
+	if err != nil {
+		var response *httphandler.Error
+		switch {
+		case errors.Is(err, mcpconnection.ErrInvalidToken):
+			w.Header().Set("WWW-Authenticate", "Bearer")
+			response = &httphandler.Error{Code: http.StatusUnauthorized, Message: err.Error()}
+		case errors.Is(err, mcpconnection.ErrPending), errors.Is(err, mcpconnection.ErrInactive):
+			response = &httphandler.Error{Code: http.StatusForbidden, Message: err.Error()}
+		default:
+			response = &httphandler.Error{Code: http.StatusServiceUnavailable, Message: "MCP connection check unavailable", Cause: err}
+		}
+		httphandler.WriteError(w, r, response)
+		return
+	}
+	r = r.Clone(context.WithValue(ctx, connectionUserContextKey{}, user))
+	r.Header.Del("Authorization")
+	s.handler.ServeHTTP(w, r)
 }

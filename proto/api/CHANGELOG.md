@@ -35,6 +35,10 @@ instead, and update `core/configuration/testdata/compat/` in the same change. Af
 - Cat_two retires the Space, identity provider, linked identity, notification, webhook and configuration status APIs.
   Affected REST and Connect calls return `UNIMPLEMENTED`. An existing note's author can still use notes that belonged
   to a Space.
+- Cat_two personal mode requires a dedicated connection token and owner approval for `/mcp`. The first request with
+  a valid new token goes pending. Retry using the same token after approval. Existing personal access tokens remain
+  valid for REST. The personal-mode MCP catalog now contains six tools for account, view and note access.
+  [MCP setup and upgrade steps](../../plugins/cat-two-notes/README.md#连接-nas)
 - When an account enables two-step verification, password sign-in requires `password_credentials.otp_code`.
   `ErrorInfo.reason` is `TOTP_REQUIRED` for a missing code and `TOTP_INVALID` for an invalid or reused code.
   Changing or resetting the factor revokes the account's interactive sessions. Personal access tokens remain valid.

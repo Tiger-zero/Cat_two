@@ -9,6 +9,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+
+	"github.com/usememos/memos/store"
 )
 
 func TestRemovedAPIVersionRoutesReturnGone(t *testing.T) {
@@ -47,4 +49,19 @@ func TestRemovedAPIVersionRoutesReturnGone(t *testing.T) {
 	rec := httptest.NewRecorder()
 	e.ServeHTTP(rec, req)
 	require.Equal(t, http.StatusOK, rec.Code)
+}
+
+func TestMCPIdentityRequiresMatchingAPIProcedure(t *testing.T) {
+	svc, _ := newUploadTestService(t)
+	handler, err := svc.NewHandler(context.Background())
+	require.NoError(t, err)
+
+	user := &store.User{ID: 1}
+	ctx := WithMCPRequest(context.Background(), user, "/memos.api.MemoService/ListMemos")
+	request := httptest.NewRequestWithContext(ctx, http.MethodGet, "/api/users", nil)
+	recorder := httptest.NewRecorder()
+	handler.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusForbidden, recorder.Code)
+	require.Contains(t, recorder.Body.String(), "MCP connection cannot access this API procedure")
 }

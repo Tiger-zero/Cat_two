@@ -85,9 +85,9 @@ flowchart LR
 
 | 入口 | 能力 |
 | --- | --- |
-| REST / Connect | Web 客户端使用 Connect，第三方可以通过 `/api/…` 的 REST 接口或 `/memos.api.…` 的 Connect 接口调用服务。在「设置 → MCP 和 API」可复制 REST 地址及调用示例，并创建个人访问令牌。持有令牌的程序按对应账户权限访问。 |
-| MCP | 支持 Streamable HTTP 和 Bearer 令牌的 MCP 客户端可连接 `/mcp`，再用工具读取笔记或把生成内容保存为笔记。工具调用走原有 API 权限。 |
-| Codex 笔记插件 | 从此仓库安装后，通过已配置的 Cat_two MCP 查询笔记、按标签或视图分组、汇总待办和知识。接入示例默认提供读取、创建和更新工具，写入前预览并确认完整内容。 [安装与接入](../plugins/cat-two-notes/README.md) |
+| REST / Connect | Web 客户端使用 Connect，第三方可以通过 `/api/…` 的 REST 接口或 `/memos.api.…` 的 Connect 接口调用服务。在「设置 → MCP 和 API」可复制 REST 地址及调用示例，并创建个人访问令牌（PAT）。持有令牌的程序按对应账户权限访问。 |
+| MCP | 在「设置 → MCP 和 API」生成专用连接令牌，用 Streamable HTTP 连接 `/mcp`。首次带令牌连接产生待审批记录，可以批准 24 小时、永久批准或拒绝，也可以撤销已批准的连接。服务端逐次检查授权，批准后可读取账户和保存的视图，以及查询、读取、创建或更新笔记。专用令牌仅适用于 MCP。 |
+| Codex | 在能访问 NAS 的本地 Codex 直接添加自定义 MCP 服务。可选的笔记插件提供按标签或视图分组、汇总待办与知识、预览后归档的工作流。 [安装与接入](../plugins/cat-two-notes/README.md) |
 | 手机访问 | 当前仓库交付的是 Web 服务和容器镜像。支持的浏览器可以添加到主屏幕。原生 Android 客户端可作为独立项目，调用同一个服务端。 |
 
 [API 说明](../proto/api/README.md) · [MCP](../server/mcp/README.md)
@@ -113,6 +113,7 @@ pnpm dev
 | 导入和导出 | 用带图片、标签和笔记引用的测试笔记导出 ZIP，再在独立实例里试导入。确认首次导入、跳过、覆盖和创建副本的结果，检查重复导入后的图片显示。 |
 | 回收站和标签整理 | 用两个账户验证回收站只显示自己的笔记，恢复后原状态和附件可用。准备两个同级标签和子标签，重命名其中一个到另一个后核对筛选结果，再整理带空格的标签路径。 |
 | 登录和两步验证 | 在独立数据库测试首次创建管理员、再次注册被拒绝、密码和验证器登录、过期或已用验证码被拒绝以及容器终端重置。 |
+| MCP 审批 | 在独立实例验证专用令牌首次连接进入待审批。同一令牌获批后重新连接，核对六个工具可用，拒绝、撤销或到期后访问失效。同步验证已有 REST PAT 仍可用于 REST。 |
 | Compose 和镜像 | 用 `docker compose config --quiet` 和 `docker compose -f compose.nas.yaml config --quiet` 检查配置。使用镜像时验证 `/healthz`，再重建容器确认数据卷仍可读写。 |
 
 `pnpm release` 将网页构建到 `server/frontend/dist`，Go 二进制将其嵌入。Docker 的构建和发布由 [Cat_two Container 工作流](../.github/workflows/cat-two-container.yml)完成。向 `main` 推送会触发验证，使用工作流的手动触发或 `[publish dockerhub]` 标记可发布 AMD64 和 ARM64 镜像。Docker Hub 编号从 `0.01` 起，每次发布递增 `0.01`。发布后核对编号、`latest` 和 `sha-<完整提交 SHA>` 是否指向同一镜像，再更新 NAS。[编号逻辑](../scripts/cat_two_docker_release.py)

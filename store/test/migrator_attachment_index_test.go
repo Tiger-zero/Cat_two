@@ -23,8 +23,10 @@ func attachmentLookupIndex(driver string) string {
 func removeSchemaAfterAttachmentLookupIndex(ctx context.Context, t *testing.T, ts *store.Store, driver string) {
 	t.Helper()
 	db := ts.GetDriver().GetDB()
-	_, err := db.ExecContext(ctx, "DROP TABLE user_totp")
-	require.NoError(t, err)
+	for _, table := range []string{"mcp_connection", "user_totp"} {
+		_, err := db.ExecContext(ctx, "DROP TABLE "+table)
+		require.NoError(t, err)
+	}
 	for _, index := range []string{"idx_memo_trash_expiry", "idx_memo_trash_creator", "idx_memo_trash_root"} {
 		drop := "DROP INDEX " + index
 		if driver == "mysql" {
@@ -69,7 +71,7 @@ func TestMigrationAttachmentIndex(t *testing.T) {
 	require.NoError(t, ts.Migrate(ctx), "a completed upgrade can restart")
 	setting, err := ts.GetUncachedInstanceSetting(ctx, &store.FindInstanceSetting{Name: "BASIC"})
 	require.NoError(t, err)
-	require.Equal(t, "26.11.3", setting.GetBasicSetting().SchemaVersion)
+	require.Equal(t, "26.11.4", setting.GetBasicSetting().SchemaVersion)
 	migratedMemo, err := ts.GetMemo(ctx, &store.FindMemo{ID: &memo.ID})
 	require.NoError(t, err)
 	require.NotNil(t, migratedMemo)

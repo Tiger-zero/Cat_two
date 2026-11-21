@@ -5,20 +5,19 @@ This package serves an [OpenAPI](https://www.openapis.org/)-driven
 `/mcp`. It exposes a curated, memo-focused toolset over the **Streamable HTTP**
 transport using the official `github.com/modelcontextprotocol/go-sdk`.
 
-The core design principle: **tool calls execute in-process against the existing
-REST API.** The package owns no store or service logic of its own. Each tool is
-derived from an operation in the generated OpenAPI document
-(`proto/gen/openapi.yaml`, embedded via `proto.OpenAPIYAML()`), and a tool call
-is translated into the matching `/api/...` HTTP request and run against the
-same HTTP handler that serves the public API. This keeps OpenAPI as the single
-source of truth and reuses the API's authentication and authorization as-is.
+Tool calls execute in-process against the existing REST API. Each tool comes
+from an operation in the generated OpenAPI document (`proto/gen/openapi.yaml`,
+embedded via `proto.OpenAPIYAML()`). The tool handler translates each call into
+the matching `/api/...` request so API authorization applies. In Cat_two
+personal mode, the transport first authenticates a dedicated MCP connection
+token and passes the approved account to the API internally.
 
 ## Integration
 
 `server.NewServer` calls `mcp.NewMCPService` after registering the API, file, and gRPC-gateway routes, passing the same HTTP handler:
 
 ```go
-mcpService, err := mcp.NewMCPService(profile, handler)
+mcpService, err := mcp.NewMCPService(profile, s.handler, s.Store)
 if err != nil {
     return nil, errors.Wrap(err, "failed to create MCP service")
 }
@@ -40,7 +39,8 @@ fast on any inconsistency:
 3. `buildCuratedTools` (`catalog.go`) selects the allowlisted operation IDs and
    converts each into an `*sdkmcp.Tool` plus a `registeredOperation`. Missing
    IDs or duplicate tool names are construction errors.
-4. Each tool is registered with `server.AddTool(tool, newMCPToolHandler(...))`.
+4. Each tool allowed in the active mode is registered with
+   `server.AddTool(tool, newMCPToolHandler(...))`.
 5. `sdkmcp.NewStreamableHTTPHandler` wraps the server in stateless,
    JSON-response mode (no SSE, no session tracking). Stateless mode is also
    what lets the SDK serve protocol version `2026-07-28`; older clients still
@@ -54,17 +54,21 @@ fast on any inconsistency:
 
 1. `isAllowedMCPOrigin` (`origin.go`) rejects disallowed cross-origin browser requests with `403`.
 2. The request body is capped at 256 MiB before the SDK reads it.
-3. The SDK streamable handler dispatches the MCP message.
-4. On a `tools/call` request, `newMCPToolHandler` (`service.go`) decodes the JSON
+3. In personal mode, the transport validates the connection token and checks
+   approval and expiry before SDK dispatch. The first POST with a valid
+   connection token records the request for approval. For an approved request,
+   the transport passes only the account identity through the in-process
+   context and strips the external token.
+4. The SDK streamable handler dispatches the MCP message.
+5. On a `tools/call` request, `newMCPToolHandler` (`service.go`) decodes the JSON
    arguments into a map.
-5. `validateToolArguments` (`validation.go`) checks them against the tool's
+6. `validateToolArguments` (`validation.go`) checks them against the tool's
    input schema.
-6. The caller's `Authorization` header is read from the request (`request.Extra.Header` on the SDK's `*sdkmcp.CallToolRequest`).
 7. `apiAdapter.execute` (`adapter.go`) builds the API request
    (`buildAPIRequest`: path-parameter substitution, query encoding, JSON body),
-   forwards the bearer token, presents the caller's resolved client address as
-   the request peer, and runs it against the HTTP handler through an
-   `httptest.ResponseRecorder`.
+   presents the caller's resolved client address as the request peer, and runs
+   it against the HTTP handler through an `httptest.ResponseRecorder`. In
+   non-personal mode it forwards the caller's Bearer header.
 8. The recorder body is decoded; a non-2xx status becomes a tool error
    (`newToolErrorResult`), otherwise the value is wrapped by
    `newStructuredToolResult`.
@@ -121,10 +125,13 @@ response has no JSON body, the fallback is:
   startup, so `tools/list` and `server/discover` advertise a 24-hour `ttlMs`
   instead of change notifications.
 - **Request size:** request bodies are limited to 256 MiB before SDK dispatch.
-- **Auth:** the caller's `Authorization: Bearer <token>` header is forwarded to
-  the in-process API request. Mutating tools therefore require a valid token
-  (personal access token or access token); public reads may work without one,
-  exactly as the REST API allows.
+- **Cat_two personal mode:** every `/mcp` request requires a valid, approved
+  MCP connection token. Missing or invalid credentials return `401`. Pending,
+  denied, expired and revoked connections return `403`. A cached client tool
+  catalog has no effect on the permission check.
+- **Memos non-personal mode:** the caller's Bearer header is forwarded to the
+  API. Mutating tools require a valid personal access token or access token.
+  Anonymous reads follow the instance's REST API permissions.
 - **Client address:** the `/mcp` request passes through the same client-address
   middleware as every other route, which resolves the caller behind trusted
   proxies. The adapter reads that resolved address from the tool handler's
@@ -140,32 +147,49 @@ response has no JSON body, the fallback is:
 
 ### Connecting a client
 
-Point any Streamable HTTP MCP client at `https://<your-instance>/mcp` and supply
-a personal access token as a bearer credential. Example client config:
+Point a Streamable HTTP client at `https://<your-instance>/mcp`. In Cat_two
+personal mode, sign in to Cat_two, open **Settings → MCP and API**, and create
+an MCP connection. Its token is shown at creation. Configure the client with
+that token in the `Authorization` header, or use a local environment variable
+if the client supports it. Example client config:
 
 ```json
 {
   "mcpServers": {
-    "memos": {
+    "cat_two": {
       "type": "http",
       "url": "https://<your-instance>/mcp",
       "headers": {
-        "Authorization": "Bearer <your-personal-access-token>"
+        "Authorization": "Bearer <your-mcp-connection-token>"
       }
     }
   }
 }
 ```
 
+1. Start the client. The first POST with the token enters the pending state and
+   returns `403`. This applies to initialization or discovery requests as well
+   as tool calls.
+2. In Cat_two, approve the pending connection for 24 hours from approval or
+   without expiry. You can also deny it.
+3. Reconnect using the same token. To stop access, revoke the connection.
+   Expired connections require a new token and approval.
+
+Existing personal access tokens still work for REST. After upgrading Cat_two,
+replace any REST token previously used for `/mcp` with an approved dedicated
+token. Managing connections requires a signed-in session. In non-personal
+Memos mode, use a personal access token as before.
+[Codex setup and troubleshooting](../../plugins/cat-two-notes/README.md#连接-nas)
+
 ## Tool surface
 
-The server exposes a curated allowlist (`curatedOperationIDs` in `catalog.go`),
-centered on memos and attachments, plus the space service (memos carry a
-placement and a `SPACE` audience, so agents must be able to discover and
-administer spaces and answer invitations) and two read-only orientation tools:
-`user_list_memo_views` (surfaces a user's named CEL filters for reuse with
-`memo_list_memos`) and `auth_get_current_user` (a "whoami" so an agent can
-resolve its own user — the single allowed auth/identity operation):
+Cat_two personal mode exposes six tools. These read the current account, list
+saved views, list or read notes, and create or update notes:
+`auth_get_current_user`, `user_list_memo_views`, `memo_list_memos`,
+`memo_get_memo`, `memo_create_memo` and `memo_update_memo`.
+
+The full Memos non-personal allowlist (`curatedOperationIDs` in `catalog.go`)
+includes the following operations.
 
 | OpenAPI operation | MCP tool |
 | --- | --- |
@@ -252,10 +276,10 @@ failed every tool call returning an attachment.
 
 ## Error handling
 
-Failures are returned as MCP tool errors (`CallToolResult` with `IsError: true`
-and a text content block), not JSON-RPC protocol errors — the handler returns
-`(result, nil)`. Error results omit `structuredContent` so strict clients do not
-validate an error payload against the tool's success-only output schema:
+Once the transport accepts a request, failures in a tool call return an MCP
+`CallToolResult` with `IsError: true` and a text content block. Error results
+omit `structuredContent` so strict clients use the tool's success schema only
+for successful responses:
 
 | Failure | Result |
 | --- | --- |

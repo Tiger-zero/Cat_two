@@ -119,7 +119,7 @@ func NewServer(ctx context.Context, profile *profile.Profile, store *store.Store
 	})
 	s.handler = httphandler.Recover(clientip.Middleware(clientIPResolver)(newCORSMiddleware(profile, mux)(router)))
 
-	mcpService, err := mcp.NewMCPService(profile, s.handler)
+	mcpService, err := mcp.NewMCPService(profile, s.handler, s.Store)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to create MCP service")
 	}

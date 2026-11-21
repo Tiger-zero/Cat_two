@@ -157,14 +157,23 @@ func (s *APIService) NewHandler(ctx context.Context) (http.Handler, error) {
 			setAPIResponseNoStoreHeaders(w.Header())
 			ctx := r.Context()
 
-			authHeader := r.Header.Get("Authorization")
-			result := authorizer.Authenticate(ctx, authHeader)
-
 			// An unresolved path yields an empty procedure, which CheckAccess
 			// treats as protected: authenticated callers pass and anonymous ones
 			// are refused. Failing closed keeps a routing gap from becoming an
 			// access-control gap.
 			procedure, _ := routeResolver.resolveRequest(r)
+			var result *auth.AuthResult
+			if request, ok := ctx.Value(mcpUserContextKey{}).(mcpAPIRequest); ok {
+				// Compare with the binding the gateway actually matched. An
+				// MCP tool can only borrow the identity for its own procedure.
+				if procedure == "" || procedure != request.procedure {
+					writeGatewayStatusError(w, status.Error(codes.PermissionDenied, "MCP connection cannot access this API procedure"))
+					return
+				}
+				result = &auth.AuthResult{User: request.user}
+			} else {
+				result = authorizer.Authenticate(ctx, r.Header.Get("Authorization"))
+			}
 			if s.isRetiredProcedure(procedure) {
 				writeGatewayStatusError(w, retiredModuleError())
 				return
@@ -245,7 +254,12 @@ func (s *APIService) NewHandler(ctx context.Context) (http.Handler, error) {
 	sseMux := http.NewServeMux()
 	RegisterSSERoutes(sseMux, s.SSEHub, s.Store, s.Secret)
 	trashHandler := s.newMemoTrashHandler(authorizer)
+	mcpConnectionHandler := s.newMCPConnectionHandler(authorizer)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if _, approvedMCP := r.Context().Value(mcpUserContextKey{}).(mcpAPIRequest); approvedMCP {
+			gwMux.ServeHTTP(w, r)
+			return
+		}
 		requestPath := r.URL.Path
 		if r.URL.RawPath != "" {
 			requestPath = r.URL.RawPath
@@ -255,6 +269,8 @@ func (s *APIService) NewHandler(ctx context.Context) (http.Handler, error) {
 			sseMux.ServeHTTP(w, r)
 		case requestPath == "/api/trash" || strings.HasPrefix(requestPath, "/api/trash/"):
 			trashHandler.ServeHTTP(w, r)
+		case s.Profile.Personal && (requestPath == "/api/mcpConnections" || strings.HasPrefix(requestPath, "/api/mcpConnections/")):
+			mcpConnectionHandler.ServeHTTP(w, r)
 		case strings.HasPrefix(requestPath, "/api/v1/"):
 			removedAPIVersionHandler(false).ServeHTTP(w, r)
 		case strings.HasPrefix(requestPath, "/memos.api.v1."):

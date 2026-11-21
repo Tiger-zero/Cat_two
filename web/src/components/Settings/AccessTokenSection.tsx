@@ -1,7 +1,7 @@
 import { timestampDate } from "@bufbuild/protobuf/wkt";
-import { Button, Collapsible, List, Tooltip } from "@usememos/ui";
+import { Button, Collapsible, List, Separator, Tooltip } from "@usememos/ui";
 import copy from "copy-to-clipboard";
-import { CopyIcon, ExternalLinkIcon, KeyRoundIcon, PlusIcon, ScissorsIcon, Trash2Icon } from "lucide-react";
+import { ExternalLinkIcon, KeyRoundIcon, PlusIcon, ScissorsIcon, Trash2Icon } from "lucide-react";
 import { useEffect, useState } from "react";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import RelativeTime from "@/components/RelativeTime";
@@ -15,69 +15,19 @@ import { showErrorToast, toast } from "@/lib/toast";
 import { CreatePersonalAccessTokenResponse, PersonalAccessToken } from "@/types/proto/api/user_service_pb";
 import { useTranslate } from "@/utils/i18n";
 import CreateAccessTokenDialog from "../CreateAccessTokenDialog";
+import CopyableSettingValue from "./CopyableSettingValue";
+import MCPConnectionSection from "./MCPConnectionSection";
 import SettingSection from "./SettingSection";
 
 const EXPIRING_SOON_MS = 30 * 24 * 60 * 60 * 1000;
 
-const CopyableValue = ({ label, value }: { label: string; value: string }) => {
-  const t = useTranslate();
-  const copyLabel = t("setting.access-token.copy-value", { label });
-
-  return (
-    <div className="min-w-0">
-      <div className="mu-label-sm text-mu-text-secondary">{label}</div>
-      <div className="relative mt-1 rounded-mu-lg border border-mu-line/60 bg-mu-well/30">
-        <pre className="overflow-x-auto p-3 pe-12 font-mono mu-caption text-mu-text/85" dir="ltr">
-          <code>{value}</code>
-        </pre>
-        <Tooltip.Root>
-          <Tooltip.Trigger
-            render={
-              <Button
-                variant="ghost"
-                className="absolute top-1.5 end-1.5"
-                aria-label={copyLabel}
-                onClick={async () => {
-                  if (await copy(value)) {
-                    toast.add({ title: t("message.copied"), type: "success" });
-                  } else {
-                    showErrorToast(t("setting.access-token.copy-failed"));
-                  }
-                }}
-                icon={<CopyIcon />}
-              />
-            }
-          />
-          <Tooltip.Popup>{copyLabel}</Tooltip.Popup>
-        </Tooltip.Root>
-      </div>
-    </div>
-  );
-};
-
 const shellQuote = (value: string) => `'${value.replaceAll("'", "'\\''")}'`;
 
-const ConnectorExamples = () => {
+const RESTConnectorExamples = ({ baseUrl }: { baseUrl: string }) => {
   const t = useTranslate();
-  const { profile } = useInstance();
-  const baseUrl = profile.instanceUrl || window.location.origin;
-  const mcpUrl = `${baseUrl}/mcp`;
   const apiUrl = `${baseUrl}/api`;
   const memosUrl = shellQuote(`${apiUrl}/memos`);
   const authHeader = shellQuote("Authorization: Bearer <YOUR_PAT>");
-  const mcpConfig = JSON.stringify(
-    {
-      mcpServers: {
-        "cat-two": {
-          type: "http",
-          url: mcpUrl,
-          headers: { Authorization: "Bearer <YOUR_PAT>" },
-        },
-      },
-    },
-    null,
-    2,
-  );
   const readExample = [`curl -fsS ${memosUrl}`, `  -H ${authHeader}`].join(" \\\n");
   const writeExample = [
     `curl -fsS -X POST ${memosUrl}`,
@@ -87,21 +37,15 @@ const ConnectorExamples = () => {
   ].join(" \\\n");
 
   return (
-    <div className="grid gap-5 lg:grid-cols-2">
-      <section className="flex min-w-0 flex-col gap-3">
-        <h2 className="mu-label text-mu-text">MCP</h2>
-        <p className="mu-body text-mu-text-secondary">{t("setting.access-token.mcp-description")}</p>
-        <CopyableValue label={t("setting.access-token.mcp-url")} value={mcpUrl} />
-        <CopyableValue label={t("setting.access-token.mcp-config")} value={mcpConfig} />
-      </section>
-      <section className="flex min-w-0 flex-col gap-3">
-        <h2 className="mu-label text-mu-text">REST API</h2>
-        <p className="mu-body text-mu-text-secondary">{t("setting.access-token.api-description")}</p>
-        <CopyableValue label={t("setting.access-token.api-url")} value={apiUrl} />
-        <CopyableValue label={t("setting.access-token.api-list-notes")} value={readExample} />
-        <CopyableValue label={t("setting.access-token.api-create-note")} value={writeExample} />
-      </section>
-    </div>
+    <section className="flex min-w-0 flex-col gap-3">
+      <h3 className="mu-label text-mu-text">REST API</h3>
+      <p className="mu-body text-mu-text-secondary">{t("setting.access-token.api-description")}</p>
+      <CopyableSettingValue label={t("setting.access-token.api-url")} value={apiUrl} />
+      <div className="grid gap-3 lg:grid-cols-2">
+        <CopyableSettingValue label={t("setting.access-token.api-list-notes")} value={readExample} />
+        <CopyableSettingValue label={t("setting.access-token.api-create-note")} value={writeExample} />
+      </div>
+    </section>
   );
 };
 
@@ -260,6 +204,8 @@ const TokenRow = ({ token, onDelete }: { token: PersonalAccessToken; onDelete: (
 const AccessTokenSection = () => {
   const t = useTranslate();
   const currentUser = useCurrentUser();
+  const { profile } = useInstance();
+  const baseUrl = (profile.instanceUrl || window.location.origin).replace(/\/+$/, "");
   const [personalAccessTokens, setPersonalAccessTokens] = useState<PersonalAccessToken[]>([]);
   const createTokenDialog = useDialog();
   const [deleteTarget, setDeleteTarget] = useState<PersonalAccessToken | undefined>(undefined);
@@ -310,7 +256,8 @@ const AccessTokenSection = () => {
 
   return (
     <SettingSection title={t("setting.access-token.label")} description={t("setting.access-token.integration-description")}>
-      <ConnectorExamples />
+      {currentUser?.name && <MCPConnectionSection key={currentUser.name} account={currentUser.name} serverURL={`${baseUrl}/mcp`} />}
+      <Separator className="my-0" />
       <div className="flex min-w-0 flex-col gap-3">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
@@ -333,6 +280,7 @@ const AccessTokenSection = () => {
             ))}
           </List.Root>
         )}
+        <RESTConnectorExamples baseUrl={baseUrl} />
       </div>
 
       {/* Create Access Token Dialog */}

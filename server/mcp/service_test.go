@@ -18,6 +18,7 @@ import (
 	"github.com/usememos/memos/internal/httphandler"
 	"github.com/usememos/memos/internal/profile"
 	memosproto "github.com/usememos/memos/proto"
+	"github.com/usememos/memos/store"
 )
 
 func TestIsAllowedMCPOrigin(t *testing.T) {
@@ -48,7 +49,7 @@ func TestIsAllowedMCPOrigin(t *testing.T) {
 func TestNewMCPServiceRegistersCuratedTools(t *testing.T) {
 	mux := http.NewServeMux()
 
-	service, err := NewMCPService(&profile.Profile{Version: "test-version"}, mux)
+	service, err := NewMCPService(&profile.Profile{Version: "test-version"}, mux, nil)
 	require.NoError(t, err)
 	require.NotNil(t, service.handler)
 	require.Len(t, service.operationsByTool, len(curatedOperationIDs))
@@ -61,7 +62,7 @@ func TestNewMCPServiceRegistersCuratedTools(t *testing.T) {
 }
 
 func TestPersonalMCPCatalogOmitsSpaces(t *testing.T) {
-	service, err := NewMCPService(&profile.Profile{Personal: true}, http.NewServeMux())
+	service, err := NewMCPService(&profile.Profile{Personal: true}, http.NewServeMux(), &store.Store{})
 	require.NoError(t, err)
 	require.Contains(t, service.operationsByTool, "memo_list_memos")
 	for _, operation := range service.operationsByTool {
@@ -72,7 +73,7 @@ func TestPersonalMCPCatalogOmitsSpaces(t *testing.T) {
 func TestNewMCPServiceUsesEmbeddedOpenAPISpec(t *testing.T) {
 	t.Chdir(t.TempDir())
 
-	service, err := NewMCPService(&profile.Profile{Version: "test-version"}, http.NewServeMux())
+	service, err := NewMCPService(&profile.Profile{Version: "test-version"}, http.NewServeMux(), nil)
 	require.NoError(t, err)
 	require.NotNil(t, service.handler)
 	require.Len(t, service.operationsByTool, len(curatedOperationIDs))
@@ -172,7 +173,7 @@ func TestMCPToolCallForwardsClientAddress(t *testing.T) {
 				seen = clientip.FromContext(r.Context())
 				return httphandler.JSON(w, http.StatusOK, map[string]any{"memos": []any{}})
 			}))
-			service, err := NewMCPService(&profile.Profile{Version: "test-version"}, handler)
+			service, err := NewMCPService(&profile.Profile{Version: "test-version"}, handler, nil)
 			require.NoError(t, err)
 			service.RegisterRoutes(mux)
 			initializeMCP(t, handler)
@@ -317,7 +318,7 @@ func TestMCPToolCallBindsSpaceResourcesFromPath(t *testing.T) {
 				return httphandler.JSON(w, http.StatusOK, test.response)
 			}))
 
-			service, err := NewMCPService(&profile.Profile{Version: "test-version"}, mux)
+			service, err := NewMCPService(&profile.Profile{Version: "test-version"}, mux, nil)
 			require.NoError(t, err)
 			service.RegisterRoutes(mux)
 
@@ -344,7 +345,7 @@ func TestMCPToolCallBindsSpaceResourcesFromPath(t *testing.T) {
 func TestMCPProtocolListsCuratedToolsOnly(t *testing.T) {
 	mux := http.NewServeMux()
 
-	service, err := NewMCPService(&profile.Profile{Version: "test-version"}, mux)
+	service, err := NewMCPService(&profile.Profile{Version: "test-version"}, mux, nil)
 	require.NoError(t, err)
 	service.RegisterRoutes(mux)
 
@@ -385,7 +386,7 @@ func TestMCPToolCallReturnsObjectStructuredContent(t *testing.T) {
 		})
 	}))
 
-	service, err := NewMCPService(&profile.Profile{Version: "test-version"}, mux)
+	service, err := NewMCPService(&profile.Profile{Version: "test-version"}, mux, nil)
 	require.NoError(t, err)
 	service.RegisterRoutes(mux)
 
@@ -426,7 +427,7 @@ func TestMCPToolCallAllowsGatewayToInferMemoUpdateMask(t *testing.T) {
 		})
 	}))
 
-	service, err := NewMCPService(&profile.Profile{Version: "test-version"}, mux)
+	service, err := NewMCPService(&profile.Profile{Version: "test-version"}, mux, nil)
 	require.NoError(t, err)
 	service.RegisterRoutes(mux)
 
@@ -512,7 +513,7 @@ func TestMCPToolCallBindsMemoFromPathForBodyStarOperations(t *testing.T) {
 				return httphandler.JSON(w, http.StatusOK, test.response)
 			})
 
-			service, err := NewMCPService(&profile.Profile{Version: "test-version"}, mux)
+			service, err := NewMCPService(&profile.Profile{Version: "test-version"}, mux, nil)
 			require.NoError(t, err)
 			service.RegisterRoutes(mux)
 
@@ -550,7 +551,7 @@ func TestMCPToolCallRejectsInvalidArguments(t *testing.T) {
 		return httphandler.JSON(w, http.StatusOK, map[string]any{"name": r.PathValue("memo")})
 	}))
 
-	service, err := NewMCPService(&profile.Profile{Version: "test-version"}, mux)
+	service, err := NewMCPService(&profile.Profile{Version: "test-version"}, mux, nil)
 	require.NoError(t, err)
 	service.RegisterRoutes(mux)
 
@@ -619,7 +620,7 @@ func TestMCPToolCallRejectsInvalidArguments(t *testing.T) {
 // allowlist still rejects disallowed origins.
 func TestMCPLoopbackBehindReverseProxy(t *testing.T) {
 	mux := http.NewServeMux()
-	service, err := NewMCPService(&profile.Profile{Version: "test-version"}, mux)
+	service, err := NewMCPService(&profile.Profile{Version: "test-version"}, mux, nil)
 	require.NoError(t, err)
 	service.RegisterRoutes(mux)
 
@@ -707,7 +708,7 @@ func TestMCPStatelessProtocol2026(t *testing.T) {
 		forwardedAuthorization = r.Header.Get("Authorization")
 		return httphandler.JSON(w, http.StatusOK, map[string]any{"memos": []any{}})
 	}))
-	service, err := NewMCPService(&profile.Profile{Version: "test-version"}, mux)
+	service, err := NewMCPService(&profile.Profile{Version: "test-version"}, mux, nil)
 	require.NoError(t, err)
 	service.RegisterRoutes(mux)
 
@@ -770,7 +771,7 @@ func TestMCPStatelessProtocol2026(t *testing.T) {
 // required by 2026-07-28: no GET stream, no DELETE session teardown.
 func TestMCPStatelessRejectsSessionMethods(t *testing.T) {
 	mux := http.NewServeMux()
-	service, err := NewMCPService(&profile.Profile{Version: "test-version"}, mux)
+	service, err := NewMCPService(&profile.Profile{Version: "test-version"}, mux, nil)
 	require.NoError(t, err)
 	service.RegisterRoutes(mux)
 
@@ -796,7 +797,7 @@ func TestMCPRequestBodyLimitMatchesAPI(t *testing.T) {
 		receivedBytes = len(content)
 		return httphandler.JSON(w, http.StatusOK, map[string]any{"name": "attachments/1"})
 	}))
-	service, err := NewMCPService(&profile.Profile{Version: "test-version"}, mux)
+	service, err := NewMCPService(&profile.Profile{Version: "test-version"}, mux, nil)
 	require.NoError(t, err)
 	service.RegisterRoutes(mux)
 
