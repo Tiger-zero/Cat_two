@@ -61,8 +61,7 @@ jobs:
         run: |
           case "${{ matrix.test-group }}" in
             store)
-              # Run all database targets (SQLite, MySQL, MariaDB, PostgreSQL).
-              DRIVER= go test -v -coverprofile=coverage.out -covermode=atomic ./store/...
+              go test -v -coverprofile=coverage.out -covermode=atomic ./store/...
               ;;
             server)
               # Includes ./server/test, which boots the real server via

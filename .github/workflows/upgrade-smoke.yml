@@ -1,6 +1,6 @@
 name: Upgrade Smoke
 
-# Verifies that a Memos instance carrying real data upgrades cleanly from the
+# Verifies that a SQLite instance carrying real data upgrades cleanly from the
 # previous stable release to the current build, and that a fresh install still
 # starts. These tiers need Docker and take minutes, so they run for relevant
 # pull requests and before releases rather than on every backend change.
@@ -45,24 +45,8 @@ concurrency:
 
 jobs:
   migration-upgrade:
-    name: Upgrade from previous stable (${{ matrix.target }})
+    name: Upgrade from previous stable (sqlite)
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - target: sqlite
-            driver: sqlite
-            mysql-variant: ""
-          - target: mysql
-            driver: mysql
-            mysql-variant: mysql
-          - target: mariadb
-            driver: mysql
-            mysql-variant: mariadb
-          - target: postgres
-            driver: postgres
-            mysql-variant: ""
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
@@ -79,8 +63,7 @@ jobs:
         run: |
           go test -v -timeout 30m -run 'TestMigration|TestUpgrade|TestFreshInstall' ./store/test/...
         env:
-          DRIVER: ${{ matrix.driver }}
-          MYSQL_VARIANT: ${{ matrix.mysql-variant }}
+          DRIVER: sqlite
 
   release-smoke:
     if: github.repository == 'usememos/memos'

@@ -9,7 +9,7 @@ Cat_two is a self-hosted personal note-taking app based on Fumos and Memos.
 
 - Backend: Go 1.27.4, net/http, Connect RPC, gRPC-Gateway, Protocol Buffers.
 - Frontend: React 19, TypeScript 7, Vite 8, Tailwind CSS v4, `@usememos/ui` on Base UI, React Query v5.
-- Storage: SQLite, MySQL, PostgreSQL; MariaDB 11.4.13 compatibility is tested through the MySQL driver.
+- Storage: SQLite for Cat_two deployment and routine verification. MySQL, MariaDB and PostgreSQL compatibility suites are opt-in.
 - Generated API outputs: `proto/gen/` for Go/OpenAPI, `web/src/types/proto/` for TypeScript.
 
 ## Working Rules
@@ -40,9 +40,8 @@ Run from the repository root unless a command starts with `cd`.
 # Backend
 go run -buildvcs=true ./cmd/memos --port 8081 # Start backend with commit-derived CalVer
 go run -buildvcs=true ./cmd/memos config plan --data DIR --config-dir DIR # Declarative configuration: also validate, apply, state
-go test ./...                      # Run all Go tests
-go test -v ./store/...             # Store tests, including DB drivers via TestContainers
-DRIVER=mysql MYSQL_VARIANT=mariadb go test -v ./store/test/... # MariaDB compatibility tests
+go test ./...                      # Run all Go packages with SQLite as the default database target
+go test -v ./store/...             # SQLite store and migration tests
 go test -v -race ./server/...      # Server tests with race detector
 go test -v -race ./internal/...    # Internal package tests with race detector
 go test -v -run TestFoo ./core/... # Run matching Go tests in one tree
@@ -154,8 +153,8 @@ Black-box service tests live in `server/api/test/`, unit tests next to the code.
 
 ## Database And Proto Rules
 
-- Prefer MySQL SQL and metadata checks shared with MariaDB when correctness, performance, and maintainability are preserved.
-  Keep MariaDB on the MySQL driver and dialect; verify shared SQL changes against both database targets.
+- Prefer shared MySQL and MariaDB SQL when it preserves correctness, performance and maintainability. See the
+  [opt-in compatibility commands](store/test/README.md) when a task calls for verification on those drivers.
 - Schema changes require SQLite, MySQL, and PostgreSQL migrations plus `LATEST.sql` updates.
 - Fresh-install SQL and incremental migrations must stay equivalent.
 - Proto field changes must preserve compatibility unless the task explicitly allows a breaking API change. Record every
@@ -165,6 +164,7 @@ Black-box service tests live in `server/api/test/`, unit tests next to the code.
 ## Verification Policy
 
 - Run the narrowest relevant checks while iterating.
+- Routine database verification uses SQLite. Run other database suites when the task explicitly calls for compatibility checks.
 - Before finishing, run the checks that match the changed surface from "Change Routing".
 - For docs-only changes, `git diff --check` is sufficient unless the docs include runnable examples that should be tested.
 - If a required check cannot run locally, report the reason and the exact command that remains.
@@ -183,6 +183,7 @@ Black-box service tests live in `server/api/test/`, unit tests next to the code.
   (pnpm from `web/package.json`, Node 24, `pnpm install`); change versions there, not per workflow.
 - Backend CI: Go 1.27.4, `go mod tidy`, `go fix -diff ./...`, golangci-lint v2.14.0 (including goimports), test groups
   `store`, `server`, `internal`, `other` (`cmd`, `core`, `markdown`, `filter`, `provider`, `proto`).
+- Backend Tests and Upgrade Smoke use SQLite for database integration and migration checks.
 - Frontend CI: Node 24, pnpm 11.0.1, `pnpm lint`, `pnpm test`, `pnpm build`.
 - Proto CI: `buf lint` and `buf format` check.
 - Docker: `scripts/Dockerfile`, Alpine 3.21 runtime, non-root app process, port 5230. Cat_two publishes amd64 and arm64.
