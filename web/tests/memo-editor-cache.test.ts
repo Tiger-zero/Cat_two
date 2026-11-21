@@ -113,7 +113,7 @@ describe("memo editor cache", () => {
   });
 
   it("keeps the cursor for the next editor mount", () => {
-    const key = cacheService.key("users/steven", "global-memo-editor");
+    const key = cacheService.key("users/steven", "new:home");
 
     const selection = { anchor: { block: 1, offset: 9 }, focus: { block: 1, offset: 9 } };
     cacheService.saveCursor(key, selection, "rich");
@@ -124,7 +124,7 @@ describe("memo editor cache", () => {
   });
 
   it("drops a cursor taken in the other editor mode", () => {
-    const key = cacheService.key("users/steven", "global-memo-editor");
+    const key = cacheService.key("users/steven", "new:home");
 
     // Source mode is one block of Markdown, so its offsets mean nothing to rich mode.
     cacheService.saveCursor(key, { anchor: { block: 0, offset: 42 }, focus: { block: 0, offset: 42 } }, "source");

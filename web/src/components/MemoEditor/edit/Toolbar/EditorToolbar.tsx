@@ -16,7 +16,7 @@ export const EditorToolbar: FC<EditorToolbarProps> = ({
   memoName,
   parentMemoName,
   onAudioRecorderClick,
-  viewToggles,
+  onToggleFocusMode,
   sourceMode,
   onInsertImages,
   onDrawingClick,
@@ -84,7 +84,7 @@ export const EditorToolbar: FC<EditorToolbarProps> = ({
           isSaving={isSaving || isRestoringDraft}
           memoName={memoName}
           onAudioRecorderClick={onAudioRecorderClick}
-          viewToggles={viewToggles}
+          onToggleFocusMode={onToggleFocusMode}
           sourceMode={sourceMode}
           onInsertImages={onInsertImages}
           onDrawingClick={onDrawingClick}

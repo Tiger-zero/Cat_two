@@ -197,7 +197,6 @@
       "invalid-link-address": "请输入有效的链接地址。",
       "link-not-applied": "无法在当前位置添加链接。"
     },
-    "new-memo": "新建备忘录",
     "no-changes-detected": "未检测到更改",
     "draft": {
       "storage-failed": "无法在本机保留草稿。请在离开页面前保存笔记。",

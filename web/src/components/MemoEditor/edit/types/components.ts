@@ -29,13 +29,6 @@ export interface EditSessionProps {
   /** A callback can decide whether focus is still appropriate after draft restoration. */
   autoFocus?: boolean | (() => boolean);
   /**
-   * Marks the instance as *hosted*: a host (the global composer dialog) presents
-   * the editor in the focus-mode layout and owns that frame. The editor mounts
-   * straight into focus mode, drops the view toggles that only make sense inline,
-   * and exits by calling this to dismiss the host rather than collapsing in place.
-   */
-  onFocusModeExit?: () => void;
-  /**
    * Reports inline focus-mode changes. A host reacts to the editor taking over
    * the viewport, e.g. the memo grid untraps its tile so the fixed focus-mode
    * surface is not contained by a transformed ancestor.
@@ -51,8 +44,6 @@ export interface EditSessionProps {
   defaultCreateTime?: Date;
   onConfirm?: (memoName: string) => void;
   onCancel?: () => void;
-  /** Reports save activity so external presentations can prevent dismissal mid-transaction. */
-  onSavingChange?: (isSaving: boolean) => void;
 }
 
 export interface EditorContentProps {
@@ -61,14 +52,6 @@ export interface EditorContentProps {
   /** Invoked by the in-editor save shortcut (Cmd/Ctrl+Enter). */
   onSubmit: () => void;
   onFiles: (files: File[], origin: EditorFileOrigin) => void;
-}
-
-/**
- * The ＋ menu's view toggles. They change how the editor presents itself
- * inline, so a hosted editor omits the whole group.
- */
-export interface EditorViewToggles {
-  onToggleFocusMode: () => void;
 }
 
 /** The composer's source-mode switch: a checked item in the ＋ menu. The text itself shows the mode. */
@@ -85,7 +68,7 @@ export interface EditorToolbarProps {
   /** Set when the editor composes a comment on this memo; picks the commit verb. */
   parentMemoName?: string;
   onAudioRecorderClick: () => void;
-  viewToggles?: EditorViewToggles;
+  onToggleFocusMode: () => void;
   sourceMode: EditorSourceModeToggle;
   onInsertImages: (files: File[]) => void;
   /** Opens the drawing sheet for a new drawing. */
@@ -117,8 +100,6 @@ export interface FocusModeOverlayProps {
 }
 
 export interface FocusModeExitButtonProps {
-  /** "minimize" collapses inline focus mode back into the page; "close" dismisses a host-owned frame. */
-  action: "minimize" | "close";
   onExit: () => void;
 }
 
@@ -127,7 +108,7 @@ export interface InsertMenuProps {
   isSaving?: boolean;
   memoName?: string;
   onAudioRecorderClick?: () => void;
-  viewToggles?: EditorViewToggles;
+  onToggleFocusMode: () => void;
   sourceMode: EditorSourceModeToggle;
   onInsertImages: (files: File[]) => void;
   onDrawingClick?: () => void;

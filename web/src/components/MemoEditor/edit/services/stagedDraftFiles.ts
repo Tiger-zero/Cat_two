@@ -67,6 +67,25 @@ export function loadStagedDraftFiles(key: string): Promise<StagedDraftFiles | un
   });
 }
 
+/** Checks draft keys in priority order without loading their files into memory. */
+export function findFirstStagedDraftKey(keys: readonly string[]): Promise<string | undefined> {
+  return transact("readonly", (store, complete) => {
+    const check = (index: number) => {
+      const key = keys[index];
+      if (key === undefined) {
+        complete(undefined);
+        return;
+      }
+      const request = store.count(key);
+      request.onsuccess = () => {
+        if (request.result > 0) complete(key);
+        else check(index + 1);
+      };
+    };
+    check(0);
+  });
+}
+
 export function writeStagedDraftFiles(key: string, expected: string | null, draft?: StagedDraftFiles): Promise<boolean> {
   return transact("readwrite", (store, complete) => {
     const request: IDBRequest<StagedDraftFiles | undefined> = store.get(key);

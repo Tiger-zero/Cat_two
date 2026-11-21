@@ -1,14 +1,5 @@
 import { Button, Drawer, Tooltip } from "@usememos/ui";
-import {
-  ArrowRightIcon,
-  CalendarDaysIcon,
-  type LucideIcon,
-  MenuIcon,
-  SearchIcon,
-  SquarePenIcon,
-  Trash2Icon,
-  UserRoundIcon,
-} from "lucide-react";
+import { ArrowRightIcon, CalendarDaysIcon, type LucideIcon, MenuIcon, SearchIcon, Trash2Icon, UserRoundIcon } from "lucide-react";
 import { useRef } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { MemoDetailSidebar } from "@/components/MemoDetailSidebar";
@@ -17,7 +8,6 @@ import { DEFAULT_SETTING_SECTION, SETTINGS_SECTIONS } from "@/components/Setting
 import StatisticsView from "@/components/StatisticsView";
 import { useAppSidebar } from "@/contexts/AppSidebarContext";
 import { useAuth } from "@/contexts/AuthContext";
-import { useGlobalMemoEditor } from "@/contexts/GlobalMemoEditorContext";
 import { useInstance } from "@/contexts/InstanceContext";
 import useCurrentUser from "@/hooks/useCurrentUser";
 import { useFilteredMemoStats } from "@/hooks/useFilteredMemoStats";
@@ -41,20 +31,6 @@ import {
 import TagsSection from "./TagsSection";
 import ThemeToggle from "./ThemeToggle";
 import ViewsSection from "./ViewsSection";
-
-const NewMemoAction = ({ onClick }: { onClick: () => void }) => {
-  const t = useTranslate();
-  const label = t("editor.new-memo");
-
-  return (
-    <Tooltip.Root>
-      <Tooltip.Trigger
-        render={<Button variant="neutral" onClick={onClick} aria-label={label} data-new-memo-trigger icon={<SquarePenIcon />} />}
-      />
-      <Tooltip.Popup side="bottom">{label}</Tooltip.Popup>
-    </Tooltip.Root>
-  );
-};
 
 const CollectionSidebarContent = ({ context, desktop }: { context: "home" | "archived"; desktop: boolean }) => {
   const t = useTranslate();
@@ -253,7 +229,6 @@ const AppSidebar = ({ className, mobile = false }: { className?: string; mobile?
   const routeKind = getSidebarRouteKind(pathname);
   const desktopCollection = !mobile && (routeKind === "home" || routeKind === "archived");
   const { setMobileOpen } = useAppSidebar();
-  const { canOpen: canCompose, openEditor } = useGlobalMemoEditor();
   return (
     <aside
       className={cn(
@@ -264,10 +239,7 @@ const AppSidebar = ({ className, mobile = false }: { className?: string; mobile?
     >
       <div data-sidebar-header className={cn("flex h-13 shrink-0 items-center justify-between gap-2", SIDEBAR_RAIL_CLASSES)}>
         <AccountMenu className="min-w-0" size="header" />
-        <div className="flex shrink-0 items-center gap-1">
-          {!mobile && <ThemeToggle />}
-          {canCompose && <NewMemoAction onClick={openEditor} />}
-        </div>
+        {!mobile && <ThemeToggle />}
       </div>
       <GlobalNavigation />
       <div className={cn("mx-3 border-t border-mu-line/70", desktopCollection ? "mt-3" : "mt-2")} />
@@ -328,13 +300,7 @@ export const MobileAppHeader = () => {
       <Tooltip.Root>
         <Tooltip.Trigger
           render={
-            <Button
-              variant="ghost"
-              onClick={() => setMobileOpen(true)}
-              aria-label={t("common.open-navigation")}
-              data-mobile-navigation-trigger
-              icon={<MenuIcon />}
-            />
+            <Button variant="ghost" onClick={() => setMobileOpen(true)} aria-label={t("common.open-navigation")} icon={<MenuIcon />} />
           }
         />
         <Tooltip.Popup side="bottom">{t("common.open-navigation")}</Tooltip.Popup>

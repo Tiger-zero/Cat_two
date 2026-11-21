@@ -4,8 +4,6 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { TimelineViewProvider } from "@/contexts/ViewContext";
 import RootLayout from "@/layouts/RootLayout";
 
-vi.mock("@/hooks/useMemoSuggestions", () => ({ useMemoSuggestions: () => [] }));
-
 const authState = vi.hoisted(() => ({ currentUser: { name: "users/test" } as { name: string } | undefined }));
 const instanceState = vi.hoisted(() => ({ accessMode: 2, instanceUrl: "https://example.com", demo: true }));
 
@@ -19,19 +17,8 @@ vi.mock("@/components/AppSidebar", () => ({
   useSidebarWidth: () => ({ width: 256, minWidth: 192, maxWidth: 384, setWidth: vi.fn() }),
 }));
 
-// Keep the actual GlobalMemoEditorContext to verify that its useAppSidebar()
-// call resolves inside RootLayout's AppSidebarProvider.
-vi.mock("@/contexts/AuthContext", () => ({
-  useAuth: () => ({ isUserSettingsInitialized: true }),
-}));
-
 vi.mock("@/contexts/InstanceContext", () => ({
   useInstance: () => ({ profile: instanceState }),
-}));
-
-vi.mock("@/contexts/SpaceContext", () => ({
-  SpaceProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
-  useSpaceContext: () => ({ selectedSpaceName: undefined }),
 }));
 
 vi.mock("@/hooks/useCurrentUser", () => ({
@@ -61,14 +48,14 @@ const RouteState = () => {
   );
 };
 
-describe("RootLayout global editor shell", () => {
+describe("RootLayout shell", () => {
   beforeEach(() => {
     authState.currentUser = { name: "users/test" };
     instanceState.accessMode = 2;
     localStorage.removeItem("memos-view-setting");
   });
 
-  it("mounts the composer provider inside the sidebar provider and keeps the shell across routes", () => {
+  it("keeps navigation and search available across routes", () => {
     render(
       <MemoryRouter initialEntries={["/setting"]}>
         <TimelineViewProvider>
@@ -85,9 +72,6 @@ describe("RootLayout global editor shell", () => {
     for (const testId of SHELL_TEST_IDS) {
       expect(screen.getByTestId(testId)).toBeInTheDocument();
     }
-    // The composer stays closed until something calls openEditor.
-    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-
     fireEvent.click(screen.getByRole("button", { name: "Open inbox" }));
 
     expect(screen.getByTestId("route")).toHaveTextContent("/inbox");

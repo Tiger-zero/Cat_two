@@ -36,6 +36,7 @@ Code blocks use lazy-loaded `@pierre/highlights` tokens as editor decorations, w
 - **Reads are by name.** `useMemoByName` (`hooks/useMemoQueries.ts`) returns the freshest copy of the memo any query holds (a list, a comment page, the calendar month, a detail, a shared memo) and fetches the detail only when nothing holds it. A card in a list therefore costs no request beyond the list's, follows the list's refetches, and never refetches on its own.
 - **Writes are mutations.** A ticked task, a save and a new memo go through `useUpdateMemo` and `useCreateMemo`, which patch and refresh every query holding the memo, so the saved text shows wherever the memo is on the page as soon as the server answers.
 - **Drafts stay in the current browser.** `edit/draftKey.ts` scopes memo edits, replies and new notes by account and subject. `initialEditorState` restores text and saved attachment references from localStorage. A recovered edit must match the memo's saved revision. `useStagedDraftFiles` restores files awaiting upload from IndexedDB and recreates their preview URLs. Writes and removal compare the last observed snapshot to detect changes from another tab. Successful saves and cancellation of an existing edit clear the session's draft when its snapshot still matches.
+- **Home restores drafts in priority order.** Its own draft comes first. On a fresh mount with an empty Home draft, the composer can open a draft from the former sidebar editor for the current account. The saved text and pending files for that draft use their original key.
 - **Calendar defaults follow the selected Shanghai day.** Manual create and update times survive filter changes and refreshes for that day. Changing or clearing the date filter resets the defaults for the new selection.
 
 ## The editing session
@@ -93,11 +94,10 @@ image preparation, original bytes/order, active Chinese text at export, desktop/
 
 Hosts of a new top-level memo pass `useMemoSuggestions()` into `suggestions`; edits and comments show none. `EditorSuggestions` hides until the draft has text, drops suggestions already satisfied or accepted, and shows at most three. Acceptance history lives in the store so Undo does not immediately resuggest, and clears with the draft.
 
-### Presentation: in a card, inline, hosted
+### Presentation in a card or inline
 
 - **In a card** (`frameless`): the card is the frame, so the session has no background, border or padding of its own outside focus mode. `MemoView` flips its body into the session by name and keeps its header, frame and reactions mounted.
 - **Inline** (Home, panels): the session brings its own frame. The ＋ menu offers focus mode, which expands it over the page; the exit button minimizes it back.
-- **Hosted** (`onFocusModeExit`): a host presents the session full-screen and owns that frame (`contexts/GlobalMemoEditorContext.tsx`). It mounts straight into focus mode and exits by calling back to dismiss the host.
 
 Focus mode is a sheet narrower than the page (`max-w-3xl`): its header, text and footer share one left edge, and the text is set larger (`MEMO_FOCUS_EDITOR_THEME`). Its header row shows only the memo's time on the left, as `TimestampPopover`: the time control once the memo has one (an edit, or a new memo dated from the calendar), otherwise "Now" in the viewer's language. The button that leaves the frame is on the right.
 

@@ -1,4 +1,4 @@
-import { type ReactNode, Suspense, useState } from "react";
+import { type ReactNode, Suspense, useEffect, useState } from "react";
 import useCurrentUser from "@/hooks/useCurrentUser";
 import { useMemoByName, useUpdateMemo } from "@/hooks/useMemoQueries";
 import type { MemoSuggestion } from "@/lib/memo-suggestions";
@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils";
 import { lazyWithReload } from "@/utils/lazy";
 import { canManageMemo } from "@/utils/user";
 import { COMPOSER_PANEL_CLASSES } from "./edit/constants";
-import { draftKeyFor, type MemoEditIdentity, migrateLegacyDraft } from "./edit/draftKey";
+import { draftKeyFor, type MemoEditIdentity, migrateLegacyDraft, resolveHomeDraftKey } from "./edit/draftKey";
 import { initialEditorState } from "./edit/initialState";
 import { cacheService } from "./edit/services/cacheService";
 import { EditorProvider } from "./edit/state";
@@ -72,19 +72,11 @@ export interface MemoEditingProps {
   frameless?: boolean;
   /** Leads the timestamp row, before the time: the card's creator while it edits in place. */
   timestampLead?: ReactNode;
-  /**
-   * Marks the instance as hosted: a host (the global composer dialog) presents the
-   * editor in the focus-mode layout and owns that frame. The editor mounts straight
-   * into focus mode and exits by calling this to dismiss the host.
-   */
-  onFocusModeExit?: () => void;
   /** Reports inline focus-mode changes, for a host whose layout must let the editor take the viewport. */
   onFocusModeChange?: (isFocusMode: boolean) => void;
   onConfirm?: (memoName: string) => void;
   /** Offers Cancel; without it the session has no way out but saving, as the Home composer. */
   onCancel?: () => void;
-  /** Reports save activity so a host can keep itself open mid-transaction. */
-  onSavingChange?: (isSaving: boolean) => void;
 }
 
 /** Editing an existing memo by name. */
@@ -176,6 +168,7 @@ const MemoEditorDraft = ({ draft, ...editing }: MemoEditorDraftProps) => {
         identity={identity}
         parentMemoName={draft.parent}
         defaultCreateTime={draft.createTime}
+        fallback={fallback}
         {...editing}
       />
     </Suspense>
@@ -190,12 +183,36 @@ interface EditingSessionProps extends MemoEditingProps {
   defaultCreateTime?: Date;
 }
 
+const isHomeDraft = (identity: MemoEditIdentity) => identity.kind === "new" && identity.scope === "home" && !identity.space;
+
 /** Remount the draft store if either its subject or its account changes. */
-const EditingSession = (props: EditingSessionProps) => {
+const EditingSession = ({ fallback, ...props }: EditingSessionProps & { fallback?: ReactNode }) => {
   const currentUser = useCurrentUser();
   const username = currentUser?.name ?? "";
   const draftKey = cacheService.key(username, draftKeyFor(props.identity));
+  if (isHomeDraft(props.identity)) {
+    return <HomeDraftSession key={draftKey} draftKey={draftKey} username={username} fallback={fallback} {...props} />;
+  }
   return <DraftEditingSession key={draftKey} draftKey={draftKey} username={username} {...props} />;
+};
+
+type DraftEditingSessionProps = EditingSessionProps & { draftKey: string; username: string };
+
+const HomeDraftSession = ({ fallback, ...props }: DraftEditingSessionProps & { fallback?: ReactNode }) => {
+  const { draftKey, username } = props;
+  const [selectedKey, setSelectedKey] = useState(() => (cacheService.readRaw(draftKey) === null ? undefined : draftKey));
+  useEffect(() => {
+    if (selectedKey !== undefined) return;
+    let active = true;
+    void resolveHomeDraftKey(username).then((key) => {
+      if (active) setSelectedKey(key);
+    });
+    return () => {
+      active = false;
+    };
+  }, [selectedKey, username]);
+
+  return selectedKey === undefined ? fallback : <DraftEditingSession {...props} draftKey={selectedKey} />;
 };
 
 const DraftEditingSession = ({
@@ -206,16 +223,14 @@ const DraftEditingSession = ({
   draftKey,
   username,
   ...editing
-}: EditingSessionProps & { draftKey: string; username: string }) => {
+}: DraftEditingSessionProps) => {
   const [{ initialState, initialDraftRaw }] = useState(() => {
-    migrateLegacyDraft(username, identity);
+    if (!isHomeDraft(identity)) migrateLegacyDraft(username, identity);
     const rawDraft = cacheService.readRaw(draftKey);
     const initialState = initialEditorState({
       memo,
       draftKey,
       rawDraft,
-      // A hosted editor starts in focus mode and stays there.
-      initialFocusMode: Boolean(editing.onFocusModeExit),
       defaultCreateTime,
     });
     // Initialization can remove a legacy edit draft that cannot be restored.

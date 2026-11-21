@@ -6,7 +6,6 @@ export type {
   EditorMetadataProps,
   EditorSourceModeToggle,
   EditorToolbarProps,
-  EditorViewToggles,
   EditSessionProps,
   FocusModeExitButtonProps,
   FocusModeOverlayProps,

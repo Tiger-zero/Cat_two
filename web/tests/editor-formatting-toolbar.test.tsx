@@ -27,6 +27,7 @@ function setup(markdown: string, isSourceMode = false) {
         onSave={vi.fn()}
         sourceMode={sourceMode}
         onAudioRecorderClick={vi.fn()}
+        onToggleFocusMode={vi.fn()}
         onInsertImages={vi.fn()}
       />
     </EditorProvider>,

@@ -9,7 +9,6 @@ export interface InitialEditorStateOptions {
   memo?: Memo;
   /** The persisted draft's key, including the current account. */
   draftKey: string;
-  initialFocusMode?: boolean;
   defaultCreateTime?: Date;
   rawDraft?: string | null;
 }
@@ -22,12 +21,11 @@ export interface InitialEditorStateOptions {
 export function initialEditorState({
   memo,
   draftKey,
-  initialFocusMode = false,
   defaultCreateTime,
   rawDraft = cacheService.readRaw(draftKey),
 }: InitialEditorStateOptions): EditorState {
   const base = {
-    ...createInitialState(initialFocusMode),
+    ...createInitialState(),
     ...(memo ? memoService.fromMemo(memo) : undefined),
     calendarDefault: defaultCreateTime,
   };

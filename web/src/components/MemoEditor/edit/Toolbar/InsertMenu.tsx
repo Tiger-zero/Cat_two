@@ -14,7 +14,7 @@ const InsertMenu = (props: InsertMenuProps) => {
   const t = useTranslate();
   const { actions, dispatch, getState } = useEditorContext();
   const relations = useEditorSelector((s) => s.metadata.relations);
-  const { viewToggles, sourceMode, isUploading: isUploadingProp } = props;
+  const { onToggleFocusMode, sourceMode, isUploading: isUploadingProp } = props;
 
   const [linkDialogOpen, setLinkDialogOpen] = useState(false);
   const inlineImageInputRef = useRef<HTMLInputElement>(null);
@@ -98,16 +98,11 @@ const InsertMenu = (props: InsertMenuProps) => {
               {item.label}
             </Menu.Item>
           ))}
-          {/* How the composer presents itself. Focus mode is absent when a host owns the
-              editor's presentation; Markdown mode (the editor's source mode) only changes how
-              the text is edited, so every composer has it. Checked while on.
-              The code glyph says this mode shows the markup. */}
+          {/* Focus mode expands the editor. Markdown mode changes how the text is edited. */}
           <Menu.Separator />
-          {viewToggles && (
-            <Menu.Item onClick={viewToggles.onToggleFocusMode} icon={<Maximize2Icon />}>
-              {t("editor.focus-mode")}
-            </Menu.Item>
-          )}
+          <Menu.Item onClick={onToggleFocusMode} icon={<Maximize2Icon />}>
+            {t("editor.focus-mode")}
+          </Menu.Item>
           <Menu.CheckboxItem checked={sourceMode.isSourceMode} onCheckedChange={sourceMode.onToggle} closeOnClick icon={<CodeXmlIcon />}>
             {t("editor.markdown-mode")}
           </Menu.CheckboxItem>

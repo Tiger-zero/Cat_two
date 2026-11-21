@@ -111,11 +111,11 @@ describe("the initial draft and useMemoInit", () => {
     cacheService.saveNow(draftKey, { content: "stale draft", attachments: [] });
     const memo = create(MemoSchema, { name: "memos/one", content: "The memo", visibility: Visibility.PUBLIC, space: "spaces/work" });
 
-    const state = initialEditorState({ memo, draftKey, initialFocusMode: true });
+    const state = initialEditorState({ memo, draftKey });
 
     expect(state.content).toBe("The memo");
     expect(state.metadata.space).toBe("spaces/work");
-    expect(state.ui.isFocusMode).toBe(true);
+    expect(state.ui.isFocusMode).toBe(false);
     expect(cacheService.loadDraft(draftKey).content).toBe("");
   });
 

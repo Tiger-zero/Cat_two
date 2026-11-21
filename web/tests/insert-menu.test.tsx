@@ -20,21 +20,17 @@ beforeAll(() => {
   Element.prototype.releasePointerCapture = vi.fn();
 });
 
-const viewToggles = {
-  onToggleFocusMode: vi.fn(),
-};
-
+const onToggleFocusMode = vi.fn();
 const richMode = { isSourceMode: false, onToggle: vi.fn() };
 
-/** `hosted` mirrors an editor whose presentation belongs to a host (the global composer). */
-const renderMenu = (onInsertImages = vi.fn(), isSaving = false, hosted = false, sourceMode = richMode) =>
+const renderMenu = (onInsertImages = vi.fn(), isSaving = false, sourceMode = richMode) =>
   render(
     <EditorProvider>
       <InsertMenu
         isSaving={isSaving}
         onInsertImages={onInsertImages}
         onAudioRecorderClick={vi.fn()}
-        viewToggles={hosted ? undefined : viewToggles}
+        onToggleFocusMode={onToggleFocusMode}
         sourceMode={sourceMode}
       />
     </EditorProvider>,
@@ -55,21 +51,13 @@ describe("InsertMenu", () => {
       "editor.insert-menu.link-memo",
       "editor.focus-mode",
     ]);
-  });
-
-  test("drops focus mode but keeps source mode when a host owns the editor's presentation", () => {
-    renderMenu(vi.fn(), false, true);
-
-    fireEvent.click(screen.getByRole("button", { name: "common.add" }));
-
-    const labels = screen.getAllByRole("menuitem").map((item) => item.textContent);
-    expect(labels).not.toContain("editor.focus-mode");
-    expect(screen.getByRole("menuitemcheckbox", { name: "editor.markdown-mode" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("menuitem", { name: "editor.focus-mode" }));
+    expect(onToggleFocusMode).toHaveBeenCalledOnce();
   });
 
   test.each([false, true])("shows source mode as a checkbox item that toggles it (on: %s)", (isSourceMode) => {
     const onToggle = vi.fn();
-    renderMenu(vi.fn(), false, false, { isSourceMode, onToggle });
+    renderMenu(vi.fn(), false, { isSourceMode, onToggle });
 
     fireEvent.click(screen.getByRole("button", { name: "common.add" }));
     const item = screen.getByRole("menuitemcheckbox", { name: "editor.markdown-mode" });
@@ -127,7 +115,7 @@ describe("InsertMenu", () => {
           editorRef={{ current: null }}
           onSave={vi.fn()}
           onAudioRecorderClick={vi.fn()}
-          viewToggles={viewToggles}
+          onToggleFocusMode={onToggleFocusMode}
           sourceMode={richMode}
           onInsertImages={vi.fn()}
         />

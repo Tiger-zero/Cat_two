@@ -24,6 +24,7 @@ const Toolbar = ({ memoName, parentMemoName }: { memoName?: string; parentMemoNa
       memoName={memoName}
       parentMemoName={parentMemoName}
       onAudioRecorderClick={vi.fn()}
+      onToggleFocusMode={vi.fn()}
       sourceMode={{ isSourceMode: false, onToggle: vi.fn() }}
       onInsertImages={vi.fn()}
     />

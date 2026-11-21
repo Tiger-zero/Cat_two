@@ -10,7 +10,6 @@ import AppSidebar, {
   useSidebarWidth,
 } from "@/components/AppSidebar";
 import { AppSidebarProvider } from "@/contexts/AppSidebarContext";
-import { GlobalMemoEditorProvider } from "@/contexts/GlobalMemoEditorContext";
 import { useInstance } from "@/contexts/InstanceContext";
 import { MemoFilterProvider, useMemoFilterContext } from "@/contexts/MemoFilterContext";
 import { useView } from "@/contexts/ViewContext";
@@ -112,9 +111,7 @@ const RootLayoutContent = () => {
 const RootLayout = () => (
   <MemoFilterProvider>
     <AppSidebarProvider>
-      <GlobalMemoEditorProvider>
-        <RootLayoutContent />
-      </GlobalMemoEditorProvider>
+      <RootLayoutContent />
     </AppSidebarProvider>
   </MemoFilterProvider>
 );

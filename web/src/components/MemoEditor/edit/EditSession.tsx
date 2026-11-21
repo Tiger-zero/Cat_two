@@ -28,16 +28,14 @@ import { useStagedDraftFiles } from "./hooks/useStagedDraftFiles";
 import { cacheService } from "./services";
 import { useEditorContext, useEditorSelector } from "./state";
 import { EditorToolbar } from "./Toolbar";
-import type { EditorViewToggles, EditSessionProps } from "./types";
+import type { EditSessionProps } from "./types";
 import type { EditorController, EditorPosition } from "./types/editorController";
 
 /**
  * An editing session over the draft store MemoEditor provides: the editor with the
  * composer's chrome around it (timestamp, attachments, suggestions, toolbar, focus
  * mode, audio recording), the draft persisted while it is open, and the save that
- * writes the memo through the memo mutations. A host that presents the editor
- * full-screen supplies `onFocusModeExit`; its presence is what makes an instance
- * hosted, so focus mode starts on and stays on.
+ * writes the memo through the memo mutations.
  */
 export const EditSession: React.FC<EditSessionProps> = ({
   className,
@@ -50,13 +48,11 @@ export const EditSession: React.FC<EditSessionProps> = ({
   parentMemoName,
   suggestions = [],
   autoFocus,
-  onFocusModeExit,
   onFocusModeChange,
   placeholder,
   defaultCreateTime,
   onConfirm,
   onCancel,
-  onSavingChange,
 }) => {
   const t = useTranslate();
   const { userGeneralSetting } = useAuth();
@@ -70,7 +66,6 @@ export const EditSession: React.FC<EditSessionProps> = ({
   useEffect(() => {
     onFocusModeChange?.(isFocusMode);
   }, [isFocusMode, onFocusModeChange]);
-  const isSaving = useEditorSelector((s) => s.ui.isLoading.saving);
   const hasTimestamp = useEditorSelector((s) => Boolean(s.timestamps.createTime));
   const [isAudioRecorderOpen, setIsAudioRecorderOpen] = useState(false);
   const [isComposerExpanded, setIsComposerExpanded] = useState(false);
@@ -96,9 +91,6 @@ export const EditSession: React.FC<EditSessionProps> = ({
   const sourceMode = { isSourceMode, onToggle: () => setEditorMode(isSourceMode ? "rich" : "source") };
 
   const { isInitialized } = useMemoInit({ editorRef, draftKey, autoFocus, mode: editorMode });
-  useEffect(() => {
-    onSavingChange?.(isSaving);
-  }, [isSaving, onSavingChange]);
 
   const reportDraftStorageError = useCallback(() => showErrorToast(t("editor.draft.storage-failed")), [t]);
   const {
@@ -208,14 +200,7 @@ export const EditSession: React.FC<EditSessionProps> = ({
     }
   }, [draftKey, editorMode]);
 
-  // Hosted: focus mode is the host's frame, so leaving it dismisses the host.
-  // Inline: focus mode is a view this editor owns and toggles in place.
   const handleToggleFocusMode = () => {
-    if (onFocusModeExit) {
-      rememberCursor();
-      onFocusModeExit();
-      return;
-    }
     animateFocusMode(() => {
       setIsComposerExpanded(false);
       dispatch(actions.toggleFocusMode());
@@ -299,14 +284,6 @@ export const EditSession: React.FC<EditSessionProps> = ({
     setIsAudioRecorderOpen(false);
   };
 
-  // The ＋ menu's view toggle only describes how an inline editor presents
-  // itself, so a hosted editor does not offer it: its host owns the frame.
-  const viewToggles: EditorViewToggles | undefined = onFocusModeExit
-    ? undefined
-    : {
-        onToggleFocusMode: handleToggleFocusMode,
-      };
-
   const handleSave = useMemoSave({
     memoName,
     parentMemoName,
@@ -349,14 +326,14 @@ export const EditSession: React.FC<EditSessionProps> = ({
         )}
       >
         {/* Focus mode always shows the memo's time ("Now" before it has one) and adds
-            the button that leaves the current frame — minimize inline, close when hosted. */}
+            the button that minimizes it back into the page. */}
         {(showTimestamp || isFocusMode) && (
           <div className={cn("flex w-full items-center gap-1.5", isFocusMode ? "h-10" : "h-6")}>
             {timestampLead}
             <TimestampPopover />
             {isFocusMode && (
               <div className="ms-auto -me-2">
-                <FocusModeExitButton action={onFocusModeExit ? "close" : "minimize"} onExit={handleToggleFocusMode} />
+                <FocusModeExitButton onExit={handleToggleFocusMode} />
               </div>
             )}
           </div>
@@ -400,7 +377,7 @@ export const EditSession: React.FC<EditSessionProps> = ({
             memoName={memoName}
             parentMemoName={parentMemoName}
             onAudioRecorderClick={handleAudioRecorderClick}
-            viewToggles={viewToggles}
+            onToggleFocusMode={handleToggleFocusMode}
             sourceMode={sourceMode}
             onInsertImages={handleInsertImages}
             onDrawingClick={drawing.openNew}

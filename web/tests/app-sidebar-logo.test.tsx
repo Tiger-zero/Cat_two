@@ -14,10 +14,6 @@ const sidebarState = vi.hoisted(() => ({
   setMobileOpen: vi.fn(),
   setQuickFindOpen: vi.fn(),
 }));
-const globalEditorState = vi.hoisted(() => ({
-  canOpen: true,
-  openEditor: vi.fn(),
-}));
 const filteredStatsHook = vi.hoisted(() => vi.fn());
 const tagsSectionHook = vi.hoisted(() => vi.fn());
 
@@ -61,10 +57,6 @@ vi.mock("@/contexts/AppSidebarContext", () => ({
 
 vi.mock("@/contexts/AuthContext", () => ({
   useAuth: () => ({ isInitialized: true }),
-}));
-
-vi.mock("@/contexts/GlobalMemoEditorContext", () => ({
-  useGlobalMemoEditor: () => globalEditorState,
 }));
 
 vi.mock("@/contexts/InstanceContext", () => ({
@@ -147,8 +139,6 @@ describe("App sidebar", () => {
     sidebarState.mobileOpen = false;
     sidebarState.setMobileOpen.mockClear();
     sidebarState.setQuickFindOpen.mockClear();
-    globalEditorState.canOpen = true;
-    globalEditorState.openEditor.mockClear();
     filteredStatsHook.mockClear();
     tagsSectionHook.mockClear();
   });
@@ -164,7 +154,7 @@ describe("App sidebar", () => {
     expect(screen.getByRole("link", { name: "common.calendar" }).querySelector(".lucide-calendar-days")).not.toBeNull();
   });
 
-  it("shows the account trigger and opens the global memo editor", () => {
+  it("shows the account and theme controls and opens search from navigation", () => {
     render(
       <MemoryRouter initialEntries={["/setting"]}>
         <AppSidebar />
@@ -173,7 +163,6 @@ describe("App sidebar", () => {
 
     const account = screen.getByRole("button", { name: "common.account-menu: test" });
     const header = account.closest("[data-sidebar-header]");
-    const compose = screen.getByRole("button", { name: "editor.new-memo" });
     const primaryNavigation = screen.getByRole("navigation", { name: "common.primary-navigation" });
     const search = within(primaryNavigation).getByRole("button", { name: "common.search" });
 
@@ -185,8 +174,7 @@ describe("App sidebar", () => {
     expect(account.querySelector(".lucide-chevrons-up-down")).not.toBeNull();
     expect(account.querySelector(".lucide-chevron-down")).toBeNull();
     expect(header).toContainElement(screen.getByRole("button", { name: /setting.preference.theme-(dark|light)/ }));
-    expect(compose).toHaveClass("mu-button", "mu-button-neutral", "mu-button-icon", "mu-s-md");
-    expect(compose).not.toHaveClass("rounded-full");
+    expect(screen.queryByRole("button", { name: "editor.new-memo" })).not.toBeInTheDocument();
     expect(header).not.toContainElement(search);
     expect(search).toHaveClass("ms-auto", "h-(--mu-row-height)", "px-1.5");
     expect(search.querySelector(".lucide-search")).toHaveClass("mu-icon");
@@ -195,8 +183,6 @@ describe("App sidebar", () => {
     expect(sidebarState.setQuickFindOpen).toHaveBeenCalledWith(true);
     expect(sidebarState.setMobileOpen).toHaveBeenCalledWith(false);
 
-    fireEvent.click(compose);
-    expect(globalEditorState.openEditor).toHaveBeenCalledOnce();
     expect(within(primaryNavigation).getAllByRole("link")).toHaveLength(1);
     expect(screen.queryByText("Calendar")).not.toBeInTheDocument();
   });
@@ -239,21 +225,8 @@ describe("App sidebar", () => {
     expect(screen.getByRole("button", { name: "User menu" })).toBeInTheDocument();
   });
 
-  it("hides Compose when the composer reports it is not available", () => {
-    globalEditorState.canOpen = false;
-    render(
-      <MemoryRouter initialEntries={["/"]}>
-        <AppSidebar />
-      </MemoryRouter>,
-    );
-
-    expect(screen.queryByRole("button", { name: "editor.new-memo" })).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "common.search" })).toBeInTheDocument();
-  });
-
   it("shows the compact visitor navigation and sign-in link on an error page", () => {
     authState.currentUser = undefined;
-    globalEditorState.canOpen = false;
     render(
       <MemoryRouter initialEntries={["/404"]}>
         <AppSidebar />
@@ -280,7 +253,6 @@ describe("App sidebar", () => {
     expect(signIn).not.toHaveClass("rounded-mu-md");
     expect(signIn.closest("footer")).not.toBeNull();
     expect(screen.queryByRole("link", { name: "trash.title" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "editor.new-memo" })).not.toBeInTheDocument();
   });
 
   it.each(["/403", "/404", "/unknown", "/inbox", "/spaces/product"])("does not render collection controls on %s", (path) => {
@@ -438,7 +410,8 @@ describe("App sidebar", () => {
       </MemoryRouter>,
     );
 
-    expect(screen.getByRole("button", { name: "common.open-navigation" })).toHaveAttribute("data-mobile-navigation-trigger");
+    fireEvent.click(screen.getByRole("button", { name: "common.open-navigation" }));
+    expect(sidebarState.setMobileOpen).toHaveBeenCalledWith(true);
     const account = screen.getByRole("button", { name: "common.account-menu: test" });
     expect(account).toHaveClass("h-9", "gap-1.5", "px-1");
     expect(screen.getByRole("button", { name: /setting.preference.theme-(dark|light)/ })).toBeInTheDocument();
@@ -446,7 +419,7 @@ describe("App sidebar", () => {
     expect(screen.queryByRole("button", { name: "editor.new-memo" })).not.toBeInTheDocument();
   });
 
-  it("exposes Compose in the mobile navigation drawer", () => {
+  it("shows search and collection controls in the mobile navigation drawer", () => {
     sidebarState.mobileOpen = true;
     render(
       <MemoryRouter initialEntries={["/"]}>
@@ -458,8 +431,7 @@ describe("App sidebar", () => {
     expect(screen.queryByRole("button", { name: /setting.preference.theme-(dark|light)/ })).not.toBeInTheDocument();
     expect(screen.getByRole("region", { name: "common.statistics" }).parentElement).toHaveClass("gap-3");
     expect(screen.getByText("Tags").closest("[data-sidebar-collection-list]")).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "editor.new-memo" }));
-    expect(globalEditorState.openEditor).toHaveBeenCalledOnce();
+    expect(screen.queryByRole("button", { name: "editor.new-memo" })).not.toBeInTheDocument();
   });
 
   it("keeps an accessible Close control in the mobile navigation drawer", () => {
