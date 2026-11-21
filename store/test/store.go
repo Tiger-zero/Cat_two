@@ -37,27 +37,6 @@ func NewTestingStore(ctx context.Context, t *testing.T) *store.Store {
 	return store
 }
 
-// NewTestingStoreWithDSN creates a testing store connected to a specific DSN.
-// This is useful for testing migrations on existing data.
-func NewTestingStoreWithDSN(_ context.Context, t *testing.T, driver, dsn string) *store.Store {
-	profile := &profile.Profile{
-		Port:    getUnusedPort(),
-		Data:    t.TempDir(), // Dummy dir, DSN matters
-		DSN:     dsn,
-		Driver:  driver,
-		Version: version.GetCurrentVersion(),
-	}
-	dbDriver, err := db.NewDBDriver(profile)
-	if err != nil {
-		t.Fatalf("failed to create db driver: %v", err)
-	}
-
-	store := store.New(dbDriver, profile)
-	// Do not run Migrate() automatically, as we might be testing pre-migration state
-	// or want to run it manually.
-	return store
-}
-
 // createSpaceMemberForTest keeps fixtures concise while exercising the same
 // invitation and acceptance flow used by production code.
 func createSpaceMemberForTest(ctx context.Context, testStore *store.Store, create *store.SpaceMember, actorUserID int32) (*store.SpaceMember, error) {

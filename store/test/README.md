@@ -34,18 +34,5 @@ The routine `TestUpgradeFromCalendarRelease` uses local store fixtures for month
 changes. It checks data preservation, post-upgrade writes and restart behavior. The application version and database schema version
 advance independently.
 
-## Optional legacy Memos upgrades
-
-Run [Upgrade Smoke (legacy Memos)](../../.github/workflows/upgrade-smoke.yml) manually in GitHub Actions, or run this command with Docker.
-
-```bash
-LEGACY_MEMOS_UPGRADE_TESTS=1 DRIVER=sqlite go test -v -count=1 -timeout 30m \
-  -run '^TestUpgrade(FromBaselineRelease|ThroughBaselineRelease)$' ./store/test/...
-```
-
-The tests run released Memos binaries against temporary databases. The optional driver selectors above also apply to local runs.
-
-- Before `v0.31.0`: `TestUpgradeThroughBaselineRelease` initializes a database with released `0.30.0`, verifies the current
-  migrator refuses a direct upgrade without modifying data or settings, then upgrades through released `0.31.0` to current.
-- From `v0.31.0`: `TestUpgradeFromBaselineRelease` initializes a database with released `0.31.0`, then checks preservation of
-  the account, memo, saved View, and access mode, post-upgrade writes, and reopening the database after upgrade.
+To verify a container upgrade with an isolated volume, pass the previous Cat_two image to the
+[container smoke script](../../scripts/release_smoke_test.sh) with `--previous-image`.

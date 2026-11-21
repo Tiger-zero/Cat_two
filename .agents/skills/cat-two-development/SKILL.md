@@ -27,7 +27,7 @@ Cat_two 面向单人自托管。新实例在首次设置时创建一个管理员
 
 1. 确认目标提交、工作区与部署版本。仓库源码描述的是拟交付功能，NAS 实际运行版本可查 `/api/instance/profile` 的 `version` 和 `commit`。在隔离数据库或容器卷测试写入、删除、恢复和迁移。
 2. 界面从 [页面路由](../../../web/src/router/index.tsx)、[编辑器](../../../web/src/components/MemoEditor/README.md) 和 [查询 hooks](../../../web/src/hooks/) 入手。用现有设计系统核对简中、英语、浅色、深色和窄屏。统一按 `Asia/Shanghai` 处理日历和按日筛选。网页改动按需运行 `pnpm lint`、`pnpm test` 与 `pnpm build`。
-3. 服务端从 [API](../../../server/api/)、[业务规则](../../../core/) 追到 [Store](../../../store/doc.go) 和 [数据模型](../../../proto/)。默认验证使用 SQLite，覆盖新建数据库、增量迁移和 CalVer 升级用例。旧版 Memos 镜像和其他数据库驱动用于按需兼容测试。API 定义修改走生成流程。 [存储测试命令](../../../store/test/README.md)
+3. 服务端从 [API](../../../server/api/)、[业务规则](../../../core/) 追到 [Store](../../../store/doc.go) 和 [数据模型](../../../proto/)。按 Cat_two 单账户 SQLite 部署验证新建数据库、增量迁移和 CalVer 升级用例。API 定义修改走生成流程。 [存储测试命令](../../../store/test/README.md)
 4. 访问控制覆盖账户本人、匿名请求及隔离测试中的旧账号数据。改动登录、附件或 MCP 时，核对令牌或会话过期、撤销后下一次请求、数据归属及既有内容读取。服务端可按改动范围运行 `go test -race ./server/...` 及对应存储测试。
 5. 按实际入口走一遍关联流程。笔记编辑核对日历到保存、刷新后显示及附件下载。导入导出核对 ZIP 内的正文、附件、标签和引用。MCP 核对工具发现、分页、上海日期边界和调用范围。改变用户可见行为时更新功能说明及相应验收项。
 
@@ -36,6 +36,7 @@ Cat_two 面向单人自托管。新实例在首次设置时创建一个管理员
 - 用户提出发布镜像时，按 [Cat_two Container](../../../.github/workflows/cat-two-container.yml) 工作流执行。Docker Hub 版本号按 `0.01` 递增，核对版本号、`latest` 和 `sha-<完整提交 SHA>`，以及 AMD64、ARM64 两种平台。 [编号实现](../../../scripts/cat_two_docker_release.py)
 - 普通提交按改动路径触发后端、前端、Proto 和容器检查。前端生产构建随容器验证运行。在 `main` 手动发布或通过 `[publish dockerhub]` 发布时执行完整构建。 [工作流](../../../.github/workflows/)
 - 分别用 Git、Actions、注册表和 NAS 实例证据确认源码推送、构建验证、镜像发布与实际升级。部署改动核对两份 Compose、`/healthz`、重建前后数据和附件可读写。历史发布证据见 [开发复盘](references/development-log.md)。
+- 冒烟脚本默认验证 Cat_two 新装及重建后的数据。用 `--previous-image` 指定实际的旧版 Cat_two 镜像，可在隔离卷中验证升级。 [冒烟脚本](../../../scripts/release_smoke_test.sh)
 
 ## 支持的内容格式
 
@@ -71,3 +72,4 @@ Cat_two 面向单人自托管。新实例在首次设置时创建一个管理员
 - **2026-11-21 22:20**　完成笔记时间、草稿、归档导入和回收站清理修复。搜索支持归档范围，SQLite 默认列表和 MCP 标签读取已优化。 [P1、P2 修复与验证](references/development-log.md#p1-与-p2-修复)
 - **2026-11-21 22:31**　将本地默认存储测试、后端 CI 和升级验证统一到 SQLite。默认存储全量、单项迁移筛选和工作流语法检查通过。 [存储测试命令](../../../store/test/README.md)
 - **2026-11-21 22:46**　按改动路径运行日常 CI，合并前端生产构建，移除 Codecov 和上游发布工作流。Stale 和旧版 Memos 升级改为手动运行。SQLite 全套、旧版升级、启动脚本和容器触发条件验证通过。 [工作流](../../../.github/workflows/) · [容器 CI](https://github.com/Tiger-zero/Cat_two/actions/runs/44915807863)
+- **2026-11-21 23:00**　关闭 Stale 及旧版 Memos 升级工作流，清理上游镜像测试和本地冒烟的自动旧镜像选择。SQLite 存储全套和 Cat_two 新装、重建及从 `0.06` 升级验证通过。 [存储测试](../../../store/test/README.md) · [冒烟脚本](../../../scripts/release_smoke_test.sh)

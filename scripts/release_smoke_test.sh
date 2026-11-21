@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 
-# Black-box smoke test for a Memos release image.
+# Black-box smoke test for a Cat_two image.
 #
-# By default, the script builds the current worktree as a local Docker image.
+# By default, the script builds the current worktree and checks a fresh install.
 # Pass --candidate-image to test an image that has already been built.
 
 set -Eeuo pipefail
@@ -19,14 +19,13 @@ usage() {
   cat <<'EOF'
 Usage: ./scripts/release_smoke_test.sh [options]
 
-Runs fresh-install and previous-stable upgrade smoke tests against a Memos
-Docker image. With no options, the current worktree is built and tested.
+Verifies a fresh Cat_two install and persistent data. Provide a previous
+Cat_two image to also verify an upgrade.
 
 Options:
   --candidate-image IMAGE  Test an existing image instead of building locally.
-  --previous-image IMAGE   Image used to seed the upgrade test. By default, the
-                           latest supported stable Git tag before HEAD is used.
-  --fresh-only             Verify a fresh install and persistent data without an upgrade.
+  --previous-image IMAGE   Cat_two image used to seed an optional upgrade test.
+  --fresh-only             Run fresh install and persistence checks regardless of the previous image.
   --keep-resources         Keep containers and volumes after the test for debugging.
   -h, --help               Show this help text.
 
@@ -38,8 +37,8 @@ Environment equivalents:
 Examples:
   ./scripts/release_smoke_test.sh
   ./scripts/release_smoke_test.sh \
-    --candidate-image memos-smoke:local \
-    --previous-image neosmemo/memos:0.31.0
+    --candidate-image cat-two:local \
+    --previous-image docker.io/tiger2896/cat_two:0.06
 EOF
 }
 
@@ -82,6 +81,10 @@ while (($# > 0)); do
       ;;
   esac
 done
+
+if [[ -z "$previous_image" ]]; then
+  fresh_only=1
+fi
 
 for command_name in curl docker git jq; do
   command -v "$command_name" >/dev/null 2>&1 || die "$command_name is required"
@@ -146,10 +149,6 @@ cleanup() {
   exit "$status"
 }
 trap cleanup EXIT
-
-detect_previous_image() {
-  bash "$SCRIPT_DIR/release_version.sh" previous-image "$REPO_ROOT"
-}
 
 build_local_candidate() {
   local commit_sha build_version image_tag
@@ -317,9 +316,6 @@ else
 fi
 
 if [[ "$fresh_only" == "0" ]]; then
-  if [[ -z "$previous_image" ]]; then
-    previous_image="$(detect_previous_image)"
-  fi
   ensure_image "$previous_image"
   [[ "$candidate_image" != "$previous_image" ]] || die "candidate and previous images must be different"
   log "Previous image:  $previous_image"

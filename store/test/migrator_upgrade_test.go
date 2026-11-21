@@ -2,8 +2,6 @@ package test
 
 import (
 	"context"
-	"fmt"
-	"os"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -15,49 +13,8 @@ import (
 	storedb "github.com/usememos/memos/store/db"
 )
 
-// TestUpgradeFromBaselineRelease tests a database initialized by v0.31.0
-// directly, independently of the pre-baseline intermediate upgrade test.
-func TestUpgradeFromBaselineRelease(t *testing.T) {
-	requireLegacyMemosUpgradeTest(t)
-
-	ctx := context.Background()
-	driver := getDriverFromEnv()
-	cfg, hostDSN := prepareUpgradeFixture(t, driver, "0.31.0")
-	container, err := StartMemosContainer(ctx, cfg)
-	require.NoError(t, err)
-	t.Cleanup(func() {
-		if container != nil {
-			_ = container.Terminate(ctx)
-		}
-	})
-	require.NoError(t, container.Terminate(ctx))
-	container = nil
-
-	previous := NewTestingStoreWithDSN(ctx, t, driver, hostDSN)
-	t.Cleanup(func() { _ = previous.Close() })
-	baseline, err := previous.GetInstanceBasicSetting(ctx)
-	require.NoError(t, err)
-	require.Equal(t, "0.31.8", baseline.SchemaVersion)
-
-	requireUpgradePreservesData(ctx, t, previous, &profile.Profile{
-		Data: t.TempDir(), DSN: hostDSN, Driver: driver, Version: "26.10.0",
-	})
-}
-
-func requireLegacyMemosUpgradeTest(t *testing.T) {
-	t.Helper()
-	if os.Getenv("LEGACY_MEMOS_UPGRADE_TESTS") != "1" {
-		t.Skip("set LEGACY_MEMOS_UPGRADE_TESTS=1 to run legacy Memos upgrade tests")
-	}
-	if testing.Short() {
-		t.Skip("skipping container-based upgrade test in short mode")
-	}
-	skipIfContainerProviderUnavailable(t)
-}
-
-// TestUpgradeFromCalendarRelease uses local store fixtures until a published
-// CalVer release is available. Application versions do not advance the schema:
-// only migrations do.
+// TestUpgradeFromCalendarRelease uses local store fixtures to verify that
+// schema versions advance independently of application versions.
 func TestUpgradeFromCalendarRelease(t *testing.T) {
 	for _, tc := range []struct{ previous, candidate string }{
 		{previous: "26.09.0", candidate: "26.10.0"},
@@ -99,8 +56,6 @@ func requireUpgradePreservesData(ctx context.Context, t *testing.T, previous *st
 		Payload: &storepb.MemoPayload{Tags: []string{"upgrade"}},
 	})
 	require.NoError(t, err)
-	// GetMemo selects columns added after the baseline. The create result
-	// has the assigned ID, timestamps and state for the post-migration check.
 	memo.Pinned = true
 	require.NoError(t, previous.UpdateMemo(ctx, &store.UpdateMemo{ID: memo.ID, Pinned: &memo.Pinned, UpdatedTs: &memo.UpdatedTs}))
 	view, err := previous.UpsertUserSetting(ctx, &storepb.UserSetting{
@@ -163,41 +118,4 @@ func requireUpgradePreservesData(ctx context.Context, t *testing.T, previous *st
 	require.NoError(t, err)
 	require.NotNil(t, persisted)
 	require.Equal(t, written.Content, persisted.Content, "post-upgrade writes must survive restart")
-}
-
-// prepareUpgradeFixture returns the container config needed to bootstrap a real
-// schema for the given Memos version, plus the DSN the host uses to reach it.
-func prepareUpgradeFixture(t *testing.T, driver, version string) (MemosContainerConfig, string) {
-	t.Helper()
-
-	switch driver {
-	case "sqlite":
-		dataDir := t.TempDir()
-		return MemosContainerConfig{
-			Version: version,
-			Driver:  driver,
-			DataDir: dataDir,
-		}, fmt.Sprintf("%s/memos_prod.db", dataDir)
-	case "mysql":
-		hostDSN := GetMySQLDSN(t)
-		containerDSN, err := getContainerDSN(driver, hostDSN)
-		require.NoError(t, err)
-		return MemosContainerConfig{
-			Version: version,
-			Driver:  driver,
-			DSN:     containerDSN,
-		}, hostDSN
-	case "postgres":
-		hostDSN := GetPostgresDSN(t)
-		containerDSN, err := getContainerDSN(driver, hostDSN)
-		require.NoError(t, err)
-		return MemosContainerConfig{
-			Version: version,
-			Driver:  driver,
-			DSN:     containerDSN,
-		}, hostDSN
-	default:
-		t.Fatalf("unsupported driver: %s", driver)
-		return MemosContainerConfig{}, ""
-	}
 }
