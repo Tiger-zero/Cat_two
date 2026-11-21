@@ -69,6 +69,7 @@ Cat_two 从 Fumos 和 Memos 衍生而来，以 `Tiger-zero/Cat_two` 的 `main` �
 ### 11 月 21 日 18:51
 
 - **发布前修复存储 CI**　升级数据库结构后，「未来版本」夹具仍写死为现在的 `26.11.4`，四种数据库均报断言错误。测试从当前嵌入版本计算下一修订，随以后的迁移更新。MySQL 同次出现账号清理语句的 `1615`，回滚失败事务后仅对此错误重试整个删除事务，保留其他错误的处理。 [失败日志](https://github.com/Tiger-zero/Cat_two/actions/runs/44895305239/job/136819563071) · [暂停的发布](https://github.com/Tiger-zero/Cat_two/actions/runs/44895938286)
+- **MySQL 发布复测**　全量测试并行迁移时，MySQL 删除账号主记录所用的预处理语句持续返回 `1615`，事务重试仍可耗尽。定位到最后一条带级联的删除后，只将这条固定 SQL 改为直接执行。唯一写入 SQL 的参数是已解码的整数账号 ID。完整 MySQL 套件以 8 个测试并发通过。 [第二次失败日志](https://github.com/Tiger-zero/Cat_two/actions/runs/44896373212/job/136822797176) · [暂停的发布](https://github.com/Tiger-zero/Cat_two/actions/runs/44896373037)
 
 ## 开发和验证
 

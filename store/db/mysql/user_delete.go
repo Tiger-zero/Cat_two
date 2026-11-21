@@ -3,6 +3,7 @@ package mysql
 import (
 	"context"
 	"database/sql"
+	"strconv"
 	"strings"
 	"time"
 
@@ -400,8 +401,11 @@ func deleteMemosTx(ctx context.Context, tx *sql.Tx, memoIDs []int32) error {
 }
 
 func deleteUserRowTx(ctx context.Context, tx *sql.Tx, userID int32) error {
-	_, err := tx.ExecContext(ctx, "DELETE FROM `user` WHERE id = "+deleteUserPlaceholder(1), userID)
-	return err
+	// Execute the cascading delete with MySQL's text protocol to avoid a
+	// prepared-statement invalidation in its foreign-key metadata. The
+	// predicate uses a typed ID formatted as a decimal integer.
+	_, err := tx.ExecContext(ctx, "DELETE FROM `user` WHERE id = "+strconv.FormatInt(int64(userID), 10))
+	return errors.Wrap(err, "failed to delete user row")
 }
 
 func deleteUserPlaceholder(_ int) string {
