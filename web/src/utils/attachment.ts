@@ -8,6 +8,11 @@ export const getAttachmentUrl = (attachment: Attachment) => {
   return `${window.location.origin}/file/${attachment.name}/${encodeURIComponent(attachment.filename)}`;
 };
 
+// The file server resolves the attachment by resource name. The suggested
+// download filename is separate from the request path.
+export const getAttachmentDownloadUrl = (attachment: Attachment) =>
+  attachment.externalLink || `${window.location.origin}/file/${attachment.name}`;
+
 /**
  * Downloads an attachment's original file (never the thumbnail) with the session's
  * credentials. Rejects when the server refuses it.

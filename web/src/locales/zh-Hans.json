@@ -68,6 +68,8 @@
     "deploy-link": "部署你的 Memos"
   },
   "attachment": {
+    "download-failed": "附件下载失败，请重试。",
+    "download-failed-status": "附件下载失败（HTTP {{status}}）。",
     "live": "实况"
   },
   "common": {

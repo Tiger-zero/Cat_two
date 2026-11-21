@@ -99,6 +99,8 @@
     "title": "Details"
   },
   "attachment": {
+    "download-failed": "Failed to download attachment. Please try again.",
+    "download-failed-status": "Failed to download attachment (HTTP {{status}}).",
     "live": "Live"
   },
   "common": {

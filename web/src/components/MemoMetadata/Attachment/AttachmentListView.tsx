@@ -1,14 +1,16 @@
 import { buttonClasses } from "@usememos/ui";
 import { DownloadIcon, ExternalLinkIcon, FileIcon, PlayIcon } from "lucide-react";
-import type { KeyboardEvent, PropsWithChildren } from "react";
+import type { KeyboardEvent, MouseEvent, PropsWithChildren } from "react";
 import { Suspense, useMemo, useState } from "react";
 import { DRAWING_PAPER, DrawingViewer, isDrawingFilename } from "@/components/DrawingSheet";
 import MotionPhotoPreview from "@/components/MotionPhotoPreview";
 import VideoPoster from "@/components/VideoPoster";
+import { AttachmentDownloadError, downloadAttachmentFile } from "@/lib/attachment-download";
+import { showErrorToast } from "@/lib/toast";
 import { cn } from "@/lib/utils";
 import type { Attachment } from "@/types/proto/api/attachment_service_pb";
 import type { Memo } from "@/types/proto/api/memo_service_pb";
-import { getAttachmentUrl, isImage } from "@/utils/attachment";
+import { getAttachmentDownloadUrl, getAttachmentUrl, isImage } from "@/utils/attachment";
 import { useTranslate } from "@/utils/i18n";
 import type { AttachmentVisualItem, PreviewMediaItem } from "@/utils/media-item";
 import { buildAttachmentVisualItems } from "@/utils/media-item";
@@ -340,6 +342,30 @@ const DocumentRow = ({ attachment }: { attachment: Attachment }) => {
   const t = useTranslate();
   const { fileTypeLabel, fileSizeLabel } = getAttachmentMetadata(attachment);
   const url = getAttachmentUrl(attachment);
+  const downloadUrl = getAttachmentDownloadUrl(attachment);
+  const [downloading, setDownloading] = useState(false);
+  const handleDownload = async (event: MouseEvent<HTMLAnchorElement>) => {
+    event.preventDefault();
+    if (downloading) return;
+    setDownloading(true);
+    try {
+      await downloadAttachmentFile(downloadUrl, attachment.filename);
+    } catch (error) {
+      showErrorToast(
+        error instanceof AttachmentDownloadError
+          ? t("attachment.download-failed-status", { status: error.status })
+          : t("attachment.download-failed"),
+      );
+    } finally {
+      setDownloading(false);
+    }
+  };
+  const downloadProps = {
+    href: downloadUrl,
+    download: attachment.filename,
+    onClick: attachment.externalLink ? undefined : handleDownload,
+    "aria-busy": downloading || undefined,
+  };
   const body = (
     <>
       <MetadataRowIconSlot icon={FileIcon} />
@@ -365,12 +391,7 @@ const DocumentRow = ({ attachment }: { attachment: Attachment }) => {
 
   if (!opensInline(attachment.type)) {
     return (
-      <a
-        href={url}
-        download={attachment.filename}
-        title={t("common.download-name", { name: attachment.filename })}
-        className={METADATA_ROW_CLASSES}
-      >
+      <a {...downloadProps} title={t("common.download-name", { name: attachment.filename })} className={METADATA_ROW_CLASSES}>
         {body}
         <DownloadIcon aria-hidden="true" className={METADATA_ROW_HINT_CLASSES} />
       </a>
@@ -390,8 +411,7 @@ const DocumentRow = ({ attachment }: { attachment: Attachment }) => {
       </a>
       <div className={METADATA_ROW_CONTROLS_CLASSES}>
         <a
-          href={url}
-          download={attachment.filename}
+          {...downloadProps}
           title={t("common.download")}
           aria-label={t("common.download-name", { name: attachment.filename })}
           className={buttonClasses({ variant: "ghost", size: "xs", iconOnly: true })}
