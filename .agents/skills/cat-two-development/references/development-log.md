@@ -1,5 +1,9 @@
 # Cat_two 开发记录
 
+## 2026-11-22（上海时间）
+
+00:28 发布 Docker Hub `0.07`。`0.07`、`latest` 和 `sha-da3bb55d5348c74d46db5514cceab6c8b4cec0ea` 共用 `sha256:6cc27f7ccd216a4e455a63cac1269e7a701a64792a2f05554244fd6451f57cb3`，AMD64 和 ARM64 均对应提交 `da3bb55d5`。发布工作流的容器检查及本地 AMD64 使用正式镜像的新装、重建和从 `0.06` 升级检查通过。 [发布](https://github.com/Tiger-zero/Cat_two/actions/runs/44924203110) · [Docker Hub](https://hub.docker.com/r/tiger2896/cat_two/tags?name=0.07)
+
 ## 2026-11-21（上海时间）
 
 本次复盘核对到 GitHub `main` 提交 `86dcec0ea`。Docker Hub 的 `latest` 指向 `0.06`，源码为 `53968a153`。
