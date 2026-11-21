@@ -16,7 +16,7 @@ import (
 )
 
 // CreateMemoShare is disabled because notes are private to their authors.
-func (s *APIService) CreateMemoShare(context.Context, *apipb.CreateMemoShareRequest) (*apipb.MemoShare, error) {
+func (*APIService) CreateMemoShare(context.Context, *apipb.CreateMemoShareRequest) (*apipb.MemoShare, error) {
 	return nil, status.Error(codes.FailedPrecondition, "memo sharing is disabled")
 }
 
@@ -108,7 +108,7 @@ func (s *APIService) DeleteMemoShare(ctx context.Context, request *apipb.DeleteM
 }
 
 // GetSharedMemo no longer grants access through a legacy share token.
-func (s *APIService) GetSharedMemo(context.Context, *apipb.GetSharedMemoRequest) (*apipb.Memo, error) {
+func (*APIService) GetSharedMemo(context.Context, *apipb.GetSharedMemoRequest) (*apipb.Memo, error) {
 	return nil, status.Error(codes.NotFound, "not found")
 }
 

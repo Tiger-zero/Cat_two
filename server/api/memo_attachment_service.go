@@ -437,8 +437,9 @@ func (s *APIService) managedAttachmentInstanceURL() (*url.URL, error) {
 }
 
 func absoluteManagedAttachmentUID(destination string, instanceURL *url.URL) (string, error) {
-	parsed, err := url.Parse(destination)
-	if err != nil || (!parsed.IsAbs() && parsed.Host == "") || !strings.HasPrefix(parsed.Path, managedAttachmentPathPrefix) {
+	// Unparseable destinations are outside the managed URL check.
+	parsed, _ := url.Parse(destination)
+	if parsed == nil || (!parsed.IsAbs() && parsed.Host == "") || !strings.HasPrefix(parsed.Path, managedAttachmentPathPrefix) {
 		return "", nil
 	}
 	if parsed.Scheme == "" && parsed.Host != "" {

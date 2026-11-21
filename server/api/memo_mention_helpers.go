@@ -65,7 +65,7 @@ func (s *APIService) resolveMentionContextFacts(ctx context.Context, memo *store
 	return facts, nil
 }
 
-func (s *APIService) canUserAccessMentionContext(facts *mentionContextFacts, target *store.User) bool {
+func (*APIService) canUserAccessMentionContext(facts *mentionContextFacts, target *store.User) bool {
 	if target == nil || facts == nil || facts.memo.Memo == nil {
 		return false
 	}

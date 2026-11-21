@@ -445,7 +445,6 @@ func TestServeAttachmentFile_CommentRequiresCommentOwner(t *testing.T) {
 	mux.ServeHTTP(recorder, newAuthenticatedFileRequest(ctx, t, svc, owner.ID, path))
 	require.Equal(t, http.StatusForbidden, recorder.Code)
 	require.NotContains(t, recorder.Body.String(), string(content))
-
 }
 
 func TestServeAttachmentFile_LocalStaticFileSupportsRangeRequests(t *testing.T) {

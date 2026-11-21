@@ -74,6 +74,8 @@ func (s *service) RewriteImageDestinations(content []byte, rewrite func(string) 
 				if len(node.Destination) > 0 {
 					images = append(images, node)
 				}
+			default:
+				// Only links and images can share a reference destination.
 			}
 		}
 		return ast.WalkContinue, nil
