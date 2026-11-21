@@ -204,6 +204,7 @@
     "footnotes": "Footnotes",
     "back-to-reference": "Back to reference",
     "format": {
+      "label": "Formatting",
       "paragraph": "Paragraph",
       "heading-1": "Heading 1",
       "heading-2": "Heading 2",

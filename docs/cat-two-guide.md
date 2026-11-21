@@ -11,8 +11,8 @@
 | 排序和来源 | 「全部笔记」菜单可按创建或更新时间升序、降序查看。侧栏的热度和日期筛选也使用所选时间类型。来源菜单可选「全部」「网页端」或「未记录」。 | [菜单](../web/src/components/MemoFeedMenu.tsx)、[排序](../web/src/hooks/useMemoSorting.ts)、[筛选](../web/src/hooks/useMemoFilters.ts) |
 | 搜索、标签和视图 | 搜索支持关键词和 CEL 表达式。侧栏默认按层级展示标签。点击一个目录会列出该路径及子路径下的笔记。标签与日期可以一起筛选，普通浏览条件可以从 URL 恢复，常用条件可以保存为视图。 | [搜索](../web/src/components/AppSidebar/QuickFindDialog.tsx)、[标签侧栏](../web/src/components/AppSidebar/TagsSection.tsx)、[筛选状态](../web/src/contexts/MemoFilterContext.tsx)、[视图管理](../web/src/pages/MemoViews.tsx)、[CEL 字段与语法](../filter/README.md) |
 | 标签整理 | 标签菜单支持置顶和编辑名称。置顶在当前浏览器按账户保存。重命名目录会移动它的子路径，改成已存在的标签时两边笔记合并。在「设置 → 标签」可手动整理斜杠两侧的空格，比如将 `#2027/ 08` 整理为 `#2027/08`。 | [标签接口](../server/api/memo_tag_routes.go)、[Markdown 解析](../markdown/) |
-| 编辑和草稿 | 支持富文本编辑、Markdown 源码模式、清单、代码、链接及专注编辑。新笔记草稿按账户和写作位置保存在当前浏览器。已有笔记在原卡片或详情页编辑，保存后服务端更新。 | [编辑器说明](../web/src/components/MemoEditor/README.md)、[保存流程](../web/src/components/MemoEditor/edit/hooks/useMemoSave.ts) |
-| 笔记内附件 | 从编辑器添加文件、图片、视频或音频，在笔记内预览和下载。部分图片支持涂画标注，媒体元数据可在偏好设置中开启。旧的独立附件库链接进入未找到页面。 | [附件编辑与显示](../web/src/components/MemoMetadata/Attachment/)、[上传 API](../server/api/attachment_upload.go)、[文件服务](../server/fileserver/) |
+| 编辑和草稿 | 工具栏提供加粗、无序列表、有序列表和代码块，富文本与 Markdown 源码模式都可使用。编辑器也支持清单、链接及专注编辑。新笔记草稿按账户和写作位置保存在当前浏览器。已有笔记在原卡片或详情页编辑，保存后服务端更新。 | [编辑器说明](../web/src/components/MemoEditor/README.md)、[保存流程](../web/src/components/MemoEditor/edit/hooks/useMemoSave.ts) |
+| 笔记内附件 | 点工具栏的回形针可选择图片、PDF、Word（`.doc`、`.docx`）、Excel（`.xls`、`.xlsx`）等文件。保存后，可以预览图片，也可以下载文档。只添加附件也能保存笔记。部分图片支持涂画标注，媒体元数据可在偏好设置中开启。 | [附件编辑与显示](../web/src/components/MemoMetadata/Attachment/)、[上传 API](../server/api/attachment_upload.go)、[文件服务](../server/fileserver/) |
 | 整理与详情 | 笔记可置顶、归档或移入回收站。详情页提供目录、笔记引用和评论，可对笔记加表情反应，也可将笔记导出为图片。归档列表按当前账户查阅。 | [卡片菜单](../web/src/components/MemoActionMenu/)、[详情页](../web/src/pages/MemoDetail.tsx)、[归档页](../web/src/pages/Archived.tsx) |
 | 回收站 | 从侧栏底部打开。只有笔记创建者能查看、恢复或彻底删除。恢复后笔记回到之前的列表或归档，附件和引用随笔记保留。到期 30 天后，服务端会定期彻底清理。 | [回收站页面](../web/src/pages/Trash.tsx)、[回收站接口](../server/api/memo_trash_handler.go)、[保留期限](../store/memo_trash.go) |
 | 个人工作区 | 所有自己的笔记统一在一个列表查阅。升级后会保留旧空间的笔记和关联数据。 | [首页](../web/src/pages/Home.tsx)、[访问规则](../core/access/memo.go) |
@@ -107,7 +107,7 @@ pnpm dev
 
 | 改动 | 核对方式 |
 | --- | --- |
-| 编辑、日历和界面 | 在 `web/` 执行 `pnpm lint`、`pnpm test`、`pnpm build`。在桌面和手机核对登录、写笔记、切换后返回历史日期、打开附件。 |
+| 编辑、日历和界面 | 在 `web/` 执行 `pnpm lint`、`pnpm test`、`pnpm build`。在桌面和手机核对常用格式按钮、富文本和源码切换、历史日期筛选，以及只添加附件的笔记能否保存和下载。 |
 | API、数据和迁移 | 在仓库根目录执行 `go test ./...`，按改动重点运行 `server/api/test`、`server/fileserver`、`core` 或 `store` 套件。用两个账户验证各自笔记和附件的读取权限。 |
 | 导入和导出 | 用带图片、标签和笔记引用的测试笔记导出 ZIP，再在独立实例里试导入。确认首次导入、跳过、覆盖和创建副本的结果，检查重复导入后的图片显示。 |
 | 回收站和标签整理 | 用两个账户验证回收站只显示自己的笔记，恢复后原状态和附件可用。准备两个同级标签和子标签，重命名其中一个到另一个后核对筛选结果，再整理带空格的标签路径。 |

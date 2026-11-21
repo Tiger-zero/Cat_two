@@ -96,10 +96,21 @@ describe("InsertMenu", () => {
     expect(onInsertImages).toHaveBeenCalledWith([image]);
   });
 
+  test("opens the general file picker from the toolbar paperclip", () => {
+    const { container } = renderMenu();
+    const attachmentInput = container.querySelector<HTMLInputElement>('input[type="file"][accept=""]')!;
+    const openPicker = vi.spyOn(attachmentInput, "click");
+
+    fireEvent.click(screen.getByRole("button", { name: "editor.insert-menu.add-attachment" }));
+
+    expect(openPicker).toHaveBeenCalledOnce();
+  });
+
   test("disables insertion controls while saving", () => {
     const { container } = renderMenu(vi.fn(), true);
 
     expect(screen.getByRole("button", { name: "common.add" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "editor.insert-menu.add-attachment" })).toBeDisabled();
     for (const input of container.querySelectorAll('input[type="file"]')) {
       expect(input).toBeDisabled();
     }
@@ -113,6 +124,7 @@ describe("InsertMenu", () => {
     render(
       <EditorProvider initialEditorState={state}>
         <EditorToolbar
+          editorRef={{ current: null }}
           onSave={vi.fn()}
           onAudioRecorderClick={vi.fn()}
           viewToggles={viewToggles}

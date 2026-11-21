@@ -54,6 +54,16 @@ var extensionMimeTypeFallbacks = map[string]string{
 	".heif": "image/heif",
 }
 
+// documentMimeTypes keeps common document types consistent on minimal systems
+// and when a browser supplies only a generic binary type.
+var documentMimeTypes = map[string]string{
+	".pdf":  "application/pdf",
+	".doc":  "application/msword",
+	".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+	".xls":  "application/vnd.ms-excel",
+	".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+}
+
 // detectAttachmentMimeType resolves the MIME type for an uploaded file that
 // arrived without a client-supplied type. It prefers the filename extension
 // (including the curated fallback above, which keeps the result identical on
@@ -61,6 +71,9 @@ var extensionMimeTypeFallbacks = map[string]string{
 // as a last resort.
 func detectAttachmentMimeType(filename string, content []byte) string {
 	ext := strings.ToLower(filepath.Ext(filename))
+	if mimeType, ok := documentMimeTypes[ext]; ok {
+		return mimeType
+	}
 	if mimeType, ok := extensionMimeTypeFallbacks[ext]; ok {
 		return mimeType
 	}
@@ -102,6 +115,11 @@ func (s *APIService) prepareAttachment(ctx context.Context, request *apipb.Creat
 	normalizedType, ok := normalizeMimeType(normalizedMimeType)
 	if !ok {
 		return nil, status.Errorf(codes.InvalidArgument, "invalid MIME type format")
+	}
+	if normalizedType == "application/octet-stream" {
+		if mimeType := documentMimeTypes[strings.ToLower(filepath.Ext(request.Attachment.Filename))]; mimeType != "" {
+			normalizedType = mimeType
+		}
 	}
 	request.Attachment.Type = normalizedType
 

@@ -264,7 +264,7 @@ const AttachmentRow: FC<{
   const detailParts = [
     actions.badge,
     audioMeta?.durationSeconds ? formatAudioTime(audioMeta.durationSeconds) : undefined,
-    getFileTypeLabel(mimeType),
+    getFileTypeLabel(mimeType, filename),
     size ? formatFileSize(size) : undefined,
   ];
 

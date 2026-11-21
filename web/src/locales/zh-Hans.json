@@ -170,6 +170,7 @@
     "focus-mode": "聚焦模式",
     "markdown-mode": "Markdown 模式",
     "format": {
+      "label": "格式",
       "paragraph": "正文",
       "heading-1": "一级标题",
       "heading-2": "二级标题",

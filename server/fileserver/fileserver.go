@@ -8,6 +8,7 @@ import (
 	"io"
 	"io/fs"
 	"log/slog"
+	"mime"
 	"net/http"
 	"net/url"
 	"os"
@@ -308,7 +309,7 @@ func (s *FileServerService) serveStaticFile(w http.ResponseWriter, r *http.Reque
 
 	// Force download for non-media files to prevent XSS execution.
 	if !strings.HasPrefix(contentType, "image/") && contentType != "application/pdf" {
-		w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", attachment.Filename))
+		w.Header().Set("Content-Disposition", mime.FormatMediaType("attachment", map[string]string{"filename": attachment.Filename}))
 	}
 
 	switch attachment.StorageType {

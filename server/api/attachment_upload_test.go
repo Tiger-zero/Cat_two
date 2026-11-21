@@ -125,6 +125,41 @@ func TestUploadAttachmentSingleCall(t *testing.T) {
 	require.Len(t, rows, 3)
 }
 
+func TestUploadAttachmentDocumentMimeTypes(t *testing.T) {
+	svc, ctx := newUploadTestService(t)
+	tests := []struct {
+		filename string
+		declared string
+		want     string
+	}{
+		{"手记.PDF", "application/octet-stream", "application/pdf"},
+		{"字稿.doc", "", "application/msword"},
+		{"字稿.DOCX", "application/octet-stream", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"},
+		{"账单.xls", "application/octet-stream", "application/vnd.ms-excel"},
+		{"账单.XLSX", "", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"},
+		{"报告.docx", "text/html", "text/html"},
+		{"文件.bin", "application/octet-stream", "application/octet-stream"},
+	}
+	content := []byte("document content")
+	for _, test := range tests {
+		t.Run(test.filename, func(t *testing.T) {
+			spec := uploadSpec(test.filename, int64(len(content)))
+			spec.Spec.Attachment.Type = test.declared
+			start, err := svc.UploadAttachment(ctx, &apipb.UploadAttachmentRequest{Upload: spec})
+			require.NoError(t, err)
+			end, err := svc.UploadAttachment(ctx, &apipb.UploadAttachmentRequest{
+				Upload: uploadID(start.UploadId), Data: content, FinishWrite: true,
+			})
+			require.NoError(t, err)
+			require.Equal(t, test.want, end.Attachment.Type)
+			require.Equal(t, test.filename, end.Attachment.Filename)
+			stored, err := svc.GetAttachment(ctx, &apipb.GetAttachmentRequest{Name: end.Attachment.Name})
+			require.NoError(t, err)
+			require.Equal(t, test.want, stored.Type)
+		})
+	}
+}
+
 func TestUploadAttachmentValidation(t *testing.T) {
 	svc, ctx := newUploadTestService(t)
 	_, err := svc.UploadAttachment(context.Background(), &apipb.UploadAttachmentRequest{})

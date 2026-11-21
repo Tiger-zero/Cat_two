@@ -16,7 +16,7 @@ describe("<AttachmentRows> document rows", () => {
     expect(open.hasAttribute("download")).toBe(false);
     const download = screen.getByLabelText("Download report.pdf");
     expect(download.tagName).toBe("A");
-    expect(download.hasAttribute("download")).toBe(true);
+    expect(download).toHaveAttribute("download", "report.pdf");
     expect(download.getAttribute("href")).toBe(open.getAttribute("href"));
   });
 
@@ -26,6 +26,22 @@ describe("<AttachmentRows> document rows", () => {
     const row = screen.getByTitle("Download notes.txt");
     expect(row.hasAttribute("download")).toBe(true);
     expect(row.hasAttribute("target")).toBe(false);
+    expect(screen.queryByTitle(/^Open /)).toBeNull();
+  });
+
+  it.each([
+    ["旧文稿.doc", "application/msword", "DOC"],
+    ["项目 计划.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "DOCX"],
+    ["数据.xls", "application/vnd.ms-excel", "XLS"],
+    ["数据报告.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "XLSX"],
+    ["早期报表.XLSX", "application/octet-stream", "XLSX"],
+  ])("uses a concise label and preserves the download filename for %s", (filename, type, label) => {
+    renderDocument({ filename, type });
+
+    const row = screen.getByTitle(`Download ${filename}`);
+    expect(row).toHaveAttribute("download", filename);
+    expect(row.getAttribute("href")).toContain(encodeURIComponent(filename));
+    expect(screen.getByText(label)).toBeVisible();
     expect(screen.queryByTitle(/^Open /)).toBeNull();
   });
 

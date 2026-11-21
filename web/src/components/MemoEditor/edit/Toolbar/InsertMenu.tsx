@@ -114,6 +114,22 @@ const InsertMenu = (props: InsertMenuProps) => {
         </Menu.Popup>
       </Menu.Root>
 
+      <Tooltip.Root>
+        <Tooltip.Trigger
+          render={
+            <Button
+              variant="ghost"
+              size="md"
+              disabled={insertionDisabled}
+              aria-label={t("editor.insert-menu.add-attachment")}
+              icon={<PaperclipIcon />}
+              onClick={handleAttachmentUploadClick}
+            />
+          }
+        />
+        <Tooltip.Popup>{t("editor.insert-menu.add-attachment")}</Tooltip.Popup>
+      </Tooltip.Root>
+
       {/* Hidden file input */}
       <input
         className="hidden"

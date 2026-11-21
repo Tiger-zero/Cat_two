@@ -7,6 +7,8 @@ export type EditorPosition = Position;
 /** A selection that survives reloading the same Markdown, for restoring the caret across mounts. */
 export type EditorSelection = SelectionJSON;
 
+export type EditorFormat = "bold" | "bulletList" | "orderedList" | "codeBlock";
+
 /**
  * The contract the memo editor (Editor) implements. Everything outside the
  * editor implementation talks markdown through this interface and never reaches
@@ -39,6 +41,12 @@ export interface EditorController {
   setSelection(selection: EditorSelection): void;
   /** Select the entire document (used by tests and select-all flows). */
   selectAll(): void;
+  /** Applies a formatting command to the selection and returns focus to the editor. */
+  toggleFormat(format: EditorFormat): boolean;
+  /** Formats applied across the selection in rich text mode. */
+  getActiveFormats(): EditorFormat[];
+  /** Notifies controls when the selection or its formatting changes. */
+  subscribeToFormatting(listener: () => void): () => void;
   /** Turns the blocks the selection touches into task items, keeping their text. Returns whether anything changed. */
   toggleTaskList(): boolean;
 }

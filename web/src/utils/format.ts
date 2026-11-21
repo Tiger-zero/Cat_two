@@ -11,14 +11,22 @@ export function formatFileSize(bytes: number): string {
   return `${formatted} ${units[i]}`;
 }
 
-export function getFileTypeLabel(mimeType: string): string {
-  if (!mimeType) return "File";
-
+export function getFileTypeLabel(mimeType: string, filename?: string): string {
   const normalizedMimeType = mimeType.toLowerCase().split(";")[0].trim();
+  if (!normalizedMimeType || normalizedMimeType === "application/octet-stream") {
+    const documentExtension = filename?.match(/\.(pdf|docx?|xlsx?)$/i)?.[1];
+    if (documentExtension) return documentExtension.toUpperCase();
+  }
+  if (!normalizedMimeType) return "File";
+
   const [category = "", subtype = ""] = normalizedMimeType.split("/");
 
   const specialCases: Record<string, string> = {
     "application/pdf": "PDF",
+    "application/msword": "DOC",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "DOCX",
+    "application/vnd.ms-excel": "XLS",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": "XLSX",
     "application/zip": "ZIP",
     "application/x-zip-compressed": "ZIP",
     "application/json": "JSON",

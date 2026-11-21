@@ -39,7 +39,7 @@ export const separateAttachments = (attachments: Attachment[]): AttachmentGroups
 };
 
 export const getAttachmentMetadata = (attachment: Attachment): AttachmentMetadata => ({
-  fileTypeLabel: getFileTypeLabel(attachment.type),
+  fileTypeLabel: getFileTypeLabel(attachment.type, attachment.filename),
   fileSizeLabel: attachment.size ? formatFileSize(Number(attachment.size)) : undefined,
 });
 

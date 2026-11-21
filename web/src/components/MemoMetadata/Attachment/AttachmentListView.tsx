@@ -365,7 +365,12 @@ const DocumentRow = ({ attachment }: { attachment: Attachment }) => {
 
   if (!opensInline(attachment.type)) {
     return (
-      <a href={url} download title={t("common.download-name", { name: attachment.filename })} className={METADATA_ROW_CLASSES}>
+      <a
+        href={url}
+        download={attachment.filename}
+        title={t("common.download-name", { name: attachment.filename })}
+        className={METADATA_ROW_CLASSES}
+      >
         {body}
         <DownloadIcon aria-hidden="true" className={METADATA_ROW_HINT_CLASSES} />
       </a>
@@ -386,7 +391,7 @@ const DocumentRow = ({ attachment }: { attachment: Attachment }) => {
       <div className={METADATA_ROW_CONTROLS_CLASSES}>
         <a
           href={url}
-          download
+          download={attachment.filename}
           title={t("common.download")}
           aria-label={t("common.download-name", { name: attachment.filename })}
           className={buttonClasses({ variant: "ghost", size: "xs", iconOnly: true })}

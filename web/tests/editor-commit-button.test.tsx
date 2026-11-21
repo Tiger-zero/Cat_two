@@ -19,6 +19,7 @@ const Toolbar = ({ memoName, parentMemoName }: { memoName?: string; parentMemoNa
   dispatchDrawingError = (error) => dispatch(actions.setDrawingSaveError(error));
   return (
     <EditorToolbar
+      editorRef={{ current: null }}
       onSave={onSave}
       memoName={memoName}
       parentMemoName={parentMemoName}

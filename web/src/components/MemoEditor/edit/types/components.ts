@@ -1,10 +1,11 @@
-import type { ReactNode } from "react";
+import type { ReactNode, RefObject } from "react";
 import type { MemoSuggestion } from "@/lib/memo-suggestions";
 import type { Attachment } from "@/types/proto/api/attachment_service_pb";
 import type { Memo } from "@/types/proto/api/memo_service_pb";
 import type { EditorFileOrigin } from "../extensions";
 import type { AudioRecorderStatus } from "../hooks/useAudioRecorder";
 import type { DrawingSource, LocalFile } from "./attachment";
+import type { EditorController } from "./editorController";
 
 /** What MemoEditor hands an editing session: its subject, the host's defaults, and where the draft lives. */
 export interface EditSessionProps {
@@ -73,6 +74,7 @@ export interface EditorSourceModeToggle {
 }
 
 export interface EditorToolbarProps {
+  editorRef: RefObject<EditorController | null>;
   onSave: () => void;
   onCancel?: () => void;
   memoName?: string;

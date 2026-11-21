@@ -6,9 +6,11 @@ import { primaryModifierGlyph } from "@/utils/platform";
 import { validationService } from "../services";
 import { useEditorSelector } from "../state";
 import type { EditorToolbarProps } from "../types";
+import FormattingControls from "./FormattingControls";
 import InsertMenu from "./InsertMenu";
 
 export const EditorToolbar: FC<EditorToolbarProps> = ({
+  editorRef,
   onSave,
   onCancel,
   memoName,
@@ -74,8 +76,8 @@ export const EditorToolbar: FC<EditorToolbarProps> = ({
   return (
     // md controls with mu-compact: 14px labels and 16px icons at 28px, the sidebar's height.
     // The portaled menus use the regular md row.
-    <div className="mu-compact flex w-full min-w-0 flex-row items-center justify-between gap-1">
-      <div className="flex min-w-0 flex-1 flex-row items-center justify-start gap-1">
+    <div className="mu-compact flex w-full min-w-0 flex-wrap items-center justify-between gap-x-2 gap-y-1">
+      <div className="flex min-w-0 flex-wrap items-center gap-1">
         <InsertMenu
           isUploading={isUploading}
           isSaving={isSaving}
@@ -86,9 +88,10 @@ export const EditorToolbar: FC<EditorToolbarProps> = ({
           onInsertImages={onInsertImages}
           onDrawingClick={onDrawingClick}
         />
+        <FormattingControls editorRef={editorRef} disabled={isSaving} sourceMode={sourceMode.isSourceMode} />
       </div>
 
-      <div className="flex shrink-0 flex-row items-center justify-end gap-1">
+      <div className="ms-auto flex shrink-0 items-center gap-1">
         {onCancel && (
           <Button variant="ghost" onClick={onCancel} disabled={isSaving}>
             {t("common.cancel")}

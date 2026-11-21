@@ -254,9 +254,7 @@ export const EditSession: React.FC<EditSessionProps> = ({
           !isFocusMode && className,
         )}
       >
-        {/* Formatting is the editor's own: its toolbar appears over selected
-            text, and the slash menu and Markdown shortcuts change block types.
-            Focus mode always shows the memo's time ("Now" before it has one) and adds
+        {/* Focus mode always shows the memo's time ("Now" before it has one) and adds
             the button that leaves the current frame — minimize inline, close when hosted. */}
         {(showTimestamp || isFocusMode) && (
           <div className={cn("flex w-full items-center gap-1.5", isFocusMode ? "h-10" : "h-6")}>
@@ -302,6 +300,7 @@ export const EditSession: React.FC<EditSessionProps> = ({
             <EditorSuggestions suggestions={suggestions} controllerRef={editorRef} />
           )}
           <EditorToolbar
+            editorRef={editorRef}
             onSave={handleSave}
             onCancel={onCancel ? handleCancel : undefined}
             memoName={memoName}

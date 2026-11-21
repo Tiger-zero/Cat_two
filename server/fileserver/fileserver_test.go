@@ -10,6 +10,7 @@ import (
 	"image"
 	"image/color"
 	"image/png"
+	"mime"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -119,6 +120,33 @@ func TestServeAttachmentFile_S3(t *testing.T) {
 	require.Equal(t, http.StatusOK, multiRangeRecorder.Code)
 	require.Equal(t, content, multiRangeRecorder.Body.Bytes())
 	require.Empty(t, multiRangeRecorder.Header().Get("Content-Range"))
+}
+
+func TestServeOfficeAttachmentPreservesUnicodeFilename(t *testing.T) {
+	ctx := context.Background()
+	svc, fs, cleanup := newSharedProfileTestServices(ctx, t)
+	defer cleanup()
+	configureLocalStorage(ctx, t, svc.Store)
+
+	const filename = "项目 计划.xlsx"
+	const fileType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+	content := []byte("local spreadsheet fixture")
+	attachment, owner := createImageMemo(ctx, t, svc, "spreadsheet-owner", filename, "application/octet-stream", content)
+
+	mux := http.NewServeMux()
+	fs.RegisterRoutes(mux, http.HandlerFunc(httphandler.NotFound))
+	recorder := httptest.NewRecorder()
+	mux.ServeHTTP(recorder, newAuthenticatedFileRequest(ctx, t, svc, owner.ID, "/file/"+attachment.Name))
+	require.Equal(t, http.StatusOK, recorder.Code)
+	require.Equal(t, fileType, recorder.Header().Get("Content-Type"))
+	require.Equal(t, "nosniff", recorder.Header().Get("X-Content-Type-Options"))
+	disposition := recorder.Header().Get("Content-Disposition")
+	require.Contains(t, disposition, "filename*=")
+	mode, params, err := mime.ParseMediaType(disposition)
+	require.NoError(t, err)
+	require.Equal(t, "attachment", mode)
+	require.Equal(t, filename, params["filename"])
+	require.Equal(t, content, recorder.Body.Bytes())
 }
 
 // A failed media fetch must answer with the JSON error it actually is, not the

@@ -1,7 +1,7 @@
-import { type Block, type Editor, inlineText, type Widget } from "@usememos/editor";
+import { type Block, commands, type Editor, inlineText, type Widget } from "@usememos/editor";
 import { collectTags, parseMemoMarkdown } from "@/lib/memo-markdown";
 import { isCompleteTagValue } from "@/utils/tag-grammar";
-import type { EditorController } from "./types/editorController";
+import type { EditorController, EditorFormat } from "./types/editorController";
 import { renderUploadAnchor } from "./uploadAnchors";
 
 /** The live editor, or null before it mounts and after it is destroyed. */
@@ -21,6 +21,13 @@ const memoBlocks = (editor: Editor): readonly Block[] =>
 
 /** An empty paragraph, which inserted blocks take the place of rather than follow. */
 const isEmptyParagraph = (block: Block): boolean => block.type === "paragraph" && inlineText(block.content) === "";
+
+const formatCommands = {
+  bold: "toggleBold",
+  bulletList: "toggleBulletList",
+  orderedList: "toggleOrderedList",
+  codeBlock: "toggleCodeBlock",
+} as const satisfies Record<EditorFormat, keyof Editor["commands"]>;
 
 /**
  * EditorController over a @usememos/editor instance. Every method reads the
@@ -112,6 +119,33 @@ export function createController(getEditor: EditorGetter, onReplace: (markdown: 
       editor.commands.scrollIntoView();
     },
     selectAll: () => live(getEditor)?.commands.selectAll(),
+    toggleFormat: (format) => {
+      const editor = live(getEditor);
+      if (!editor || editor.isComposing) return false;
+      const changed = editor.commands[formatCommands[format]]();
+      editor.commands.focus();
+      if (changed) editor.commands.scrollIntoView();
+      return changed;
+    },
+    getActiveFormats: () => {
+      const editor = live(getEditor);
+      if (!editor || editor.mode !== "rich") return [];
+
+      const active: EditorFormat[] = editor.isActive("bold") ? ["bold"] : [];
+      // Block commands toggle off only when every convertible block already has the format.
+      const blocks = commands.convertibleBlocks(editor.state);
+      const first = blocks[0];
+      if (
+        first?.type === "listItem" &&
+        first.listType !== "task" &&
+        blocks.every((block) => block.type === "listItem" && block.listType === first.listType)
+      ) {
+        active.push(first.listType === "bullet" ? "bulletList" : "orderedList");
+      }
+      if (first?.type === "code" && blocks.every((block) => block.type === "code")) active.push("codeBlock");
+      return active;
+    },
+    subscribeToFormatting: (listener) => live(getEditor)?.on("selectionChange", listener) ?? (() => {}),
     toggleTaskList: () => live(getEditor)?.commands.toggleTaskList() ?? false,
   };
 }
