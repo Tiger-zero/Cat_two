@@ -8,7 +8,7 @@ import (
 	"github.com/usememos/memos/store"
 )
 
-func authorizeSQLiteMemoComment(ctx context.Context, tx dbExecutor, contextMemoID, actorUserID int32) error {
+func authorizeSQLiteMemoComment(ctx context.Context, tx dbExecutor, contextMemoID, actorUserID int32, personal bool) error {
 	snapshot, err := loadSQLiteMemoParticipation(ctx, tx, contextMemoID, actorUserID)
 	if err != nil {
 		if stderrors.Is(err, sql.ErrNoRows) {
@@ -16,6 +16,7 @@ func authorizeSQLiteMemoComment(ctx context.Context, tx dbExecutor, contextMemoI
 		}
 		return err
 	}
+	snapshot.Personal = personal
 	return store.ValidateMemoCommentAuthorization(snapshot)
 }
 

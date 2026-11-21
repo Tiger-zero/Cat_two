@@ -7,17 +7,13 @@ import RootLayout from "@/layouts/RootLayout";
 import { lazyWithReload } from "@/utils/lazy";
 import { RequireAuthRoute, RequireFullInitializationRoute, RequireGuestRoute, RequireInstanceInitializationRoute } from "./guards";
 import { LegacyCalendarRedirect } from "./LegacyCalendarRedirect";
-import { LegacyProfileRedirect } from "./LegacyProfileRedirect";
-import { ROUTES, SPACE_ROUTE_PATTERN, withCollectionCreator } from "./routes";
-import { SpaceRoute } from "./SpaceRoute";
+import { personalFeedSearch, ROUTES } from "./routes";
 
 const AdminSignIn = lazyWithReload(() => import("@/pages/AdminSignIn"));
 const Archived = lazyWithReload(() => import("@/pages/Archived"));
-const AuthCallback = lazyWithReload(() => import("@/pages/AuthCallback"));
 // A signed-in user's Home composes at once, so the page's code arrives together with the
 // editing session's and the composer renders with the page, never after it.
 const Home = lazyWithReload(() => Promise.all([import("@/pages/Home"), preloadMemoEditing()]).then(([page]) => page));
-const Inboxes = lazyWithReload(() => import("@/pages/Inboxes"));
 const MemoDetail = lazyWithReload(() => import("@/pages/MemoDetail"));
 const NotFound = lazyWithReload(() => import("@/pages/NotFound"));
 const PermissionDenied = lazyWithReload(() => import("@/pages/PermissionDenied"));
@@ -29,10 +25,12 @@ const Trash = lazyWithReload(() => import("@/pages/Trash"));
 
 const LEGACY_CALENDAR_PATH = "calendar/:year?/:month?/:day?";
 
-const ExploreRoute = () => {
-  const location = useLocation();
-  const search = withCollectionCreator(location.search);
-  if (search !== location.search) return <Navigate to={{ pathname: location.pathname, search, hash: location.hash }} replace />;
+const HomeRoute = () => {
+  const { pathname, search, hash } = useLocation();
+  const normalizedSearch = personalFeedSearch(search);
+  if (pathname !== ROUTES.HOME || normalizedSearch !== search) {
+    return <Navigate to={{ pathname: ROUTES.HOME, search: normalizedSearch, hash }} replace />;
+  }
   return <Home />;
 };
 
@@ -54,10 +52,6 @@ export const routeConfig: RouteObject[] = [
       {
         path: Routes.AUTH,
         children: [
-          // The OAuth callback must run regardless of the current session — an
-          // authenticated tab elsewhere must not block it from consuming its
-          // one-time OAuth state. Keep it outside the guest-only subtree.
-          { path: "callback", element: <AuthCallback /> },
           {
             element: <RequireInstanceInitializationRoute />,
             children: [
@@ -73,11 +67,21 @@ export const routeConfig: RouteObject[] = [
           },
         ],
       },
-      // Backward compatibility: the old `/home` URL now lives at `/`.
-      { path: "home", element: <Navigate to={Routes.HOME} replace /> },
       {
         element: <RequireAuthRoute />,
         children: [
+          { path: "home", element: <HomeRoute /> },
+          { path: "explore", element: <HomeRoute /> },
+          { path: "inbox", element: <HomeRoute /> },
+          { path: "u/:username", element: <HomeRoute /> },
+          {
+            path: "spaces/:spaceUid",
+            children: [
+              { index: true, element: <HomeRoute /> },
+              { path: "explore", element: <HomeRoute /> },
+              { path: LEGACY_CALENDAR_PATH, element: <LegacyCalendarRedirect /> },
+            ],
+          },
           { path: LEGACY_CALENDAR_PATH, element: <LegacyCalendarRedirect /> },
           {
             element: <RootLayout />,
@@ -85,8 +89,7 @@ export const routeConfig: RouteObject[] = [
               {
                 element: <MainLayout />,
                 children: [
-                  { index: true, element: <Home /> },
-                  { path: Routes.EXPLORE, element: <ExploreRoute /> },
+                  { index: true, element: <HomeRoute /> },
                   { path: Routes.ARCHIVED, element: <Archived /> },
                   { path: Routes.TRASH, element: <Trash /> },
                   {
@@ -98,29 +101,7 @@ export const routeConfig: RouteObject[] = [
               { path: "memos/:uid", element: <MemoDetail /> },
               {
                 element: <RequireFullInitializationRoute />,
-                children: [
-                  {
-                    path: SPACE_ROUTE_PATTERN,
-                    children: [
-                      { path: LEGACY_CALENDAR_PATH, element: <LegacyCalendarRedirect /> },
-                      {
-                        element: <SpaceRoute />,
-                        children: [
-                          {
-                            element: <MainLayout />,
-                            children: [
-                              { index: true, element: <Home /> },
-                              { path: "explore", element: <ExploreRoute /> },
-                            ],
-                          },
-                        ],
-                      },
-                      { path: "*", element: <NotFound /> },
-                    ],
-                  },
-                  { path: Routes.INBOX, element: <Inboxes /> },
-                  { path: Routes.SETTING, element: <Setting /> },
-                ],
+                children: [{ path: Routes.SETTING, element: <Setting /> }],
               },
             ],
           },
@@ -129,7 +110,6 @@ export const routeConfig: RouteObject[] = [
       {
         element: <RootLayout />,
         children: [
-          { path: Routes.USER_PROFILE, element: <LegacyProfileRedirect /> },
           { path: "403", element: <PermissionDenied /> },
           { path: "404", element: <NotFound /> },
           { path: "*", element: <NotFound /> },

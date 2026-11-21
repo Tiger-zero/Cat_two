@@ -43,6 +43,8 @@ const (
 type instanceOptions struct {
 	// demo enables demo mode, which seeds the database during migration.
 	demo bool
+	// personal uses the policy enabled by the Cat_two executable.
+	personal bool
 	// instanceURL is the canonical external instance URL. On the first boot of
 	// a database without ACCESS, it is also the legacy compatibility input used
 	// to initialize that dedicated setting exactly once.
@@ -82,6 +84,7 @@ func bootInstance(ctx context.Context, t *testing.T, opts instanceOptions) *inst
 
 	instanceProfile := &profile.Profile{
 		Demo:        opts.demo,
+		Personal:    opts.personal,
 		Addr:        "127.0.0.1",
 		Port:        unusedPort(t),
 		Data:        dataDir,

@@ -4,11 +4,9 @@ import { type ChangeEvent, type FormEvent, type KeyboardEvent, useEffect, useId,
 import { useLocation, useNavigate } from "react-router-dom";
 import { useAppSidebar } from "@/contexts/AppSidebarContext";
 import { getFilterSearch, isSearchFilter, type MemoFilter, useMemoFilterContext } from "@/contexts/MemoFilterContext";
-import { useSpaceContext } from "@/contexts/SpaceContext";
 import useCurrentUser from "@/hooks/useCurrentUser";
 import { useMemoViews } from "@/hooks/useUserQueries";
 import { getMemoViewId, isMemoCollectionRoute } from "@/lib/memo-views";
-import { extractSpaceUidFromName, formatSpaceUidForDisplay } from "@/lib/space-display";
 import { useTranslate } from "@/utils/i18n";
 import { getRouteActionPolicy, getSidebarRouteKind } from "./routes";
 
@@ -65,7 +63,6 @@ export const resolveQuickFindSubmission = (
 const getScopeLabel = (pathname: string, t: ReturnType<typeof useTranslate>) => {
   const routeKind = getSidebarRouteKind(pathname);
   if (routeKind === "archived") return t("common.archived");
-  if (routeKind === "explore") return t("common.explore");
   return t("common.memos");
 };
 
@@ -76,7 +73,6 @@ const QuickFindDialog = () => {
   const currentUser = useCurrentUser();
   const { data: memoViews = [] } = useMemoViews(currentUser?.name);
   const { filters, setFilters, setMemoView, memoView } = useMemoFilterContext();
-  const { duplicateSpaceTitles, selectedSpace, selectedSpaceName } = useSpaceContext();
   const { quickFindOpen, setQuickFindOpen } = useAppSidebar();
   const [query, setQuery] = useState("");
   const [mode, setMode] = useState<QuickFindMode>("text");
@@ -84,18 +80,7 @@ const QuickFindDialog = () => {
   const hintId = useId();
   const viewApplies = isMemoCollectionRoute(location.pathname);
   const selectedMemoView = viewApplies ? memoViews.find((item) => getMemoViewId(item.name) === memoView) : undefined;
-  const lensLabel = selectedMemoView?.title || getScopeLabel(location.pathname, t);
-  const selectedSpaceUid = selectedSpaceName ? extractSpaceUidFromName(selectedSpaceName) : "";
-  const selectedSpaceUidDisplay = selectedSpaceName ? formatSpaceUidForDisplay(selectedSpaceName) : "";
-  const showSelectedSpaceUid = selectedSpace ? duplicateSpaceTitles.has(selectedSpace.title) : Boolean(selectedSpaceName);
-  const selectedSpaceLabel = `${selectedSpace?.title || t("space.current")}${
-    showSelectedSpaceUid && selectedSpaceUid ? ` (${selectedSpaceUid})` : ""
-  }`;
-  const compactSelectedSpaceLabel = `${selectedSpace?.title || t("space.current")}${
-    showSelectedSpaceUid && selectedSpaceUidDisplay ? ` (${selectedSpaceUidDisplay})` : ""
-  }`;
-  const scopeLabel = selectedSpaceName ? `${selectedSpaceLabel} · ${lensLabel}` : lensLabel;
-  const compactScopeLabel = selectedSpaceName ? `${compactSelectedSpaceLabel} · ${lensLabel}` : lensLabel;
+  const scopeLabel = selectedMemoView?.title || getScopeLabel(location.pathname, t);
 
   useEffect(() => {
     if (!quickFindOpen) return;
@@ -154,7 +139,7 @@ const QuickFindDialog = () => {
         <form onSubmit={handleSubmit}>
           <div className="flex items-center justify-between gap-3 border-b border-mu-line/50 px-4 py-2">
             <span className="min-w-0 truncate mu-caption text-mu-text-secondary" title={scopeLabel}>
-              {compactScopeLabel}
+              {scopeLabel}
             </span>
             <ToggleGroup
               size="sm"
@@ -205,7 +190,7 @@ const QuickFindDialog = () => {
               <Input
                 {...fieldProps}
                 prefix={<SearchIcon />}
-                placeholder={`${t("common.search")} ${compactScopeLabel}`}
+                placeholder={`${t("common.search")} ${scopeLabel}`}
                 aria-label={`${t("common.search")} ${scopeLabel}`}
                 suffix={
                   <Tooltip.Root>

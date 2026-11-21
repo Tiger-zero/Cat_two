@@ -177,6 +177,7 @@ func (s *APIService) createMemoWithMutation(
 		})
 	}
 	return s.Store.ApplyMemoMutation(ctx, &store.MemoMutation{
+		PersonalCreation:          s.personalMode(),
 		MemoCreate:                create,
 		CommentContextMemoID:      commentContextMemoID,
 		MemoCreatorID:             create.CreatorID,
@@ -206,7 +207,7 @@ func (s *APIService) applyMemoMutation(
 	if !access.CanManageMemo(user, memo) {
 		return status.Error(codes.PermissionDenied, "permission denied")
 	}
-	policy := memoWritePolicy(user.ID, false)
+	policy := s.memoWritePolicy(user.ID, false)
 	if memoUpdate != nil && memoUpdate.Policy != nil {
 		policy = memoUpdate.Policy
 	} else if memoUpdate != nil {

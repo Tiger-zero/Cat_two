@@ -10,18 +10,15 @@ import ReactionSelector from "@/components/MemoReactionListView/ReactionSelector
 import { memoKeys, useMemoRecord } from "@/hooks/useMemoQueries";
 import { State } from "@/types/proto/api/common_pb";
 import { type Memo, MemoSchema, type Reaction, ReactionSchema } from "@/types/proto/api/memo_service_pb";
-import { SpaceMember_Role } from "@/types/proto/api/space_service_pb";
 import { UserSchema } from "@/types/proto/api/user_service_pb";
 
 const state = vi.hoisted(() => ({
   currentUser: { name: "users/me", username: "me" } as { name: string; username: string } | undefined,
   resolveUsers: true,
-  role: 0,
   api: { getMemo: vi.fn(), upsertMemoReaction: vi.fn(), deleteMemoReaction: vi.fn(), showErrorToast: vi.fn() },
 }));
 vi.mock("@/connect", () => ({ memoServiceClient: state.api }));
 vi.mock("@/hooks/useCurrentUser", () => ({ default: () => state.currentUser }));
-vi.mock("@/hooks/useSpaceQueries", () => ({ useSpaces: () => ({ data: [{ name: "spaces/a", currentUserRole: state.role }] }) }));
 vi.mock("@/lib/toast", () => ({ showErrorToast: state.api.showErrorToast }));
 vi.mock("@/contexts/MentionResolutionContext", () => ({
   useResolvedUsersByNames: () =>
@@ -80,7 +77,6 @@ describe("ReactionSelector", () => {
     vi.resetAllMocks();
     state.currentUser = { name: "users/me", username: "me" };
     state.resolveUsers = true;
-    state.role = 0;
   });
 
   it("focuses search, filters by name or pasted emoji, and shows a no-results state", async () => {
@@ -208,26 +204,14 @@ describe("ReactionSelector", () => {
     expect(screen.getByText("🎉")).toBeInTheDocument();
   });
 
-  it("hides the picker when the author loses Space membership but lets them withdraw their reaction", async () => {
-    const memo = reactionMemo();
-    memo.space = "spaces/a";
-    setup(memo);
-    expect(screen.queryByRole("button", { name: "memo.add-reaction" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /thumbs up:/ })).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /party popper:/ }));
-    await waitFor(() => expect(state.api.deleteMemoReaction).toHaveBeenCalledWith({ name: "memos/1/reactions/1" }));
-  });
-
-  it("offers the picker to a memo's author while they are an active Space member", async () => {
-    state.role = SpaceMember_Role.USER;
+  it("offers the picker to the author of a note with legacy Space metadata", async () => {
     const memo = reactionMemo();
     memo.space = "spaces/a";
     setup(memo);
     expect((await openPicker()).getByRole("combobox")).toBeInTheDocument();
   });
 
-  it("hides the picker on another author's memo even when the viewer belongs to its Space", () => {
-    state.role = SpaceMember_Role.USER;
+  it("hides the picker on another author's note with legacy Space metadata", () => {
     const memo = reactionMemo();
     memo.creator = "users/other";
     memo.space = "spaces/a";

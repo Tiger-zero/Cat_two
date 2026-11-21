@@ -18,7 +18,6 @@ import { restampDefaultCreateTime } from "../utils/deriveDefaultCreateTime";
 interface UseMemoSaveOptions {
   memoName?: string;
   parentMemoName?: string;
-  defaultSpace?: string;
   defaultCreateTime?: Date;
   discardDraft: () => void;
   onConfirm?: (memoName: string) => void;
@@ -34,7 +33,6 @@ interface UseMemoSaveOptions {
 export function useMemoSave({
   memoName,
   parentMemoName,
-  defaultSpace,
   defaultCreateTime,
   discardDraft,
   onConfirm,
@@ -106,7 +104,6 @@ export function useMemoSave({
         {
           memoName,
           parentMemoName,
-          space: defaultSpace,
           onFileUploaded: (file, attachment) => {
             uploaded.set(file.previewUrl, attachment);
             if (file.replaces) dispatch(actions.setDrawingMemoUpdate(true));
@@ -172,7 +169,6 @@ export function useMemoSave({
     actions,
     createMemo,
     defaultCreateTime,
-    defaultSpace,
     discardDraft,
     dispatch,
     getState,

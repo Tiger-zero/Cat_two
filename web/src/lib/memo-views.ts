@@ -1,6 +1,6 @@
-import { ROUTES, resolveCollectionRoute } from "@/router/routes";
+import { ROUTES } from "@/router/routes";
 
-export type MemoScope = "home" | "explore" | "archived";
+export type MemoScope = "home" | "archived";
 
 export const getMemoViewId = (name: string): string => {
   const parts = name.split("/");
@@ -9,16 +9,13 @@ export const getMemoViewId = (name: string): string => {
 
 const cleanPathname = (value: string): string => {
   const pathname = value.split(/[?#]/, 1)[0] || ROUTES.HOME;
-  return pathname.length > 1 ? pathname.replace(/\/+$/, "") : pathname;
+  return (pathname.replace(/\/+$/, "") || ROUTES.HOME).toLowerCase();
 };
-
-/** Lower-cased global pathname, so a Space-scoped URL compares like its global twin. */
-const comparablePathname = (pathname: string): string => resolveCollectionRoute(pathname).pathname.toLowerCase();
 
 /** Routes that display a memo list with the sidebar's view, date and tag filters. */
 export const isMemoCollectionRoute = (pathname: string): boolean => {
-  const comparablePath = comparablePathname(pathname);
-  return comparablePath === ROUTES.HOME || comparablePath === ROUTES.EXPLORE || comparablePath === ROUTES.ARCHIVED;
+  const cleanPath = cleanPathname(pathname);
+  return cleanPath === ROUTES.HOME || cleanPath === ROUTES.ARCHIVED;
 };
 
 interface ResolveMemoScopeOptions {
@@ -29,18 +26,16 @@ interface ResolveMemoScopeOptions {
 
 export const resolveMemoScope = (pathname: string, options: ResolveMemoScopeOptions = {}): MemoScope => {
   const cleanPath = cleanPathname(pathname);
-  const comparablePath = comparablePathname(cleanPath);
-  if (comparablePath === ROUTES.EXPLORE) return "explore";
-  if (comparablePath === ROUTES.ARCHIVED) return "archived";
-  if (comparablePath === ROUTES.HOME) return "home";
+  if (cleanPath === ROUTES.ARCHIVED) return "archived";
+  if (cleanPath === ROUTES.HOME) return "home";
 
-  if (comparablePath.startsWith("/memos/") && options.detailFrom) {
+  if (cleanPath.startsWith("/memos/") && options.detailFrom) {
     return resolveMemoScope(options.detailFrom, {
       fallback: options.fallback,
     });
   }
 
-  if (comparablePath.startsWith("/memos/") && options.memoArchived) {
+  if (cleanPath.startsWith("/memos/") && options.memoArchived) {
     return "archived";
   }
 

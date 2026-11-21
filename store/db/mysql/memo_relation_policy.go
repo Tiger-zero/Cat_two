@@ -37,6 +37,7 @@ func validateMySQLMemoRelationEndpoints(ctx context.Context, tx *sql.Tx, mutatio
 			return err
 		}
 		snapshot := &store.MemoRelationEndpointSnapshot{
+			Personal:           mutation.PersonalMode(),
 			ActorUserID:        actorUserID,
 			Actor:              actor,
 			EndpointID:         state.id,

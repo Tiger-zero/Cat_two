@@ -35,14 +35,7 @@ const settings = () => JSON.parse(screen.getByRole("status").textContent ?? "{}"
 describe("Timeline display settings scope", () => {
   beforeEach(() => localStorage.setItem(storageKey, JSON.stringify(saved)));
 
-  it.each([
-    "/",
-    "/explore",
-    "/?creator=alice",
-    "/spaces/test",
-    "/spaces/test/explore",
-    "/Spaces/test/Explore/",
-  ])("applies saved preferences to %s", (path) => {
+  it.each(["/", "/?filter=displayTime%3A2026-08-02"])("applies saved preferences to %s", (path) => {
     renderRoute(path);
     expect(settings()).toEqual(saved);
   });
@@ -59,11 +52,11 @@ describe("Timeline display settings scope", () => {
   });
 
   it("restores Timeline preferences after visiting another view without overwriting storage", async () => {
-    const router = renderRoute("/spaces/test?creator=alice");
+    const router = renderRoute("/?filter=displayTime%3A2026-08-02");
     expect(settings()).toEqual(saved);
     await act(() => router.navigate("/archived"));
     expect(settings()).toEqual(defaults);
-    await act(() => router.navigate("/spaces/test?creator=alice"));
+    await act(() => router.navigate("/?filter=displayTime%3A2026-08-02"));
     expect(settings()).toEqual(saved);
     expect(JSON.parse(localStorage.getItem(storageKey) ?? "{}")).toEqual(saved);
   });

@@ -20,9 +20,11 @@ func attachmentLookupIndex(driver string) string {
 	return "idx_attachment_memo_id_type"
 }
 
-func removeMemoTrashSchema(ctx context.Context, t *testing.T, ts *store.Store, driver string) {
+func removeSchemaAfterAttachmentLookupIndex(ctx context.Context, t *testing.T, ts *store.Store, driver string) {
 	t.Helper()
 	db := ts.GetDriver().GetDB()
+	_, err := db.ExecContext(ctx, "DROP TABLE user_totp")
+	require.NoError(t, err)
 	for _, index := range []string{"idx_memo_trash_expiry", "idx_memo_trash_creator", "idx_memo_trash_root"} {
 		drop := "DROP INDEX " + index
 		if driver == "mysql" {
@@ -60,14 +62,14 @@ func TestMigrationAttachmentIndex(t *testing.T) {
 	}
 	_, err = ts.GetDriver().GetDB().ExecContext(ctx, query)
 	require.NoError(t, err)
-	removeMemoTrashSchema(ctx, t, ts, driver)
+	removeSchemaAfterAttachmentLookupIndex(ctx, t, ts, driver)
 	setSchemaVersion(ctx, t, ts, "26.10.1")
 	require.NoError(t, ts.Migrate(ctx))
 	requireLookupIndexes(ctx, t, ts, driver)
 	require.NoError(t, ts.Migrate(ctx), "a completed upgrade can restart")
 	setting, err := ts.GetUncachedInstanceSetting(ctx, &store.FindInstanceSetting{Name: "BASIC"})
 	require.NoError(t, err)
-	require.Equal(t, "26.11.2", setting.GetBasicSetting().SchemaVersion)
+	require.Equal(t, "26.11.3", setting.GetBasicSetting().SchemaVersion)
 	migratedMemo, err := ts.GetMemo(ctx, &store.FindMemo{ID: &memo.ID})
 	require.NoError(t, err)
 	require.NotNil(t, migratedMemo)
@@ -100,7 +102,7 @@ func TestMigrationAttachmentLongType(t *testing.T) {
 			if upgrade {
 				_, err := ts.GetDriver().GetDB().ExecContext(ctx, "DROP INDEX "+attachmentLookupIndex("postgres"))
 				require.NoError(t, err)
-				removeMemoTrashSchema(ctx, t, ts, "postgres")
+				removeSchemaAfterAttachmentLookupIndex(ctx, t, ts, "postgres")
 				setSchemaVersion(ctx, t, ts, "26.10.1")
 			}
 			attachment, err := ts.CreateAttachment(ctx, &store.Attachment{UID: "long-type", CreatorID: user.ID, Type: mime.String()})

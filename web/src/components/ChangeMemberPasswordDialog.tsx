@@ -83,7 +83,7 @@ function ChangeMemberPasswordDialog({ open, onOpenChange, user, onSuccess }: Pro
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Popup closeLabel={t("common.close")}>
         <Dialog.Title>
-          {t("setting.account.change-password")} ({user.displayName})
+          {t("setting.account.change-password")} ({user.displayName || user.username})
         </Dialog.Title>
         <div className="flex flex-col gap-4">
           <Field.Root invalid={!!fieldErrors.errors.newPassword}>

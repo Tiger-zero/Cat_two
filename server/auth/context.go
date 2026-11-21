@@ -2,6 +2,7 @@ package auth
 
 import (
 	"context"
+	"strings"
 
 	"github.com/usememos/memos/store"
 )
@@ -45,6 +46,11 @@ func GetAccessToken(ctx context.Context) string {
 	return ""
 }
 
+// HasPersonalAccessToken reports whether the caller was authenticated with a personal access token.
+func HasPersonalAccessToken(ctx context.Context) bool {
+	return strings.HasPrefix(GetAccessToken(ctx), PersonalAccessTokenPrefix)
+}
+
 // SetUserInContext sets the authenticated user's information in the context.
 // This is a simpler alternative to AuthorizeAndSetContext for cases where
 // authorization is handled separately (e.g., HTTP middleware).
@@ -62,10 +68,11 @@ func SetUserInContext(ctx context.Context, user *store.User, accessToken string)
 
 // UserClaims represents authenticated user info from access token.
 type UserClaims struct {
-	UserID   int32
-	Username string
-	Role     string
-	Status   string
+	UserID          int32
+	Username        string
+	Role            string
+	Status          string
+	SessionRevision string
 }
 
 // GetUserClaims retrieves the user claims from context.

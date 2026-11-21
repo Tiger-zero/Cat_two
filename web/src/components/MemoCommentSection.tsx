@@ -113,7 +113,7 @@ const MemoCommentSection = forwardRef<MemoCommentSectionHandle, Props>(
           )}
           {comments.map((comment) => (
             <div className="w-full" key={comment.name} id={extractMemoIdFromName(comment.name)}>
-              <MemoView memo={comment} parentPage={parentPage} showCreator showSpace compact />
+              <MemoView memo={comment} parentPage={parentPage} showCreator compact />
             </div>
           ))}
           {hasMoreComments && (

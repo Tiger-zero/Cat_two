@@ -5,6 +5,7 @@ package store
 type MemoCommentAuthorizationSnapshot struct {
 	ActorUserID int32
 	Actor       MemoActorState
+	Personal    bool
 
 	ContextID         int32
 	ContextCreatorID  int32
@@ -25,6 +26,12 @@ func ValidateMemoCommentAuthorization(snapshot *MemoCommentAuthorizationSnapshot
 	}
 	if snapshot.ContextID <= 0 || snapshot.ContextRowStatus != Normal || !isValidVisibility(snapshot.ContextVisibility) {
 		return ErrMemoSpaceNotWritable
+	}
+	if snapshot.Personal {
+		if snapshot.ContextCreatorID != snapshot.ActorUserID {
+			return ErrMemoPermissionDenied
+		}
+		return nil
 	}
 	if snapshot.ContextSpaceID == nil && snapshot.ContextVisibility == SpaceAudience {
 		return ErrMemoSpaceNotWritable

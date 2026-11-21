@@ -289,6 +289,7 @@ paths:
                 - AuthService
             description: |-
                 SignIn authenticates a user with password or SSO credentials.
+                 Password sign-in also requires a one-time code when two-factor authentication is enabled.
                  On success, returns a short-lived access token and sets a refresh token in an HttpOnly cookie.
                  Public. Attempts are rate limited. Archived users cannot sign in.
             operationId: AuthService_SignIn
@@ -5088,6 +5089,9 @@ components:
                 password:
                     type: string
                     description: Required. The password to sign in with.
+                otpCode:
+                    type: string
+                    description: Optional. The six-digit authenticator code when the account has two-factor authentication enabled.
             description: |-
                 PasswordCredentials are a username and password.
                  Regular users cannot use them when the instance disallows password sign-in.

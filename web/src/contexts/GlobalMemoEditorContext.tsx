@@ -5,7 +5,6 @@ import { getSidebarRouteKind } from "@/components/AppSidebar/routes";
 import { MemoEditor, preloadMemoEditing } from "@/components/MemoEditor";
 import { useAppSidebar } from "@/contexts/AppSidebarContext";
 import { useAuth } from "@/contexts/AuthContext";
-import { useSpaceContext } from "@/contexts/SpaceContext";
 import useCurrentUser from "@/hooks/useCurrentUser";
 import useMediaQuery from "@/hooks/useMediaQuery";
 import { useMemoSuggestions } from "@/hooks/useMemoSuggestions";
@@ -42,16 +41,13 @@ export function GlobalMemoEditorProvider({ children }: { children: ReactNode }) 
   const location = useLocation();
   const currentUserName = useCurrentUser()?.name;
   const suggestions = useMemoSuggestions();
-  const { selectedSpaceName, isSpaceReady } = useSpaceContext();
   const { isUserSettingsInitialized } = useAuth();
   const desktop = useMediaQuery("md");
-  const [initialHome] = useState(() => ({ location, user: currentUserName, space: selectedSpaceName }));
+  const [initialHome] = useState(() => ({ location, user: currentUserName }));
   const homeAutoFocusPending = useRef(desktop && getSidebarRouteKind(location.pathname) === "home" && Boolean(currentUserName));
   const { setMobileOpen, setQuickFindOpen } = useAppSidebar();
-  // One snapshot taken when the composer opens: keyed by the user who opened it, so
-  // signing out closes the composer in the same render and a different user signing
-  // in cannot resurrect it, and pinned to the Space that was selected at that moment.
-  const [opened, setOpened] = useState<{ user: string; space?: string }>();
+  // Keep the open composer tied to the session that opened it.
+  const [openedBy, setOpenedBy] = useState<string>();
   // Only ever read from event handlers, so a ref keeps each save from
   // re-rendering the provider and the whole editor tree it hosts.
   const isSavingRef = useRef(false);
@@ -63,12 +59,11 @@ export function GlobalMemoEditorProvider({ children }: { children: ReactNode }) 
       location.pathname !== initialHome.location.pathname ||
       location.search !== initialHome.location.search ||
       currentUserName !== initialHome.user ||
-      selectedSpaceName !== initialHome.space ||
       !desktop
     ) {
       homeAutoFocusPending.current = false;
     }
-  }, [location, currentUserName, selectedSpaceName, desktop, initialHome]);
+  }, [location, currentUserName, desktop, initialHome]);
 
   const claimHomeAutoFocus = useCallback(() => {
     const pending = homeAutoFocusPending.current;
@@ -79,7 +74,7 @@ export function GlobalMemoEditorProvider({ children }: { children: ReactNode }) 
 
   const closeEditor = useCallback(() => {
     isSavingRef.current = false;
-    setOpened(undefined);
+    setOpenedBy(undefined);
   }, []);
   const requestCloseEditor = useCallback(() => {
     if (!isSavingRef.current) closeEditor();
@@ -90,7 +85,7 @@ export function GlobalMemoEditorProvider({ children }: { children: ReactNode }) 
 
   // The editor reads defaults out of user settings, so composing has to wait for
   // them. Keep the rule here so every entry point uses the same gate.
-  const canOpen = Boolean(currentUserName) && isUserSettingsInitialized && isSpaceReady;
+  const canOpen = Boolean(currentUserName) && isUserSettingsInitialized;
 
   const openEditor = useCallback(() => {
     if (!canOpen || !currentUserName) return;
@@ -106,13 +101,11 @@ export function GlobalMemoEditorProvider({ children }: { children: ReactNode }) 
 
     // The dialog opens at once; the editor fills it as soon as its code is here.
     preloadMemoEditing();
-    setOpened({ user: currentUserName, space: selectedSpaceName });
-  }, [canOpen, selectedSpaceName, currentUserName, setMobileOpen, setQuickFindOpen]);
+    setOpenedBy(currentUserName);
+  }, [canOpen, currentUserName, setMobileOpen, setQuickFindOpen]);
 
   useEffect(() => {
-    // RootLayout remains mounted when a public instance moves from Home to
-    // Explore on sign-out. Treat every auth/readiness transition as a session
-    // boundary so an open composer—or a pending lazy import—cannot survive it.
+    // Treat every auth or readiness transition as a boundary for an open editor.
     closeEditor();
     returnFocusRef.current = null;
   }, [closeEditor, currentUserName, isUserSettingsInitialized]);
@@ -127,7 +120,7 @@ export function GlobalMemoEditorProvider({ children }: { children: ReactNode }) 
     return remembered ?? findVisibleFocusTarget("[data-new-memo-trigger]") ?? findVisibleFocusTarget("[data-mobile-navigation-trigger]");
   }, []);
 
-  const editorIsOpen = opened !== undefined && opened.user === currentUserName;
+  const editorIsOpen = openedBy !== undefined && openedBy === currentUserName;
   const value = useMemo(() => ({ canOpen, openEditor, claimHomeAutoFocus }), [canOpen, openEditor, claimHomeAutoFocus]);
 
   return (
@@ -141,7 +134,7 @@ export function GlobalMemoEditorProvider({ children }: { children: ReactNode }) 
             return;
           }
           if (open) {
-            setOpened((previous) => (currentUserName ? { user: currentUserName, space: previous?.space } : undefined));
+            setOpenedBy(currentUserName);
           } else {
             closeEditor();
           }
@@ -159,7 +152,7 @@ export function GlobalMemoEditorProvider({ children }: { children: ReactNode }) 
               <DialogPrimitive.Title className="mu-visually-hidden">{t("editor.new-memo")}</DialogPrimitive.Title>
               <MemoEditor
                 autoFocus
-                draft={{ scope: "global", space: opened?.space }}
+                draft={{ scope: "global" }}
                 suggestions={suggestions}
                 placeholder={t("editor.any-thoughts")}
                 onConfirm={closeEditor}

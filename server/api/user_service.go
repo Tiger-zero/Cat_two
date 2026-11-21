@@ -20,6 +20,7 @@ import (
 	"github.com/usememos/memos/internal/clientip"
 	"github.com/usememos/memos/internal/ratelimit"
 	apipb "github.com/usememos/memos/proto/gen/api"
+	"github.com/usememos/memos/server/auth"
 	"github.com/usememos/memos/store"
 )
 
@@ -200,9 +201,6 @@ func (s *APIService) GetUser(ctx context.Context, request *apipb.GetUserRequest)
 }
 
 func (s *APIService) CreateUser(ctx context.Context, request *apipb.CreateUserRequest) (*apipb.User, error) {
-	// Get current user (might be nil for unauthenticated requests)
-	currentUser, _ := s.fetchCurrentUser(ctx)
-
 	if request.User == nil {
 		return nil, status.Errorf(codes.InvalidArgument, "user is required")
 	}
@@ -219,7 +217,11 @@ func (s *APIService) CreateUser(ctx context.Context, request *apipb.CreateUserRe
 	if err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, "%v", err)
 	}
+	if s.personalMode() {
+		return s.createPersonalAdministrator(ctx, request, email)
+	}
 
+	currentUser, _ := s.fetchCurrentUser(ctx)
 	roleToAssign := store.RoleUser
 	if currentUser != nil && currentUser.Role == store.RoleAdmin {
 		// Authenticated ADMIN user can create users with any role specified in request
@@ -336,6 +338,35 @@ func (s *APIService) CreateUser(ctx context.Context, request *apipb.CreateUserRe
 	return convertUserFromStore(user, user), nil
 }
 
+func (s *APIService) createPersonalAdministrator(ctx context.Context, request *apipb.CreateUserRequest, email string) (*apipb.User, error) {
+	const registrationClosed = "registration closed after initial administrator setup"
+	users, err := s.Store.ListUsers(ctx, &store.FindUser{Limit: new(1)})
+	if err != nil {
+		return nil, status.Error(codes.Internal, "failed to check initial administrator setup")
+	}
+	if len(users) != 0 {
+		return nil, status.Error(codes.PermissionDenied, registrationClosed)
+	}
+	if request.ValidateOnly {
+		return &apipb.User{Username: request.User.Username, Role: apipb.User_ADMIN, Email: email, DisplayName: request.User.DisplayName}, nil
+	}
+	passwordHash, err := bcrypt.GenerateFromPassword([]byte(request.User.Password), bcrypt.DefaultCost)
+	if err != nil {
+		return nil, status.Error(codes.Internal, "failed to protect administrator password")
+	}
+	user, created, err := s.Store.CreateUserIfNoUsers(ctx, &store.User{
+		Username: request.User.Username, Role: store.RoleAdmin, Email: email,
+		Nickname: request.User.DisplayName, PasswordHash: string(passwordHash),
+	})
+	if err != nil {
+		return nil, convertUserWriteError(err, "failed to create initial administrator")
+	}
+	if !created {
+		return nil, status.Error(codes.PermissionDenied, registrationClosed)
+	}
+	return convertUserFromStore(user, user), nil
+}
+
 func (s *APIService) UpdateUser(ctx context.Context, request *apipb.UpdateUserRequest) (*apipb.User, error) {
 	if request.User == nil {
 		return nil, status.Errorf(codes.InvalidArgument, "user is required")
@@ -435,6 +466,9 @@ func (s *APIService) UpdateUser(ctx context.Context, request *apipb.UpdateUserRe
 			role := convertUserRoleToStore(request.User.Role)
 			update.Role = &role
 		case "password":
+			if s.personalMode() && auth.HasPersonalAccessToken(ctx) {
+				return nil, status.Error(codes.PermissionDenied, "password changes require an interactive session")
+			}
 			if err := coreuser.ValidatePassword(request.User.Password); err != nil {
 				return nil, status.Errorf(codes.InvalidArgument, "%v", err)
 			}

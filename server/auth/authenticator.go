@@ -71,57 +71,81 @@ func (a *Authenticator) resolveAccessToken(ctx context.Context, accessToken stri
 	if !hmac.Equal([]byte(claims.AuthHash), []byte(accessTokenAuthHash(user.ID, user.PasswordHash, []byte(a.secret)))) {
 		return nil, nil
 	}
+	factor, err := a.store.GetUserTwoFactor(ctx, userID)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to get access token session revision")
+	}
+	if claims.SessionRevision != factor.SessionRevision {
+		return nil, nil
+	}
 
 	return &bearerAuth{
 		user: user,
 		claims: &UserClaims{
-			UserID:   userID,
-			Username: claims.Username,
-			Role:     claims.Role,
-			Status:   claims.Status,
+			UserID:          userID,
+			Username:        claims.Username,
+			Role:            claims.Role,
+			Status:          claims.Status,
+			SessionRevision: claims.SessionRevision,
 		},
 	}, nil
 }
 
 // AuthenticateByRefreshToken validates a refresh token against the database.
 func (a *Authenticator) AuthenticateByRefreshToken(ctx context.Context, refreshToken string) (*store.User, string, error) {
+	user, claims, err := a.AuthenticateRefreshSession(ctx, refreshToken)
+	if err != nil {
+		return nil, "", err
+	}
+	return user, claims.TokenID, nil
+}
+
+// AuthenticateRefreshSession returns the proven revision alongside the refresh token's user.
+func (a *Authenticator) AuthenticateRefreshSession(ctx context.Context, refreshToken string) (*store.User, *RefreshTokenClaims, error) {
 	claims, err := ParseRefreshToken(refreshToken, []byte(a.secret))
 	if err != nil {
-		return nil, "", errors.Wrap(err, "invalid refresh token")
+		return nil, nil, errors.Wrap(err, "invalid refresh token")
 	}
 
 	userID, err := parseInt32(claims.Subject)
 	if err != nil {
-		return nil, "", errors.Wrap(err, "invalid user ID in token")
+		return nil, nil, errors.Wrap(err, "invalid user ID in token")
 	}
 
 	// Check token exists in database (revocation check)
 	token, err := a.store.GetUserRefreshTokenByID(ctx, userID, claims.TokenID)
 	if err != nil {
-		return nil, "", errors.Wrap(err, "failed to get refresh token")
+		return nil, nil, errors.Wrap(err, "failed to get refresh token")
 	}
 	if token == nil {
-		return nil, "", errors.New("refresh token revoked")
+		return nil, nil, errors.New("refresh token revoked")
 	}
 
 	// Check token not expired
 	if token.ExpiresAt != nil && token.ExpiresAt.AsTime().Before(time.Now()) {
-		return nil, "", errors.New("refresh token expired")
+		return nil, nil, errors.New("refresh token expired")
 	}
 
 	// Get user
 	user, err := a.store.GetUser(ctx, &store.FindUser{ID: &userID})
 	if err != nil {
-		return nil, "", errors.Wrap(err, "failed to get user")
+		return nil, nil, errors.Wrap(err, "failed to get user")
 	}
 	if user == nil {
-		return nil, "", errors.New("user not found")
+		return nil, nil, errors.New("user not found")
 	}
 	if user.RowStatus == store.Archived {
-		return nil, "", errors.New("user is archived")
+		return nil, nil, errors.New("user is archived")
 	}
 
-	return user, claims.TokenID, nil
+	factor, err := a.store.GetUserTwoFactor(ctx, userID)
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "failed to get refresh token session revision")
+	}
+	if claims.SessionRevision != factor.SessionRevision {
+		return nil, nil, errors.New("refresh token revoked")
+	}
+	return user, claims, nil
 }
 
 // ErrInvalidPAT marks a Personal Access Token that cannot authenticate: it is

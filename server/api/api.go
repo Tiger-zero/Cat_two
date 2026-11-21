@@ -165,6 +165,10 @@ func (s *APIService) NewHandler(ctx context.Context) (http.Handler, error) {
 			// are refused. Failing closed keeps a routing gap from becoming an
 			// access-control gap.
 			procedure, _ := routeResolver.resolveRequest(r)
+			if s.isRetiredProcedure(procedure) {
+				writeGatewayStatusError(w, retiredModuleError())
+				return
+			}
 			if err := authorizer.CheckAccess(ctx, procedure, result); err != nil {
 				writeGatewayAuthorizationError(w, err)
 				return
@@ -197,6 +201,9 @@ func (s *APIService) NewHandler(ctx context.Context) (http.Handler, error) {
 	if err := apipb.RegisterAuthServiceHandlerServer(ctx, gwMux, s); err != nil {
 		return nil, err
 	}
+	if err := s.registerTwoFactorRoutes(gwMux); err != nil {
+		return nil, err
+	}
 	if err := apipb.RegisterUserServiceHandlerServer(ctx, gwMux, s); err != nil {
 		return nil, err
 	}
@@ -222,6 +229,7 @@ func (s *APIService) NewHandler(ctx context.Context) (http.Handler, error) {
 		NewMetadataInterceptor(), // Convert HTTP headers to gRPC metadata first
 		NewLoggingInterceptor(logStacktraces),
 		NewRecoveryInterceptor(logStacktraces),
+		connect.UnaryInterceptorFunc(s.rejectRetiredConnectProcedures),
 		NewAuthInterceptor(authorizer),
 	)
 	connectMux := http.NewServeMux()

@@ -1,15 +1,16 @@
 import { Navigate, useLocation, useParams } from "react-router-dom";
 import { parseFilterQuery, replaceFiltersByFactor, stringifyFilters } from "@/contexts/MemoFilterContext";
 import { parseLocalDate } from "@/lib/calendar-utils";
-import { buildCollectionPath, getCollectionCreator, ROUTES } from "./routes";
+import { personalFeedSearch, ROUTES } from "./routes";
 
 export const LegacyCalendarRedirect = () => {
   const { spaceUid, year, month, day } = useParams();
-  const { search, hash } = useLocation();
+  const location = useLocation();
   if (spaceUid?.includes("/")) return <Navigate to="/404" replace />;
 
-  const scope = getCollectionCreator(search) ? ROUTES.HOME : ROUTES.EXPLORE;
-  const pathname = buildCollectionPath(scope, spaceUid ? `spaces/${spaceUid}` : undefined);
+  const { hash } = location;
+  const pathname = ROUTES.HOME;
+  const search = personalFeedSearch(location.search);
 
   // A selected day on an old link becomes the same filter as a pick in the sidebar calendar.
   const date = year && month && day && `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;

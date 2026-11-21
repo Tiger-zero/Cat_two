@@ -14,7 +14,7 @@ import { handleError } from "@/lib/error";
 import { getMemoViewId, isMemoCollectionRoute } from "@/lib/memo-views";
 import { showErrorToast, toast } from "@/lib/toast";
 import { cn } from "@/lib/utils";
-import { getCollectionHomePath, ROUTES } from "@/router/routes";
+import { ROUTES } from "@/router/routes";
 import type { MemoView } from "@/types/proto/api/user_service_pb";
 import { useTranslate } from "@/utils/i18n";
 import SidebarRow, {
@@ -47,7 +47,7 @@ const ViewsSection = ({ manageActive = false }: { manageActive?: boolean }) => {
 
   const handleView = (viewId: string) => {
     setMemoView(selectedMemoView === viewId ? undefined : viewId);
-    if (!isMemoCollectionRoute(location.pathname)) navigate({ pathname: getCollectionHomePath(location), search: location.search });
+    if (!isMemoCollectionRoute(location.pathname)) navigate({ pathname: ROUTES.HOME, search: location.search });
     setMobileOpen(false);
   };
 

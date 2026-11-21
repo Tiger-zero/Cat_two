@@ -1,52 +1,37 @@
 import {
   ArrowLeftRightIcon,
-  AstroidIcon,
   BarChart3Icon,
   CogIcon,
   DatabaseIcon,
-  FileCogIcon,
-  KeyIcon,
   KeyRoundIcon,
   type LucideIcon,
-  MailIcon,
   Settings2Icon,
   SquarePenIcon,
   TagsIcon,
   UserIcon,
-  WebhookIcon,
 } from "lucide-react";
 import { type ComponentType } from "react";
 import AccessTokenSection from "@/components/Settings/AccessTokenSection";
-import ConfigurationSection from "@/components/Settings/ConfigurationSection";
 import EditorSection from "@/components/Settings/EditorSection";
 import InstanceSection from "@/components/Settings/InstanceSection";
 import MemoExportSection from "@/components/Settings/MemoExportSection";
 import MyAccountSection from "@/components/Settings/MyAccountSection";
-import NotificationSection from "@/components/Settings/NotificationSection";
 import PreferencesSection from "@/components/Settings/PreferencesSection";
 import ResourceStatsSection from "@/components/Settings/ResourceStatsSection";
-import SpacesSection from "@/components/Settings/SpacesSection";
-import SSOSection from "@/components/Settings/SSOSection";
 import StorageSection from "@/components/Settings/StorageSection";
 import TagsSection from "@/components/Settings/TagsSection";
-import WebhookSection from "@/components/Settings/WebhookSection";
 import { InstanceSetting_Key } from "@/types/proto/api/instance_service_pb";
 
 export type SettingSectionKey =
   | "my-account"
   | "memo-export"
-  | "spaces"
   | "access-token"
   | "preference"
   | "editor"
-  | "webhook"
   | "system"
   | "storage"
-  | "notification"
-  | "sso"
   | "tags"
-  | "resource-stats"
-  | "configuration";
+  | "resource-stats";
 
 type SettingSectionScope = "basic" | "admin";
 
@@ -68,13 +53,6 @@ export const SETTINGS_SECTIONS: SettingSectionDefinition[] = [
     component: MyAccountSection,
   },
   {
-    key: "spaces",
-    scope: "basic",
-    labelKey: "setting.spaces.label",
-    icon: AstroidIcon,
-    component: SpacesSection,
-  },
-  {
     key: "access-token",
     scope: "basic",
     labelKey: "setting.access-token.label",
@@ -94,13 +72,6 @@ export const SETTINGS_SECTIONS: SettingSectionDefinition[] = [
     labelKey: "setting.editor.label",
     icon: SquarePenIcon,
     component: EditorSection,
-  },
-  {
-    key: "webhook",
-    scope: "basic",
-    labelKey: "setting.webhook.label",
-    icon: WebhookIcon,
-    component: WebhookSection,
   },
   {
     key: "system",
@@ -132,33 +103,11 @@ export const SETTINGS_SECTIONS: SettingSectionDefinition[] = [
     preloadSettingKeys: [InstanceSetting_Key.STORAGE],
   },
   {
-    key: "notification",
-    scope: "admin",
-    labelKey: "setting.notification.label",
-    icon: MailIcon,
-    component: NotificationSection,
-    preloadSettingKeys: [InstanceSetting_Key.NOTIFICATION],
-  },
-  {
-    key: "sso",
-    scope: "admin",
-    labelKey: "setting.sso.label",
-    icon: KeyIcon,
-    component: SSOSection,
-  },
-  {
     key: "resource-stats",
     scope: "admin",
     labelKey: "setting.resource-stats.label",
     icon: BarChart3Icon,
     component: ResourceStatsSection,
-  },
-  {
-    key: "configuration",
-    scope: "admin",
-    labelKey: "setting.configuration.label",
-    icon: FileCogIcon,
-    component: ConfigurationSection,
   },
 ];
 

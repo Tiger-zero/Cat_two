@@ -9,7 +9,6 @@ export interface MemoViewProps {
   timeDisplay?: MemoTimeDisplay;
   showCreator?: boolean;
   showPinned?: boolean;
-  showSpace?: boolean;
   className?: string;
   parentPage?: string;
   shareImageDialogOpen?: boolean;
@@ -26,7 +25,6 @@ export interface MemoViewHandle {
 export interface MemoHeaderProps {
   timeDisplay?: MemoTimeDisplay;
   showCreator?: boolean;
-  showSpace?: boolean;
 }
 
 export interface MemoBodyProps {

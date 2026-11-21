@@ -25,8 +25,8 @@
       --mu-selection: rgb(8 118 73 / 18%);
       --memos-activity-empty: #e7e7e2;
       --memos-activity-low: #b9f8cf;
-      --memos-activity-medium: #05df72;
-      --memos-activity-high: #00a63e;
+      --memos-activity-medium: var(--memos-activity-low);
+      --memos-activity-high: var(--memos-activity-low);
       --memos-activity-today: #00a63e;
       --memos-panel-shadow: 0 1px 2px rgb(29 31 35 / 4%), 0 3px 12px rgb(29 31 35 / 3%);
     }

@@ -8,8 +8,6 @@ vi.mock("@/hooks/useMemoSuggestions", () => ({
 }));
 
 const state = vi.hoisted(() => ({
-  selectedSpaceName: undefined as string | undefined,
-  creatorUsername: undefined as string | undefined,
   editorProps: undefined as Record<string, unknown> | undefined,
   listProps: undefined as Record<string, unknown> | undefined,
   memoViewProps: undefined as Record<string, unknown> | undefined,
@@ -51,7 +49,7 @@ vi.mock("@/components/PagedMemoList", () => ({
     renderHeader,
     ...props
   }: {
-    renderer: (memo: { name: string }, options: { compact: boolean }) => React.ReactNode;
+    renderer: (memo: { name: string; space?: string }, options: { compact: boolean }) => React.ReactNode;
     renderLeading: (options: { useGrid: boolean }) => React.ReactNode;
     renderHeader: () => React.ReactNode;
   } & Record<string, unknown>) => {
@@ -60,7 +58,7 @@ vi.mock("@/components/PagedMemoList", () => ({
       <>
         {renderHeader()}
         {renderLeading({ useGrid: false })}
-        {renderer({ name: "memos/1" }, { compact: false })}
+        {renderer({ name: "memos/1", space: "spaces/legacy" }, { compact: false })}
       </>
     );
   },
@@ -89,20 +87,6 @@ vi.mock("@/contexts/NewMemoContext", () => ({
   NewMemoProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));
 
-vi.mock("@/contexts/SpaceContext", () => ({
-  useSpaceContext: () => ({
-    selectedSpaceName: state.selectedSpaceName,
-    creatorUsername: state.creatorUsername,
-    memoFilter:
-      [
-        state.selectedSpaceName && `space == "${state.selectedSpaceName}"`,
-        state.creatorUsername && `creator == "users/${state.creatorUsername}"`,
-      ]
-        .filter(Boolean)
-        .join(" && ") || undefined,
-  }),
-}));
-
 vi.mock("@/hooks", () => ({
   useMemoFilters: (options: Record<string, unknown>) => {
     state.filterOptions = options;
@@ -121,8 +105,6 @@ vi.mock("@/utils/i18n", () => ({
 
 describe("<Home>", () => {
   beforeEach(() => {
-    state.selectedSpaceName = undefined;
-    state.creatorUsername = undefined;
     state.editorProps = undefined;
     state.listProps = undefined;
     state.memoViewProps = undefined;
@@ -134,34 +116,22 @@ describe("<Home>", () => {
 
     expect(screen.getByTestId("memo-editor")).toBeInTheDocument();
     expect(screen.getByTestId("memo-view")).toBeInTheDocument();
-    expect(state.listProps).toMatchObject({ contextFilter: undefined });
-    expect(state.editorProps).toMatchObject({ draft: { scope: "home", space: undefined } });
+    expect(state.listProps).toMatchObject({ contextFilter: 'creator == "users/steven"' });
+    expect(state.editorProps?.draft).toEqual({ scope: "home", createTime: undefined });
     expect(state.editorProps?.autoFocus).toEqual(expect.any(Function));
     expect(state.editorProps?.suggestions).toEqual([{ id: "tag:work" }]);
     expect(state.filterOptions).not.toHaveProperty("creatorName");
-    expect(state.memoViewProps).toMatchObject({ showCreator: true });
+    expect(state.memoViewProps).toMatchObject({ showPinned: true });
   });
 
-  it("shows another creator's matching memos without offering an editor", () => {
-    state.creatorUsername = "alice";
-    render(<Home />);
-    expect(state.listProps).toMatchObject({ contextFilter: 'creator == "users/alice"' });
-    expect(state.memoViewProps).toMatchObject({ showCreator: false });
-    expect(screen.queryByTestId("memo-editor")).not.toBeInTheDocument();
-  });
-
-  it("filters the feed and sets new memo placement to the selected Space", () => {
-    state.selectedSpaceName = "spaces/product";
+  it("renders an owned note with legacy Space metadata in the personal feed", () => {
     render(<Home />);
 
-    expect(state.listProps).toMatchObject({ contextFilter: 'space == "spaces/product"' });
-    expect(state.editorProps).toMatchObject({
-      draft: { scope: "home", space: "spaces/product" },
-    });
+    expect(state.listProps).toMatchObject({ contextFilter: 'creator == "users/steven"' });
+    expect(state.memoViewProps).toMatchObject({ memo: { name: "memos/1", space: "spaces/legacy" } });
   });
 
-  it("lets a regular user export their own memos while browsing another user's feed", () => {
-    state.creatorUsername = "alice";
+  it("lets a regular user export their own memos", () => {
     render(<Home />);
     fireEvent.click(screen.getByRole("button", { name: "Export memos" }));
     expect(state.exportMemos).toHaveBeenCalledWith("steven", undefined);

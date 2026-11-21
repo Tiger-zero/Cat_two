@@ -29,6 +29,15 @@ instead, and update `core/configuration/testdata/compat/` in the same change. Af
 
 ### Breaking
 
+- Cat_two uses private instance access with one-time web administrator setup. `CreateUser` rejects additional
+  registrations, and `UpdateInstanceSetting` rejects access-policy changes. Administrator password changes require an
+  interactive sign-in session.
+- Cat_two retires the Space, identity provider, linked identity, notification, webhook and configuration status APIs.
+  Affected REST and Connect calls return `UNIMPLEMENTED`. An existing note's author can still use notes that belonged
+  to a Space.
+- When an account enables two-step verification, password sign-in requires `password_credentials.otp_code`.
+  `ErrorInfo.reason` is `TOTP_REQUIRED` for a missing code and `TOTP_INVALID` for an invalid or reused code.
+  Changing or resetting the factor revokes the account's interactive sessions. Personal access tokens remain valid.
 - Cat_two removed the built-in transcription service. `POST /api/ai:transcribe` and
   `/memos.api.AIService/Transcribe` return `404 Not Found`. Existing `instance/settings/AI` values and
   declarative configuration remain compatible. They no longer drive server-side model calls.

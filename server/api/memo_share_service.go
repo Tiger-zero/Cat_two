@@ -100,7 +100,7 @@ func (s *APIService) DeleteMemoShare(ctx context.Context, request *apipb.DeleteM
 	if err := s.Store.DeleteMemoShare(ctx, &store.DeleteMemoShare{
 		UID:    &shareToken,
 		MemoID: &memo.ID,
-		Policy: memoWritePolicy(user.ID, false),
+		Policy: s.memoWritePolicy(user.ID, false),
 	}); err != nil {
 		return nil, mapMemoWriteError(err, "failed to delete memo share")
 	}

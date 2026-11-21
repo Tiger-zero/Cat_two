@@ -84,7 +84,7 @@ func (s *APIService) UpsertMemoReaction(ctx context.Context, request *apipb.Upse
 		CreatorID:    user.ID,
 		MemoID:       memo.ID,
 		ReactionType: request.Reaction.ReactionType,
-		Policy:       reactionWritePolicy(user.ID),
+		Policy:       s.reactionWritePolicy(user.ID),
 	})
 	if err != nil {
 		return nil, mapReactionMutationError(err, "failed to upsert reaction")
@@ -143,7 +143,7 @@ func (s *APIService) DeleteMemoReaction(ctx context.Context, request *apipb.Dele
 		ID:          &reactionID,
 		MemoID:      &reaction.MemoID,
 		ActorUserID: &user.ID,
-		Policy:      reactionWritePolicy(user.ID),
+		Policy:      s.reactionWritePolicy(user.ID),
 	}); err != nil {
 		return nil, mapReactionMutationError(err, "failed to delete reaction")
 	}
@@ -153,8 +153,8 @@ func (s *APIService) DeleteMemoReaction(ctx context.Context, request *apipb.Dele
 	return &emptypb.Empty{}, nil
 }
 
-func reactionWritePolicy(actorUserID int32) *store.ReactionWritePolicy {
-	return &store.ReactionWritePolicy{ActorUserID: actorUserID}
+func (s *APIService) reactionWritePolicy(actorUserID int32) *store.ReactionWritePolicy {
+	return &store.ReactionWritePolicy{ActorUserID: actorUserID, Personal: s.personalMode()}
 }
 
 func mapReactionMutationError(err error, operation string) error {

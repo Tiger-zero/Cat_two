@@ -1,10 +1,7 @@
 import { Button, Drawer, Tooltip } from "@usememos/ui";
 import {
-  ArchiveIcon,
   ArrowRightIcon,
-  BellIcon,
   CalendarDaysIcon,
-  ListIcon,
   type LucideIcon,
   MenuIcon,
   SearchIcon,
@@ -18,23 +15,22 @@ import { MemoDetailSidebar } from "@/components/MemoDetailSidebar";
 import MemoDisplaySettingMenu from "@/components/MemoDisplaySettingMenu";
 import { DEFAULT_SETTING_SECTION, SETTINGS_SECTIONS } from "@/components/Settings/settingSections";
 import StatisticsView from "@/components/StatisticsView";
-import { type InboxFilter, useAppSidebar } from "@/contexts/AppSidebarContext";
+import { useAppSidebar } from "@/contexts/AppSidebarContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { useGlobalMemoEditor } from "@/contexts/GlobalMemoEditorContext";
 import { useInstance } from "@/contexts/InstanceContext";
-import { useSpaceContext } from "@/contexts/SpaceContext";
 import useCurrentUser from "@/hooks/useCurrentUser";
 import { useFilteredMemoStats } from "@/hooks/useFilteredMemoStats";
 import useMediaQuery from "@/hooks/useMediaQuery";
-import { useNotifications } from "@/hooks/useUserQueries";
+import { buildMemoCreatorFilter } from "@/lib/resource-names";
 import { cn } from "@/lib/utils";
-import { collectionNavigationPath, ROUTES } from "@/router/routes";
-import { User_Role, UserNotification_Status } from "@/types/proto/api/user_service_pb";
+import { ROUTES } from "@/router/routes";
+import { User_Role } from "@/types/proto/api/user_service_pb";
 import { useTranslate } from "@/utils/i18n";
+import AccountMenu from "./AccountMenu";
 import { getSidebarRouteKind } from "./routes";
-import SidebarRow, { SIDEBAR_ROW_CLASSES, SidebarRowIconSlot, sidebarRowStateClasses } from "./SidebarRow";
+import { SIDEBAR_ROW_CLASSES, SidebarRowIconSlot, sidebarRowStateClasses } from "./SidebarRow";
 import SidebarSection, { SIDEBAR_SECTION_STACK_CLASSES } from "./SidebarSection";
-import SpaceSwitcher from "./SpaceSwitcher";
 import {
   SIDEBAR_LEADING_SLOT_CLASSES,
   SIDEBAR_NAV_LEADING_SLOT_CLASSES,
@@ -59,23 +55,18 @@ const NewMemoAction = ({ onClick }: { onClick: () => void }) => {
   );
 };
 
-const CollectionSidebarContent = ({ context }: { context: "home" | "explore" | "archived" }) => {
+const CollectionSidebarContent = ({ context }: { context: "home" | "archived" }) => {
   const t = useTranslate();
   const currentUser = useCurrentUser();
-  const { memoFilter, selectedSpaceName, creatorUsername } = useSpaceContext();
   const md = useMediaQuery("md");
   const { mobileOpen, setMobileOpen } = useAppSidebar();
   const { isInitialized: authInitialized } = useAuth();
   const { isInitialized: instanceInitialized } = useInstance();
-  // User-level collections stay aligned with their unscoped feeds even when a Space is remembered.
-  const isUserLevelCollection = context === "archived";
   const { statistics, tags } = useFilteredMemoStats({
     context: context === "archived" ? "archived" : "collection",
-    filter: isUserLevelCollection ? undefined : memoFilter,
+    filter: context === "home" && currentUser ? buildMemoCreatorFilter(currentUser.name) : undefined,
     enabled: authInitialized && instanceInitialized && (md || mobileOpen),
   });
-
-  const tagStateScope = isUserLevelCollection ? context : `${creatorUsername ?? "all"}${selectedSpaceName ? `:${selectedSpaceName}` : ""}`;
 
   return (
     <div className={SIDEBAR_SECTION_STACK_CLASSES}>
@@ -84,46 +75,8 @@ const CollectionSidebarContent = ({ context }: { context: "home" | "explore" | "
       </SidebarSection>
       {/* Every collection route narrows the same way: views (yours, so signed-in only), days, tags. */}
       {currentUser && <ViewsSection />}
-      <TagsSection tagCount={tags} scope={tagStateScope} onSelect={() => setMobileOpen(false)} />
+      <TagsSection tagCount={tags} scope={`${currentUser?.name ?? "anonymous"}:${context}`} onSelect={() => setMobileOpen(false)} />
     </div>
-  );
-};
-
-const InboxSidebarContent = () => {
-  const t = useTranslate();
-  const { inboxFilter, setInboxFilter, setMobileOpen } = useAppSidebar();
-  const { data: notifications = [] } = useNotifications();
-  const rows: Array<{ value: InboxFilter; icon: LucideIcon; label: string; count: number }> = [
-    { value: "all", icon: ListIcon, label: t("common.all"), count: notifications.length },
-    {
-      value: "unread",
-      icon: BellIcon,
-      label: t("inbox.unread"),
-      count: notifications.filter((item) => item.status === UserNotification_Status.UNREAD).length,
-    },
-    {
-      value: "archived",
-      icon: ArchiveIcon,
-      label: t("common.archived"),
-      count: notifications.filter((item) => item.status === UserNotification_Status.ARCHIVED).length,
-    },
-  ];
-  return (
-    <SidebarSection label={t("common.inbox")}>
-      {rows.map((row) => (
-        <SidebarRow
-          key={row.value}
-          state={inboxFilter === row.value ? "current" : "idle"}
-          icon={row.icon}
-          label={row.label}
-          count={row.count}
-          onClick={() => {
-            setInboxFilter(row.value);
-            setMobileOpen(false);
-          }}
-        />
-      ))}
-    </SidebarSection>
   );
 };
 
@@ -133,9 +86,12 @@ const SettingsSidebarContent = () => {
   const user = useCurrentUser();
   const { setMobileOpen } = useAppSidebar();
   const isHost = user?.role === User_Role.ADMIN;
-  const currentSection = location.hash.slice(1) || DEFAULT_SETTING_SECTION;
   const basic = SETTINGS_SECTIONS.filter((section) => section.scope === "basic");
   const admin = SETTINGS_SECTIONS.filter((section) => section.scope === "admin");
+  const requestedSection = location.hash.slice(1);
+  const currentSection = [...basic, ...(isHost ? admin : [])].some((section) => section.key === requestedSection)
+    ? requestedSection
+    : DEFAULT_SETTING_SECTION;
   const renderSections = (sections: typeof SETTINGS_SECTIONS) =>
     sections.map((section) => (
       <Link
@@ -181,11 +137,10 @@ const MemoDetailSidebarContent = () => {
 const RouteSidebarContent = () => {
   const location = useLocation();
   const kind = getSidebarRouteKind(location.pathname);
-  if (kind === "home" || kind === "archived" || kind === "explore") {
+  if (kind === "home" || kind === "archived") {
     return <CollectionSidebarContent context={kind} />;
   }
   if (kind === "views") return <ViewsSection manageActive />;
-  if (kind === "inbox") return <InboxSidebarContent />;
   if (kind === "settings") return <SettingsSidebarContent />;
   if (kind === "memo") return <MemoDetailSidebarContent />;
   return null;
@@ -260,10 +215,9 @@ const GlobalNavigation = () => {
   const t = useTranslate();
   const calendarRef = useRef<HTMLDivElement>(null);
   const location = useLocation();
-  const currentUser = useCurrentUser();
   const { setQuickFindOpen } = useAppSidebar();
   const routeKind = getSidebarRouteKind(location.pathname);
-  const calendarActive = routeKind === "home" || routeKind === "explore";
+  const calendarActive = routeKind === "home";
 
   return (
     <Tooltip.Provider>
@@ -276,7 +230,7 @@ const GlobalNavigation = () => {
           className={cn("flex min-w-0 items-center rounded-mu-md", calendarActive && sidebarRowStateClasses("current"))}
         >
           <NavPill
-            to={collectionNavigationPath(location, currentUser?.username)}
+            to={calendarActive ? `${ROUTES.HOME}${location.search}` : ROUTES.HOME}
             label={t("common.calendar")}
             icon={CalendarDaysIcon}
             active={calendarActive}
@@ -300,7 +254,7 @@ const AppSidebar = ({ className, showThemeToggle = true }: { className?: string;
   return (
     <aside className={cn("mu-compact flex h-full w-full select-none flex-col bg-mu-canvas text-mu-text-secondary", className)}>
       <div data-sidebar-header className={cn("flex h-13 shrink-0 items-center justify-between gap-2", SIDEBAR_RAIL_CLASSES)}>
-        <SpaceSwitcher className="min-w-0" size="header" />
+        <AccountMenu className="min-w-0" size="header" />
         <div className="flex shrink-0 items-center gap-1">
           {showThemeToggle && <ThemeToggle />}
           {canCompose && <NewMemoAction onClick={openEditor} />}
@@ -370,7 +324,7 @@ export const MobileAppHeader = () => {
         />
         <Tooltip.Popup side="bottom">{t("common.open-navigation")}</Tooltip.Popup>
       </Tooltip.Root>
-      <SpaceSwitcher className="max-w-[12rem]" size="md" />
+      <AccountMenu className="max-w-[12rem]" />
       <div className="ms-auto">
         <ThemeToggle />
       </div>

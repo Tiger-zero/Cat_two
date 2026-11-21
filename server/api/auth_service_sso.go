@@ -186,6 +186,9 @@ func (s *APIService) createSSOUser(
 }
 
 func (s *APIService) resolveSSOIdentity(ctx context.Context, idpName, code, redirectURI, codeVerifier string) (*storepb.IdentityProvider, *idp.IdentityProviderUserInfo, error) {
+	if s.personalMode() {
+		return nil, nil, retiredModuleError()
+	}
 	idpUID, err := ExtractIdentityProviderUIDFromName(idpName)
 	if err != nil {
 		return nil, nil, status.Errorf(codes.InvalidArgument, "invalid identity provider name: %v", err)

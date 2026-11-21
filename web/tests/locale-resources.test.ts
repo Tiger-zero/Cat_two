@@ -34,7 +34,6 @@ const dynamicKeyParts: Record<string, readonly string[]> = {
   "live-update.${}": ["connected", "connecting", "disconnected"],
   "memo.${}": ["layout-auto", "layout-columns", "layout-list"],
   "memo.${}-description": ["layout-auto", "layout-columns", "layout-list"],
-  "setting.notification.requirement-${}": ["gmail", "optional", "recommended", "required"],
   "space.icon.${}": ["emoji", "icons"],
 };
 
@@ -147,9 +146,9 @@ describe("locale key usage", () => {
 
 describe("locale resources", () => {
   it("allows extra plural categories only for existing plural messages", () => {
-    expect(referenceFor("setting.sso.scope-count_few")).toBe(source["setting.sso.scope-count_other"]);
-    expect(referenceFor("setting.sso.scope-count_many")).toBe(source["setting.sso.scope-count_other"]);
-    expect(referenceFor("setting.sso.removed-key_other")).toBeUndefined();
+    expect(referenceFor("setting.tags.updated-notes_few")).toBe(source["setting.tags.updated-notes_other"]);
+    expect(referenceFor("setting.tags.updated-notes_many")).toBe(source["setting.tags.updated-notes_other"]);
+    expect(referenceFor("setting.tags.removed-key_other")).toBeUndefined();
     expect(referenceFor("common.save_few")).toBeUndefined();
   });
 

@@ -293,8 +293,10 @@ func (i *memoImporter) replaceMemo(record *memoexport.Memo, existing *store.Memo
 		RowStatus:  &next.RowStatus,
 		CreatedTs:  &next.CreatedTs,
 		UpdatedTs:  &next.UpdatedTs,
-		ClearSpace: next.SpaceID == nil,
-		SpaceID:    next.SpaceID,
+	}
+	if !i.service.personalMode() {
+		update.ClearSpace = next.SpaceID == nil
+		update.SpaceID = next.SpaceID
 	}
 	err = i.bindAttachments(existing, next.Content, names, attachments, func(prepared *preparedMemoAttachments, required []int32) error {
 		return i.service.applyMemoMutation(i.ctx, existing, prepared, update, required, nil)
@@ -351,7 +353,9 @@ func (i *memoImporter) buildMemo(record *memoexport.Memo, uid string, content []
 		Pinned:     record.Pinned,
 		Payload:    &storepb.MemoPayload{},
 	}
-	if record.Space != nil {
+	if record.Space != nil && i.service.personalMode() {
+		i.warn(record.UID, "space placement from the archive was ignored")
+	} else if record.Space != nil {
 		spaceID, err := i.resolveSpace(record.Space)
 		if err != nil {
 			return nil, err

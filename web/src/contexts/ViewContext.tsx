@@ -1,6 +1,6 @@
 import { createContext, type ReactNode, useContext, useState } from "react";
 import { useLocation } from "react-router-dom";
-import { ROUTES, resolveCollectionRoute } from "@/router/routes";
+import { ROUTES } from "@/router/routes";
 
 export type MemoTimeBasis = "create_time" | "update_time";
 
@@ -111,10 +111,7 @@ export function ViewProvider({ children, enabled = true }: { children: ReactNode
 /** Timeline preferences also apply to its sidebar statistics and date filters. */
 export function TimelineViewProvider({ children }: { children: ReactNode }) {
   const { pathname } = useLocation();
-  const route = resolveCollectionRoute(pathname);
-  const collectionPath = route.pathname.toLowerCase();
-  const enabled = route.isCollection && (collectionPath === ROUTES.HOME || collectionPath === ROUTES.EXPLORE);
-  return <ViewProvider enabled={enabled}>{children}</ViewProvider>;
+  return <ViewProvider enabled={pathname === ROUTES.HOME}>{children}</ViewProvider>;
 }
 
 export function useView() {

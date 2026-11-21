@@ -1,22 +1,21 @@
 import { create } from "@bufbuild/protobuf";
-import { Button, Checkbox, Select } from "@usememos/ui";
+import { Button, Select } from "@usememos/ui";
 import { isEqual } from "lodash-es";
 import { useEffect, useMemo, useState } from "react";
-import { identityProviderServiceClient } from "@/connect";
 import { useInstance } from "@/contexts/InstanceContext";
-import { isFieldManaged, useManagedResource } from "@/hooks/useConfigurationQueries";
+import useCurrentUser from "@/hooks/useCurrentUser";
 import useDialog from "@/hooks/useDialog";
 import { toast } from "@/lib/toast";
-import { IdentityProvider } from "@/types/proto/api/idp_service_pb";
 import {
   InstanceSetting_GeneralSetting,
   InstanceSetting_GeneralSettingSchema,
   InstanceSetting_Key,
   InstanceSettingSchema,
 } from "@/types/proto/api/instance_service_pb";
+import { User_Role } from "@/types/proto/api/user_service_pb";
 import { useTranslate } from "@/utils/i18n";
+import ChangeMemberPasswordDialog from "../ChangeMemberPasswordDialog";
 import UpdateCustomizedProfileDialog from "../UpdateCustomizedProfileDialog";
-import ManagedByConfigurationChip from "./ManagedByConfigurationChip";
 import SettingGroup from "./SettingGroup";
 import { SettingCodeEditor, SettingList, SettingListItem } from "./SettingList";
 import SettingSection from "./SettingSection";
@@ -24,28 +23,17 @@ import useInstanceSettingUpdater, { buildInstanceSettingName } from "./useInstan
 
 const InstanceSection = () => {
   const t = useTranslate();
+  const user = useCurrentUser();
+  const admin = user?.role === User_Role.ADMIN ? user : undefined;
   const customizeDialog = useDialog();
+  const passwordDialog = useDialog();
   const saveInstanceSetting = useInstanceSettingUpdater();
-  const { generalSetting: originalGeneralSetting, profile } = useInstance();
+  const { generalSetting: originalGeneralSetting } = useInstance();
   const [instanceGeneralSetting, setInstanceGeneralSetting] = useState<InstanceSetting_GeneralSetting>(originalGeneralSetting);
-  const [identityProviderList, setIdentityProviderList] = useState<IdentityProvider[]>([]);
-  const managedGeneral = useManagedResource(buildInstanceSettingName(InstanceSetting_Key.GENERAL));
-  const generalLocked = (field: string) => isFieldManaged(managedGeneral, `generalSetting.${field}`);
-  // A group names its configuration file only when one of its own fields is managed.
-  const groupChip = (locked: boolean) => (locked ? <ManagedByConfigurationChip resource={managedGeneral} /> : undefined);
 
   useEffect(() => {
     setInstanceGeneralSetting(originalGeneralSetting);
   }, [originalGeneralSetting]);
-
-  const fetchIdentityProviderList = async () => {
-    const { identityProviders } = await identityProviderServiceClient.listIdentityProviders({});
-    setIdentityProviderList(identityProviders);
-  };
-
-  useEffect(() => {
-    fetchIdentityProviderList();
-  }, []);
 
   const weekStartDayOptions = useMemo(
     () => [
@@ -84,21 +72,16 @@ const InstanceSection = () => {
 
   return (
     <SettingSection title={t("setting.system.label")}>
-      <SettingGroup
-        title={t("common.basic")}
-        description={t("setting.system.basic-description")}
-        actions={groupChip(generalLocked("customProfile") || generalLocked("weekStartDayOffset"))}
-      >
+      <SettingGroup title={t("common.basic")} description={t("setting.system.basic-description")}>
         <SettingList>
           <SettingListItem label={t("setting.system.server-name")} description={instanceGeneralSetting.customProfile?.title || "Memos"}>
-            <Button variant="neutral" disabled={generalLocked("customProfile")} onClick={customizeDialog.open}>
+            <Button variant="neutral" onClick={customizeDialog.open}>
               {t("common.edit")}
             </Button>
           </SettingListItem>
 
           <SettingListItem label={t("setting.instance.week-start-day")} description={t("setting.instance.week-start-day-description")}>
             <Select.Root
-              disabled={generalLocked("weekStartDayOffset")}
               value={instanceGeneralSetting.weekStartDayOffset.toString()}
               items={weekStartDayOptions}
               onValueChange={(value) => {
@@ -120,77 +103,25 @@ const InstanceSection = () => {
         </SettingList>
       </SettingGroup>
 
-      <SettingGroup
-        title={t("setting.instance.access-title")}
-        description={t("setting.instance.access-description")}
-        showSeparator
-        actions={groupChip(
-          ["disallowUserRegistration", "disallowPasswordAuth", "disallowChangeUsername", "disallowChangeNickname"].some(generalLocked),
-        )}
-      >
-        <SettingList>
-          <SettingListItem
-            label={t("setting.instance.disallow-user-registration")}
-            description={t("setting.instance.disallow-user-registration-description")}
-          >
-            <Checkbox
-              disabled={profile.demo || generalLocked("disallowUserRegistration")}
-              checked={instanceGeneralSetting.disallowUserRegistration}
-              onCheckedChange={(checked) => updatePartialSetting({ disallowUserRegistration: checked })}
-            />
-          </SettingListItem>
+      {admin && (
+        <SettingGroup title={t("setting.instance.access-title")} showSeparator>
+          <SettingList>
+            <SettingListItem label={t("common.password")} description={t("setting.instance.access-description")}>
+              <Button variant="neutral" onClick={passwordDialog.open}>
+                {t("setting.account.change-password")}
+              </Button>
+            </SettingListItem>
+          </SettingList>
+          <ChangeMemberPasswordDialog open={passwordDialog.isOpen} onOpenChange={passwordDialog.setOpen} user={admin} />
+        </SettingGroup>
+      )}
 
-          <SettingListItem
-            label={t("setting.instance.disallow-password-auth")}
-            description={t("setting.instance.disallow-password-auth-description")}
-          >
-            <Checkbox
-              disabled={
-                profile.demo ||
-                generalLocked("disallowPasswordAuth") ||
-                (identityProviderList.length === 0 && !instanceGeneralSetting.disallowPasswordAuth)
-              }
-              checked={instanceGeneralSetting.disallowPasswordAuth}
-              onCheckedChange={(checked) => updatePartialSetting({ disallowPasswordAuth: checked })}
-            />
-          </SettingListItem>
-
-          <SettingListItem
-            label={t("setting.instance.disallow-change-username")}
-            description={t("setting.instance.disallow-change-username-description")}
-          >
-            <Checkbox
-              disabled={generalLocked("disallowChangeUsername")}
-              checked={instanceGeneralSetting.disallowChangeUsername}
-              onCheckedChange={(checked) => updatePartialSetting({ disallowChangeUsername: checked })}
-            />
-          </SettingListItem>
-
-          <SettingListItem
-            label={t("setting.instance.disallow-change-nickname")}
-            description={t("setting.instance.disallow-change-nickname-description")}
-          >
-            <Checkbox
-              disabled={generalLocked("disallowChangeNickname")}
-              checked={instanceGeneralSetting.disallowChangeNickname}
-              onCheckedChange={(checked) => updatePartialSetting({ disallowChangeNickname: checked })}
-            />
-          </SettingListItem>
-        </SettingList>
-      </SettingGroup>
-
-      <SettingGroup
-        title={t("setting.system.custom-code-title")}
-        description={t("setting.system.custom-code-description")}
-        showSeparator
-        actions={groupChip(generalLocked("additionalStyle") || generalLocked("additionalScript"))}
-      >
+      <SettingGroup title={t("setting.system.custom-code-title")} description={t("setting.system.custom-code-description")} showSeparator>
         <SettingCodeEditor
           label={t("setting.system.additional-style")}
           description={t("setting.system.additional-style-description")}
           placeholder={t("setting.system.additional-style-placeholder")}
           value={instanceGeneralSetting.additionalStyle}
-          disabled={generalLocked("additionalStyle")}
           onChange={(additionalStyle) => updatePartialSetting({ additionalStyle })}
         />
 
@@ -199,7 +130,6 @@ const InstanceSection = () => {
           description={t("setting.system.additional-script-description")}
           placeholder={t("setting.system.additional-script-placeholder")}
           value={instanceGeneralSetting.additionalScript}
-          disabled={generalLocked("additionalScript")}
           onChange={(additionalScript) => updatePartialSetting({ additionalScript })}
         />
       </SettingGroup>

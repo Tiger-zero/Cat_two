@@ -116,10 +116,31 @@ func (s *APIService) resolveWritableSpaceByName(ctx context.Context, name string
 // other caller must be an active member. Collection scopes such as the space
 // filter keep using resolveWritableSpaceByName, so feeds stay membership-only.
 func (s *APIService) resolveSpaceForMemoPlacement(ctx context.Context, name string, user *store.User) (*store.Space, error) {
+	if s.personalMode() {
+		return nil, retiredModuleError()
+	}
 	if access.IsInstanceAdmin(user) {
 		return s.resolveSpaceByName(ctx, name)
 	}
 	return s.resolveWritableSpaceByName(ctx, name, user.ID)
+}
+
+// requireUnchangedMemoSpace accepts an older client echoing an existing placement.
+func (s *APIService) requireUnchangedMemoSpace(ctx context.Context, memo *store.Memo, name string) error {
+	if memo.SpaceID == nil && name == "" {
+		return nil
+	}
+	if memo.SpaceID == nil || name == "" {
+		return retiredModuleError()
+	}
+	space, err := s.Store.GetSpace(ctx, &store.FindSpace{ID: memo.SpaceID})
+	if err != nil {
+		return status.Error(codes.Internal, "failed to get memo space")
+	}
+	if space == nil || buildSpaceName(space.UID) != name {
+		return retiredModuleError()
+	}
+	return nil
 }
 
 func (s *APIService) isActiveSpaceMember(ctx context.Context, spaceID, userID int32) (bool, error) {
@@ -144,9 +165,10 @@ func sameOptionalInt32(left, right *int32) bool {
 	return *left == *right
 }
 
-func memoWritePolicy(actorUserID int32, lifecycleOnly bool) *store.MemoWritePolicy {
+func (s *APIService) memoWritePolicy(actorUserID int32, lifecycleOnly bool) *store.MemoWritePolicy {
 	return &store.MemoWritePolicy{
 		ActorUserID:   actorUserID,
+		Personal:      s.personalMode(),
 		LifecycleOnly: lifecycleOnly,
 	}
 }
@@ -170,7 +192,7 @@ func mapMemoWriteError(err error, operation string) error {
 // valid and the actor to be an active member of it. An instance administrator
 // is exempt from membership but not from placement validity.
 func (s *APIService) requireAssignedMemoWritable(ctx context.Context, memo *store.Memo, user *store.User) error {
-	if memo.SpaceID == nil {
+	if memo.SpaceID == nil || s.personalMode() {
 		return nil
 	}
 	space, err := s.Store.GetSpace(ctx, &store.FindSpace{ID: memo.SpaceID})

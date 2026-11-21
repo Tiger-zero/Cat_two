@@ -85,6 +85,9 @@ type Driver interface {
 	UpdateUserTx(ctx context.Context, tx *sql.Tx, update *UpdateUser) (*User, error)
 	ListUsersTx(ctx context.Context, tx *sql.Tx, find *FindUser) ([]*User, error)
 	DeleteUser(ctx context.Context, delete *DeleteUser) (*DeleteUserResult, error)
+	// GetUserTwoFactor reads the persisted factor state, locking it in a transaction.
+	GetUserTwoFactor(ctx context.Context, tx *sql.Tx, userID int32) (UserTwoFactor, error)
+	UpsertUserTwoFactorTx(ctx context.Context, tx *sql.Tx, userID int32, state UserTwoFactor) error
 
 	// UserSetting model related methods.
 	UpsertUserSetting(ctx context.Context, upsert *UserSetting) (*UserSetting, error)

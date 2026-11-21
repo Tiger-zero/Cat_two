@@ -4,7 +4,6 @@ import { getRequestToken, refreshAccessToken } from "@/connect";
 import { useAuth } from "@/contexts/AuthContext";
 import { attachmentKeys } from "@/hooks/useAttachmentQueries";
 import { memoKeys } from "@/hooks/useMemoQueries";
-import { spaceKeys } from "@/hooks/useSpaceQueries";
 import { userKeys } from "@/hooks/useUserQueries";
 import { trashQueryKey } from "@/lib/trash";
 
@@ -73,7 +72,7 @@ type SSESyncMessage =
 
 /**
  * useLiveMemoRefresh connects to the server's SSE endpoint and invalidates
- * Space- and memo-backed React Query caches when a change event is received.
+ * Note-backed React Query caches when a change event is received.
  *
  * This enables real-time updates across all open instances of the app.
  */
@@ -155,7 +154,7 @@ export function useLiveMemoRefresh() {
           if (hasConnectedOnceRef.current) {
             // Resync active collaborative views after reconnect because the server may have
             // dropped events while the client was disconnected or backpressured.
-            invalidateAllLiveQueries(queryClient);
+            invalidateLiveMemoQueries(queryClient);
           }
           hasConnectedOnceRef.current = true;
 
@@ -279,7 +278,7 @@ export function useLiveMemoRefresh() {
           }
           if (message.status === "connected") {
             if (hasConnectedOnceRef.current) {
-              invalidateAllLiveQueries(queryClient);
+              invalidateLiveMemoQueries(queryClient);
             }
             hasConnectedOnceRef.current = true;
           }
@@ -463,19 +462,10 @@ async function consumeSSEStream(body: ReadableStream<Uint8Array>, signal: AbortS
 function handleSSEEvent(event: SSEChangeEvent, queryClient: ReturnType<typeof useQueryClient>) {
   switch (event.type) {
     case MEMO_CHANGED_SSE_EVENT_TYPE:
+    case SPACE_CHANGED_SSE_EVENT_TYPE:
       invalidateLiveMemoQueries(queryClient);
       break;
-    case SPACE_CHANGED_SSE_EVENT_TYPE:
-      invalidateAllLiveQueries(queryClient);
-      break;
   }
-}
-
-function invalidateAllLiveQueries(queryClient: ReturnType<typeof useQueryClient>) {
-  queryClient.invalidateQueries({ queryKey: spaceKeys.all, refetchType: "active" });
-  // Space invitations are delivered to the inbox and resolved with the same event.
-  queryClient.invalidateQueries({ queryKey: userKeys.notifications(), refetchType: "active" });
-  invalidateLiveMemoQueries(queryClient);
 }
 
 function invalidateLiveMemoQueries(queryClient: ReturnType<typeof useQueryClient>) {

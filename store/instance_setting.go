@@ -196,11 +196,22 @@ func (s *Store) GetInstanceGeneralSetting(ctx context.Context) (*storepb.Instanc
 		Key:   storepb.InstanceSettingKey_GENERAL,
 		Value: &storepb.InstanceSetting_GeneralSetting{GeneralSetting: instanceGeneralSetting},
 	})
+	if s.profile.Personal {
+		// Retain legacy policy values in storage while applying the personal policy.
+		instanceGeneralSetting = proto.CloneOf(instanceGeneralSetting)
+		instanceGeneralSetting.DisallowUserRegistration = true
+		instanceGeneralSetting.DisallowPasswordAuth = false
+		instanceGeneralSetting.DisallowChangeUsername = false
+		instanceGeneralSetting.DisallowChangeNickname = false
+	}
 	return instanceGeneralSetting, nil
 }
 
 // GetInstanceAccessSetting gets the instance access policy, defaulting to private.
 func (s *Store) GetInstanceAccessSetting(ctx context.Context) (*storepb.InstanceAccessSetting, error) {
+	if s.profile.Personal {
+		return &storepb.InstanceAccessSetting{AccessMode: storepb.InstanceAccessMode_INSTANCE_ACCESS_MODE_PRIVATE}, nil
+	}
 	// Access policy changes must take effect across replicas without waiting for
 	// the general instance-setting cache to expire.
 	instanceSetting, err := s.GetUncachedInstanceSetting(ctx, &FindInstanceSetting{Name: storepb.InstanceSettingKey_ACCESS.String()})

@@ -14,7 +14,6 @@ type Store struct {
 	profile *profile.Profile
 	driver  Driver
 
-	userCreateMu   sync.Mutex
 	authConfigMu   sync.Mutex
 	refreshTokenMu sync.Mutex
 	patMu          sync.Mutex

@@ -11,12 +11,11 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useGlobalMemoEditor } from "@/contexts/GlobalMemoEditorContext";
 import { useMemoFilterContext } from "@/contexts/MemoFilterContext";
 import { NewMemoProvider } from "@/contexts/NewMemoContext";
-import { useSpaceContext } from "@/contexts/SpaceContext";
 import { useMemoFilters, useMemoSorting } from "@/hooks";
 import useCurrentUser from "@/hooks/useCurrentUser";
 import { useMemoSuggestions } from "@/hooks/useMemoSuggestions";
 import { MAX_SELECTED_MEMO_EXPORT } from "@/lib/memo-export";
-import { extractMemoIdFromName } from "@/lib/resource-names";
+import { buildMemoCreatorFilter, extractMemoIdFromName } from "@/lib/resource-names";
 import { State } from "@/types/proto/api/common_pb";
 import { Memo } from "@/types/proto/api/memo_service_pb";
 import { useTranslate } from "@/utils/i18n";
@@ -28,24 +27,17 @@ const Home = () => {
   const { isUserSettingsInitialized } = useAuth();
   const { claimHomeAutoFocus } = useGlobalMemoEditor();
   const { filters } = useMemoFilterContext();
-  const { memoFilter: contextFilter, selectedSpaceName, creatorUsername } = useSpaceContext();
+  const contextFilter = user && buildMemoCreatorFilter(user.name);
   const defaultCreateTime = useMemo(() => deriveDefaultCreateTimeFromFilters(filters), [filters]);
 
   const memoFilter = useMemoFilters({
     includeMemoViews: true,
     includePinned: true,
   });
-  const canComposeInScope = Boolean(user && (!creatorUsername || creatorUsername === user.username));
-  // The welcome guide belongs to the account's own timeline, not to Explore, a space or
-  // another member's page.
-  const onOwnHome = Boolean(user && creatorUsername === user.username);
-  const welcomeGuide = useWelcomeGuide(onOwnHome);
-  // Pinning is the owner's arrangement of their own memos, so it only shapes a single
-  // creator's feed; a mixed-author feed like Explore stays purely chronological.
-  const honorPinned = Boolean(creatorUsername);
+  const welcomeGuide = useWelcomeGuide(Boolean(user));
 
   const { listSort, orderBy } = useMemoSorting({
-    pinnedFirst: honorPinned,
+    pinnedFirst: true,
     state: State.NORMAL,
   });
 
@@ -81,9 +73,7 @@ const Home = () => {
               <MemoView
                 key={getMemoKey(memo)}
                 memo={memo}
-                showCreator={!creatorUsername}
-                showPinned={honorPinned}
-                showSpace={!selectedSpaceName}
+                showPinned
                 compact={compact}
                 className={checked ? "border-mu-accent" : undefined}
               />
@@ -120,17 +110,16 @@ const Home = () => {
           emptyState={
             <EmptyLine
               message={t("memo.no-memos-yet")}
-              action={onOwnHome ? t("welcome.reopen") : undefined}
-              onAction={onOwnHome ? welcomeGuide.show : undefined}
+              action={user ? t("welcome.reopen") : undefined}
+              onAction={user ? welcomeGuide.show : undefined}
             />
           }
           renderLeading={({ useGrid }) => {
-            if (!isUserSettingsInitialized || !canComposeInScope) return null;
+            if (!isUserSettingsInitialized || !user) return null;
 
             return (
               <MemoEditor
-                // Each Space keeps its own Home draft; the editor restarts when the Space changes.
-                draft={{ scope: "home", space: selectedSpaceName, createTime: defaultCreateTime }}
+                draft={{ scope: "home", createTime: defaultCreateTime }}
                 autoFocus={claimHomeAutoFocus}
                 className={useGrid ? undefined : "mb-2"}
                 placeholder={t("editor.any-thoughts")}

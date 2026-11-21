@@ -14,9 +14,9 @@ import { useTranslate } from "@/utils/i18n";
 import ChangeMemberPasswordDialog from "../ChangeMemberPasswordDialog";
 import UpdateAccountDialog from "../UpdateAccountDialog";
 import UserAvatar from "../UserAvatar";
-import LinkedIdentitySection from "./LinkedIdentitySection";
 import SettingGroup from "./SettingGroup";
 import SettingSection from "./SettingSection";
+import TwoFactorSection from "./TwoFactorSection";
 import UserStatsSection from "./UserStatsSection";
 
 const MyAccountSection = () => {
@@ -68,7 +68,7 @@ const MyAccountSection = () => {
 
       <UserStatsSection />
 
-      <LinkedIdentitySection />
+      <TwoFactorSection />
 
       <SettingGroup showSeparator title={t("setting.account.danger-area")} description={t("setting.account.danger-area-description")}>
         {/* A plain row: red is kept for the confirm step, not the section that leads to it. */}

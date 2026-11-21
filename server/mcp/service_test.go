@@ -60,6 +60,15 @@ func TestNewMCPServiceRegistersCuratedTools(t *testing.T) {
 	require.Equal(t, "/api/memos", operation.Path)
 }
 
+func TestPersonalMCPCatalogOmitsSpaces(t *testing.T) {
+	service, err := NewMCPService(&profile.Profile{Personal: true}, http.NewServeMux())
+	require.NoError(t, err)
+	require.Contains(t, service.operationsByTool, "memo_list_memos")
+	for _, operation := range service.operationsByTool {
+		require.NotContains(t, operation.OperationID, "SpaceService_")
+	}
+}
+
 func TestNewMCPServiceUsesEmbeddedOpenAPISpec(t *testing.T) {
 	t.Chdir(t.TempDir())
 

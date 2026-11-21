@@ -8,7 +8,7 @@ import (
 	"github.com/usememos/memos/store"
 )
 
-func authorizeMySQLMemoComment(ctx context.Context, tx *sql.Tx, contextMemoID, actorUserID int32) error {
+func authorizeMySQLMemoComment(ctx context.Context, tx *sql.Tx, contextMemoID, actorUserID int32, personal bool) error {
 	snapshot, err := loadMySQLMemoParticipation(ctx, tx, contextMemoID, actorUserID)
 	if err != nil {
 		if stderrors.Is(err, sql.ErrNoRows) || stderrors.Is(err, store.ErrMemoMutationConflict) {
@@ -16,6 +16,7 @@ func authorizeMySQLMemoComment(ctx context.Context, tx *sql.Tx, contextMemoID, a
 		}
 		return err
 	}
+	snapshot.Personal = personal
 	return store.ValidateMemoCommentAuthorization(snapshot)
 }
 

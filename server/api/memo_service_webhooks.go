@@ -36,6 +36,9 @@ func (s *APIService) DispatchMemoCommentCreatedWebhook(
 	comment, relatedMemo *store.Memo,
 	relatedMemoCreatorID int32,
 ) error {
+	if s.personalMode() {
+		return nil
+	}
 	receiver, err := s.Store.GetUser(ctx, &store.FindUser{ID: &relatedMemoCreatorID})
 	if err != nil {
 		return err
@@ -84,6 +87,9 @@ func (s *APIService) DispatchMemoCommentCreatedWebhook(
 }
 
 func (s *APIService) dispatchMemoRelatedWebhook(ctx context.Context, memo *apipb.Memo, activityType string) error {
+	if s.personalMode() {
+		return nil
+	}
 	creator, err := ResolveUserByName(ctx, s.Store, memo.Creator)
 	if err != nil {
 		return status.Errorf(codes.InvalidArgument, "invalid memo creator")

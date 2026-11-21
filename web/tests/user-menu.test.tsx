@@ -1,5 +1,4 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { badgeClasses } from "@usememos/ui";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { SCOPE_PANEL_ROW_CLASSES } from "@/components/AppSidebar/sidebar-layout";
@@ -16,7 +15,6 @@ const mocks = vi.hoisted(() => ({
   currentUser: { name: "users/steven", username: "steven", displayName: "Steven" } as
     | { name: string; username: string; displayName: string }
     | undefined,
-  notifications: [] as Array<{ status: number }>,
 }));
 
 vi.mock("@/contexts/AppSidebarContext", () => ({ useAppSidebar: () => ({ setMobileOpen: mocks.setMobileOpen }) }));
@@ -28,7 +26,6 @@ vi.mock("@/hooks/useCurrentUser", () => ({
   default: () => mocks.currentUser,
 }));
 vi.mock("@/hooks/useUserQueries", () => ({
-  useNotifications: () => ({ data: mocks.notifications }),
   useUpdateUserGeneralSetting: () => ({ mutate: mocks.updateGeneralSetting }),
 }));
 vi.mock("@/utils/i18n", async (importOriginal) => ({
@@ -61,33 +58,35 @@ describe("User menu panel", () => {
     mocks.logout.mockReset();
     mocks.updateGeneralSetting.mockReset();
     mocks.refetchSettings.mockReset();
-    mocks.notifications = [];
   });
 
-  it("signs out to manual sign-in so an active SSO session cannot immediately sign back in", async () => {
+  it("signs out to the sign-in page and retains account-local tag pins", async () => {
     const originalLocation = window.location;
     const replace = vi.fn();
+    localStorage.setItem("memos-pinned-tags:users/steven", '["work"]');
+    localStorage.setItem("temporary-account-state", "clear this");
     Object.defineProperty(window, "location", { configurable: true, value: { ...originalLocation, replace } });
     try {
       renderMenu();
       fireEvent.click(screen.getByRole("button", { name: "common.sign-out" }));
-      await waitFor(() => expect(replace).toHaveBeenCalledWith("/auth?auto_sign_in=false"));
+      await waitFor(() => expect(replace).toHaveBeenCalledOnce());
+      expect(new URL(replace.mock.calls[0][0], originalLocation.origin).pathname).toBe("/auth");
       expect(mocks.logout).toHaveBeenCalledOnce();
+      expect(localStorage.getItem("memos-pinned-tags:users/steven")).toBe('["work"]');
+      expect(localStorage.getItem("temporary-account-state")).toBeNull();
     } finally {
       Object.defineProperty(window, "location", { configurable: true, value: originalLocation });
     }
   });
 
-  it("puts Settings first while keeping Inbox beside the account", () => {
+  it("puts Settings before the account and links to Archive", () => {
     renderMenu("/archived");
-    const accountHeader = screen.getByText("Steven").parentElement!;
-    const inbox = within(accountHeader).getByRole("link", { name: "common.inbox" });
-    const archived = screen.getByRole("link", { name: "common.archived" });
-    expect(screen.queryByText("setting.sso.account")).not.toBeInTheDocument();
-    expect(inbox).toHaveClass(...badgeClasses({ tone: "neutral" }).split(" "));
-    expect(inbox.compareDocumentPosition(archived) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    const account = screen.getByRole("region", { name: "setting.account.title" });
+    const archived = within(account).getByRole("link", { name: "common.archived" });
     const settings = screen.getByRole("link", { name: "common.settings" });
-    expect(settings.compareDocumentPosition(inbox) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(within(account).getByText("Steven")).toBeInTheDocument();
+    expect(settings.compareDocumentPosition(account) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.getAllByRole("link").map((link) => link.getAttribute("href"))).toEqual(["/setting", "/archived"]);
     expect(archived).toHaveAttribute("aria-current", "page");
     expect(archived).toHaveAttribute("href", "/archived");
     fireEvent.click(archived);
@@ -111,19 +110,17 @@ describe("User menu panel", () => {
     }
   });
 
-  it("shows unread Inbox count and navigates from the same panel", () => {
-    mocks.notifications = [{ status: 1 }, { status: 1 }, { status: 2 }];
-    renderMenu("/Inbox/");
-    const inbox = screen.getByRole("link", { name: "common.inbox, 2 inbox.unread" });
-    expect(inbox).toHaveAttribute("aria-current", "page");
-    expect(inbox).toHaveTextContent("2");
-    expect(inbox).toHaveAttribute("href", "/inbox");
+  it("marks Settings current while viewing one of its sections", () => {
+    renderMenu("/setting#tags");
+    expect(screen.getByRole("link", { name: "common.settings" })).toHaveAttribute("aria-current", "page");
+    expect(screen.getByRole("link", { name: "common.archived" })).not.toHaveAttribute("aria-current");
   });
 
   it("offers guests preferences without account pages or a second sign-in", () => {
     mocks.currentUser = undefined;
-    renderMenu("/explore");
+    renderMenu("/404");
     expect(screen.getByRole("button", { name: /setting.preference.theme/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /common.language/ })).toBeInTheDocument();
     for (const name of ["common.inbox", "common.archived", "common.settings", "common.sign-out", "common.sign-in"]) {
       expect(screen.queryByRole("button", { name })).not.toBeInTheDocument();
       expect(screen.queryByRole("link", { name })).not.toBeInTheDocument();
@@ -200,14 +197,14 @@ describe("User menu panel", () => {
     label,
   }) => {
     mocks.currentUser = undefined;
-    const menu = renderMenu("/explore");
+    const menu = renderMenu("/404");
     fireEvent.click(screen.getByRole("button", { name: row }));
     fireEvent.click(await screen.findByRole("menuitemradio", { name: choice }));
     expect(localStorage.getItem(storageKey)).toBe(value);
     expect(mocks.updateGeneralSetting).not.toHaveBeenCalled();
     expect(mocks.refetchSettings).not.toHaveBeenCalled();
     menu.unmount();
-    renderMenu("/explore");
+    renderMenu("/404");
     expect(screen.getByRole("button", { name: label })).toBeInTheDocument();
   });
 });

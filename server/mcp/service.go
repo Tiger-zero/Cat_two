@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"strings"
 	"time"
 
 	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
@@ -71,6 +72,10 @@ func NewMCPService(profile *profile.Profile, handler http.Handler) (*MCPService,
 	adapter := newAPIAdapter(handler)
 	for _, tool := range tools {
 		operation := operationsByTool[tool.Name]
+		if profile != nil && profile.Personal && strings.HasPrefix(operation.OperationID, "SpaceService_") {
+			delete(operationsByTool, tool.Name)
+			continue
+		}
 		server.AddTool(tool, newMCPToolHandler(adapter, operation))
 	}
 

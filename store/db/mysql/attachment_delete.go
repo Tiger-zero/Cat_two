@@ -34,7 +34,7 @@ func (d *DB) DeleteAttachmentsWithPolicy(ctx context.Context, policy *store.Atta
 	if err := store.ValidateAttachmentDeletionMemoSnapshots(memoIDs, policy.ExpectedMemoContents); err != nil {
 		return err
 	}
-	if err := authorizeMySQLAttachmentMutation(ctx, tx, policy.ActorUserID, actor.Admin, memoIDs, policy.ExpectedMemoContents); err != nil {
+	if err := authorizeMySQLAttachmentMutation(ctx, tx, policy.ActorUserID, actor.Admin, memoIDs, policy.ExpectedMemoContents, d.profile != nil && d.profile.Personal); err != nil {
 		return err
 	}
 
@@ -62,8 +62,9 @@ func authorizeMySQLAttachmentMutation(
 	actorIsAdmin bool,
 	memoIDs []int32,
 	expectedMemoContents map[int32]string,
+	personal bool,
 ) error {
-	policy := &store.MemoWritePolicy{ActorUserID: actorUserID}
+	policy := &store.MemoWritePolicy{ActorUserID: actorUserID, Personal: personal}
 	for _, memoID := range memoIDs {
 		snapshot := &store.MemoWriteSnapshot{ActorIsAdmin: actorIsAdmin}
 		var spaceID sql.NullInt64

@@ -5,8 +5,10 @@ describe("sidebar route content", () => {
   it.each([
     ["/", "home"],
     ["/archived", "archived"],
-    ["/explore", "explore"],
-    ["/Explore/", "explore"],
+    ["/explore", "common"],
+    ["/Explore/", "common"],
+    ["/spaces/work", "common"],
+    ["/spaces/work/explore", "common"],
     ["/ARCHIVED/", "archived"],
     ["/u/steven", "common"],
     ["/U/Steven/", "common"],
@@ -17,8 +19,8 @@ describe("sidebar route content", () => {
     ["/Calendar/2026/08/02/", "common"],
     ["/attachments", "common"],
     ["/Attachments/", "common"],
-    ["/inbox", "inbox"],
-    ["/Inbox/", "inbox"],
+    ["/inbox", "common"],
+    ["/Inbox/", "common"],
     ["/setting", "settings"],
     ["/Setting/", "settings"],
     ["/memos/abc", "memo"],
@@ -33,8 +35,8 @@ describe("sidebar route content", () => {
     expect(getSidebarRouteKind(path)).toBe(kind);
   });
 
-  it.each(["/", "/explore"])("keeps search in the route collection on %s", (path) => {
-    expect(getRouteActionPolicy(path)).toEqual({
+  it("keeps search in the personal feed", () => {
+    expect(getRouteActionPolicy("/")).toEqual({
       searchScope: "route-collection",
     });
   });
@@ -45,15 +47,10 @@ describe("sidebar route content", () => {
     });
   });
 
-  it("keeps a normalized Explore route in the route scope", () => {
-    const path = "/Explore/";
-    expect(getRouteActionPolicy(path)).toEqual({
-      searchScope: "route-collection",
-    });
-  });
-
   it.each([
     "/inbox",
+    "/explore",
+    "/spaces/work",
     "/setting",
     "/views",
     "/about",
@@ -62,10 +59,10 @@ describe("sidebar route content", () => {
     "/403",
     "/404",
     "/unknown",
-  ])("sends search to All on %s", (path) => {
+  ])("sends search to the personal feed from %s", (path) => {
     expect(getRouteActionPolicy(path)).toEqual({
       searchScope: "all",
-      searchDestination: "/explore",
+      searchDestination: "/",
     });
   });
 });

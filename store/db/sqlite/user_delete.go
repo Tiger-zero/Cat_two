@@ -371,6 +371,10 @@ func deleteMemosTx(ctx context.Context, tx dbExecutor, memoIDs []int32) error {
 }
 
 func deleteUserRowTx(ctx context.Context, tx dbExecutor, userID int32) error {
+	// SQLite opens the database with foreign-key enforcement disabled.
+	if _, err := tx.ExecContext(ctx, `DELETE FROM user_totp WHERE user_id = `+deleteUserPlaceholder(1), userID); err != nil {
+		return err
+	}
 	_, err := tx.ExecContext(ctx, `DELETE FROM user WHERE id = `+deleteUserPlaceholder(1), userID)
 	return err
 }

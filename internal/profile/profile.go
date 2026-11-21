@@ -16,6 +16,8 @@ import (
 type Profile struct {
 	// Demo indicates if the server is in demo mode
 	Demo bool
+	// Personal applies the private Cat_two server policy.
+	Personal bool
 	// Addr is the binding address for server
 	Addr string
 	// Port is the binding port for server

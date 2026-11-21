@@ -3,81 +3,52 @@ import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import SignIn from "@/pages/SignIn";
 
-const state = vi.hoisted(() => ({
-  generalSetting: {
-    disallowPasswordAuth: true,
-  },
-  identityProviders: {
-    identityProviderList: [] as { name: string; title: string }[],
-    isLoading: true,
-  },
-}));
+const generalSetting = vi.hoisted(() => ({ disallowPasswordAuth: false, disallowUserRegistration: false }));
 
 vi.mock("@/contexts/InstanceContext", () => ({
-  useInstance: () => ({
-    generalSetting: state.generalSetting,
-    profile: { accessMode: 1 },
-  }),
-}));
-
-vi.mock("@/hooks/useIdentityProviderQueries", () => ({
-  useIdentityProviderList: () => state.identityProviders,
+  useInstance: () => ({ generalSetting }),
 }));
 
 vi.mock("@/components/AuthFooter", () => ({ default: () => null }));
-
-vi.mock("@/components/IdentityProviderButtons", () => ({
-  default: ({ identityProviderList }: { identityProviderList: { title: string }[] }) => (
-    <div data-testid="identity-providers">{identityProviderList.map((provider) => provider.title).join(", ")}</div>
-  ),
-}));
-
 vi.mock("@/components/PasswordSignInForm", () => ({
-  default: () => <div data-testid="password-sign-in" />,
+  default: ({ redirectPath }: { redirectPath?: string }) => <div data-testid="password-sign-in">{redirectPath}</div>,
 }));
+vi.mock("@/utils/i18n", () => ({ useTranslate: () => (key: string) => key }));
 
-vi.mock("@/utils/i18n", () => ({
-  useTranslate: () => (key: string) => key,
-}));
-
-const renderPage = () =>
+const renderPage = (path = "/auth") =>
   render(
-    <MemoryRouter>
+    <MemoryRouter initialEntries={[path]}>
       <SignIn />
     </MemoryRouter>,
   );
 
 describe("<SignIn>", () => {
   beforeEach(() => {
-    state.generalSetting.disallowPasswordAuth = true;
-    state.identityProviders.identityProviderList = [];
-    state.identityProviders.isLoading = true;
+    generalSetting.disallowPasswordAuth = false;
+    generalSetting.disallowUserRegistration = false;
   });
 
-  it("waits for identity providers before choosing the sign-in method", () => {
-    const { container, rerender } = renderPage();
+  it("shows password sign-in and preserves a safe destination", () => {
+    renderPage("/auth?redirect=%2Fmemos%2Fexample");
 
-    expect(container.querySelector(".mu-skeleton")).toBeInTheDocument();
-    expect(screen.queryByText("auth.signin-unavailable-title")).not.toBeInTheDocument();
-    expect(screen.queryByTestId("password-sign-in")).not.toBeInTheDocument();
-    expect(screen.queryByTestId("identity-providers")).not.toBeInTheDocument();
-
-    state.identityProviders.identityProviderList = [{ name: "identityProviders/acme", title: "Acme SSO" }];
-    state.identityProviders.isLoading = false;
-    rerender(
-      <MemoryRouter>
-        <SignIn />
-      </MemoryRouter>,
-    );
-
-    expect(screen.getByTestId("identity-providers")).toHaveTextContent("Acme SSO");
-    expect(screen.queryByText("auth.signin-unavailable-title")).not.toBeInTheDocument();
+    expect(screen.getByTestId("password-sign-in")).toHaveTextContent("/memos/example");
+    expect(screen.getByRole("link", { name: "common.sign-up" })).toHaveAttribute("href", "/auth/signup?redirect=%2Fmemos%2Fexample");
   });
 
-  it("shows the unavailable state only after an empty provider response", () => {
-    state.identityProviders.isLoading = false;
+  it("announces closed registration while allowing existing accounts to sign in", () => {
+    generalSetting.disallowUserRegistration = true;
+    renderPage("/auth?reason=signups-closed");
+
+    expect(screen.getByRole("status")).toHaveTextContent("auth.signups-closed-description");
+    expect(screen.getByTestId("password-sign-in")).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "common.sign-up" })).not.toBeInTheDocument();
+  });
+
+  it("offers the administrator sign-in route when password sign-in is disabled for members", () => {
+    generalSetting.disallowPasswordAuth = true;
     renderPage();
 
-    expect(screen.getByText("auth.signin-unavailable-title")).toBeInTheDocument();
+    expect(screen.queryByTestId("password-sign-in")).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "auth.admin-sign-in" })).toHaveAttribute("href", "/auth/admin");
   });
 });

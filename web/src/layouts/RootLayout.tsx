@@ -13,7 +13,6 @@ import { AppSidebarProvider } from "@/contexts/AppSidebarContext";
 import { GlobalMemoEditorProvider } from "@/contexts/GlobalMemoEditorContext";
 import { useInstance } from "@/contexts/InstanceContext";
 import { MemoFilterProvider, useMemoFilterContext } from "@/contexts/MemoFilterContext";
-import { SpaceProvider } from "@/contexts/SpaceContext";
 import { useView } from "@/contexts/ViewContext";
 import useCurrentUser from "@/hooks/useCurrentUser";
 import useMediaQuery from "@/hooks/useMediaQuery";
@@ -111,15 +110,13 @@ const RootLayoutContent = () => {
 };
 
 const RootLayout = () => (
-  <SpaceProvider>
-    <MemoFilterProvider>
-      <AppSidebarProvider>
-        <GlobalMemoEditorProvider>
-          <RootLayoutContent />
-        </GlobalMemoEditorProvider>
-      </AppSidebarProvider>
-    </MemoFilterProvider>
-  </SpaceProvider>
+  <MemoFilterProvider>
+    <AppSidebarProvider>
+      <GlobalMemoEditorProvider>
+        <RootLayoutContent />
+      </GlobalMemoEditorProvider>
+    </AppSidebarProvider>
+  </MemoFilterProvider>
 );
 
 export default RootLayout;

@@ -1,5 +1,5 @@
-import { badgeClasses, Menu, menuClasses } from "@usememos/ui";
-import { ArchiveIcon, BellIcon, ChevronRightIcon, GlobeIcon, LogOutIcon, type LucideIcon, PaletteIcon, SettingsIcon } from "lucide-react";
+import { Menu, menuClasses } from "@usememos/ui";
+import { ArchiveIcon, ChevronRightIcon, GlobeIcon, LogOutIcon, type LucideIcon, PaletteIcon, SettingsIcon } from "lucide-react";
 import { type ReactNode, useState } from "react";
 import { Link, matchPath, useLocation } from "react-router-dom";
 import { ScopePanelRowIcon } from "@/components/AppSidebar/SidebarRow";
@@ -10,11 +10,10 @@ import { useAuth } from "@/contexts/AuthContext";
 import useCurrentUser from "@/hooks/useCurrentUser";
 import { useSSEConnectionStatus } from "@/hooks/useLiveMemoRefresh";
 import { useThemePreference } from "@/hooks/useResolvedTheme";
-import { useNotifications, useUpdateUserGeneralSetting } from "@/hooks/useUserQueries";
+import { useUpdateUserGeneralSetting } from "@/hooks/useUserQueries";
 import { locales } from "@/i18n";
 import { cn } from "@/lib/utils";
 import { Routes } from "@/router";
-import { UserNotification_Status } from "@/types/proto/api/user_service_pb";
 import { buildAuthRoute } from "@/utils/auth-redirect";
 import { getLocaleDisplayName, getLocaleWithFallback, loadLocale, useTranslate } from "@/utils/i18n";
 import { loadTheme, THEME_OPTIONS } from "@/utils/theme";
@@ -136,11 +135,7 @@ const UserMenu = ({ onClose }: { onClose: () => void }) => {
   const currentUser = useCurrentUser();
   const sseStatus = useSSEConnectionStatus();
   const { logout } = useAuth();
-  const { data: notifications = [] } = useNotifications();
-  const unreadCount = notifications.filter((notification) => notification.status === UserNotification_Status.UNREAD).length;
-  const inboxLabel = unreadCount > 0 ? `${t("common.inbox")}, ${unreadCount} ${t("inbox.unread")}` : t("common.inbox");
   const accountLabel = currentUser?.displayName || currentUser?.username || t("common.profile");
-  const inboxActive = Boolean(matchPath(Routes.INBOX, location.pathname));
   const archivedActive = Boolean(matchPath(Routes.ARCHIVED, location.pathname));
   const settingsActive = Boolean(matchPath(Routes.SETTING, location.pathname));
 
@@ -156,7 +151,7 @@ const UserMenu = ({ onClose }: { onClose: () => void }) => {
       const keysToRemove: string[] = [];
       for (let i = 0; i < localStorage.length; i++) {
         const key = localStorage.key(i);
-        if (key && !keysToPreserve.includes(key)) keysToRemove.push(key);
+        if (key && !keysToPreserve.includes(key) && !key.startsWith("memos-pinned-tags:")) keysToRemove.push(key);
       }
       keysToRemove.forEach((key) => localStorage.removeItem(key));
     } catch {
@@ -176,7 +171,7 @@ const UserMenu = ({ onClose }: { onClose: () => void }) => {
       {currentUser && (
         <>
           <div role="separator" className={menuClasses().separator} />
-          <section aria-label={t("setting.sso.account")}>
+          <section aria-label={t("setting.account.title")}>
             <div className="flex h-(--mu-row-height) items-center gap-2 px-(--mu-row-padding)">
               <span className={cn(SIDEBAR_LEADING_SLOT_CLASSES, "relative")}>
                 <UserAvatar avatarUrl={currentUser.avatarUrl} name={accountLabel} className="size-5" />
@@ -192,19 +187,6 @@ const UserMenu = ({ onClose }: { onClose: () => void }) => {
                 )}
               </span>
               <span className="min-w-0 flex-1 truncate mu-label">{accountLabel}</span>
-              {/* A quiet chip beside the name: the package's badge look on a link. */}
-              <Link
-                to={Routes.INBOX}
-                viewTransition
-                aria-label={inboxLabel}
-                aria-current={inboxActive ? "page" : undefined}
-                className={cn(badgeClasses({ tone: "neutral" }), "border border-transparent mu-focus focus-visible:border-mu-focus")}
-                onClick={closePanel}
-              >
-                <BellIcon aria-hidden="true" className="mu-icon-xs" />
-                {t("common.inbox")}
-                {unreadCount > 0 && <span className="tabular-nums text-mu-primary">{unreadCount > 99 ? "99+" : unreadCount}</span>}
-              </Link>
             </div>
             <NavRow to={Routes.ARCHIVED} current={archivedActive} icon={ArchiveIcon} onNavigate={closePanel}>
               {t("common.archived")}

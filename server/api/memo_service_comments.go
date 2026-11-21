@@ -96,7 +96,7 @@ func (s *APIService) CreateMemoComment(ctx context.Context, request *apipb.Creat
 // only loses the notification and is logged instead of failing the request;
 // failing it would make clients retry and create a duplicate comment.
 func (s *APIService) createMemoCommentNotification(ctx context.Context, creatorID int32, memo *store.Memo, relatedMemo *store.Memo) {
-	if creatorID == relatedMemo.CreatorID {
+	if s.personalMode() || creatorID == relatedMemo.CreatorID {
 		return
 	}
 	relatedCreator, err := s.Store.GetUser(ctx, &store.FindUser{ID: &relatedMemo.CreatorID})

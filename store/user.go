@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"database/sql"
 	stderrors "errors"
 	"log/slog"
 	"strconv"
@@ -136,32 +137,36 @@ func (s *Store) CreateUser(ctx context.Context, create *User) (*User, error) {
 }
 
 // CreateUserIfNoUsers creates a user only when the instance has no users.
-// The in-process lock prevents concurrent first-user setup requests from
-// creating multiple admins in the same server process.
+// A serializable transaction prevents concurrent setup requests from creating
+// multiple administrators when they reach different server processes.
 func (s *Store) CreateUserIfNoUsers(ctx context.Context, create *User) (*User, bool, error) {
-	s.userCreateMu.Lock()
-	defer s.userCreateMu.Unlock()
-
-	limitOne := 1
-	users, err := s.driver.ListUsers(ctx, &FindUser{Limit: &limitOne})
-	if err != nil {
-		return nil, false, err
-	}
-	if len(users) > 0 {
-		return nil, false, nil
-	}
-
 	email, err := normalizeUserEmail(create.Email)
 	if err != nil {
 		return nil, false, err
 	}
-	create.Email = email
-	user, err := s.driver.CreateUser(ctx, create)
+	var user *User
+	err = s.runSerializable(ctx, func(tx *sql.Tx) error {
+		user = nil
+		users, err := s.driver.ListUsersTx(ctx, tx, &FindUser{Limit: new(1)})
+		if err != nil {
+			return err
+		}
+		if len(users) != 0 {
+			return nil
+		}
+		candidate := *create
+		candidate.Email = email
+		user, err = s.driver.CreateUserTx(ctx, tx, &candidate)
+		return err
+	})
 	if err != nil {
 		if uniqueErr := classifyUserUniqueViolation(err); uniqueErr != nil {
 			return nil, false, uniqueErr
 		}
 		return nil, false, err
+	}
+	if user == nil {
+		return nil, false, nil
 	}
 	s.userCache.Set(ctx, userCacheKey(user.ID), user)
 	return user, true, nil

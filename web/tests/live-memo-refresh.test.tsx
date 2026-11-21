@@ -29,16 +29,9 @@ vi.mock("@/hooks/useMemoQueries", () => ({
   },
 }));
 
-vi.mock("@/hooks/useSpaceQueries", () => ({
-  spaceKeys: {
-    all: ["spaces"],
-  },
-}));
-
 vi.mock("@/hooks/useUserQueries", () => ({
   userKeys: {
     stats: () => ["users", "stats"],
-    notifications: () => ["users", "notifications"],
   },
 }));
 
@@ -257,7 +250,7 @@ describe("useLiveMemoRefresh", () => {
 
     await waitFor(() => {
       for (const invalidate of [firstInvalidate, secondInvalidate]) {
-        expect(invalidate).toHaveBeenCalledWith({ queryKey: ["spaces"], refetchType: "active" });
+        expect(invalidate).not.toHaveBeenCalledWith({ queryKey: ["spaces"], refetchType: "active" });
         expect(invalidate).toHaveBeenCalledWith({ queryKey: ["memos"], refetchType: "active" });
         expect(invalidate).toHaveBeenCalledWith({ queryKey: ["users", "stats"], refetchType: "active" });
         expect(invalidate).toHaveBeenCalledWith({ queryKey: ["attachments", "list"], refetchType: "active" });
@@ -322,7 +315,7 @@ describe("useLiveMemoRefresh", () => {
     await act(async () => vi.advanceTimersByTimeAsync(1000));
     await flushAsyncWork();
     expect(fetchMock).toHaveBeenCalledTimes(2);
-    expect(invalidate).toHaveBeenCalledWith({ queryKey: ["spaces"], refetchType: "active" });
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ["memos"], refetchType: "active" });
 
     await act(async () => vi.advanceTimersByTimeAsync(1000));
     await flushAsyncWork();

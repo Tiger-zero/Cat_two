@@ -18,7 +18,6 @@ import (
 	"github.com/usememos/memos/core/configuration"
 	"github.com/usememos/memos/internal/profile"
 	"github.com/usememos/memos/internal/version"
-	"github.com/usememos/memos/internal/webhook"
 	apipb "github.com/usememos/memos/proto/gen/api"
 	storepb "github.com/usememos/memos/proto/gen/store"
 	"github.com/usememos/memos/server"
@@ -68,16 +67,18 @@ func init() {
 	rootCmd.Flags().String("driver", "sqlite", "database driver (sqlite, mysql, postgres)")
 	rootCmd.Flags().String("dsn", "", "database source name (DSN)")
 	rootCmd.Flags().String("instance-url", "", "canonical external URL of the Memos instance")
-	rootCmd.Flags().Bool("allow-private-webhooks", false, "allow webhooks to access any private/reserved IP address")
-	rootCmd.Flags().StringSlice("webhook-private-network-allowlist", nil, "private webhook destinations to allow (exact hostname, IP, or CIDR)")
+	rootCmd.Flags().Bool("allow-private-webhooks", false, "legacy webhook option")
+	rootCmd.Flags().StringSlice("webhook-private-network-allowlist", nil, "legacy webhook option")
 	rootCmd.Flags().String("log-level", "info", "log verbosity level (debug, info, warn, error)")
 	rootCmd.Flags().Bool("rate-limit", true, "enable request rate limiting")
 	rootCmd.Flags().String("config-dir", configuration.DefaultDir, "directory of declarative configuration files")
 	rootCmd.Flags().String("config-apply", "startup", "when to apply the declarative configuration: startup, or off to leave it to memos config apply")
 	rootCmd.Flags().StringSlice("trusted-proxies", []string{"private"}, "proxies whose forwarding headers identify the client: CIDRs, IPs, \"private\" (default; the loopback and private ranges), or \"none\" when the instance is reached without a header-rewriting proxy")
 
-	if err := rootCmd.Flags().MarkDeprecated("allow-private-webhooks", "use --webhook-private-network-allowlist to allow only required destinations"); err != nil {
-		panic(err)
+	for _, flag := range []string{"allow-private-webhooks", "webhook-private-network-allowlist"} {
+		if err := rootCmd.Flags().MarkDeprecated(flag, "Cat_two no longer sends webhooks"); err != nil {
+			panic(err)
+		}
 	}
 	for _, key := range []string{
 		"demo",
@@ -88,8 +89,6 @@ func init() {
 		"driver",
 		"dsn",
 		"instance-url",
-		"allow-private-webhooks",
-		"webhook-private-network-allowlist",
 		"log-level",
 		"rate-limit",
 		"trusted-proxies",
@@ -113,12 +112,13 @@ func init() {
 	rootCmd.Version = version.GetCurrentVersion()
 	rootCmd.SetVersionTemplate("{{.Version}}\n")
 
-	rootCmd.AddCommand(versionCmd)
+	rootCmd.AddCommand(versionCmd, newTwoFactorCommand())
 }
 
 func runServer() error {
 	instanceProfile := &profile.Profile{
 		Demo:           viper.GetBool("demo"),
+		Personal:       true,
 		Addr:           viper.GetString("addr"),
 		Port:           viper.GetInt("port"),
 		UNIXSock:       viper.GetString("unix-sock"),
@@ -132,15 +132,6 @@ func runServer() error {
 		Commit:         version.Commit,
 	}
 
-	allowPrivateWebhooks := viper.GetBool("allow-private-webhooks")
-	//nolint:staticcheck // The deprecated CLI/env input remains supported for upgrade compatibility.
-	webhook.AllowPrivateIPs = allowPrivateWebhooks
-	if allowPrivateWebhooks {
-		slog.Warn("--allow-private-webhooks is deprecated and disables webhook private-network protection; use --webhook-private-network-allowlist")
-	}
-	if err := webhook.ConfigurePrivateDestinationAllowlist(privateWebhookAllowlist()); err != nil {
-		return errors.Wrap(err, "failed to configure private webhook destinations")
-	}
 	if err := instanceProfile.Validate(); err != nil {
 		return errors.Wrap(err, "failed to validate profile")
 	}
@@ -198,18 +189,6 @@ func runServer() error {
 	<-signals
 	s.Shutdown(context.Background())
 	return nil
-}
-
-func privateWebhookAllowlist() []string {
-	var entries []string
-	for _, value := range viper.GetStringSlice("webhook-private-network-allowlist") {
-		for entry := range strings.SplitSeq(value, ",") {
-			if entry = strings.TrimSpace(entry); entry != "" {
-				entries = append(entries, entry)
-			}
-		}
-	}
-	return entries
 }
 
 func printServerInfo(profile *profile.Profile, accessMode storepb.InstanceAccessMode) {

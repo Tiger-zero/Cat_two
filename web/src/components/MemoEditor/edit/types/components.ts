@@ -21,8 +21,6 @@ export interface EditSessionProps {
   parentMemoName?: string;
   /** Context-derived suggestions for a new top-level memo. */
   suggestions?: readonly MemoSuggestion[];
-  /** Assigns a newly created top-level memo to this Space. Ignored for edits and comments. */
-  defaultSpace?: string;
   /** A callback can decide whether focus is still appropriate after draft restoration. */
   autoFocus?: boolean | (() => boolean);
   /**
@@ -80,10 +78,6 @@ export interface EditorToolbarProps {
   memoName?: string;
   /** Set when the editor composes a comment on this memo; picks the commit verb. */
   parentMemoName?: string;
-  /** The Space that owns the memo being created or edited, if any. */
-  space?: string;
-  /** Only unscoped, new top-level memos can choose a destination. */
-  canChooseSpace?: boolean;
   onAudioRecorderClick: () => void;
   viewToggles?: EditorViewToggles;
   sourceMode: EditorSourceModeToggle;

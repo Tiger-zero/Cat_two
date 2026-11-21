@@ -179,6 +179,8 @@ type UpdateMemo struct {
 // Space, membership, and share state in the write transaction.
 type MemoWritePolicy struct {
 	ActorUserID int32
+	// Personal authorizes only the memo's author and freezes historical Space placement.
+	Personal bool
 	// LifecycleOnly permits an author who is no longer a member of the source
 	// Space to move or withdraw the memo. It never permits content, metadata,
 	// attachment, relation, or share mutations.
@@ -355,7 +357,7 @@ func ValidateMemoWriteSnapshot(policy *MemoWritePolicy, update *UpdateMemo, snap
 	// An instance administrator is the superuser for named memo operations and
 	// is not held to authorship or Space membership. Structural validity below
 	// still applies to every actor.
-	if !snapshot.ActorIsAdmin && snapshot.CreatorID != policy.ActorUserID {
+	if snapshot.CreatorID != policy.ActorUserID && (!snapshot.ActorIsAdmin || policy.Personal) {
 		return ErrMemoPermissionDenied
 	}
 	if snapshot.RowStatus != Normal && snapshot.RowStatus != Archived {
@@ -366,6 +368,18 @@ func ValidateMemoWriteSnapshot(policy *MemoWritePolicy, update *UpdateMemo, snap
 	}
 	if !isValidVisibility(snapshot.Visibility) {
 		return ErrMemoMutationConflict
+	}
+	if policy.Personal {
+		if policy.CreatingShare || policy.LifecycleOnly {
+			return ErrMemoPermissionDenied
+		}
+		if update != nil && (update.SpaceID != nil || update.ClearSpace) {
+			return ErrMemoSpaceNotWritable
+		}
+		if update != nil && update.Visibility != nil && *update.Visibility != Private {
+			return ErrMemoPermissionDenied
+		}
+		return nil
 	}
 	if policy.LifecycleOnly && !isLifecycleOnlyMemoUpdate(update) {
 		// The source-writability exception exists only for an author's explicit

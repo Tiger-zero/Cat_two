@@ -4,18 +4,15 @@ import { type FC, useId } from "react";
 import { useTranslate } from "@/utils/i18n";
 import { primaryModifierGlyph } from "@/utils/platform";
 import { validationService } from "../services";
-import { useEditorContext, useEditorSelector } from "../state";
+import { useEditorSelector } from "../state";
 import type { EditorToolbarProps } from "../types";
 import InsertMenu from "./InsertMenu";
-import SpaceMenu from "./SpaceMenu";
 
 export const EditorToolbar: FC<EditorToolbarProps> = ({
   onSave,
   onCancel,
   memoName,
   parentMemoName,
-  space,
-  canChooseSpace,
   onAudioRecorderClick,
   viewToggles,
   sourceMode,
@@ -23,7 +20,6 @@ export const EditorToolbar: FC<EditorToolbarProps> = ({
   onDrawingClick,
 }) => {
   const t = useTranslate();
-  const { actions, dispatch } = useEditorContext();
   // Subscribe to narrow/derived slices so typing (which only changes content)
   // doesn't re-render the toolbar or the heavy InsertMenu it hosts. `valid`
   // flips only on empty↔non-empty / loading transitions, not per keystroke.
@@ -42,10 +38,6 @@ export const EditorToolbar: FC<EditorToolbarProps> = ({
   // The verb names what the host does with the memo: update, comment, or save.
   const commitLabel = memoName ? t("common.update") : parentMemoName ? t("editor.comment") : t("editor.save");
   const loadingLabel = memoName ? t("editor.updating") : parentMemoName ? t("editor.commenting") : t("editor.saving");
-
-  const handleSpaceChange = (next?: string) => {
-    dispatch(actions.setMetadata({ space: next }));
-  };
 
   const blockedReasonId = useId();
   const commitButton = (
@@ -94,7 +86,6 @@ export const EditorToolbar: FC<EditorToolbarProps> = ({
           onInsertImages={onInsertImages}
           onDrawingClick={onDrawingClick}
         />
-        {canChooseSpace && <SpaceMenu space={space} onChange={handleSpaceChange} disabled={isSaving} />}
       </div>
 
       <div className="flex shrink-0 flex-row items-center justify-end gap-1">

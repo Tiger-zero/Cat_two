@@ -397,7 +397,9 @@ type SignInRequest_PasswordCredentials struct {
 	// Required. The username to sign in with.
 	Username string `protobuf:"bytes,1,opt,name=username,proto3" json:"username,omitempty"`
 	// Required. The password to sign in with.
-	Password      string `protobuf:"bytes,2,opt,name=password,proto3" json:"password,omitempty"`
+	Password string `protobuf:"bytes,2,opt,name=password,proto3" json:"password,omitempty"`
+	// Optional. The six-digit authenticator code when the account has two-factor authentication enabled.
+	OtpCode       string `protobuf:"bytes,3,opt,name=otp_code,json=otpCode,proto3" json:"otp_code,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -442,6 +444,13 @@ func (x *SignInRequest_PasswordCredentials) GetUsername() string {
 func (x *SignInRequest_PasswordCredentials) GetPassword() string {
 	if x != nil {
 		return x.Password
+	}
+	return ""
+}
+
+func (x *SignInRequest_PasswordCredentials) GetOtpCode() string {
+	if x != nil {
+		return x.OtpCode
 	}
 	return ""
 }
@@ -525,13 +534,14 @@ var File_api_auth_service_proto protoreflect.FileDescriptor
 
 const file_api_auth_service_proto_rawDesc = "" +
 	"\n" +
-	"\x16api/auth_service.proto\x12\tmemos.api\x1a\x16api/user_service.proto\x1a\x1cgoogle/api/annotations.proto\x1a\x1fgoogle/api/field_behavior.proto\x1a\x19google/api/resource.proto\x1a\x1bgoogle/protobuf/empty.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xfd\x03\n" +
+	"\x16api/auth_service.proto\x12\tmemos.api\x1a\x16api/user_service.proto\x1a\x1cgoogle/api/annotations.proto\x1a\x1fgoogle/api/field_behavior.proto\x1a\x19google/api/resource.proto\x1a\x1bgoogle/protobuf/empty.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\x9d\x04\n" +
 	"\rSignInRequest\x12a\n" +
 	"\x14password_credentials\x18\x01 \x01(\v2,.memos.api.SignInRequest.PasswordCredentialsH\x00R\x13passwordCredentials\x12R\n" +
-	"\x0fsso_credentials\x18\x02 \x01(\v2'.memos.api.SignInRequest.SsoCredentialsH\x00R\x0essoCredentials\x1aW\n" +
+	"\x0fsso_credentials\x18\x02 \x01(\v2'.memos.api.SignInRequest.SsoCredentialsH\x00R\x0essoCredentials\x1aw\n" +
 	"\x13PasswordCredentials\x12\x1f\n" +
 	"\busername\x18\x01 \x01(\tB\x03\xe0A\x02R\busername\x12\x1f\n" +
-	"\bpassword\x18\x02 \x01(\tB\x03\xe0A\x02R\bpassword\x1a\xcc\x01\n" +
+	"\bpassword\x18\x02 \x01(\tB\x03\xe0A\x02R\bpassword\x12\x1e\n" +
+	"\botp_code\x18\x03 \x01(\tB\x03\xe0A\x01R\aotpCode\x1a\xcc\x01\n" +
 	"\x0eSsoCredentials\x12O\n" +
 	"\x11identity_provider\x18\x01 \x01(\tB\"\xe0A\x02\xfaA\x1c\n" +
 	"\x1amemos.api/IdentityProviderR\x10identityProvider\x12\x17\n" +

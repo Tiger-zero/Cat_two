@@ -9,6 +9,9 @@ import (
 )
 
 func (s *APIService) createInboxWithEmailNotification(ctx context.Context, inbox *store.Inbox) (*store.Inbox, error) {
+	if s.personalMode() {
+		return nil, nil
+	}
 	createdInbox, err := s.Store.CreateInbox(ctx, inbox)
 	if err != nil {
 		return nil, err

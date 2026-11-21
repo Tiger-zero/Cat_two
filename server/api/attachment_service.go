@@ -154,7 +154,7 @@ func (s *APIService) prepareAttachment(ctx context.Context, request *apipb.Creat
 			return nil, err
 		}
 		create.MemoID = &memo.ID
-		create.Policy = memoWritePolicy(user.ID, false)
+		create.Policy = s.memoWritePolicy(user.ID, false)
 	}
 
 	return create, nil
@@ -397,7 +397,7 @@ func (s *APIService) UpdateAttachment(ctx context.Context, request *apipb.Update
 	update := &store.UpdateAttachment{
 		ID:        attachment.ID,
 		UpdatedTs: &currentTsSec,
-		Policy:    memoWritePolicy(user.ID, false),
+		Policy:    s.memoWritePolicy(user.ID, false),
 	}
 	for _, field := range request.UpdateMask.Paths {
 		if field == "filename" {

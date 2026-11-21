@@ -316,6 +316,12 @@ func (s *APIService) UpdateMemo(ctx context.Context, request *apipb.UpdateMemoRe
 		}
 		updatePaths[path] = true
 	}
+	if s.personalMode() && updatePaths["space"] {
+		if err := s.requireUnchangedMemoSpace(ctx, memo, request.Memo.GetSpace()); err != nil {
+			return nil, err
+		}
+		delete(updatePaths, "space")
+	}
 	if len(updatePaths) == 0 {
 		return s.GetMemo(ctx, &apipb.GetMemoRequest{Name: request.Memo.Name})
 	}
@@ -357,7 +363,7 @@ func (s *APIService) UpdateMemo(ctx context.Context, request *apipb.UpdateMemoRe
 		private := store.Private
 		update.Visibility = &private
 	}
-	update.Policy = memoWritePolicy(user.ID, lifecycleOnly)
+	update.Policy = s.memoWritePolicy(user.ID, lifecycleOnly)
 	previousContent := memo.Content
 	contentUpdated := false
 	attachmentsUpdated := false
@@ -497,7 +503,7 @@ func (s *APIService) DeleteMemo(ctx context.Context, request *apipb.DeleteMemoRe
 	// the author loses read access to a memo with the SPACE audience. Only
 	// build a content-bearing webhook payload when the actor can still read the
 	// memo immediately before deletion.
-	if s.checkMemoReadAccess(ctx, memo) == nil {
+	if !s.personalMode() && s.checkMemoReadAccess(ctx, memo) == nil {
 		reactions, err := s.Store.ListReactions(ctx, &store.FindReaction{MemoID: &memo.ID})
 		if err != nil {
 			return nil, status.Errorf(codes.Internal, "failed to list reactions")

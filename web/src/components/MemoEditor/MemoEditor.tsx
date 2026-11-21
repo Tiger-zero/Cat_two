@@ -7,7 +7,7 @@ import { lazyWithReload } from "@/utils/lazy";
 import { canManageMemo } from "@/utils/user";
 import { COMPOSER_PANEL_CLASSES } from "./edit/constants";
 import { draftKeyFor, type MemoEditIdentity, migrateLegacyDraft } from "./edit/draftKey";
-import { canChooseSpaceFor, initialEditorState } from "./edit/initialState";
+import { initialEditorState } from "./edit/initialState";
 import { cacheService } from "./edit/services/cacheService";
 import { EditorProvider } from "./edit/state";
 import { MemoContentView } from "./view/MemoContentView";
@@ -47,15 +47,13 @@ export interface MemoEditorViewProps {
 
 /** What a new memo or comment starts from. */
 export interface MemoDraftSeed {
-  /** The memo this draft comments on. A comment has no scope, Space or timestamps of its own. */
+  /** The memo this draft comments on. A comment has no scope or timestamps of its own. */
   parent?: string;
   /**
-   * Where a new memo is composed, such as `home`, `global` or `calendar:<date>`.
-   * Each scope keeps its own draft, per Space.
+   * Where a new memo is composed, such as `home` or `global`.
+   * Each scope keeps its own draft.
    */
   scope?: string;
-  /** Fixes the new memo's Space; the Space chooser is then off. */
-  space?: string;
   /**
    * Seeds `createTime` and `updateTime` and shows the timestamp popover. Followed live
    * while the draft is open, for a calendar whose selected day changes.
@@ -159,7 +157,7 @@ const MemoEditorEdit = ({ name, ...editing }: MemoEditorEditProps) => {
 const MemoEditorDraft = ({ draft, ...editing }: MemoEditorDraftProps) => {
   const identity: MemoEditIdentity = draft.parent
     ? { kind: "comment", parent: draft.parent }
-    : { kind: "new", scope: draft.scope ?? "default", space: draft.space };
+    : { kind: "new", scope: draft.scope ?? "default" };
   // While the session's code loads, a still of the empty composer: the same frame, the
   // placeholder line and the toolbar's height, so the page below does not move when the
   // session takes its place.
@@ -175,7 +173,6 @@ const MemoEditorDraft = ({ draft, ...editing }: MemoEditorDraftProps) => {
         key={draftKeyFor(identity)}
         identity={identity}
         parentMemoName={draft.parent}
-        defaultSpace={draft.space}
         defaultCreateTime={draft.createTime}
         {...editing}
       />
@@ -187,12 +184,11 @@ interface EditingSessionProps extends MemoEditingProps {
   identity: MemoEditIdentity;
   memo?: Parameters<typeof initialEditorState>[0]["memo"];
   parentMemoName?: string;
-  defaultSpace?: string;
   defaultCreateTime?: Date;
 }
 
 /** One session over one identity: the draft store is created once, so a new identity is a new key. */
-const EditingSession = ({ identity, memo, parentMemoName, defaultSpace, defaultCreateTime, ...editing }: EditingSessionProps) => {
+const EditingSession = ({ identity, memo, parentMemoName, defaultCreateTime, ...editing }: EditingSessionProps) => {
   const currentUser = useCurrentUser();
   const username = currentUser?.name ?? "";
   const draftKey = cacheService.key(username, draftKeyFor(identity));
@@ -204,20 +200,12 @@ const EditingSession = ({ identity, memo, parentMemoName, defaultSpace, defaultC
       // A hosted editor starts in focus mode and stays there.
       initialFocusMode: Boolean(editing.onFocusModeExit),
       defaultCreateTime,
-      canChooseSpace: canChooseSpaceFor({ memo, currentUser, parentMemoName, defaultSpace }),
     });
   });
   const EditSession = loadedEditSession ?? LazyEditSession;
   return (
     <EditorProvider initialEditorState={initialState}>
-      <EditSession
-        memo={memo}
-        parentMemoName={parentMemoName}
-        defaultSpace={defaultSpace}
-        defaultCreateTime={defaultCreateTime}
-        draftKey={draftKey}
-        {...editing}
-      />
+      <EditSession memo={memo} parentMemoName={parentMemoName} defaultCreateTime={defaultCreateTime} draftKey={draftKey} {...editing} />
     </EditorProvider>
   );
 };

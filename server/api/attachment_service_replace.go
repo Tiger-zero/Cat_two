@@ -194,7 +194,7 @@ func (s *APIService) finishAttachmentReplace(ctx context.Context, upload *attach
 			Reference:   content.Reference,
 			Blob:        content.Blob,
 		},
-		Policy: memoWritePolicy(user.ID, false),
+		Policy: s.memoWritePolicy(user.ID, false),
 	}); err != nil {
 		discardContent("after the update failed")
 		return nil, mapMemoWriteError(err, "failed to replace attachment content")

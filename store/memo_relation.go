@@ -23,6 +23,7 @@ type MemoRelation struct {
 // MemoRelationEndpointSnapshot is the memo-local database state used to
 // authorize one endpoint during a reference-relation mutation.
 type MemoRelationEndpointSnapshot struct {
+	Personal    bool
 	ActorUserID int32
 	Actor       MemoActorState
 
@@ -51,6 +52,12 @@ func ValidateMemoRelationEndpointRead(snapshot *MemoRelationEndpointSnapshot) er
 	}
 	if !isValidVisibility(snapshot.EndpointVisibility) {
 		return ErrMemoMutationConflict
+	}
+	if snapshot.Personal {
+		if snapshot.EndpointCreatorID != snapshot.ActorUserID {
+			return ErrMemoPermissionDenied
+		}
+		return nil
 	}
 	if snapshot.EndpointVisibility == SpaceAudience &&
 		(snapshot.EndpointSpaceID == nil || !snapshot.EndpointSpaceExists) {

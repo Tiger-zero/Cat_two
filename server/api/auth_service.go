@@ -84,14 +84,14 @@ func (s *APIService) SignIn(ctx context.Context, request *apipb.SignInRequest) (
 		if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(passwordCredentials.Password)); err != nil {
 			return nil, status.Errorf(codes.InvalidArgument, unmatchedUsernameAndPasswordError)
 		}
-		// The password matched: from here on the attempt is not a guess.
-		attempt.succeeded()
 		instanceGeneralSetting, err := s.Store.GetInstanceGeneralSetting(ctx)
 		if err != nil {
+			attempt.succeeded()
 			return nil, status.Errorf(codes.Internal, "failed to get instance general setting, error: %v", err)
 		}
 		// Check if the password auth in is allowed.
 		if instanceGeneralSetting.DisallowPasswordAuth && user.Role == store.RoleUser {
+			attempt.succeeded()
 			return nil, status.Errorf(codes.PermissionDenied, "password signin is not allowed")
 		}
 		existingUser = user
@@ -116,13 +116,22 @@ func (s *APIService) SignIn(ctx context.Context, request *apipb.SignInRequest) (
 		attempt.succeeded()
 		return nil, status.Errorf(codes.InvalidArgument, "invalid credentials")
 	}
-	// The credential has been proven from here on; the attempt does not count.
-	attempt.succeeded()
 	if existingUser.RowStatus == store.Archived {
+		attempt.succeeded()
 		return nil, status.Errorf(codes.PermissionDenied, "user has been archived with username %s", existingUser.Username)
 	}
 
-	accessToken, accessExpiresAt, err := s.doSignIn(ctx, existingUser)
+	revision, err := s.verifySignInTwoFactor(ctx, existingUser, request.GetPasswordCredentials().GetOtpCode())
+	if err != nil {
+		// Missing codes are a normal first step in an interactive sign-in.
+		// Submitted invalid codes remain counted against the sign-in budget.
+		if status.Code(err) != codes.InvalidArgument {
+			attempt.succeeded()
+		}
+		return nil, err
+	}
+	attempt.succeeded()
+	accessToken, accessExpiresAt, err := s.doSignIn(ctx, existingUser, revision)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to sign in: %v", err)
 	}

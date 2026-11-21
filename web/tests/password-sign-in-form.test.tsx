@@ -1,13 +1,15 @@
+import { BinaryWriter } from "@bufbuild/protobuf/wire";
 import { Code, ConnectError } from "@connectrpc/connect";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import PasswordSignInForm from "@/components/PasswordSignInForm";
 
 const signIn = vi.hoisted(() => vi.fn());
+const setAccessToken = vi.hoisted(() => vi.fn());
 const initialize = vi.hoisted(() => vi.fn());
 const navigateTo = vi.hoisted(() => vi.fn());
 
-vi.mock("@/auth-state", () => ({ setAccessToken: vi.fn() }));
+vi.mock("@/auth-state", () => ({ setAccessToken }));
 
 vi.mock("@/connect", () => ({
   authServiceClient: { signIn },
@@ -36,6 +38,13 @@ const fill = () => {
   fireEvent.change(screen.getByLabelText("common.password"), { target: { value: "wrong" } });
   fireEvent.click(screen.getByRole("button", { name: "common.sign-in" }));
 };
+
+function totpError(reason: string) {
+  const error = new ConnectError("Authenticator verification required", Code.InvalidArgument);
+  const value = new BinaryWriter().tag(1, 2).string(reason).finish();
+  error.details.push({ type: "google.rpc.ErrorInfo", value });
+  return error;
+}
 
 describe("<PasswordSignInForm>", () => {
   beforeEach(() => {
@@ -83,6 +92,57 @@ describe("<PasswordSignInForm>", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "auth.hide-password" }));
     expect(password).toHaveAttribute("type", "password");
+  });
+
+  it("signs in only after the server accepts a fresh verification code", async () => {
+    signIn
+      .mockRejectedValueOnce(totpError("TOTP_REQUIRED"))
+      .mockRejectedValueOnce(totpError("TOTP_INVALID"))
+      .mockResolvedValueOnce({ accessToken: "verified-access" });
+    render(<PasswordSignInForm redirectPath="/memos/example" />);
+
+    fill();
+
+    const field = await screen.findByLabelText("two-factor.code");
+    expect(field).toHaveFocus();
+    expect(field).toHaveAttribute("autocomplete", "one-time-code");
+    expect(screen.queryByLabelText("common.password")).not.toBeInTheDocument();
+    expect(initialize).not.toHaveBeenCalled();
+    expect(setAccessToken).not.toHaveBeenCalled();
+
+    const verify = screen.getByRole("button", { name: "two-factor.verify" });
+    expect(verify).toBeDisabled();
+    fireEvent.change(field, { target: { value: "123456" } });
+    fireEvent.click(verify);
+
+    expect(await screen.findByText("two-factor.invalid-code")).toBeInTheDocument();
+    expect(field).toHaveValue("");
+    expect(navigateTo).not.toHaveBeenCalled();
+
+    fireEvent.change(field, { target: { value: "654321" } });
+    fireEvent.click(verify);
+
+    await waitFor(() => expect(navigateTo).toHaveBeenCalledWith("/memos/example", { replace: true }));
+    expect(signIn.mock.calls.map(([request]) => request.credentials.value)).toEqual([
+      { username: "steven", password: "wrong" },
+      { username: "steven", password: "wrong", otpCode: "123456" },
+      { username: "steven", password: "wrong", otpCode: "654321" },
+    ]);
+    expect(setAccessToken).toHaveBeenCalledWith("verified-access", undefined);
+  });
+
+  it("cancels a challenged sign-in without retaining the password", async () => {
+    signIn.mockRejectedValueOnce(totpError("TOTP_REQUIRED"));
+    render(<PasswordSignInForm />);
+    fill();
+
+    await screen.findByLabelText("two-factor.code");
+    fireEvent.click(screen.getByRole("button", { name: "auth.back-to-sign-in" }));
+
+    expect(screen.queryByLabelText("two-factor.code")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("common.username")).toHaveValue("steven");
+    expect(screen.getByLabelText("common.password")).toHaveValue("");
+    expect(signIn).toHaveBeenCalledOnce();
   });
 
   it("keeps the login label and focus while signing in and initializing the session", async () => {

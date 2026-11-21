@@ -53,10 +53,10 @@ func TestUserWebhookSigningSecretLifecycle(t *testing.T) {
 	otherCtx := userCtx(ctx, other.ID)
 	hostCtx := userCtx(ctx, host.ID)
 
-	// Create without supplying a secret -> the server generates one.
+	// Use a public IP literal so destination validation requires no DNS query.
 	created, err := svc.CreateUserWebhook(ownerCtx, &apipb.CreateUserWebhookRequest{
 		Parent:  "users/owner",
-		Webhook: &apipb.UserWebhook{DisplayName: "deploy", Url: "https://example.com/postreceive"},
+		Webhook: &apipb.UserWebhook{DisplayName: "deploy", Url: "https://8.8.8.8/postreceive"},
 	})
 	require.NoError(t, err)
 	require.True(t, created.SigningSecretSet, "create must auto-generate a signing secret")

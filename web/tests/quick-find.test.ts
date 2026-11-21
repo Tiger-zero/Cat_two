@@ -54,8 +54,8 @@ describe("Quick Find", () => {
     expect(buildQuickFindFilters("project", scopedFilters, false, "text")).toEqual([{ factor: "contentSearch", value: "project" }]);
   });
 
-  it.each(["/", "/explore"])("keeps scoped filters and stays on %s", (pathname) => {
-    expect(resolveQuickFindSubmission(pathname, "project", scopedFilters, "text")).toEqual({
+  it("keeps scoped filters and stays in the personal feed", () => {
+    expect(resolveQuickFindSubmission("/", "project", scopedFilters, "text")).toEqual({
       filters: [
         { factor: "tagSearch", value: "work" },
         { factor: "displayTime", value: "2026-08-03" },
@@ -87,7 +87,7 @@ describe("Quick Find", () => {
   ])("starts a clean All search from %s", (pathname) => {
     expect(resolveQuickFindSubmission(pathname, "project", scopedFilters, "text")).toEqual({
       filters: [{ factor: "contentSearch", value: "project" }],
-      destination: "/explore?filter=contentSearch%3Aproject",
+      destination: "/?filter=contentSearch%3Aproject",
     });
   });
 

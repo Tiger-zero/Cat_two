@@ -8,7 +8,7 @@ import (
 	"github.com/usememos/memos/store"
 )
 
-func authorizePostgresMemoComment(ctx context.Context, tx *sql.Tx, contextMemoID, actorUserID int32) error {
+func authorizePostgresMemoComment(ctx context.Context, tx *sql.Tx, contextMemoID, actorUserID int32, personal bool) error {
 	snapshot, err := readPostgresMemoParticipation(ctx, tx, contextMemoID, actorUserID)
 	if err != nil {
 		if stderrors.Is(err, sql.ErrNoRows) || stderrors.Is(err, store.ErrMemoMutationConflict) {
@@ -16,6 +16,7 @@ func authorizePostgresMemoComment(ctx context.Context, tx *sql.Tx, contextMemoID
 		}
 		return err
 	}
+	snapshot.Personal = personal
 	return store.ValidateMemoCommentAuthorization(snapshot)
 }
 

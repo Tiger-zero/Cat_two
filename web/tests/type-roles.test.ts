@@ -50,8 +50,6 @@ describe("type roles", () => {
         "components/CustomIconPicker.tsx",
         "components/MemoFilters.tsx",
         "components/MemoReactionListView/ReactionSelector.tsx",
-        "components/SpaceIcon.tsx",
-        "components/SpaceMark.tsx",
         "pages/MemoViews.tsx",
         // The serif wordmark.
         "components/IdentityLabel.tsx",

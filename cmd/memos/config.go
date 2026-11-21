@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"net/url"
 	"os"
 	"strings"
 	"time"
@@ -109,7 +110,7 @@ func init() {
 	rootCmd.AddCommand(configCmd)
 }
 
-// flagOrSetting returns a config command's flag when it was given, and
+// flagOrSetting returns a subcommand's flag when it was given, and
 // otherwise the setting viper resolves from the environment and defaults.
 func flagOrSetting(cmd *cobra.Command, name string) string {
 	if flag := cmd.Flags().Lookup(name); flag != nil && flag.Changed {
@@ -209,13 +210,16 @@ func runConfigPlan(ctx context.Context, dir string, resolver configuration.Resol
 // state do, it never creates or migrates a database. To write, as apply does,
 // it migrates exactly as server startup would, creating a fresh one.
 func openConfigurationStore(ctx context.Context, cmd *cobra.Command, write bool) (*store.Store, error) {
-	instanceProfile := &profile.Profile{
+	return openInstanceStore(ctx, &profile.Profile{
 		Data:    flagOrSetting(cmd, "data"),
 		Driver:  flagOrSetting(cmd, "driver"),
 		DSN:     flagOrSetting(cmd, "dsn"),
 		Version: version.GetCurrentVersion(),
 		Commit:  version.Commit,
-	}
+	}, write)
+}
+
+func openInstanceStore(ctx context.Context, instanceProfile *profile.Profile, migrate bool) (*store.Store, error) {
 	if instanceProfile.Data != "" {
 		if _, err := os.Stat(instanceProfile.Data); err != nil {
 			return nil, errors.Wrap(err, "failed to open the data directory")
@@ -224,9 +228,15 @@ func openConfigurationStore(ctx context.Context, cmd *cobra.Command, write bool)
 	if err := instanceProfile.Validate(); err != nil {
 		return nil, errors.Wrap(err, "failed to validate profile")
 	}
-	if instanceProfile.Driver == "sqlite" && !write {
-		if _, err := os.Stat(instanceProfile.DSN); errors.Is(err, fs.ErrNotExist) {
-			return nil, errors.Errorf("no SQLite database at %s; pass the instance's --data or --dsn", instanceProfile.DSN)
+	if instanceProfile.Driver == "sqlite" && !migrate {
+		path, err := sqliteDatabasePath(instanceProfile.DSN)
+		if err != nil {
+			return nil, err
+		}
+		if _, err := os.Stat(path); errors.Is(err, fs.ErrNotExist) {
+			return nil, errors.Errorf("no SQLite database at %s; pass the instance's --data or --dsn", path)
+		} else if err != nil {
+			return nil, errors.Wrap(err, "failed to check the SQLite database")
 		}
 	}
 	dbDriver, err := db.NewDBDriver(instanceProfile)
@@ -235,7 +245,7 @@ func openConfigurationStore(ctx context.Context, cmd *cobra.Command, write bool)
 	}
 	storeInstance := store.New(dbDriver, instanceProfile)
 	check := storeInstance.CheckSchemaCurrent
-	if write {
+	if migrate {
 		check = storeInstance.Migrate
 	}
 	if err := check(ctx); err != nil {
@@ -243,6 +253,20 @@ func openConfigurationStore(ctx context.Context, cmd *cobra.Command, write bool)
 		return nil, err
 	}
 	return storeInstance, nil
+}
+
+func sqliteDatabasePath(dsn string) (string, error) {
+	if !strings.HasPrefix(dsn, "file:") {
+		return dsn, nil
+	}
+	uri, err := url.Parse(dsn)
+	if err != nil {
+		return "", errors.Wrap(err, "invalid SQLite file URI")
+	}
+	if uri.Opaque != "" {
+		return url.PathUnescape(uri.Opaque)
+	}
+	return uri.Path, nil
 }
 
 func runConfigApply(ctx context.Context, dir string, resolver configuration.Resolver, s *store.Store, metadata configuration.ApplyMetadata, jsonOutput bool, stdout, stderr io.Writer) error {

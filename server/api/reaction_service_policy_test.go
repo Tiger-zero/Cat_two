@@ -8,12 +8,15 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	"github.com/usememos/memos/internal/profile"
 	"github.com/usememos/memos/store"
 )
 
 func TestReactionWritePolicy(t *testing.T) {
-	policy := reactionWritePolicy(7)
+	service := &APIService{Profile: &profile.Profile{Personal: true}}
+	policy := service.reactionWritePolicy(7)
 	require.Equal(t, int32(7), policy.ActorUserID)
+	require.True(t, policy.Personal)
 }
 
 func TestMapReactionMutationError(t *testing.T) {

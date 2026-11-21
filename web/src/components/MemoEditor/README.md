@@ -10,7 +10,7 @@ Both modes show the memo through the same binding of [`@usememos/editor`](https:
 <MemoEditor name="memos/abc" />                                     // view; the owner can tick tasks
 <MemoEditor mode="edit" name="memos/abc" onConfirm onCancel />      // edit in place
 <MemoEditor draft={{ parent: "memos/abc" }} onConfirm onCancel />   // new comment
-<MemoEditor draft={{ scope: "home", space, createTime }} />         // new memo
+<MemoEditor draft={{ scope: "home", createTime }} />                // new memo
 ```
 
 ## Layers
@@ -98,9 +98,9 @@ Focus mode is a sheet narrower than the page (`max-w-3xl`): its header, text and
 
 The session's code is a chunk of its own, loaded when a memo is first edited or composed, and renders without suspending once loaded. A host that knows an editor is coming calls `preloadMemoEditing()`: the router loads it with the Home page for a signed-in user, so the composer renders with the page, and the comment section loads it while the pointer is on its button. Until it is loaded a new draft shows a still of the empty composer, the same frame, placeholder line and toolbar height, so nothing moves when the session takes its place.
 
-### Space placement
+### Personal notes
 
-`SpaceMenu` organizes personal memos in Spaces. It appears when a top-level memo can move and the user has a Space to choose or clear. A draft seed's `space` fixes a new memo's placement. Comments inherit their parent's Space. The editor sends private visibility when creating or moving a memo.
+New memos go into the personal workspace with private visibility. The service preserves the saved placement when editing a note from an older Space.
 
 ## Directory structure
 

@@ -106,7 +106,7 @@ func (s *APIService) shouldSkipMentionInbox(facts *mentionContextFacts, target *
 }
 
 func (s *APIService) dispatchMemoMentionNotifications(ctx context.Context, memo *store.Memo, relatedMemo *store.Memo, previousContent string) error {
-	if memo == nil {
+	if s.personalMode() || memo == nil {
 		return nil
 	}
 

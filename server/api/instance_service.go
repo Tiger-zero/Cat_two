@@ -107,6 +107,9 @@ func (s *APIService) getInstanceSettingByName(ctx context.Context, name string, 
 	}
 
 	instanceSettingKey := storepb.InstanceSettingKey(storepb.InstanceSettingKey_value[instanceSettingKeyString])
+	if s.personalMode() && instanceSettingKey == storepb.InstanceSettingKey_NOTIFICATION {
+		return nil, retiredModuleError()
+	}
 	// Get instance setting from store with default value.
 	var instanceSetting *storepb.InstanceSetting
 	switch instanceSettingKey {
@@ -214,6 +217,9 @@ func (s *APIService) UpdateInstanceSetting(ctx context.Context, request *apipb.U
 	_ = request.UpdateMask
 
 	updateSetting := instancesetting.ToStore(request.InstanceSetting)
+	if s.personalMode() && (updateSetting.Key == storepb.InstanceSettingKey_NOTIFICATION || updateSetting.Key == storepb.InstanceSettingKey_ACCESS) {
+		return nil, retiredModuleError()
+	}
 	if updateSetting.Key == storepb.InstanceSettingKey_USAGE_LIMITS {
 		usageLimits, err := s.convertUsageLimitsSettingToStore(ctx, request.InstanceSetting.GetUsageLimitsSetting())
 		if err != nil {

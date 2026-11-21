@@ -1,7 +1,6 @@
 import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { DrawingSheet } from "@/components/DrawingSheet";
 import { useAuth } from "@/contexts/AuthContext";
-import useCurrentUser from "@/hooks/useCurrentUser";
 import { useSourceMode } from "@/hooks/useSourceMode";
 import { showErrorToast } from "@/lib/toast";
 import { cn } from "@/lib/utils";
@@ -23,7 +22,6 @@ import {
   useMemoInit,
   useMemoSave,
 } from "./hooks";
-import { canChooseSpaceFor } from "./initialState";
 import { cacheService } from "./services";
 import { useEditorContext, useEditorSelector } from "./state";
 import { EditorToolbar } from "./Toolbar";
@@ -46,7 +44,6 @@ export const EditSession: React.FC<EditSessionProps> = ({
   memo,
   parentMemoName,
   suggestions = [],
-  defaultSpace,
   autoFocus,
   onFocusModeExit,
   onFocusModeChange,
@@ -57,7 +54,6 @@ export const EditSession: React.FC<EditSessionProps> = ({
   onSavingChange,
 }) => {
   const t = useTranslate();
-  const currentUser = useCurrentUser();
   const { userGeneralSetting } = useAuth();
   const editorRef = useRef<EditorController>(null);
   const { actions, dispatch, getState } = useEditorContext();
@@ -83,12 +79,6 @@ export const EditSession: React.FC<EditSessionProps> = ({
 
   const memoName = memo?.name;
   const showTimestamp = Boolean(memoName || (!memo && hasTimestamp));
-  // Replies are never placed independently: a comment's Space is its parent's.
-  // An edited top-level memo can change its Space; a new one can unless its
-  // host fixes the target (e.g. composing inside a Space).
-  const draftSpace = useEditorSelector((s) => s.metadata.space);
-  const canChooseSpace = canChooseSpaceFor({ memo, currentUser, parentMemoName, defaultSpace });
-  const editorSpace = memo ? draftSpace : parentMemoName ? undefined : (defaultSpace ?? draftSpace);
 
   // Source mode only changes how the text is edited, so every composer offers it.
   const [editorMode, setEditorMode] = useSourceMode();
@@ -232,7 +222,6 @@ export const EditSession: React.FC<EditSessionProps> = ({
   const handleSave = useMemoSave({
     memoName,
     parentMemoName,
-    defaultSpace,
     defaultCreateTime,
     discardDraft,
     onConfirm,
@@ -317,8 +306,6 @@ export const EditSession: React.FC<EditSessionProps> = ({
             onCancel={onCancel ? handleCancel : undefined}
             memoName={memoName}
             parentMemoName={parentMemoName}
-            space={editorSpace}
-            canChooseSpace={canChooseSpace}
             onAudioRecorderClick={handleAudioRecorderClick}
             viewToggles={viewToggles}
             sourceMode={sourceMode}

@@ -1,4 +1,3 @@
-import { Skeleton } from "@usememos/ui";
 import { ArrowLeftIcon } from "lucide-react";
 import { Link } from "react-router-dom";
 import { cn } from "@/lib/utils";
@@ -23,7 +22,7 @@ export const AuthLinkPrompt = ({ prompt, to, label }: { prompt: string; to: stri
   </p>
 );
 
-// The way back from a page reached off the sign-in path, such as administrator sign-in or a failed SSO return.
+// The way back from administrator sign-in.
 export const AuthBackLink = ({ to = ROUTES.AUTH }: { to?: string }) => {
   const t = useTranslate();
   return (
@@ -35,8 +34,6 @@ export const AuthBackLink = ({ to = ROUTES.AUTH }: { to?: string }) => {
     </p>
   );
 };
-
-export const AuthOptionsLoading = () => <Skeleton height={32} />;
 
 /**
  * Every auth page: the instance's identity, the task's heading, the task, and a footer row with the

@@ -235,7 +235,6 @@ const MemoDetail = () => {
               onShowBlurredContentChange={handleShowBlurredContentChange}
               showCreator
               showPinned
-              showSpace
               onShareImageDialogOpenChange={setShareImageDialogOpen}
             />
             <MemoCommentSection

@@ -22,12 +22,11 @@ function Probe({ autoFocus, mode = "rich" }: { autoFocus?: boolean | (() => bool
 }
 
 /** Mounts a session the way MemoEditor does: the draft read once, then the caret restored. */
-const mountSession = (props: { autoFocus?: boolean | (() => boolean); mode?: EditorMode; canChooseSpace?: boolean }) =>
+const mountSession = (props: { autoFocus?: boolean | (() => boolean); mode?: EditorMode }) =>
   render(
     <EditorProvider
       initialEditorState={initialEditorState({
         draftKey,
-        canChooseSpace: props.canChooseSpace,
       })}
     >
       <Probe autoFocus={props.autoFocus} mode={props.mode} />
@@ -86,14 +85,15 @@ describe("the initial draft and useMemoInit", () => {
     expect(setSelection).not.toHaveBeenCalled();
   });
 
-  it.each([true, false])("restores destination only when the composer can choose a Space (%s)", (canChooseSpace) => {
+  it("restores an old draft without reusing its Space assignment", () => {
     cacheService.saveNow(draftKey, {
       content: "Draft",
       attachments: [],
       space: "spaces/work",
     });
-    mountSession({ canChooseSpace });
-    expect(getEditorState().metadata.space).toBe(canChooseSpace ? "spaces/work" : undefined);
+    mountSession({});
+    expect(getEditorState().content).toBe("Draft");
+    expect(getEditorState().metadata.space).toBeUndefined();
   });
 
   it("restores uploaded attachment bindings with a new memo draft", () => {

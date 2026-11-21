@@ -26,6 +26,8 @@ type MemoAttachmentBinding struct {
 // reference relations. Removed attachment rows are deleted in the same
 // transaction; callers may clean up external objects after the commit.
 type MemoMutation struct {
+	// PersonalCreation uses personal authorization for an imported or newly created memo.
+	PersonalCreation bool
 	// MemoCreate requests that the memo row be created in this same transaction
 	// before attachments and relations are applied. CommentContextMemoID creates
 	// one immutable COMMENT relation from the new memo to the named context memo.
@@ -41,6 +43,12 @@ type MemoMutation struct {
 	ReplaceReferenceRelations bool
 	ReferenceRelations        []*MemoRelation
 	Policy                    *MemoWritePolicy
+}
+
+// PersonalMode reports whether the mutation uses author-only access.
+func (m *MemoMutation) PersonalMode() bool {
+	policy := m.WritePolicy()
+	return m.PersonalCreation || (policy != nil && policy.Personal)
 }
 
 // MemoAttachmentBindingOwnerAllowed reports whether an unbound attachment may
@@ -96,6 +104,9 @@ func (s *Store) ApplyMemoMutation(ctx context.Context, mutation *MemoMutation) e
 			return errors.New("memo creation mutation cannot update or remove existing state")
 		}
 		create := mutation.MemoCreate
+		if mutation.PersonalCreation && create.SpaceID != nil {
+			return ErrMemoSpaceNotWritable
+		}
 		if create.CreatorID <= 0 {
 			return errors.New("memo creation mutation requires creator")
 		}

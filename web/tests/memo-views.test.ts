@@ -6,15 +6,14 @@ import { getMemoViewId, isMemoCollectionRoute, resolveMemoScope } from "@/lib/me
 describe("memo scopes", () => {
   it("resolves collection and detail routes", () => {
     expect(resolveMemoScope("/archived")).toBe("archived");
-    expect(resolveMemoScope("/explore")).toBe("explore");
     expect(resolveMemoScope("/memos/123", { detailFrom: "/archived?filter=tagSearch%3Awork" })).toBe("archived");
     expect(resolveMemoScope("/memos/123", { memoArchived: true })).toBe("archived");
-    expect(resolveMemoScope("/settings", { fallback: "explore" })).toBe("explore");
+    expect(resolveMemoScope("/settings", { fallback: "archived" })).toBe("archived");
   });
 
   it("applies sidebar views and filters to the note collections", () => {
     expect(isMemoCollectionRoute("/")).toBe(true);
-    expect(isMemoCollectionRoute("/explore")).toBe(true);
+    expect(isMemoCollectionRoute("/explore")).toBe(false);
     expect(isMemoCollectionRoute("/archived")).toBe(true);
     expect(isMemoCollectionRoute("/?creator=steven")).toBe(true);
     expect(isMemoCollectionRoute("/u/steven")).toBe(false);

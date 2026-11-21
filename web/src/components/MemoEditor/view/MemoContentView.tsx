@@ -9,7 +9,6 @@ import { useDevicePreferences } from "@/hooks/useDevicePreferences";
 import { useNearViewport } from "@/hooks/useNearViewport";
 import { markdownStyles } from "@/lib/markdownStyles";
 import { cn } from "@/lib/utils";
-import { getCreatorHomePath } from "@/router/routes";
 import type { Attachment } from "@/types/proto/api/attachment_service_pb";
 import { findAnchorTarget } from "@/utils/markdown-manipulation";
 import { headingSlugs } from "./headings";
@@ -56,8 +55,8 @@ interface LinkCard extends LinkCardMount {
 let nextLinkCardKey = 0;
 
 /**
- * A memo's content, read-only, with the memo view's own surface over MemoMarkdown: tags and
- * mentions navigate, in-memo anchors scroll, bare links become preview cards, and the page's
+ * A memo's content, read-only, with the memo view's own surface over MemoMarkdown: tags
+ * navigate, in-memo anchors scroll, bare links become preview cards, and the page's
  * search matches are painted. Owners can tick task items: each tick reports the new Markdown,
  * in which only that item's `[ ]` or `[x]` changed. Truncation is not this component's
  * concern — compact cards are bounded by ClampedSection around the whole memo body;
@@ -139,9 +138,7 @@ const MemoContentViewImpl = (props: MemoContentViewProps) => {
           extensions={linkCards}
           headingIds={headingSlugs}
           onLinkClick={handleLinkClick}
-          // Tags filter the list when clicked here; mentions of people who exist open their page.
           onTagClick={navigateToTag}
-          onMentionClick={(username) => navigate(getCreatorHomePath(username))}
           className="memo-content-root"
         />
         {cards.map((card) => createPortal(<LinkPreview href={card.href} />, card.element, String(card.key)))}

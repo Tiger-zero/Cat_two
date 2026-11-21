@@ -22,10 +22,10 @@ import (
 	"github.com/usememos/memos/store"
 )
 
-func (s *APIService) doSignIn(ctx context.Context, user *store.User) (string, time.Time, error) {
+func (s *APIService) doSignIn(ctx context.Context, user *store.User, revision string) (string, time.Time, error) {
 	// Generate refresh token
 	tokenID := random.UUID()
-	refreshToken, refreshExpiresAt, err := auth.GenerateRefreshToken(user.ID, tokenID, []byte(s.Secret))
+	refreshToken, refreshExpiresAt, err := auth.GenerateSessionRefreshToken(user.ID, tokenID, revision, []byte(s.Secret))
 	if err != nil {
 		return "", time.Time{}, status.Errorf(codes.Internal, "failed to generate refresh token: %v", err)
 	}
@@ -49,14 +49,7 @@ func (s *APIService) doSignIn(ctx context.Context, user *store.User) (string, ti
 	}
 
 	// Generate access token
-	accessToken, accessExpiresAt, err := auth.GenerateAccessTokenV2(
-		user.ID,
-		user.Username,
-		string(user.Role),
-		string(user.RowStatus),
-		user.PasswordHash,
-		[]byte(s.Secret),
-	)
+	accessToken, accessExpiresAt, err := auth.GenerateSessionAccessToken(user, revision, []byte(s.Secret))
 	if err != nil {
 		return "", time.Time{}, status.Errorf(codes.Internal, "failed to generate access token: %v", err)
 	}
@@ -127,7 +120,7 @@ func (s *APIService) RefreshToken(ctx context.Context, _ *apipb.RefreshTokenRequ
 
 	// Validate refresh token and get old token ID for rotation
 	authenticator := auth.NewAuthenticator(s.Store, s.Secret)
-	user, oldTokenID, err := authenticator.AuthenticateByRefreshToken(ctx, refreshToken)
+	user, oldSession, err := authenticator.AuthenticateRefreshSession(ctx, refreshToken)
 	if err != nil {
 		return nil, status.Errorf(codes.Unauthenticated, "invalid refresh token: %v", err)
 	}
@@ -135,7 +128,7 @@ func (s *APIService) RefreshToken(ctx context.Context, _ *apipb.RefreshTokenRequ
 	// --- Refresh Token Rotation ---
 	// Generate new refresh token with fresh 30-day expiry (sliding window)
 	newTokenID := random.UUID()
-	newRefreshToken, newRefreshExpiresAt, err := auth.GenerateRefreshToken(user.ID, newTokenID, []byte(s.Secret))
+	newRefreshToken, newRefreshExpiresAt, err := auth.GenerateSessionRefreshToken(user.ID, newTokenID, oldSession.SessionRevision, []byte(s.Secret))
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to generate refresh token: %v", err)
 	}
@@ -153,9 +146,9 @@ func (s *APIService) RefreshToken(ctx context.Context, _ *apipb.RefreshTokenRequ
 	}
 
 	// Remove old refresh token
-	if err := s.Store.RemoveUserRefreshToken(ctx, user.ID, oldTokenID); err != nil {
+	if err := s.Store.RemoveUserRefreshToken(ctx, user.ID, oldSession.TokenID); err != nil {
 		// Log but don't fail - old token will expire naturally
-		slog.Warn("failed to remove old refresh token", "error", err, "userID", user.ID, "tokenID", oldTokenID)
+		slog.Warn("failed to remove old refresh token", "error", err, "userID", user.ID, "tokenID", oldSession.TokenID)
 	}
 
 	// Set new refresh token cookie
@@ -166,14 +159,7 @@ func (s *APIService) RefreshToken(ctx context.Context, _ *apipb.RefreshTokenRequ
 	// --- End Rotation ---
 
 	// Generate new access token
-	accessToken, expiresAt, err := auth.GenerateAccessTokenV2(
-		user.ID,
-		user.Username,
-		string(user.Role),
-		string(user.RowStatus),
-		user.PasswordHash,
-		[]byte(s.Secret),
-	)
+	accessToken, expiresAt, err := auth.GenerateSessionAccessToken(user, oldSession.SessionRevision, []byte(s.Secret))
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to generate access token: %v", err)
 	}

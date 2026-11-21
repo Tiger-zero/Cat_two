@@ -4,10 +4,8 @@ import { createConnectTransport } from "@connectrpc/connect-web";
 import { getAccessToken, hasStoredToken, isTokenExpired, REQUEST_TOKEN_EXPIRY_BUFFER_MS, setAccessToken } from "./auth-state";
 import { AttachmentService } from "./types/proto/api/attachment_service_pb";
 import { AuthService } from "./types/proto/api/auth_service_pb";
-import { IdentityProviderService } from "./types/proto/api/idp_service_pb";
 import { InstanceService } from "./types/proto/api/instance_service_pb";
 import { MemoService } from "./types/proto/api/memo_service_pb";
-import { SpaceService } from "./types/proto/api/space_service_pb";
 import { UserService } from "./types/proto/api/user_service_pb";
 import { redirectOnAuthFailure } from "./utils/auth-redirect";
 
@@ -218,7 +216,3 @@ export const userServiceClient = createClient(UserService, transport);
 // Content service clients
 export const memoServiceClient = createClient(MemoService, transport);
 export const attachmentServiceClient = createClient(AttachmentService, transport);
-export const spaceServiceClient = createClient(SpaceService, transport);
-
-// Configuration service clients
-export const identityProviderServiceClient = createClient(IdentityProviderService, transport);

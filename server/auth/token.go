@@ -21,6 +21,7 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/usememos/memos/internal/random"
+	"github.com/usememos/memos/store"
 )
 
 const (
@@ -70,19 +71,21 @@ type ClaimsMessage struct {
 // AccessTokenClaims contains claims for short-lived access tokens.
 // Authentication also checks AuthHash against the user's current password hash.
 type AccessTokenClaims struct {
-	Type     string `json:"type"`      // "access"
-	Role     string `json:"role"`      // User role
-	Status   string `json:"status"`    // User status
-	Username string `json:"username"`  // Username for display
-	AuthHash string `json:"auth_hash"` // Password-bound session validation
+	Type            string `json:"type"`      // "access"
+	Role            string `json:"role"`      // User role
+	Status          string `json:"status"`    // User status
+	Username        string `json:"username"`  // Username for display
+	AuthHash        string `json:"auth_hash"` // Password-bound session validation
+	SessionRevision string `json:"session_revision,omitempty"`
 	jwt.RegisteredClaims
 }
 
 // RefreshTokenClaims contains claims for long-lived refresh tokens.
 // These tokens are validated against the database for revocation.
 type RefreshTokenClaims struct {
-	Type    string `json:"type"` // "refresh"
-	TokenID string `json:"tid"`  // Token ID for revocation lookup
+	Type            string `json:"type"` // "refresh"
+	TokenID         string `json:"tid"`  // Token ID for revocation lookup
+	SessionRevision string `json:"session_revision,omitempty"`
 	jwt.RegisteredClaims
 }
 
@@ -134,19 +137,29 @@ func generateToken(username string, userID int32, audience string, expirationTim
 
 // GenerateAccessTokenV2 generates a short-lived access token bound to the user's current password hash.
 func GenerateAccessTokenV2(userID int32, username, role, status, passwordHash string, secret []byte) (string, time.Time, error) {
+	return issueAccessTokenV2(userID, username, role, status, passwordHash, "", secret)
+}
+
+// GenerateSessionAccessToken issues an access token for a proven factor revision.
+func GenerateSessionAccessToken(user *store.User, revision string, secret []byte) (string, time.Time, error) {
+	return issueAccessTokenV2(user.ID, user.Username, string(user.Role), string(user.RowStatus), user.PasswordHash, revision, secret)
+}
+
+func issueAccessTokenV2(userID int32, username, role, status, passwordHash, revision string, secret []byte) (string, time.Time, error) {
 	expiresAt := time.Now().Add(AccessTokenDuration)
 
 	claims := &AccessTokenClaims{
-		Type:      "access",
-		Role:      role,
-		Status:    status,
-		Username:  username,
-		AuthHash:  accessTokenAuthHash(userID, passwordHash, secret),
-		Issuer:    Issuer,
-		Audience:  jwt.ClaimStrings{AccessTokenAudienceName},
-		Subject:   fmt.Sprint(userID),
-		IssuedAt:  jwt.NewNumericDate(time.Now()),
-		ExpiresAt: jwt.NewNumericDate(expiresAt),
+		Type:            "access",
+		Role:            role,
+		Status:          status,
+		Username:        username,
+		AuthHash:        accessTokenAuthHash(userID, passwordHash, secret),
+		SessionRevision: revision,
+		Issuer:          Issuer,
+		Audience:        jwt.ClaimStrings{AccessTokenAudienceName},
+		Subject:         fmt.Sprint(userID),
+		IssuedAt:        jwt.NewNumericDate(time.Now()),
+		ExpiresAt:       jwt.NewNumericDate(expiresAt),
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
@@ -171,16 +184,22 @@ func accessTokenAuthHash(userID int32, passwordHash string, secret []byte) strin
 
 // GenerateRefreshToken generates a long-lived refresh token.
 func GenerateRefreshToken(userID int32, tokenID string, secret []byte) (string, time.Time, error) {
+	return GenerateSessionRefreshToken(userID, tokenID, "", secret)
+}
+
+// GenerateSessionRefreshToken issues a refresh token for a proven factor revision.
+func GenerateSessionRefreshToken(userID int32, tokenID, revision string, secret []byte) (string, time.Time, error) {
 	expiresAt := time.Now().Add(RefreshTokenDuration)
 
 	claims := &RefreshTokenClaims{
-		Type:      "refresh",
-		TokenID:   tokenID,
-		Issuer:    Issuer,
-		Audience:  jwt.ClaimStrings{RefreshTokenAudienceName},
-		Subject:   fmt.Sprint(userID),
-		IssuedAt:  jwt.NewNumericDate(time.Now()),
-		ExpiresAt: jwt.NewNumericDate(expiresAt),
+		Type:            "refresh",
+		TokenID:         tokenID,
+		SessionRevision: revision,
+		Issuer:          Issuer,
+		Audience:        jwt.ClaimStrings{RefreshTokenAudienceName},
+		Subject:         fmt.Sprint(userID),
+		IssuedAt:        jwt.NewNumericDate(time.Now()),
+		ExpiresAt:       jwt.NewNumericDate(expiresAt),
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)

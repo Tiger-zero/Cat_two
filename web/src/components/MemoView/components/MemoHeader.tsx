@@ -6,7 +6,6 @@ import { useNewMemo } from "@/contexts/NewMemoContext";
 import i18n from "@/i18n";
 import { APP_TIME_ZONE } from "@/lib/time-zone";
 import { cn } from "@/lib/utils";
-import { getCreatorHomePath } from "@/router/routes";
 import type { User } from "@/types/proto/api/user_service_pb";
 import { useTranslate } from "@/utils/i18n";
 import MemoActionMenu from "../../MemoActionMenu";
@@ -16,9 +15,8 @@ import { MEMO_TIME_CONTROL_CLASSES } from "../constants";
 import { useMemoViewContext, useMemoViewDerived } from "../MemoViewContext";
 import { createMemoNavigationState, isMemoDetailPath } from "../navigation";
 import type { MemoHeaderProps } from "../types";
-import MemoSpaceBadge from "./MemoSpaceBadge";
 
-const MemoHeader: React.FC<MemoHeaderProps> = ({ timeDisplay = "relative", showCreator, showSpace }) => {
+const MemoHeader: React.FC<MemoHeaderProps> = ({ timeDisplay = "relative", showCreator }) => {
   const t = useTranslate();
 
   const { memo, creator, currentUser, parentPage, isArchived, readonly, isEditing, openEditor } = useMemoViewContext();
@@ -49,12 +47,11 @@ const MemoHeader: React.FC<MemoHeaderProps> = ({ timeDisplay = "relative", showC
         ? `${t("common.last-updated-at")}: ${updateTime.toLocaleString(i18n.language, { timeZone: APP_TIME_ZONE })}`
         : undefined,
   };
-  const spaceMetadata = showSpace && memo.space ? <MemoSpaceBadge spaceName={memo.space} /> : null;
   const showsCreator = Boolean(showCreator && creator);
   const isNew = memo.name === newMemoName;
 
   // While the card edits in place, the session's timestamp row is the header: the body
-  // hands it the identity (`CreatorDisplay`) to lead with, and the time and Space show once, in their editable form. Reacting or opening the action menu makes no
+  // hands it the identity (`CreatorDisplay`) to lead with, and time appears once. Reacting or opening the action menu makes no
   // sense mid-edit, and the "new" mark is for finding the memo in the list, not for the
   // person editing it.
   if (isEditing) return null;
@@ -64,7 +61,7 @@ const MemoHeader: React.FC<MemoHeaderProps> = ({ timeDisplay = "relative", showC
     // moves with what the header happens to show.
     <div className="flex h-6 w-full items-center justify-between gap-2">
       <div className="flex min-w-0 flex-1 items-center gap-2">
-        {/* The time stays visible while the creator and Space badge can shrink and truncate. */}
+        {/* The time stays visible while the creator can shrink and truncate. */}
         <div data-slot="memo-header-meta" className="flex min-w-0 items-center gap-1.5 overflow-hidden">
           {showsCreator && creator && <CreatorDisplay creator={creator} />}
           <TimeDisplay
@@ -74,7 +71,6 @@ const MemoHeader: React.FC<MemoHeaderProps> = ({ timeDisplay = "relative", showC
             parentPage={parentPage}
             isCurrentPage={isMemoDetailPath(location.pathname, memo.name)}
           />
-          {spaceMetadata}
         </div>
         {isNew && <NewBadge />}
       </div>
@@ -110,19 +106,12 @@ const NewBadge = () => {
  */
 export const CreatorDisplay: React.FC<{ creator: User }> = ({ creator }) => (
   <>
-    <Link
-      className={cn(
-        "flex min-w-0 shrink items-center gap-1.5 rounded-mu-sm mu-label-sm text-mu-text transition-colors hover:text-mu-text/80",
-        "border border-transparent mu-focus focus-visible:border-mu-focus",
-      )}
-      to={getCreatorHomePath(creator.username)}
-      viewTransition
-    >
+    <span className="flex min-w-0 shrink items-center gap-1.5 mu-label-sm text-mu-text">
       <span className="flex size-5 shrink-0 items-center justify-center">
         <UserAvatar className="size-5" avatarUrl={creator.avatarUrl} name={creator.displayName || creator.username} />
       </span>
       <span className="min-w-0 truncate">{creator.displayName || creator.username}</span>
-    </Link>
+    </span>
     <span aria-hidden="true" className="shrink-0 text-mu-text-secondary/40">
       ·
     </span>

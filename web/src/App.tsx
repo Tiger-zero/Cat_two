@@ -7,7 +7,6 @@ import useNavigateTo from "./hooks/useNavigateTo";
 import { useUserLocale } from "./hooks/useUserLocale";
 import { useUserTheme } from "./hooks/useUserTheme";
 import { DEFAULT_FAVICON, getCustomLogoUrl } from "./lib/branding";
-import { cleanupExpiredOAuthState } from "./utils/oauth";
 
 const App = () => {
   const navigateTo = useNavigateTo();
@@ -16,11 +15,6 @@ const App = () => {
   // Apply user preferences reactively
   const direction = useUserLocale();
   useUserTheme();
-
-  // Clean up expired OAuth states on app initialization
-  useEffect(() => {
-    cleanupExpiredOAuthState();
-  }, []);
 
   // Redirect to sign up page if the instance needs initial setup (no users yet).
   // needsSetup is used instead of a missing admin so an instance that has lost its

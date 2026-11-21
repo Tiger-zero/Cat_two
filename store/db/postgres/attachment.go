@@ -237,7 +237,7 @@ func (d *DB) UpdateAttachment(ctx context.Context, update *store.UpdateAttachmen
 	if err != nil {
 		return err
 	}
-	if err := authorizePostgresAttachmentMutation(ctx, tx, update.Policy.ActorUserID, actor.Admin, memoIDs, nil); err != nil {
+	if err := authorizePostgresAttachmentMutation(ctx, tx, update.Policy.ActorUserID, actor.Admin, memoIDs, nil, d.profile != nil && d.profile.Personal); err != nil {
 		return err
 	}
 	if err := applyPostgresAttachmentUpdate(ctx, tx, update); err != nil {

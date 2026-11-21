@@ -1,9 +1,8 @@
-import { create } from "@bufbuild/protobuf";
 import { Suspense, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
-import SpaceIconPicker from "@/components/SpaceIconPicker";
+import CustomIconPicker from "@/components/CustomIconPicker";
 import i18n from "@/i18n";
-import { type Space_Icon, Space_IconSchema } from "@/types/proto/api/space_service_pb";
+import type { CustomIconValue } from "@/lib/custom-icons";
 import "@/index.css";
 
 declare global {
@@ -19,10 +18,10 @@ declare global {
 const changes: (string | null)[] = [];
 
 function Harness() {
-  const [value, setValue] = useState<Space_Icon>();
+  const [value, setValue] = useState<CustomIconValue>();
   useEffect(() => {
     window.iconPickerTest = {
-      setCustom: (custom) => setValue(custom ? create(Space_IconSchema, { value: { case: "lucide", value: "leaf" } }) : undefined),
+      setCustom: (custom) => setValue(custom ? { value: { case: "lucide", value: "leaf" } } : undefined),
       setLocale: async (locale) => {
         await i18n.changeLanguage(locale);
         document.documentElement.lang = locale;
@@ -33,7 +32,8 @@ function Harness() {
 
   return (
     <main className="flex justify-center pt-24">
-      <SpaceIconPicker
+      <CustomIconPicker
+        label="Choose icon"
         value={value}
         onChange={(next) => {
           changes.push(next?.value.value ?? null);
