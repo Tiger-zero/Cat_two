@@ -708,7 +708,7 @@ func newShareAttachmentTestServices(ctx context.Context, t *testing.T) (*api.API
 		InstanceURL: "http://localhost:8080",
 		Driver:      "sqlite",
 		DSN:         ":memory:",
-		Data:        t.TempDir(),
+		Data:        testStore.GetDataDir(),
 	}
 	secret := "test-secret"
 	markdownService := markdown.NewService(markdown.WithTagExtension())

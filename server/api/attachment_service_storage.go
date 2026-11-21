@@ -85,28 +85,16 @@ func saveAttachmentContent(
 			filepathTemplate = instanceStorageSetting.FilepathTemplate
 		}
 
-		internalPath := filepathTemplate
-		if !strings.Contains(internalPath, "{filename}") {
-			internalPath = filepath.Join(internalPath, "{filename}")
+		if !strings.Contains(filepathTemplate, "{filename}") {
+			filepathTemplate = filepath.Join(filepathTemplate, "{filename}")
 		}
-		internalPath = replaceFilenameWithPathTemplate(internalPath, create.Filename)
-		internalPath = filepath.ToSlash(internalPath)
-
-		// Ensure the directory exists.
-		osPath := filepath.FromSlash(internalPath)
-		if !filepath.IsAbs(osPath) {
-			osPath = filepath.Join(profile.Data, osPath)
+		templatePath := filepath.FromSlash(replaceFilenameWithPathTemplate(filepathTemplate, create.Filename))
+		relative := !filepath.IsAbs(templatePath)
+		targetPath := templatePath
+		if relative {
+			targetPath = filepath.Join(profile.Data, templatePath)
 		}
-		osPath = ensureUniqueLocalAttachmentPath(osPath, create.UID)
-		internalPath = filepath.ToSlash(osPath)
-		if !filepath.IsAbs(filepath.FromSlash(internalPath)) {
-			relativePath, err := filepath.Rel(profile.Data, osPath)
-			if err != nil {
-				return errors.Wrap(err, "Failed to get relative path")
-			}
-			internalPath = filepath.ToSlash(relativePath)
-		}
-		dir := filepath.Dir(osPath)
+		dir := filepath.Dir(targetPath)
 		if err := os.MkdirAll(dir, os.ModePerm); err != nil {
 			return errors.Wrap(err, "Failed to create directory")
 		}
@@ -127,10 +115,17 @@ func saveAttachmentContent(
 		if err := file.Close(); err != nil {
 			return errors.Wrap(err, "failed to close attachment file")
 		}
-		if err := os.Rename(file.Name(), osPath); err != nil {
+		if err := ctx.Err(); err != nil {
 			return errors.Wrap(err, "failed to finalize attachment file")
 		}
-		create.Reference = internalPath
+		savedPath, err := publishLocalAttachment(file.Name(), targetPath, create.UID)
+		if err != nil {
+			return err
+		}
+		if relative {
+			savedPath = filepath.Join(filepath.Dir(templatePath), filepath.Base(savedPath))
+		}
+		create.Reference = filepath.ToSlash(savedPath)
 		create.Blob = nil
 		create.StorageType = storepb.AttachmentStorageType_LOCAL
 	} else if defaultStorage.Type == storepb.StorageType_STORAGE_TYPE_S3 {
@@ -194,19 +189,20 @@ func cleanupSavedAttachmentBlob(
 	if err != nil {
 		return false, errors.Wrap(err, "failed to verify attachment create outcome")
 	}
-	if hasSameManagedStorageObject(persisted, attachment) {
+	if hasSameManagedStorageObject(stores.GetDataDir(), persisted, attachment) {
 		return true, nil
 	}
 	return false, stores.DeleteAttachmentStorageWithInstanceSetting(cleanupCtx, attachment, instanceStorageSetting)
 }
 
-func hasSameManagedStorageObject(left, right *store.Attachment) bool {
+func hasSameManagedStorageObject(dataDir string, left, right *store.Attachment) bool {
 	if left == nil || right == nil || left.StorageType != right.StorageType {
 		return false
 	}
 	switch left.StorageType {
 	case storepb.AttachmentStorageType_LOCAL:
-		return left.Reference != "" && left.Reference == right.Reference
+		return left.Reference != "" && right.Reference != "" &&
+			localAttachmentPath(dataDir, left.Reference) == localAttachmentPath(dataDir, right.Reference)
 	case storepb.AttachmentStorageType_S3:
 		leftObject, rightObject := left.Payload.GetS3Object(), right.Payload.GetS3Object()
 
@@ -222,6 +218,14 @@ func hasSameManagedStorageObject(left, right *store.Attachment) bool {
 	default:
 		return false
 	}
+}
+
+func localAttachmentPath(dataDir, reference string) string {
+	path := filepath.FromSlash(reference)
+	if filepath.IsAbs(path) {
+		return path
+	}
+	return filepath.Join(dataDir, path)
 }
 
 func (s *APIService) cleanupDeletedAttachmentStorage(ctx context.Context, attachments []*store.Attachment) error {
@@ -269,11 +273,7 @@ func (s *APIService) GetAttachmentBlob(ctx context.Context, attachment *store.At
 func (s *APIService) openAttachmentContent(ctx context.Context, attachment *store.Attachment) (io.ReadCloser, error) {
 	switch attachment.StorageType {
 	case storepb.AttachmentStorageType_LOCAL:
-		attachmentPath := filepath.FromSlash(attachment.Reference)
-		if !filepath.IsAbs(attachmentPath) {
-			attachmentPath = filepath.Join(s.Profile.Data, attachmentPath)
-		}
-		file, err := os.Open(attachmentPath)
+		file, err := os.Open(localAttachmentPath(s.Profile.Data, attachment.Reference))
 		if err != nil {
 			if os.IsNotExist(err) {
 				return nil, errors.Wrap(err, "file not found")
@@ -338,14 +338,34 @@ func replaceFilenameWithPathTemplate(path, filename string) string {
 	return path
 }
 
-func ensureUniqueLocalAttachmentPath(path, uid string) string {
-	if _, err := os.Stat(path); err != nil {
-		return path
-	}
-
+// publishLocalAttachment reserves its destination exclusively before replacing
+// that reservation with the fully written file.
+func publishLocalAttachment(staged, path, uid string) (string, error) {
 	ext := filepath.Ext(path)
 	base := strings.TrimSuffix(path, ext)
-	return base + "_" + uid + ext
+	destination := path
+	for collision := 1; ; collision++ {
+		reservation, err := os.OpenFile(destination, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+		if os.IsExist(err) {
+			destination = base + "_" + uid + ext
+			if collision > 1 {
+				destination = fmt.Sprintf("%s_%s_%d%s", base, uid, collision, ext)
+			}
+			continue
+		}
+		if err != nil {
+			return "", errors.Wrap(err, "failed to reserve attachment file")
+		}
+		if err := reservation.Close(); err != nil {
+			os.Remove(destination)
+			return "", errors.Wrap(err, "failed to close attachment reservation")
+		}
+		if err := os.Rename(staged, destination); err != nil {
+			os.Remove(destination)
+			return "", errors.Wrap(err, "failed to finalize attachment file")
+		}
+		return destination, nil
+	}
 }
 
 func validateFilename(filename string) bool {

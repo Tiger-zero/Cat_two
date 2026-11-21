@@ -9,6 +9,7 @@ import (
 	"io"
 	"log/slog"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/lithammer/shortuuid/v4"
@@ -19,6 +20,7 @@ import (
 	"github.com/usememos/memos/core/memoexport"
 	"github.com/usememos/memos/core/memopayload"
 	"github.com/usememos/memos/internal/ratelimit"
+	"github.com/usememos/memos/markdown"
 	apipb "github.com/usememos/memos/proto/gen/api"
 	storepb "github.com/usememos/memos/proto/gen/store"
 	"github.com/usememos/memos/store"
@@ -225,14 +227,14 @@ func (i *memoImporter) createMemo(record *memoexport.Memo, targetUID string, con
 			parentID = &parent.ID
 		}
 	}
-	added, err := i.importAttachments(record, nil)
+	attachments, err := i.prepareImportedMemoContent(record, memo, nil)
 	if err != nil {
 		return err
 	}
 	// Creation never sets pinned or the lifecycle state; they follow in a
 	// second write, as they do for a memo created through the API.
 	wantPinned, wantRowStatus := memo.Pinned, memo.RowStatus
-	err = i.bindAttachments(memo, added, added, func(prepared *preparedMemoAttachments, required []int32) error {
+	err = i.bindAttachments(memo, memo.Content, nil, attachments, func(prepared *preparedMemoAttachments, required []int32) error {
 		if err := i.service.createMemoWithMutation(i.ctx, i.user, memo, parentID, prepared, required, nil); err != nil {
 			return mapMemoCreateError(err, targetUID, "failed to create memo")
 		}
@@ -270,6 +272,18 @@ func (i *memoImporter) replaceMemo(record *memoexport.Memo, existing *store.Memo
 	if record.Parent != "" && (existing.ParentUID == nil || *existing.ParentUID != record.Parent) {
 		i.warn(record.UID, "comment threading of an existing memo cannot be changed; the parent from the archive was ignored")
 	}
+	current, err := i.service.Store.ListAttachments(i.ctx, &store.FindAttachment{MemoID: &existing.ID})
+	if err != nil {
+		return errors.Wrap(err, "failed to list attachments")
+	}
+	names := make([]*apipb.Attachment, 0, len(current)+len(record.Attachments))
+	for _, attachment := range current {
+		names = append(names, &apipb.Attachment{Name: AttachmentNamePrefix + attachment.UID})
+	}
+	attachments, err := i.prepareImportedMemoContent(record, next, current)
+	if err != nil {
+		return err
+	}
 	update := &store.UpdateMemo{
 		ID:         existing.ID,
 		Content:    &next.Content,
@@ -282,19 +296,7 @@ func (i *memoImporter) replaceMemo(record *memoexport.Memo, existing *store.Memo
 		ClearSpace: next.SpaceID == nil,
 		SpaceID:    next.SpaceID,
 	}
-	current, err := i.service.Store.ListAttachments(i.ctx, &store.FindAttachment{MemoID: &existing.ID})
-	if err != nil {
-		return errors.Wrap(err, "failed to list attachments")
-	}
-	names := make([]*apipb.Attachment, 0, len(current)+len(record.Attachments))
-	for _, attachment := range current {
-		names = append(names, &apipb.Attachment{Name: AttachmentNamePrefix + attachment.UID})
-	}
-	added, err := i.importAttachments(record, current)
-	if err != nil {
-		return err
-	}
-	err = i.bindAttachments(existing, append(names, added...), added, func(prepared *preparedMemoAttachments, required []int32) error {
+	err = i.bindAttachments(existing, next.Content, names, attachments, func(prepared *preparedMemoAttachments, required []int32) error {
 		return i.service.applyMemoMutation(i.ctx, existing, prepared, update, required, nil)
 	})
 	if err != nil {
@@ -309,20 +311,20 @@ func (i *memoImporter) replaceMemo(record *memoexport.Memo, existing *store.Memo
 // bindAttachments prepares the memo's attachment set, resolves the managed
 // references in its content, and runs write. When any step fails, the
 // attachments this run created for the memo are removed again.
-func (i *memoImporter) bindAttachments(memo *store.Memo, names, added []*apipb.Attachment, write func(*preparedMemoAttachments, []int32) error) error {
+func (i *memoImporter) bindAttachments(memo *store.Memo, content string, names []*apipb.Attachment, imported importedMemoAttachments, write func(*preparedMemoAttachments, []int32) error) error {
 	err := func() error {
-		prepared, err := i.service.prepareMemoAttachments(i.ctx, i.user, memo, names)
+		prepared, err := i.service.prepareMemoAttachments(i.ctx, i.user, memo, append(names, imported.toBind...))
 		if err != nil {
 			return err
 		}
-		required, err := i.service.resolveMemoAttachmentReferences(memo.Content, prepared.normalized)
+		required, err := i.service.resolveMemoAttachmentReferences(content, prepared.normalized)
 		if err != nil {
 			return err
 		}
 		return write(prepared, required)
 	}()
 	if err != nil {
-		i.discardAttachments(added)
+		i.discardAttachments(imported.created)
 	}
 	return err
 }
@@ -347,6 +349,7 @@ func (i *memoImporter) buildMemo(record *memoexport.Memo, uid string, content []
 		Content:    string(content),
 		Visibility: store.Private,
 		Pinned:     record.Pinned,
+		Payload:    &storepb.MemoPayload{},
 	}
 	if record.Space != nil {
 		spaceID, err := i.resolveSpace(record.Space)
@@ -357,9 +360,6 @@ func (i *memoImporter) buildMemo(record *memoexport.Memo, uid string, content []
 			i.warn(record.UID, fmt.Sprintf("space %q was not found among your spaces; imported without a space", record.Space.UID))
 		}
 		memo.SpaceID = spaceID
-	}
-	if err := memopayload.RebuildMemoPayload(i.ctx, memo, i.service.MarkdownService); err != nil {
-		return nil, errors.Wrap(err, "failed to rebuild memo payload")
 	}
 	if store.IsMemoCreationChannel(record.CreationChannel) {
 		memo.Payload.CreationChannel = record.CreationChannel
@@ -419,17 +419,24 @@ func (i *memoImporter) resolveMemo(uid string) (*store.Memo, error) {
 	return memo, nil
 }
 
-// importAttachments creates the attachments of a record that the memo does
-// not already hold and returns their names for binding.
-func (i *memoImporter) importAttachments(record *memoexport.Memo, current []*store.Attachment) ([]*apipb.Attachment, error) {
+type importedMemoAttachments struct {
+	toBind  []*apipb.Attachment
+	created []*apipb.Attachment
+}
+
+// prepareImportedMemoContent imports new attachments and updates the memo's
+// image destinations and derived payload before its transactional write.
+func (i *memoImporter) prepareImportedMemoContent(record *memoexport.Memo, memo *store.Memo, current []*store.Attachment) (attachments importedMemoAttachments, prepareErr error) {
+	defer func() {
+		if prepareErr != nil {
+			i.discardAttachments(attachments.created)
+		}
+	}()
+	remapped := make(map[string]string)
 	bound := make(map[string]struct{}, len(current))
 	for _, attachment := range current {
 		bound[attachment.UID] = struct{}{}
 	}
-	toBind := make([]*apipb.Attachment, 0, len(record.Attachments))
-	// created holds only attachments this run stored; a pre-existing
-	// attachment that is merely re-bound is never discarded on failure.
-	created := make([]*apipb.Attachment, 0, len(record.Attachments))
 	for index := range record.Attachments {
 		entry := &record.Attachments[index]
 		if _, ok := bound[entry.UID]; ok {
@@ -437,18 +444,54 @@ func (i *memoImporter) importAttachments(record *memoexport.Memo, current []*sto
 		}
 		name, stored, err := i.importAttachment(entry)
 		if err != nil {
-			i.discardAttachments(created)
-			return nil, errors.Wrapf(err, "attachment %s", entry.UID)
+			return attachments, errors.Wrapf(err, "attachment %s", entry.UID)
 		}
 		attachment := &apipb.Attachment{Name: name}
-		toBind = append(toBind, attachment)
+		attachments.toBind = append(attachments.toBind, attachment)
 		if stored {
-			created = append(created, attachment)
+			attachments.created = append(attachments.created, attachment)
 			// Stored bytes count against the same upload budget as an upload.
 			i.service.charge(ratelimit.ScopeUploadUser, userKey(i.user.ID), 1)
 		}
+		if uid := strings.TrimPrefix(name, AttachmentNamePrefix); uid != entry.UID {
+			remapped[entry.UID] = uid
+		}
 	}
-	return toBind, nil
+	if len(remapped) > 0 {
+		content, err := i.service.remapImportedMemoImages(memo.Content, remapped)
+		if err != nil {
+			return attachments, err
+		}
+		memo.Content = content
+	}
+	if err := memopayload.RebuildMemoPayload(i.ctx, memo, i.service.MarkdownService); err != nil {
+		return attachments, errors.Wrap(err, "failed to rebuild memo payload")
+	}
+	return attachments, nil
+}
+
+func (s *APIService) remapImportedMemoImages(content string, remapped map[string]string) (string, error) {
+	instanceURL, err := s.managedAttachmentInstanceURL()
+	if err != nil {
+		return "", err
+	}
+	return s.MarkdownService.RewriteImageDestinations([]byte(content), func(destination string) (string, error) {
+		uid, managed, valid := markdown.ParseManagedAttachmentImageURL(destination)
+		if !managed {
+			var err error
+			uid, err = absoluteManagedAttachmentUID(destination, instanceURL)
+			if err != nil {
+				return "", err
+			}
+		} else if !valid {
+			// Final binding still rejects every invalid managed image URL.
+			return destination, nil
+		}
+		if replacement, ok := remapped[uid]; ok {
+			return strings.Replace(destination, managedAttachmentPathPrefix+uid, managedAttachmentPathPrefix+replacement, 1), nil
+		}
+		return destination, nil
+	})
 }
 
 // importAttachment stores one attachment entry and returns the resource name

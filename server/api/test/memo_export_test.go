@@ -333,6 +333,81 @@ func TestImportMemoExportIntoAnotherAccount(t *testing.T) {
 	require.Equal(t, fixture.photo, blob)
 }
 
+func TestImportMemoExportRemapsManagedImages(t *testing.T) {
+	ts := NewTestService(t)
+	defer ts.Cleanup()
+	ctx := context.Background()
+	owner, err := ts.CreateRegularUser(ctx, "inline-image-owner")
+	require.NoError(t, err)
+	ownerCtx := ts.CreateUserContext(ctx, owner.ID)
+	image := createTestImageAttachment(ownerCtx, t, ts, "photo.png")
+	oldUID, err := api.ExtractAttachmentUIDFromName(image.Name)
+	require.NoError(t, err)
+	const attachmentPath = "/file/attachments/"
+	originalPath := attachmentPath + oldUID
+
+	// Every occurrence after this point uses the original bytes or source
+	// origin even when the actual inline image has to use a different UID.
+	untouched := "![external](https://cdn.example.org" + originalPath + ")\n" +
+		"[link][shared]\n`![code](" + originalPath + ")`\n" +
+		"```md\n![fenced](" + originalPath + ")\n```\n\n"
+	const sharedTitle = ` "Shared photo"`
+	content := func(imagePath, sharedSyntax string) string {
+		return "![relative](<" + imagePath + `/photo.png> "Title")` + "\n" +
+			"![absolute](http://localhost:8080" + imagePath + ")\n" +
+			"![ref][only-image]\n![shared image]" + sharedSyntax + "\n" + untouched +
+			"[only-image]: " + imagePath + "\n" +
+			"[shared]: " + originalPath + sharedTitle
+	}
+	original, err := ts.Service.CreateMemo(ownerCtx, &apipb.CreateMemoRequest{Memo: &apipb.Memo{
+		Content:     content(originalPath, "[shared]"),
+		Attachments: []*apipb.Attachment{{Name: image.Name}},
+	}})
+	require.NoError(t, err)
+	archive := exportArchive(t, ts, owner)
+	other, err := ts.CreateRegularUser(ctx, "inline-image-importer")
+	require.NoError(t, err)
+	for _, tc := range []struct {
+		name   string
+		user   *store.User
+		policy apipb.ImportMemosRequest_ConflictPolicy
+	}{
+		{"duplicate into same account", owner, apipb.ImportMemosRequest_DUPLICATE},
+		{"restore into other account", other, apipb.ImportMemosRequest_SKIP},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			userCtx := ts.CreateUserContext(ctx, tc.user.ID)
+			report, err := ts.Service.ImportMemoExport(userCtx, tc.user, archive, tc.policy)
+			require.NoError(t, err)
+			require.Zero(t, report.Failed, "%v", report.Failures)
+			require.EqualValues(t, 1, report.Created)
+			memos, err := ts.Store.ListMemos(ctx, &store.FindMemo{CreatorID: &tc.user.ID})
+			require.NoError(t, err)
+			var imported []*store.Memo
+			for _, memo := range memos {
+				if "memos/"+memo.UID != original.Name {
+					imported = append(imported, memo)
+				}
+			}
+			require.Len(t, imported, 1)
+			copy := imported[0]
+			attachments, err := ts.Store.ListAttachments(ctx, &store.FindAttachment{MemoID: &copy.ID})
+			require.NoError(t, err)
+			require.Len(t, attachments, 1)
+			require.Equal(t, tc.user.ID, attachments[0].CreatorID)
+			require.NotEqual(t, oldUID, attachments[0].UID)
+			newPath := attachmentPath + attachments[0].UID
+			require.Equal(t, content(newPath, "(<"+newPath+">"+sharedTitle+")"), copy.Content)
+			require.True(t, copy.Payload.GetProperty().GetHasInlineImage())
+		})
+	}
+	note, err := ts.Service.GetMemo(ownerCtx, &apipb.GetMemoRequest{Name: original.Name})
+	require.NoError(t, err)
+	require.Equal(t, original.Content, note.Content)
+	require.Len(t, note.Attachments, 1)
+	require.Equal(t, image.Name, note.Attachments[0].Name)
+}
+
 func TestPlanMemoImport(t *testing.T) {
 	ts := NewTestService(t)
 	defer ts.Cleanup()
@@ -579,9 +654,17 @@ func TestImportMemos(t *testing.T) {
 	})
 }
 
-// buildImportArchive writes a one-memo export file whose attachments are given
-// as (uid, filename, bytes). Sizes and digests are computed from the bytes.
 func buildImportArchive(t *testing.T, username string, attachments []struct {
+	uid, filename string
+	content       []byte
+}) []byte {
+	t.Helper()
+	return buildImportArchiveWithContent(t, username, "imported memo", attachments)
+}
+
+// buildImportArchiveWithContent writes an export file with the given content
+// and attachments. Sizes and digests are computed from the attachment bytes.
+func buildImportArchiveWithContent(t *testing.T, username, content string, attachments []struct {
 	uid, filename string
 	content       []byte
 }) []byte {
@@ -607,7 +690,7 @@ func buildImportArchive(t *testing.T, username string, attachments []struct {
 			CreateTime: "2026-04-01T00:00:00Z",
 		})
 	}
-	require.NoError(t, writer.WriteMemo(record, []byte("imported memo")))
+	require.NoError(t, writer.WriteMemo(record, []byte(content)))
 	require.NoError(t, writer.Close())
 	return buf.Bytes()
 }
@@ -656,6 +739,47 @@ func TestImportMemosFailureKeepsPreexistingAttachment(t *testing.T) {
 
 	_, err = ts.Service.GetAttachment(userCtx, &apipb.GetAttachmentRequest{Name: "attachments/discard0001"})
 	require.Equal(t, codes.NotFound, status.Code(err), "the import's new attachment is discarded")
+}
+
+func TestReplaceImportedMemoValidatesIncomingImageReferences(t *testing.T) {
+	ts := NewTestService(t)
+	defer ts.Cleanup()
+	ctx := context.Background()
+	user, err := ts.CreateRegularUser(ctx, "replace-image-owner")
+	require.NoError(t, err)
+	userCtx := ts.CreateUserContext(ctx, user.ID)
+	memo, err := ts.Service.CreateMemo(userCtx, &apipb.CreateMemoRequest{
+		MemoId: "importedmemo1",
+		Memo:   &apipb.Memo{Content: "original"},
+	})
+	require.NoError(t, err)
+	existingContent := []byte("bytes the user already uploaded")
+	existing, err := ts.Service.CreateAttachment(userCtx, &apipb.CreateAttachmentRequest{
+		AttachmentId: "keepme0001",
+		Attachment:   &apipb.Attachment{Filename: "keep.bin", Type: "application/octet-stream", Content: existingContent},
+	})
+	require.NoError(t, err)
+
+	data := buildImportArchiveWithContent(t, user.Username, "![missing](/file/attachments/missingimage)", []struct {
+		uid, filename string
+		content       []byte
+	}{
+		{"keepme0001", "keep.bin", existingContent},
+		{"discard0001", "discard.bin", []byte("bytes written by this import")},
+	})
+	report, err := ts.Service.ImportMemoExport(userCtx, user, readArchive(t, data), apipb.ImportMemosRequest_REPLACE)
+	require.NoError(t, err)
+	require.Zero(t, report.Updated)
+	require.EqualValues(t, 1, report.Failed)
+	require.Contains(t, report.Failures[0].Message, "missingimage")
+	unchanged, err := ts.Service.GetMemo(userCtx, &apipb.GetMemoRequest{Name: memo.Name})
+	require.NoError(t, err)
+	require.Equal(t, "original", unchanged.Content)
+	require.Empty(t, unchanged.Attachments)
+	_, err = ts.Service.GetAttachment(userCtx, &apipb.GetAttachmentRequest{Name: existing.Name})
+	require.NoError(t, err)
+	_, err = ts.Service.GetAttachment(userCtx, &apipb.GetAttachmentRequest{Name: "attachments/discard0001"})
+	require.Equal(t, codes.NotFound, status.Code(err))
 }
 
 // Imported memos and stored attachments count against the same per-user

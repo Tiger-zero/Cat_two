@@ -322,3 +322,10 @@ the reader rejects.
 
 The export route is a plain HTTP route and no longer appears in the generated clients or the OpenAPI document. The
 `Export semantics` and `Transport` sections above describe the RPC as it shipped in 26.10.0-rc.2.
+
+### 2026-11-21: managed image destinations follow imported attachments
+
+When an imported attachment gets a new UID, its relative and same-origin absolute Markdown image destinations
+use the new UID. When a reference definition also serves an ordinary link, the image switches to an inline
+destination so the link keeps its original target. Other destinations and literal text are preserved. The exported
+archive still stores the original content bytes.

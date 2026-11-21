@@ -218,7 +218,7 @@ func (s *APIService) finishAttachmentReplace(ctx context.Context, upload *attach
 		discardContent("of a deleted attachment")
 		return nil, status.Errorf(codes.NotFound, "attachment not found")
 	}
-	if hasSameManagedStorageObject(replaced, updated) {
+	if hasSameManagedStorageObject(s.Store.GetDataDir(), replaced, updated) {
 		s.Store.DeleteAttachmentDerivedCaches(replaced)
 	} else if err := s.Store.DeleteAttachmentStorageWithInstanceSetting(ctx, replaced, setting); err != nil {
 		// The attachment is consistent; the previous file is only orphaned.
@@ -253,7 +253,7 @@ func (s *APIService) deleteReplacedContent(ctx context.Context, leftover *store.
 	if err != nil {
 		return logFailure("failed to get attachment before deleting replaced content", err)
 	}
-	if current == nil || hasSameManagedStorageObject(current, leftover) {
+	if current == nil || hasSameManagedStorageObject(s.Store.GetDataDir(), current, leftover) {
 		return true
 	}
 	setting, err := s.Store.GetInstanceStorageSetting(ctx)

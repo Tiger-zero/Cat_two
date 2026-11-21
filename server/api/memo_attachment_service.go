@@ -393,46 +393,18 @@ func (s *APIService) extractManagedAttachmentReferences(content string) ([]markd
 		return nil, status.Errorf(codes.InvalidArgument, "invalid managed attachment image URL: %s", data.InvalidManagedAttachmentReferences[0])
 	}
 	references := slices.Clone(data.ManagedAttachmentReferences)
-	instanceURLString := ""
-	if s.Profile != nil {
-		instanceURLString = strings.TrimSpace(s.Profile.InstanceURL)
-	}
-	var instanceURL *url.URL
-	if instanceURLString != "" {
-		instanceURL, err = url.Parse(instanceURLString)
-		if err != nil || !instanceURL.IsAbs() || instanceURL.Host == "" {
-			return nil, status.Errorf(codes.Internal, "invalid configured instance URL")
-		}
+	instanceURL, err := s.managedAttachmentInstanceURL()
+	if err != nil {
+		return nil, err
 	}
 	for _, destination := range data.ImageDestinations {
-		parsed, err := url.Parse(destination)
-		if err != nil || (!parsed.IsAbs() && parsed.Host == "") || !strings.HasPrefix(parsed.Path, "/file/attachments/") {
-			continue
+		uid, err := absoluteManagedAttachmentUID(destination, instanceURL)
+		if err != nil {
+			return nil, err
 		}
-		if parsed.Scheme == "" && parsed.Host != "" {
-			if instanceURL == nil || sameURLAuthority(parsed, instanceURL) {
-				return nil, status.Errorf(codes.InvalidArgument, "protocol-relative managed attachment image URLs are not allowed: %s", destination)
-			}
-			continue
+		if uid != "" {
+			references = append(references, markdown.ManagedAttachmentReference{UID: uid})
 		}
-		if instanceURL == nil {
-			return nil, status.Errorf(codes.InvalidArgument, "absolute managed attachment image URLs require a configured instance URL")
-		}
-		if !sameURLOrigin(parsed, instanceURL) {
-			continue
-		}
-		relative := parsed.EscapedPath()
-		if parsed.RawQuery != "" {
-			relative += "?" + parsed.RawQuery
-		}
-		if parsed.Fragment != "" {
-			relative += "#" + parsed.Fragment
-		}
-		uid, managed, valid := markdown.ParseManagedAttachmentImageURL(relative)
-		if !managed || !valid {
-			return nil, status.Errorf(codes.InvalidArgument, "invalid managed attachment image URL: %s", destination)
-		}
-		references = append(references, markdown.ManagedAttachmentReference{UID: uid})
 	}
 
 	seenReferences := make(map[string]struct{}, len(references))
@@ -445,6 +417,54 @@ func (s *APIService) extractManagedAttachmentReferences(content string) ([]markd
 		uniqueReferences = append(uniqueReferences, reference)
 	}
 	return uniqueReferences, nil
+}
+
+const managedAttachmentPathPrefix = "/file/attachments/"
+
+func (s *APIService) managedAttachmentInstanceURL() (*url.URL, error) {
+	instanceURLString := ""
+	if s.Profile != nil {
+		instanceURLString = strings.TrimSpace(s.Profile.InstanceURL)
+	}
+	if instanceURLString == "" {
+		return nil, nil
+	}
+	instanceURL, err := url.Parse(instanceURLString)
+	if err != nil || !instanceURL.IsAbs() || instanceURL.Host == "" {
+		return nil, status.Errorf(codes.Internal, "invalid configured instance URL")
+	}
+	return instanceURL, nil
+}
+
+func absoluteManagedAttachmentUID(destination string, instanceURL *url.URL) (string, error) {
+	parsed, err := url.Parse(destination)
+	if err != nil || (!parsed.IsAbs() && parsed.Host == "") || !strings.HasPrefix(parsed.Path, managedAttachmentPathPrefix) {
+		return "", nil
+	}
+	if parsed.Scheme == "" && parsed.Host != "" {
+		if instanceURL == nil || sameURLAuthority(parsed, instanceURL) {
+			return "", status.Errorf(codes.InvalidArgument, "protocol-relative managed attachment image URLs are not allowed: %s", destination)
+		}
+		return "", nil
+	}
+	if instanceURL == nil {
+		return "", status.Errorf(codes.InvalidArgument, "absolute managed attachment image URLs require a configured instance URL")
+	}
+	if !sameURLOrigin(parsed, instanceURL) {
+		return "", nil
+	}
+	relative := parsed.EscapedPath()
+	if parsed.RawQuery != "" {
+		relative += "?" + parsed.RawQuery
+	}
+	if parsed.Fragment != "" {
+		relative += "#" + parsed.Fragment
+	}
+	uid, managed, valid := markdown.ParseManagedAttachmentImageURL(relative)
+	if !managed || !valid {
+		return "", status.Errorf(codes.InvalidArgument, "invalid managed attachment image URL: %s", destination)
+	}
+	return uid, nil
 }
 
 func sameURLAuthority(candidate, instance *url.URL) bool {

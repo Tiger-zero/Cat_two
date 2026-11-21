@@ -60,6 +60,58 @@ func TestReplaceAttachmentRetryAfterCommitKeepsNewerReplacement(t *testing.T) {
 	require.Equal(t, newer.Attachment.Size, retried.Attachment.Size)
 }
 
+func TestReplaceAttachmentRestoresMissingLegacyAbsoluteFile(t *testing.T) {
+	svc := newIntegrationService(t)
+	t.Cleanup(svc.CloseUploads)
+	ctx := t.Context()
+	user := createSpaceTestUser(ctx, t, svc, "artist", store.RoleUser)
+	ownerCtx := userCtx(ctx, user.ID)
+	configureLocalStorage := func(template string) {
+		_, err := svc.Store.UpsertInstanceSetting(ctx, &storepb.InstanceSetting{
+			Key:   storepb.InstanceSettingKey_STORAGE,
+			Value: &storepb.InstanceSetting_StorageSetting{StorageSetting: localAttachmentTestSetting(template)},
+		})
+		require.NoError(t, err)
+	}
+	configureLocalStorage(filepath.Join(svc.Profile.Data, "assets", "{filename}"))
+	const filename = "drawing.canvas.png"
+	original := testutil.BuildPNG(4, 4)
+	attachment, err := svc.CreateAttachment(ownerCtx, &apipb.CreateAttachmentRequest{Attachment: &apipb.Attachment{
+		Filename: filename, Type: "image/png", Content: original,
+	}})
+	require.NoError(t, err)
+	uid, err := ExtractAttachmentUIDFromName(attachment.Name)
+	require.NoError(t, err)
+	previous, err := svc.Store.GetAttachment(ctx, &store.FindAttachment{UID: &uid})
+	require.NoError(t, err)
+	path := filepath.Join(svc.Profile.Data, "assets", filename)
+	require.Equal(t, filepath.ToSlash(path), previous.Reference)
+	content, err := svc.GetAttachmentBlob(ctx, previous)
+	require.NoError(t, err)
+	require.Equal(t, original, content)
+	require.NoError(t, os.Remove(path))
+	configureLocalStorage("assets/{filename}")
+
+	replacement := testutil.BuildPNG(6, 6)
+	_, err = svc.UploadAttachment(ownerCtx, &apipb.UploadAttachmentRequest{
+		Upload: &apipb.UploadAttachmentRequest_Spec{Spec: &apipb.UploadAttachmentSpec{
+			Attachment:        &apipb.Attachment{Filename: filename, Type: "image/png"},
+			TotalSize:         int64(len(replacement)),
+			ReplaceAttachment: attachment.Name,
+		}},
+		Data:        replacement,
+		FinishWrite: true,
+	})
+	require.NoError(t, err)
+
+	current, err := svc.Store.GetAttachment(ctx, &store.FindAttachment{UID: &uid})
+	require.NoError(t, err)
+	require.Equal(t, "assets/"+filename, current.Reference)
+	content, err = svc.GetAttachmentBlob(ctx, current)
+	require.NoError(t, err)
+	require.Equal(t, replacement, content)
+}
+
 // When the reload after a committed replacement fails, the previous file is
 // kept for safety. The client's retry then deletes it, but never the file the
 // attachment's row points at.
@@ -107,7 +159,9 @@ func TestReplaceAttachmentRetryDeletesLeftoverFile(t *testing.T) {
 		{
 			name: "the file the row points at stays",
 			leftover: func() (*store.Attachment, string) {
-				return current, currentFile
+				previous := *current
+				previous.Reference = currentFile
+				return &previous, currentFile
 			},
 			wantExists: true,
 		},

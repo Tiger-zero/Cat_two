@@ -83,6 +83,25 @@ describe("useFilteredMemoStats", () => {
     expect(result.current.statistics.timeBasis).toBe("update_time");
   });
 
+  it("aggregates large timestamp groups across users without overflowing the argument stack", () => {
+    const count = 150_000;
+    const firstDay = ts(2026, 5, 1);
+    const secondDay = ts(2026, 5, 2);
+    mockUseView.mockReturnValue({ timeBasis: "update_time" });
+    vi.mocked(useAllUserStats).mockReturnValue({
+      data: [
+        { memoCreatedTimestamps: [], memoUpdatedTimestamps: Array(count).fill(firstDay), tagCounts: { work: 2 } },
+        { memoCreatedTimestamps: [], memoUpdatedTimestamps: [firstDay, secondDay], tagCounts: { work: 1, personal: 1 } },
+      ],
+      isLoading: false,
+    } as unknown as ReturnType<typeof useAllUserStats>);
+
+    const { result } = renderHook(() => useFilteredMemoStats({ context: "collection" }), { wrapper });
+
+    expect(result.current.statistics.activityStats).toEqual({ "2026-05-01": count + 1, "2026-05-02": 1 });
+    expect(result.current.tags).toEqual({ work: 3, personal: 1 });
+  });
+
   it("falls back to created timestamps when updated array is empty (old server)", () => {
     // Old servers that don't know about the new field deserialize it as [].
     // Length divergence (created non-empty, updated empty) is the signal.

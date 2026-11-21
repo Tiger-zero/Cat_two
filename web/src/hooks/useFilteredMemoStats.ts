@@ -1,5 +1,4 @@
-import { timestampDate } from "@bufbuild/protobuf/wkt";
-import { countBy } from "lodash-es";
+import { type Timestamp, timestampDate } from "@bufbuild/protobuf/wkt";
 import { useMemo } from "react";
 import { type MemoTimeBasis, useView } from "@/contexts/ViewContext";
 import useCurrentUser from "@/hooks/useCurrentUser";
@@ -26,7 +25,15 @@ export interface UseFilteredMemoStatsOptions {
   filter?: string;
 }
 
-const toDateString = (date: Date) => inAppTimeZone(date).format(ISO_DATE_FORMAT);
+const NO_USER_STATS: UserStats[] = [];
+
+const addDailyCounts = (counts: Record<string, number>, timestamps: readonly Timestamp[]) => {
+  for (const timestamp of timestamps) {
+    if (!timestamp) continue;
+    const day = inAppTimeZone(timestampDate(timestamp)).format(ISO_DATE_FORMAT);
+    counts[day] = (counts[day] ?? 0) + 1;
+  }
+};
 
 const timestampsForBasis = (stats: UserStats, basis: MemoTimeBasis) => {
   const createdArray = stats.memoCreatedTimestamps ?? [];
@@ -52,38 +59,23 @@ export const useFilteredMemoStats = (options: UseFilteredMemoStatsOptions = {}):
   const allUserStatsRequest =
     context === "collection" ? { state: State.NORMAL, filter } : context === "archived" ? { state: State.ARCHIVED, filter } : {};
   const shouldFetchAllUserStats = context === "collection" || (context === "archived" && !!currentUser?.name);
-  const { data: allUserStats = [], isLoading: isLoadingAllUserStats } = useAllUserStats(allUserStatsRequest, {
+  const { data: allUserStats = NO_USER_STATS, isLoading: isLoadingAllUserStats } = useAllUserStats(allUserStatsRequest, {
     enabled: enabled && shouldFetchAllUserStats,
   });
 
   const data = useMemo(() => {
     const loading = isLoadingUserStats || isLoadingAllUserStats;
-    let activityStats: Record<string, number> = {};
+    const activityStats: Record<string, number> = {};
     let tagCount: Record<string, number> = mergeTagCounts();
 
     if (context === "collection" || context === "archived") {
-      const displayDates: string[] = [];
       tagCount = mergeTagCounts(...allUserStats.map((stats) => stats.tagCounts));
       for (const stats of allUserStats) {
-        displayDates.push(
-          ...timestampsForBasis(stats, timeBasis)
-            .map((ts) => (ts ? timestampDate(ts) : undefined))
-            .filter((date): date is Date => date !== undefined)
-            .map(toDateString),
-        );
+        addDailyCounts(activityStats, timestampsForBasis(stats, timeBasis));
       }
-      activityStats = countBy(displayDates);
     } else if (userName && userStats) {
       // Legacy personal collections use backend per-user stats.
-      const sourceArray = timestampsForBasis(userStats, timeBasis);
-      if (sourceArray.length > 0) {
-        activityStats = countBy(
-          sourceArray
-            .map((ts) => (ts ? timestampDate(ts) : undefined))
-            .filter((date): date is Date => date !== undefined)
-            .map(toDateString),
-        );
-      }
+      addDailyCounts(activityStats, timestampsForBasis(userStats, timeBasis));
       if (userStats.tagCounts) {
         tagCount = mergeTagCounts(userStats.tagCounts);
       }

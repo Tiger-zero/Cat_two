@@ -61,6 +61,9 @@ type Service interface {
 
 	// RenameTag renames all occurrences of oldTag to newTag in content
 	RenameTag(content []byte, oldTag, newTag string) (string, error)
+
+	// RewriteImageDestinations edits destinations reached by Markdown images.
+	RewriteImageDestinations(content []byte, rewrite func(string) (string, error)) (string, error)
 }
 
 // service implements the Service interface.
@@ -113,6 +116,7 @@ func NewService(opts ...Option) Service {
 	}
 
 	md := goldmark.New(
+		goldmark.WithParser(newMarkdownParser()),
 		goldmark.WithExtensions(exts...),
 		goldmark.WithParserOptions(
 			parser.WithAutoHeadingID(), // Generate heading IDs
@@ -126,12 +130,26 @@ func NewService(opts ...Option) Service {
 
 // parse is an internal helper to parse content into AST.
 func (s *service) parse(content []byte) (gast.Node, error) {
-	reader := text.NewReader(content)
-	doc := s.md.Parser().Parse(reader)
-	if masked := maskInvalidLinkReferenceDefinitions(doc, content); masked != nil {
-		doc = s.md.Parser().Parse(text.NewReader(masked))
-	}
+	doc, _ := s.parseSource(content, nil)
 	return doc, nil
+}
+
+func (s *service) parseSource(content []byte, ranges imageReferenceRanges) (gast.Node, []byte) {
+	parse := func(source []byte) gast.Node {
+		reader := text.NewReader(source)
+		if ranges == nil {
+			return s.md.Parser().Parse(reader)
+		}
+		context := parser.NewContext()
+		context.Set(imageReferenceRangesKey, ranges)
+		return s.md.Parser().Parse(reader, parser.WithContext(context))
+	}
+	doc := parse(content)
+	if masked := maskInvalidLinkReferenceDefinitions(doc, content); masked != nil {
+		clear(ranges)
+		return parse(masked), masked
+	}
+	return doc, content
 }
 
 func isTagNodeInLinkOrImage(n gast.Node) bool {

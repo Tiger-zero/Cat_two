@@ -29,7 +29,7 @@ func newIntegrationService(t *testing.T) *APIService {
 	ctx := context.Background()
 	st := teststore.NewTestingStore(ctx, t)
 	t.Cleanup(func() { st.Close() })
-	p := &profile.Profile{Demo: true, Data: t.TempDir(), Driver: "sqlite", DSN: ":memory:"}
+	p := &profile.Profile{Demo: true, Data: st.GetDataDir(), Driver: "sqlite", DSN: ":memory:"}
 	return NewAPIService("test-secret", p, st)
 }
 
