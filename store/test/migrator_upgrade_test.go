@@ -86,11 +86,14 @@ func requireUpgradePreservesData(ctx context.Context, t *testing.T, previous *st
 	user, err := createTestingHostUser(ctx, previous)
 	require.NoError(t, err)
 	memo, err := previous.CreateMemo(ctx, &store.Memo{
-		UID: "upgrade-sentinel", CreatorID: user.ID, Content: "#upgrade\n- [ ] preserved task", Visibility: store.Private, Pinned: true,
+		UID: "upgrade-sentinel", CreatorID: user.ID, Content: "#upgrade\n- [ ] preserved task", Visibility: store.Private,
+		Payload: &storepb.MemoPayload{Tags: []string{"upgrade"}},
 	})
 	require.NoError(t, err)
-	memo, err = previous.GetMemo(ctx, &store.FindMemo{UID: &memo.UID})
-	require.NoError(t, err)
+	// GetMemo selects columns added after the baseline. The create result
+	// has the assigned ID, timestamps and state for the post-migration check.
+	memo.Pinned = true
+	require.NoError(t, previous.UpdateMemo(ctx, &store.UpdateMemo{ID: memo.ID, Pinned: &memo.Pinned, UpdatedTs: &memo.UpdatedTs}))
 	view, err := previous.UpsertUserSetting(ctx, &storepb.UserSetting{
 		UserId: user.ID, Key: storepb.UserSetting_MEMO_VIEWS,
 		Value: &storepb.UserSetting_MemoViews{MemoViews: &storepb.MemoViewsUserSetting{
@@ -119,7 +122,7 @@ func requireUpgradePreservesData(ctx context.Context, t *testing.T, previous *st
 		require.Equal(t, user, preservedUser)
 		preservedMemo, err := candidate.GetMemo(ctx, &store.FindMemo{UID: &memo.UID})
 		require.NoError(t, err)
-		require.Equal(t, memo, preservedMemo)
+		require.EqualExportedValues(t, memo, preservedMemo)
 		preservedView, err := candidate.GetUserSetting(ctx, &store.FindUserSetting{UserID: &user.ID, Key: storepb.UserSetting_MEMO_VIEWS})
 		require.NoError(t, err)
 		require.True(t, proto.Equal(view, preservedView), "saved Views must survive the upgrade")
