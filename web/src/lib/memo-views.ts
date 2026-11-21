@@ -15,22 +15,11 @@ const cleanPathname = (value: string): string => {
 /** Lower-cased global pathname, so a Space-scoped URL compares like its global twin. */
 const comparablePathname = (pathname: string): string => resolveCollectionRoute(pathname).pathname.toLowerCase();
 
-export const isMemoScopeRoute = (pathname: string): boolean => {
+/** Routes that display a memo list with the sidebar's view, date and tag filters. */
+export const isMemoCollectionRoute = (pathname: string): boolean => {
   const comparablePath = comparablePathname(pathname);
   return comparablePath === ROUTES.HOME || comparablePath === ROUTES.EXPLORE || comparablePath === ROUTES.ARCHIVED;
 };
-
-/** `/calendar` and any month or day beneath it. */
-export const isCalendarRoute = (pathname: string): boolean => {
-  const comparablePath = comparablePathname(pathname);
-  return comparablePath === ROUTES.CALENDAR || comparablePath.startsWith(`${ROUTES.CALENDAR}/`);
-};
-
-/**
- * Routes that render a memo collection the sidebar can narrow. Views, calendar days,
- * and tags apply in place on all of them.
- */
-export const isMemoCollectionRoute = (pathname: string): boolean => isMemoScopeRoute(pathname) || isCalendarRoute(pathname);
 
 interface ResolveMemoScopeOptions {
   detailFrom?: string;

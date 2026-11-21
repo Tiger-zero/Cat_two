@@ -92,7 +92,7 @@ describe("Memo detail mutation navigation", () => {
   });
 
   it("returns to the full Space origin after deleting a memo detail", async () => {
-    const origin = "/spaces/product/calendar/2026/09/06?filter=tagSearch%3Awork";
+    const origin = "/spaces/product?filter=tagSearch%3Awork%2CdisplayTime%3A2026-09-06";
     const { result } = renderActions(State.NORMAL, "", origin);
     await act(() => result.current.handlers.confirmDeleteMemo());
     expect(result.current.pathname + result.current.search).toBe(origin);

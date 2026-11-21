@@ -4,17 +4,11 @@ import {
   ArrowRightIcon,
   BellIcon,
   CalendarDaysIcon,
-  FileAudioIcon,
-  FileTextIcon,
-  ImageIcon,
-  LibraryIcon,
   ListIcon,
   type LucideIcon,
   MenuIcon,
-  PaperclipIcon,
   SearchIcon,
   SquarePenIcon,
-  Trash2Icon,
   UserRoundIcon,
 } from "lucide-react";
 import { useRef } from "react";
@@ -23,12 +17,11 @@ import { MemoDetailSidebar } from "@/components/MemoDetailSidebar";
 import MemoDisplaySettingMenu from "@/components/MemoDisplaySettingMenu";
 import { DEFAULT_SETTING_SECTION, SETTINGS_SECTIONS } from "@/components/Settings/settingSections";
 import StatisticsView from "@/components/StatisticsView";
-import { type AttachmentSection, type InboxFilter, useAppSidebar } from "@/contexts/AppSidebarContext";
+import { type InboxFilter, useAppSidebar } from "@/contexts/AppSidebarContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { useGlobalMemoEditor } from "@/contexts/GlobalMemoEditorContext";
 import { useInstance } from "@/contexts/InstanceContext";
 import { useSpaceContext } from "@/contexts/SpaceContext";
-import { useAttachmentLibraryStats } from "@/hooks/useAttachmentLibrary";
 import useCurrentUser from "@/hooks/useCurrentUser";
 import { useFilteredMemoStats } from "@/hooks/useFilteredMemoStats";
 import useMediaQuery from "@/hooks/useMediaQuery";
@@ -64,14 +57,7 @@ const NewMemoAction = ({ onClick }: { onClick: () => void }) => {
   );
 };
 
-/** The calendar is its own month view, so its sidebar narrows by view and tag but skips the heatmap. */
-const CollectionSidebarContent = ({
-  context,
-  showStatistics = true,
-}: {
-  context: "home" | "explore" | "archived";
-  showStatistics?: boolean;
-}) => {
+const CollectionSidebarContent = ({ context }: { context: "home" | "explore" | "archived" }) => {
   const t = useTranslate();
   const currentUser = useCurrentUser();
   const { memoFilter, selectedSpaceName, creatorUsername } = useSpaceContext();
@@ -91,61 +77,13 @@ const CollectionSidebarContent = ({
 
   return (
     <div className={SIDEBAR_SECTION_STACK_CLASSES}>
-      {showStatistics && (
-        <SidebarSection ariaLabel={t("common.statistics")}>
-          <StatisticsView statisticsData={statistics} onDateSelect={() => setMobileOpen(false)} />
-        </SidebarSection>
-      )}
+      <SidebarSection ariaLabel={t("common.statistics")}>
+        <StatisticsView statisticsData={statistics} onDateSelect={() => setMobileOpen(false)} />
+      </SidebarSection>
       {/* Every collection route narrows the same way: views (yours, so signed-in only), days, tags. */}
       {currentUser && <ViewsSection />}
       <TagsSection tagCount={tags} scope={tagStateScope} onSelect={() => setMobileOpen(false)} />
     </div>
-  );
-};
-
-const AttachmentsSidebarContent = () => {
-  const t = useTranslate();
-  const currentUser = useCurrentUser();
-  const { memoFilter, selectedSpaceName, creatorUsername } = useSpaceContext();
-  const { attachmentSection, setAttachmentSection, setMobileOpen } = useAppSidebar();
-  const { isComplete, stats } = useAttachmentLibraryStats(memoFilter);
-  const total = stats.media + stats.documents + stats.audio;
-  const rows: Array<{ value: AttachmentSection; icon: LucideIcon; label: string; count?: number }> = [
-    { value: "all", icon: ListIcon, label: t("common.all"), count: isComplete ? total : undefined },
-    { value: "media", icon: ImageIcon, label: t("attachment-library.tabs.media"), count: isComplete ? stats.media : undefined },
-    { value: "audio", icon: FileAudioIcon, label: t("attachment-library.tabs.audio"), count: isComplete ? stats.audio : undefined },
-    {
-      value: "documents",
-      icon: FileTextIcon,
-      label: t("attachment-library.tabs.documents"),
-      count: isComplete ? stats.documents : undefined,
-    },
-  ];
-  // Unlinked uploads do not belong to any Space, so "Unused" is only a Memos-level collection.
-  if (!selectedSpaceName && (!creatorUsername || creatorUsername === currentUser?.username)) {
-    rows.push({
-      value: "unused",
-      icon: Trash2Icon,
-      label: t("attachment-library.labels.unused"),
-      count: isComplete ? stats.unused : undefined,
-    });
-  }
-  return (
-    <SidebarSection label={t("common.attachments")}>
-      {rows.map((row) => (
-        <SidebarRow
-          key={row.value}
-          state={attachmentSection === row.value ? "current" : "idle"}
-          icon={row.icon}
-          label={row.label}
-          count={row.count}
-          onClick={() => {
-            setAttachmentSection(row.value);
-            setMobileOpen(false);
-          }}
-        />
-      ))}
-    </SidebarSection>
   );
 };
 
@@ -245,19 +183,11 @@ const RouteSidebarContent = () => {
     return <CollectionSidebarContent context={kind} />;
   }
   if (kind === "views") return <ViewsSection manageActive />;
-  if (kind === "calendar") return <CollectionSidebarContent context="home" showStatistics={false} />;
-  if (kind === "attachments") return <AttachmentsSidebarContent />;
   if (kind === "inbox") return <InboxSidebarContent />;
   if (kind === "settings") return <SettingsSidebarContent />;
   if (kind === "memo") return <MemoDetailSidebarContent />;
   return null;
 };
-
-/** Collection views beside Timeline. Attachments is a library of the user's own files, so guests get the reading views only. */
-const NAV_DESTINATIONS = [
-  { kind: "calendar", labelKey: "common.calendar", pathname: ROUTES.CALENDAR, icon: CalendarDaysIcon, signedInOnly: false },
-  { kind: "attachments", labelKey: "common.attachments", pathname: ROUTES.ATTACHMENTS, icon: PaperclipIcon, signedInOnly: true },
-] as const;
 
 interface NavPillProps {
   label: string;
@@ -278,7 +208,7 @@ interface NavPillProps {
  *
  * Actions are separated by 2px; icons and labels by 6px. Below a 230px row the current
  * page stays a filled square with its tooltip, leaving room for the other actions.
- * Timeline's trailing arrow shares its surface, with a separate click target.
+ * The calendar link's trailing arrow shares its surface, with a separate click target.
  */
 const NavPill = ({ label, icon: Icon, to, onClick, active = false, expanded = false, className }: NavPillProps) => {
   const { setMobileOpen } = useAppSidebar();
@@ -326,16 +256,12 @@ const NavPill = ({ label, icon: Icon, to, onClick, active = false, expanded = fa
 
 const GlobalNavigation = () => {
   const t = useTranslate();
-  const timelineRef = useRef<HTMLDivElement>(null);
+  const calendarRef = useRef<HTMLDivElement>(null);
   const location = useLocation();
   const currentUser = useCurrentUser();
   const { setQuickFindOpen } = useAppSidebar();
   const routeKind = getSidebarRouteKind(location.pathname);
-  const timelineActive = routeKind === "home" || routeKind === "explore";
-  const destinations = NAV_DESTINATIONS.filter((destination) => currentUser || !destination.signedInOnly);
-  // The current page shows its label; anywhere else, Timeline does.
-  const expandedKind = destinations.find((destination) => destination.kind === routeKind)?.kind ?? "timeline";
-  const navigationPath = (pathname: string) => collectionNavigationPath(pathname, location, currentUser?.username);
+  const calendarActive = routeKind === "home" || routeKind === "explore";
 
   return (
     <Tooltip.Provider>
@@ -344,29 +270,19 @@ const GlobalNavigation = () => {
         aria-label={t("common.primary-navigation")}
       >
         <div
-          ref={timelineRef}
-          className={cn("flex min-w-0 items-center rounded-mu-md", timelineActive && sidebarRowStateClasses("current"))}
+          ref={calendarRef}
+          className={cn("flex min-w-0 items-center rounded-mu-md", calendarActive && sidebarRowStateClasses("current"))}
         >
           <NavPill
-            to={navigationPath(ROUTES.HOME)}
-            label={t("common.timeline")}
-            icon={LibraryIcon}
-            active={timelineActive}
-            expanded={expandedKind === "timeline"}
-            className={cn(timelineActive && "rounded-e-none pe-0")}
+            to={collectionNavigationPath(location, currentUser?.username)}
+            label={t("common.calendar")}
+            icon={CalendarDaysIcon}
+            active={calendarActive}
+            expanded
+            className={cn(calendarActive && "rounded-e-none pe-0")}
           />
-          {timelineActive && <MemoDisplaySettingMenu anchor={timelineRef} />}
+          {calendarActive && <MemoDisplaySettingMenu anchor={calendarRef} />}
         </div>
-        {destinations.map((destination) => (
-          <NavPill
-            key={destination.kind}
-            to={navigationPath(destination.pathname)}
-            label={t(destination.labelKey)}
-            icon={destination.icon}
-            active={destination.kind === routeKind}
-            expanded={destination.kind === expandedKind}
-          />
-        ))}
         <NavPill label={t("common.search")} icon={SearchIcon} onClick={() => setQuickFindOpen(true)} className="ms-auto bg-mu-well" />
       </nav>
     </Tooltip.Provider>

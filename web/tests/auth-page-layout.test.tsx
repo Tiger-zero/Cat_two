@@ -46,13 +46,13 @@ describe("<AuthPageLayout>", () => {
     expect(screen.getByRole("main")).toContainElement(screen.getByTestId("auth-footer"));
   });
 
-  it.each([undefined, "/logo.webp"])("uses a themeable small logo for the default %s", (logoUrl) => {
+  it.each([undefined, "/logo.webp"])("uses the cat for the default logo %s", (logoUrl) => {
     settings.customProfile = { logoUrl };
     const { container } = renderLayout();
 
     expect(container.querySelector(".memos-mark")).toHaveAttribute("height", "32");
+    expect(container.querySelector(".memos-mark")).toHaveAttribute("src", "/logo.webp?v=cat-two");
     expect(screen.getByText("Memos")).toBeInTheDocument();
-    expect(container.querySelector("img")).toBeNull();
   });
 
   it("preserves custom logos and titles", () => {

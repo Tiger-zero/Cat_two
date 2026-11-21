@@ -1,9 +1,11 @@
+import { render, waitFor } from "@testing-library/react";
 import { isValidElement } from "react";
-import { matchRoutes, type RouteObject } from "react-router-dom";
+import { createMemoryRouter, matchRoutes, type RouteObject, RouterProvider } from "react-router-dom";
 import { describe, expect, it } from "vitest";
 import { ROUTES, routeConfig } from "@/router";
 import { RequireAuthRoute, RequireFullInitializationRoute, RequireGuestRoute, RequireInstanceInitializationRoute } from "@/router/guards";
-import { CALENDAR_ROUTE_PATTERN, SPACE_ROUTE_PATTERN } from "@/router/routes";
+import { LegacyCalendarRedirect } from "@/router/LegacyCalendarRedirect";
+import { SPACE_ROUTE_PATTERN } from "@/router/routes";
 import { SpaceRoute } from "@/router/SpaceRoute";
 
 // Walk the nested route config and find the first route with the given path,
@@ -47,19 +49,53 @@ describe("router configuration", () => {
     expect(elementType(matches?.[1]?.route)).toBe(RequireAuthRoute);
   });
 
-  it.each([
-    "/spaces/product",
-    "/spaces/product/explore",
-    "/spaces/product/calendar/2026/09",
-    "/spaces/product/attachments",
-  ])("gates %s with authentication and Space access", (path) => {
+  it.each(["/spaces/product", "/spaces/product/explore"])("gates %s with authentication and Space access", (path) => {
     const types = matchRoutes(routeConfig, path)?.map(({ route }) => elementType(route));
     expect(types).toContain(RequireAuthRoute);
     expect(types).toContain(SpaceRoute);
     expect(findByPath(routeConfig, SPACE_ROUTE_PATTERN)).toBeDefined();
   });
+
+  it.each([
+    ["/calendar", "/explore"],
+    ["/calendar/2026/9/6", "/explore?filter=displayTime%3A2026-09-06"],
+    ["/spaces/product/calendar/2026/09?filter=tagSearch%3Awork", "/spaces/product/explore?filter=tagSearch%3Awork"],
+    [
+      "/spaces/product/calendar/2026/9/6?creator=alice&filter=tagSearch%3Awork%2CdisplayTime%3A2026-09-05#anchor",
+      "/spaces/product?creator=alice&filter=tagSearch%3Awork%2CdisplayTime%3A2026-09-06#anchor",
+    ],
+    ["/calendar/2026/02/30?creator=alice", "/?creator=alice"],
+    ["/spaces/a%2Fb/calendar/2026/9/6", "/404"],
+  ])("redirects %s to %s", async (source, destination) => {
+    const matches = matchRoutes(routeConfig, source);
+    const redirect = matches?.at(-1)?.route;
+    expect(elementType(redirect)).toBe(LegacyCalendarRedirect);
+    expect(matches?.map(({ route }) => elementType(route))).toContain(RequireAuthRoute);
+
+    const spacePrefix = source.startsWith("/spaces/") ? `${SPACE_ROUTE_PATTERN}/` : "/";
+    const router = createMemoryRouter(
+      [
+        { path: `${spacePrefix}${redirect?.path}`, element: redirect?.element },
+        { path: "*", element: <p>Memo list</p> },
+      ],
+      { initialEntries: [source] },
+    );
+    render(<RouterProvider router={router} />);
+    await waitFor(() => {
+      const { pathname, search, hash } = router.state.location;
+      expect(`${pathname}${search}${hash}`).toBe(destination);
+      expect(router.state.historyAction).toBe("REPLACE");
+    });
+  });
+
   it("keeps unknown Space subroutes outside collection pages", () => {
     const matches = matchRoutes(routeConfig, "/spaces/product/unknown");
+    expect(matches?.at(-1)?.route.path).toBe("*");
+    expect(matches?.map(({ route }) => elementType(route))).not.toContain(SpaceRoute);
+  });
+
+  it.each(["/attachments", "/spaces/product/attachments"])("uses the not-found route for %s", (path) => {
+    const matches = matchRoutes(routeConfig, path);
     expect(matches?.at(-1)?.route.path).toBe("*");
     expect(matches?.map(({ route }) => elementType(route))).not.toContain(SpaceRoute);
   });
@@ -78,13 +114,13 @@ describe("router configuration", () => {
   });
 
   it("wraps authenticated-only pages in RequireAuthRoute", () => {
-    for (const path of [ROUTES.ARCHIVED, ROUTES.VIEWS, ROUTES.ATTACHMENTS, ROUTES.INBOX, ROUTES.SETTING, "memos/:uid"]) {
+    for (const path of [ROUTES.ARCHIVED, ROUTES.VIEWS, ROUTES.INBOX, ROUTES.SETTING, "memos/:uid"]) {
       expect(hasAncestorOfType(routeConfig, path, RequireAuthRoute)).toBe(true);
     }
   });
 
   it("keeps non-feed pages behind their full initialization requirements", () => {
-    for (const path of [ROUTES.VIEWS, ROUTES.ATTACHMENTS, ROUTES.INBOX, ROUTES.SETTING]) {
+    for (const path of [ROUTES.VIEWS, ROUTES.INBOX, ROUTES.SETTING]) {
       expect(hasAncestorOfType(routeConfig, path, RequireFullInitializationRoute)).toBe(true);
     }
   });
@@ -102,7 +138,7 @@ describe("router configuration", () => {
   });
 
   it("leaves memo feeds available for early queries", () => {
-    for (const path of [ROUTES.EXPLORE, ROUTES.ARCHIVED, CALENDAR_ROUTE_PATTERN, "memos/:uid", "u/:username"]) {
+    for (const path of [ROUTES.EXPLORE, ROUTES.ARCHIVED, "memos/:uid", "u/:username"]) {
       expect(hasAncestorOfType(routeConfig, path, RequireFullInitializationRoute)).toBe(false);
     }
   });

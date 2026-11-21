@@ -207,7 +207,7 @@ const AttachmentTile: FC<{
     >
       <TileMedia item={item} />
 
-      {item.category === "motion" && <span className={cn(TILE_BADGE_CLASS, "start-2 top-2")}>{t("attachment-library.labels.live")}</span>}
+      {item.category === "motion" && <span className={cn(TILE_BADGE_CLASS, "start-2 top-2")}>{t("attachment.live")}</span>}
       {actions.badge && <span className={cn(TILE_BADGE_CLASS, "bottom-2 start-2")}>{actions.badge}</span>}
       {actions.isUploadingInline && (
         <div className="absolute inset-0 flex items-center justify-center bg-mu-surface/40 text-mu-text">

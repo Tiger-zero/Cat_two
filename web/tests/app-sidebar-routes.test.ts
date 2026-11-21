@@ -12,11 +12,11 @@ describe("sidebar route content", () => {
     ["/U/Steven/", "common"],
     ["/views", "views"],
     ["/Views/", "views"],
-    ["/calendar", "calendar"],
-    ["/calendar/2026/08", "calendar"],
-    ["/Calendar/2026/08/02/", "calendar"],
-    ["/attachments", "attachments"],
-    ["/Attachments/", "attachments"],
+    ["/calendar", "common"],
+    ["/calendar/2026/08", "common"],
+    ["/Calendar/2026/08/02/", "common"],
+    ["/attachments", "common"],
+    ["/Attachments/", "common"],
     ["/inbox", "inbox"],
     ["/Inbox/", "inbox"],
     ["/setting", "settings"],
@@ -42,20 +42,6 @@ describe("sidebar route content", () => {
   it.each(["/archived", "/ARCHIVED/"])("keeps %s in the user archive", (path) => {
     expect(getRouteActionPolicy(path)).toEqual({
       searchScope: "user-collection",
-    });
-  });
-
-  it.each(["/attachments", "/calendar/2026/08/02"])("keeps the All scope when %s sends search to Explore", (path) => {
-    expect(getRouteActionPolicy(path)).toEqual({
-      searchScope: "route-collection",
-      searchDestination: "/explore",
-    });
-  });
-
-  it("keeps a creator when Calendar sends search to Home", () => {
-    expect(getRouteActionPolicy("/spaces/a/calendar/2026/08/02", "?creator=alice")).toEqual({
-      searchScope: "route-collection",
-      searchDestination: "/spaces/a",
     });
   });
 

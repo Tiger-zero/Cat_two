@@ -1,6 +1,5 @@
 import { cn } from "@/lib/utils";
 import type { CalendarDayCell } from "./types";
-import type { ActivityLevel } from "./utils";
 
 /**
  * The square chip inside a cell carries every visual. The grid's columns are 28px (see
@@ -18,17 +17,6 @@ const OUTSIDE_MONTH_CHIP = "bg-transparent text-mu-text-secondary/25";
 const EMPTY_CHIP = "bg-[var(--memos-activity-empty,var(--mu-well))] text-mu-text-secondary";
 const TODAY_CHIP = "border-[color:var(--memos-activity-today,var(--mu-primary))]";
 const SELECTED_CHIP = "z-10 border-mu-accent bg-mu-selected text-mu-text";
-
-/**
- * The full calendar uses a softer, relative intensity for cells that contain excerpts and photos.
- */
-export const DAY_CELL_FILLS: Record<ActivityLevel, string> = {
-  0: "bg-mu-surface hover:bg-mu-hover",
-  1: "bg-mu-primary/8 hover:bg-mu-primary/12",
-  2: "bg-mu-primary/16 hover:bg-mu-primary/20",
-  3: "bg-mu-primary/26 hover:bg-mu-primary/30",
-  4: "bg-mu-primary/38 hover:bg-mu-primary/42",
-};
 
 const getFillClass = (day: CalendarDayCell): string => {
   if (!day.isCurrentMonth) return OUTSIDE_MONTH_CHIP;

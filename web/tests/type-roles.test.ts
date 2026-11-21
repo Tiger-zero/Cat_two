@@ -26,7 +26,6 @@ describe("type roles", () => {
     // section titles `mu-label`, body text `mu-body`.
     expect(filesUsing(/\bmu-title\b/)).toEqual([
       "components/MemoActionMenu/MemoShareImagePreview.tsx",
-      "components/MemoPanel/MemoPanel.tsx",
       "components/WelcomeGuide/WelcomeGuideDialog.tsx",
     ]);
   });

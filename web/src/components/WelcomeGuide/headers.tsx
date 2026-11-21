@@ -4,7 +4,6 @@ import {
   CalendarDaysIcon,
   ChevronDownIcon,
   HashIcon,
-  LibraryIcon,
   ListChecksIcon,
   MoreVerticalIcon,
   PaperclipIcon,
@@ -136,8 +135,8 @@ export const KeepHeader = () => {
       <div className="mu-compact hidden flex-col gap-3 sm:flex">
         <div className="flex items-center gap-1">
           <span className={pillClasses}>
-            <LibraryIcon className="mu-icon" />
-            {t("common.timeline")}
+            <CalendarDaysIcon className="mu-icon" />
+            {t("common.calendar")}
             <ChevronDownIcon className="mu-icon-xs" />
           </span>
           <CalendarDaysIcon className="mu-icon text-mu-text-secondary" />

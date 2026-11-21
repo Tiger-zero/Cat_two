@@ -1,9 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import MemosLogo from "@/components/MemosLogo";
-import { MemosMark } from "@/components/MemosMark";
-import standardSource from "../public/logo.svg?raw";
-import smallSource from "../public/logo-small.svg?raw";
 
 const mockInstance = {
   generalSetting: {} as { customProfile?: { title?: string; logoUrl?: string } },
@@ -18,13 +15,13 @@ describe("<MemosLogo>", () => {
     mockInstance.generalSetting = {};
   });
 
-  it.each([undefined, "", "/logo.webp", "/logo.svg"])("uses the inline logo for the built-in URL %s", (logoUrl) => {
+  it.each([undefined, "", "/logo.webp", "/logo.svg", "/logo-small.svg"])("uses the cat for the built-in logo URL %s", (logoUrl) => {
     mockInstance.generalSetting = { customProfile: { logoUrl } };
     const { container } = render(<MemosLogo />);
 
-    expect(container.querySelector("img")).toBeNull();
-    expect(container.querySelector("svg")).toHaveAttribute("fill", "currentColor");
-    expect(container.querySelector("svg")).toHaveAttribute("aria-hidden", "true");
+    const logo = container.querySelector("img");
+    expect(logo).toHaveAttribute("src", "/logo.webp?v=cat-two");
+    expect(logo).toHaveAttribute("alt", "");
     expect(screen.getByText("Memos")).toBeInTheDocument();
   });
 
@@ -40,7 +37,7 @@ describe("<MemosLogo>", () => {
   it("names the standalone mark when the title is collapsed", () => {
     render(<MemosLogo collapsed />);
 
-    expect(screen.getByRole("img", { name: "Memos" })).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: "Memos" })).toHaveAttribute("src", "/logo.webp?v=cat-two");
   });
 
   it("names a custom standalone logo when the title is collapsed", () => {
@@ -48,19 +45,5 @@ describe("<MemosLogo>", () => {
     render(<MemosLogo collapsed />);
 
     expect(screen.getByRole("img", { name: "Team Notes" })).toHaveAttribute("src", "/custom-logo.svg");
-  });
-});
-
-describe("<MemosMark>", () => {
-  // Keep the inline paths aligned with the vendored upstream SVGs.
-  it.each([20, 24, 28, 32, 33, 48, 64])("uses the official contour at %ipx", (size) => {
-    const source = new DOMParser().parseFromString(size <= 32 ? smallSource : standardSource, "image/svg+xml");
-    const { container } = render(<MemosMark size={size} />);
-
-    expect(container.querySelector("svg")).toHaveAttribute("width", String(size));
-    expect(container.querySelector("svg")).toHaveAttribute("height", String(size));
-    expect(container.querySelector("g")).toHaveAttribute("transform", source.querySelector("g")?.getAttribute("transform"));
-    expect(container.querySelector("path")).toHaveAttribute("d", source.querySelector("path")?.getAttribute("d"));
-    expect(container.querySelector("path")).toHaveAttribute("fill-rule", "evenodd");
   });
 });

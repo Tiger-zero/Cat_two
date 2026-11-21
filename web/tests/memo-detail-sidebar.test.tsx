@@ -80,7 +80,7 @@ describe("MemoDetailSidebar", () => {
   });
 
   it("leaves returning to the origin to browser back and the app navigation", () => {
-    const parentPage = "/spaces/travel/calendar?filter=tagSearch%3Atravel";
+    const parentPage = "/spaces/travel?filter=tagSearch%3Atravel";
     const { container } = renderSidebar(<MemoDetailSidebar memo={create(MemoSchema, { name: "memos/detail" })} parentPage={parentPage} />);
 
     expect(container.querySelector(`a[href="${parentPage}"]`)).toBeNull();

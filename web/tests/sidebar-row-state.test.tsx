@@ -102,7 +102,7 @@ describe("MemoFilters", () => {
   });
 
   it("stays quiet about a view off the collection routes, where it does not apply", () => {
-    renderChips("/attachments", "abc");
+    renderChips("/setting", "abc");
     expect(screen.queryByText("Last week")).not.toBeInTheDocument();
   });
 

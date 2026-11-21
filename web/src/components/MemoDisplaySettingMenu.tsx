@@ -122,7 +122,7 @@ function MemoDisplaySettingsContent() {
 
 function MemoDisplaySettingMenu({ anchor }: Props) {
   const t = useTranslate();
-  const label = `${t("common.timeline")} · ${t("memo.view-options")}`;
+  const label = `${t("common.calendar")} · ${t("memo.view-options")}`;
 
   return (
     <Popover.Root>

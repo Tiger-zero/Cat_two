@@ -48,20 +48,18 @@ describe("useMemoRecord", () => {
     expect(api.getMemo).not.toHaveBeenCalled();
   });
 
-  it("reads a memo from comment pages and the calendar month", () => {
+  it("reads a memo from a comment page", () => {
     const { client, wrapper } = setup();
     const comment = memo("memos/comment");
-    const monthly = memo("memos/monthly");
     client.setQueryData([...memoKeys.comments("memos/parent"), "infinite", 50], {
       pages: [create(ListMemoCommentsResponseSchema, { comments: [comment] })],
       pageParams: [""],
     });
-    client.setQueryData([...memoKeys.lists(), "calendar-month", { filter: "", orderBy: "" }], [monthly]);
-    const { result } = renderHook(() => [useMemoRecord(comment.name), useMemoRecord(monthly.name), useMemoRecord("memos/none")], {
+    const { result } = renderHook(() => [useMemoRecord(comment.name), useMemoRecord("memos/none")], {
       wrapper,
     });
 
-    expect(result.current).toEqual([comment, monthly, undefined]);
+    expect(result.current).toEqual([comment, undefined]);
   });
 
   it("prefers the copy fetched most recently", () => {

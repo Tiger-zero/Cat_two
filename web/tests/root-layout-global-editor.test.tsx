@@ -70,11 +70,11 @@ describe("RootLayout global editor shell", () => {
 
   it("mounts the composer provider inside the sidebar provider and keeps the shell across routes", () => {
     render(
-      <MemoryRouter initialEntries={["/attachments"]}>
+      <MemoryRouter initialEntries={["/setting"]}>
         <TimelineViewProvider>
           <Routes>
             <Route element={<RootLayout />}>
-              <Route path="attachments" element={<RouteState />} />
+              <Route path="setting" element={<RouteState />} />
               <Route path="inbox" element={<RouteState />} />
             </Route>
           </Routes>

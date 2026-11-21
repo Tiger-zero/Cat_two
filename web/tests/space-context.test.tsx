@@ -84,13 +84,13 @@ describe("URL-owned Space context", () => {
   });
   it("restores Space from a deep link before metadata has loaded", () => {
     state.ready = false;
-    setup("/spaces/a/calendar/2026/09/06");
+    setup("/spaces/a/explore?filter=displayTime%3A2026-09-06");
     expect(screen.getByTestId("space")).toHaveTextContent("spaces/a");
     expect(screen.getByTestId("filter")).toHaveTextContent('space == "spaces/a"');
     expect(screen.getByTestId("ready")).toHaveTextContent("false");
   });
   it("preserves dates and filters through A, B, All and browser history", async () => {
-    const suffix = "/calendar/2026/09/06?filter=tagSearch%3Awork";
+    const suffix = "/explore?filter=tagSearch%3Awork%2CdisplayTime%3A2026-09-06";
     const router = setup(`/spaces/a${suffix}`);
     fireEvent.click(screen.getByText("B"));
     expect(screen.getByTestId("path").textContent).toBe(`/spaces/b${suffix}`);

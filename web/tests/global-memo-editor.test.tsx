@@ -327,11 +327,7 @@ describe("GlobalMemoEditorProvider", () => {
     });
   });
 
-  it.each([
-    "/spaces/product/explore",
-    "/spaces/product/attachments",
-    "/spaces/product/calendar/2026/09",
-  ])("inherits the route Space when composing from %s", async (pathname) => {
+  it.each(["/spaces/product", "/spaces/product/explore"])("inherits the route Space when composing from %s", async (pathname) => {
     mocks.pathname = pathname;
     mocks.selectedSpaceName = "spaces/product";
     await openViaTrigger();

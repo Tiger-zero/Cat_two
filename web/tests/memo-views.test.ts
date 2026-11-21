@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { buildMemoFilter } from "@/hooks/useMemoFilters";
 import { combineCELFilters } from "@/lib/cel-filter";
-import { getMemoViewId, isMemoCollectionRoute, isMemoScopeRoute, resolveMemoScope } from "@/lib/memo-views";
+import { getMemoViewId, isMemoCollectionRoute, resolveMemoScope } from "@/lib/memo-views";
 
 describe("memo scopes", () => {
   it("resolves collection and detail routes", () => {
@@ -12,22 +12,12 @@ describe("memo scopes", () => {
     expect(resolveMemoScope("/settings", { fallback: "explore" })).toBe("explore");
   });
 
-  it("recognizes Home, Archived, and the legacy Explore alias", () => {
-    expect(isMemoScopeRoute("/")).toBe(true);
-    expect(isMemoScopeRoute("/explore")).toBe(true);
-    expect(isMemoScopeRoute("/archived")).toBe(true);
-    expect(isMemoScopeRoute("/attachments")).toBe(false);
-  });
-
-  it("treats Home and calendar as collection routes where views and filters apply in place", () => {
+  it("applies sidebar views and filters to the note collections", () => {
     expect(isMemoCollectionRoute("/")).toBe(true);
+    expect(isMemoCollectionRoute("/explore")).toBe(true);
     expect(isMemoCollectionRoute("/archived")).toBe(true);
     expect(isMemoCollectionRoute("/?creator=steven")).toBe(true);
     expect(isMemoCollectionRoute("/u/steven")).toBe(false);
-    expect(isMemoCollectionRoute("/calendar")).toBe(true);
-    expect(isMemoCollectionRoute("/Calendar/2026/08/02/")).toBe(true);
-    expect(isMemoCollectionRoute("/calendars")).toBe(false);
-    expect(isMemoScopeRoute("/u/steven")).toBe(false);
     expect(isMemoCollectionRoute("/memos/123")).toBe(false);
     expect(isMemoCollectionRoute("/attachments")).toBe(false);
   });

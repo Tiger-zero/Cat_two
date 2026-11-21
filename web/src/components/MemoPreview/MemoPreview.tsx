@@ -66,7 +66,7 @@ const AttachmentThumbnails = ({ attachments }: { attachments: Attachment[] }) =>
           />
           {item.kind === "motion" && (
             <span className="absolute left-1 top-1 rounded bg-black/70 px-1 py-0.5 text-[8px] font-medium uppercase leading-none text-white">
-              {t("attachment-library.labels.live")}
+              {t("attachment.live")}
             </span>
           )}
         </div>

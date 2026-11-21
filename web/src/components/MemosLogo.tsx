@@ -1,8 +1,7 @@
 import { useInstance } from "@/contexts/InstanceContext";
-import { getCustomLogoUrl } from "@/lib/branding";
+import { DEFAULT_LOGO, getCustomLogoUrl } from "@/lib/branding";
 import { cn } from "@/lib/utils";
 import IdentityLabel from "./IdentityLabel";
-import { MemosMark } from "./MemosMark";
 
 interface Props {
   className?: string;
@@ -25,6 +24,7 @@ function MemosLogo({ collapsed, size = "md", as: Component = "div", className }:
   const { generalSetting: instanceGeneralSetting } = useInstance();
   const title = instanceGeneralSetting.customProfile?.title || "Memos";
   const logoUrl = getCustomLogoUrl(instanceGeneralSetting.customProfile?.logoUrl);
+  const markWidth = logoUrl || collapsed ? scale.mark : Math.ceil((scale.mark * 88) / 144);
 
   return (
     <Component className={cn("memos-logo w-fit min-w-0 max-w-full", className)}>
@@ -34,26 +34,16 @@ function MemosLogo({ collapsed, size = "md", as: Component = "div", className }:
         collapsed={collapsed}
         wrap={size === "lg" || size === "hero"}
         mark={
-          logoUrl ? (
-            <img
-              src={logoUrl}
-              width={scale.mark}
-              height={scale.mark}
-              style={{ width: scale.mark, height: scale.mark }}
-              className="shrink-0 select-none object-contain"
-              alt={collapsed ? title : ""}
-              draggable={false}
-              decoding="async"
-            />
-          ) : (
-            <MemosMark
-              size={scale.mark}
-              className="text-mu-primary"
-              label={collapsed ? title : undefined}
-              // Like dotcom's lockup, trim transparent margins so the gap follows the visible bird.
-              {...(!collapsed ? { viewBox: "112 32 288 448", width: Math.ceil((scale.mark * 288) / 448) } : {})}
-            />
-          )
+          <img
+            src={logoUrl ?? DEFAULT_LOGO}
+            width={markWidth}
+            height={scale.mark}
+            style={{ width: markWidth, height: scale.mark }}
+            className={cn("shrink-0 select-none object-contain", !logoUrl && "memos-mark")}
+            alt={collapsed ? title : ""}
+            draggable={false}
+            decoding="async"
+          />
         }
       />
     </Component>

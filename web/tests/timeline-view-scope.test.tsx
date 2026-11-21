@@ -48,12 +48,9 @@ describe("Timeline display settings scope", () => {
   });
 
   it.each([
-    "/calendar",
     "/archived",
-    "/attachments",
     "/memos/example",
     "/memos/shares/example",
-    "/spaces/test/calendar",
     "/setting",
     "/views",
   ])("keeps %s independent of Timeline preferences", (path) => {
@@ -64,7 +61,7 @@ describe("Timeline display settings scope", () => {
   it("restores Timeline preferences after visiting another view without overwriting storage", async () => {
     const router = renderRoute("/spaces/test?creator=alice");
     expect(settings()).toEqual(saved);
-    await act(() => router.navigate("/spaces/test/calendar?creator=alice"));
+    await act(() => router.navigate("/archived"));
     expect(settings()).toEqual(defaults);
     await act(() => router.navigate("/spaces/test?creator=alice"));
     expect(settings()).toEqual(saved);

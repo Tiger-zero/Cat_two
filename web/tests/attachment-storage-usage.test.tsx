@@ -1,18 +1,16 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { act, render, renderHook, screen, waitFor } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import type { PropsWithChildren } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import UserStatsSection from "@/components/Settings/UserStatsSection";
-import { useBatchDeleteAttachments } from "@/hooks/useAttachmentQueries";
-import { userKeys, useUserStats } from "@/hooks/useUserQueries";
+import { userKeys } from "@/hooks/useUserQueries";
 
 const mocks = vi.hoisted(() => ({
   getUserStats: vi.fn(),
-  batchDeleteAttachments: vi.fn(),
   user: { name: "users/alice" } as { name: string } | undefined,
 }));
 
-vi.mock("@/connect", () => ({ attachmentServiceClient: mocks, userServiceClient: mocks }));
+vi.mock("@/connect", () => ({ userServiceClient: mocks }));
 vi.mock("@/hooks/useCurrentUser", () => ({ default: () => mocks.user }));
 vi.mock("@/utils/i18n", () => ({
   useTranslate: () => (key: string) =>
@@ -33,7 +31,6 @@ describe("account statistics", () => {
   beforeEach(() => {
     mocks.user = { name: "users/alice" };
     mocks.getUserStats.mockReset();
-    mocks.batchDeleteAttachments.mockReset();
   });
 
   it("distinguishes loading, zero bytes, and a failed read", async () => {
@@ -68,18 +65,6 @@ describe("account statistics", () => {
     rerender(<UserStatsSection />);
     expect(screen.queryByText("1.0 KB")).not.toBeInTheDocument();
     expect(await screen.findByText("2.0 KB")).toBeInTheDocument();
-  });
-
-  it("refreshes usage even when deletion reports a storage cleanup failure", async () => {
-    mocks.getUserStats.mockResolvedValueOnce({ attachmentStorageBytes: 1024n }).mockResolvedValue({ attachmentStorageBytes: 0n });
-    mocks.batchDeleteAttachments.mockRejectedValue(new Error("attachments were deleted but storage cleanup failed"));
-    const { wrapper } = setup();
-    const { result } = renderHook(() => ({ stats: useUserStats("users/alice"), deletion: useBatchDeleteAttachments() }), { wrapper });
-    await waitFor(() => expect(result.current.stats.data?.attachmentStorageBytes).toBe(1024n));
-    await act(async () => {
-      await result.current.deletion.mutateAsync(["attachments/file"]).catch(() => {});
-    });
-    await waitFor(() => expect(result.current.stats.data?.attachmentStorageBytes).toBe(0n));
   });
 
   it("does not request or display usage without a signed-in user", () => {

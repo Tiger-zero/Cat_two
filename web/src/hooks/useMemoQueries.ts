@@ -72,8 +72,8 @@ function discardUnavailableMemo(client: QueryClient, name: string) {
 type MemoPatch = Partial<Memo> & Pick<Memo, "name">;
 
 // The shapes a memo query holds: a memo list response (`memos`), a comment list
-// response (`comments`), a bare array (the calendar month), the infinite-query
-// pages of either response, or one memo (a detail or a shared memo).
+// response (`comments`), the infinite-query pages of either response, or one
+// memo (a detail or a shared memo).
 
 function isMemo(data: unknown): data is Memo {
   return typeof data === "object" && data !== null && typeof (data as { name?: unknown }).name === "string" && "content" in data;
@@ -92,7 +92,6 @@ function isInfiniteData(data: unknown): data is InfiniteData<unknown> {
 }
 
 function memosOfPage(page: unknown): Memo[] | undefined {
-  if (Array.isArray(page)) return page as Memo[];
   if (isMemoListResponse(page)) return page.memos;
   if (isMemoCommentsResponse(page)) return page.comments;
   return undefined;
@@ -101,7 +100,6 @@ function memosOfPage(page: unknown): Memo[] | undefined {
 /** Replaces a page's memos, keeping the page's reference when the memos did not change. */
 function withMemos<T>(page: T, memos: Memo[]): T {
   if (memosOfPage(page) === memos) return page;
-  if (Array.isArray(page)) return memos as T;
   if (isMemoListResponse(page)) return { ...page, memos } as T;
   return { ...(page as object), comments: memos } as T;
 }
@@ -151,9 +149,8 @@ function findMemoInQueryData(data: unknown, name: string): Memo | undefined {
 }
 
 /**
- * Looks a memo up by name in the collections already fetched (lists, comments,
- * the calendar month): a seed for a detail query that would otherwise refetch
- * a memo the page already shows. A detail cached as unavailable (`null`) wins.
+ * Looks a memo up by name in lists and comments already fetched, seeding detail
+ * queries for memos the page already shows. A detail cached as unavailable (`null`) wins.
  */
 export function findMemoInCollectionQueries(queryClient: QueryClient, name: string, freshOnly = false): Memo | undefined {
   if (queryClient.getQueryData(memoKeys.detail(name)) === null) return undefined;
@@ -169,7 +166,7 @@ export function findMemoInCollectionQueries(queryClient: QueryClient, name: stri
 
 /**
  * The freshest copy of a memo any query holds, by name: a detail or an entry in
- * a list, comment page or month. `null` when a detail query recorded it as
+ * a list or comment page. `null` when a detail query recorded it as
  * unavailable, `undefined` when no query holds it.
  */
 export function findMemoRecord(queryClient: QueryClient, name: string): Memo | null | undefined {

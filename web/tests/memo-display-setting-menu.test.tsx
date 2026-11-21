@@ -7,7 +7,7 @@ import { ViewProvider } from "@/contexts/ViewContext";
 vi.mock("@/utils/i18n", () => ({
   useTranslate: () => (key: string, params?: Record<string, number>) => {
     const labels: Record<string, string> = {
-      "common.timeline": "Timeline",
+      "common.calendar": "Calendar",
       "common.created-at": "Created",
       "common.last-updated-at": "Last updated",
       "memo.compact-mode": "Compact mode",
@@ -42,7 +42,7 @@ describe("MemoDisplaySettingMenu", () => {
       </ViewProvider>,
     );
 
-    const trigger = screen.getByRole("button", { name: "Timeline · View options" });
+    const trigger = screen.getByRole("button", { name: "Calendar · View options" });
     expect(trigger).toHaveClass("mu-button", "mu-button-ghost", "mu-s-md", "w-auto", "px-1.5", "rounded-s-none");
     expect(trigger.querySelector(".lucide-chevron-down")).toBeInTheDocument();
     expect(trigger.querySelector("svg")).toHaveClass("mu-icon-sm");
@@ -64,17 +64,17 @@ describe("MemoDisplaySettingMenu", () => {
     expect(compactMode).toHaveAccessibleDescription("Grid layouts always use compact cards.");
   });
 
-  it("opens only from the arrow, not the adjacent Timeline link", () => {
+  it("opens only from the arrow, not the adjacent Calendar link", () => {
     render(
       <ViewProvider>
         <div>
-          <a href="#timeline">Timeline</a>
+          <a href="#calendar">Calendar</a>
           <MemoDisplaySettingMenu />
         </div>
       </ViewProvider>,
     );
-    const trigger = screen.getByRole("button", { name: "Timeline · View options" });
-    fireEvent.click(screen.getByRole("link", { name: "Timeline" }));
+    const trigger = screen.getByRole("button", { name: "Calendar · View options" });
+    fireEvent.click(screen.getByRole("link", { name: "Calendar" }));
     expect(trigger).toHaveAttribute("aria-expanded", "false");
     expect(screen.queryByRole("group", { name: "Layout" })).not.toBeInTheDocument();
     fireEvent.click(trigger);
@@ -91,7 +91,7 @@ describe("MemoDisplaySettingMenu", () => {
       </DirectionProvider>,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Timeline · View options" }));
+    fireEvent.click(screen.getByRole("button", { name: "Calendar · View options" }));
     const list = screen.getByRole("button", { name: "List" });
     act(() => list.focus());
     fireEvent.keyDown(list, { key: "ArrowLeft" });

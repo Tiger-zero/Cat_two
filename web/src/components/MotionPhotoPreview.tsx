@@ -81,7 +81,7 @@ const MotionPhotoPreview = ({
         }}
         aria-label={t("attachment-preview.play-live-photo")}
       >
-        {t("attachment-library.labels.live")}
+        {t("attachment.live")}
       </div>
     </div>
   );

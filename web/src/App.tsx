@@ -64,9 +64,8 @@ const App = () => {
       return;
     }
 
-    // A fixed blue stays visible when browser chrome differs from the system theme.
     link.href = DEFAULT_FAVICON;
-    link.type = "image/svg+xml";
+    link.type = "image/png";
   }, [instanceGeneralSetting.customProfile]);
 
   return (

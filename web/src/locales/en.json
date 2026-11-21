@@ -38,14 +38,6 @@
     "signin-unavailable-title": "Sign-in is unavailable",
     "signups-closed-description": "New accounts are disabled on this instance. Contact your administrator if you need access."
   },
-  "calendar": {
-    "new-memo-on-day": "New memo on this day",
-    "next-year": "Next year",
-    "no-memos-in-month": "No memos in {{month}}",
-    "no-memos-on-day": "No memos on this day",
-    "previous-year": "Previous year",
-    "select-month": "Select month"
-  },
   "demo": {
     "banner-description": "Feel free to explore! This demo is reset periodically.",
     "banner-title": "Memos demo",
@@ -82,38 +74,8 @@
     "timezone-unknown": "Time zone unknown",
     "title": "Details"
   },
-  "attachment-library": {
-    "actions": {
-      "open": "Open",
-      "retry": "Retry"
-    },
-    "empty": {
-      "all": "No attachments yet.",
-      "audio": "No audio attachments yet.",
-      "documents": "No document attachments yet.",
-      "media": "No media attachments yet."
-    },
-    "errors": {
-      "load": "Failed to load attachments."
-    },
-    "labels": {
-      "live": "Live",
-      "live-photo": "Live Photo",
-      "memo": "Memo",
-      "not-linked": "Not linked",
-      "unknown-date": "Unknown date",
-      "unused": "Unused"
-    },
-    "tabs": {
-      "audio": "Audio",
-      "documents": "Documents",
-      "media": "Media"
-    },
-    "unused": {
-      "confirm-description": "This removes every uploaded file that is not linked to a memo.",
-      "description": "These uploads were never attached to a memo. Review or remove them here.",
-      "title": "Unlinked uploads"
-    }
+  "attachment": {
+    "live": "Live"
   },
   "common": {
     "zoom-in": "Zoom in",
@@ -134,7 +96,6 @@
     "clear": "Clear",
     "close": "Close",
     "collapse": "Collapse",
-    "collapse-panel": "Collapse panel",
     "copy": "Copy",
     "create": "Create",
     "created-at": "Created at",
@@ -152,11 +113,9 @@
     "edit": "Edit",
     "email": "Email",
     "expand": "Expand",
-    "expand-panel": "Expand panel",
     "explore": "Explore",
     "filter": "Filter",
     "home": "Home",
-    "timeline": "Timeline",
     "inbox": "Inbox",
     "language": "Language",
     "last-updated-at": "Last updated at",
@@ -180,7 +139,6 @@
     "profile": "Profile",
     "referenced-by": "Referenced by",
     "referencing": "Referencing",
-    "resize-panel": "Resize panel",
     "resize-sidebar": "Resize sidebar",
     "restore": "Restore",
     "role": "Role",
@@ -195,7 +153,6 @@
     "statistics": "Statistics",
     "tags": "Tags",
     "title": "Title",
-    "today": "Today",
     "tree-mode": "Show as tree",
     "type": "Type",
     "unlink": "Unlink",
@@ -456,7 +413,7 @@
     "full-width": "Full width",
     "connections": "Connections",
     "grid-compact-hint": "Collapse longer memos. Always enabled for grid layouts.",
-    "full-width-hint": "Use entire width of the memo timeline.",
+    "full-width-hint": "Use the full width of the note list.",
     "layout": "Layout",
     "layout-auto": "Auto",
     "layout-auto-description": "As many columns as fit the screen",
@@ -515,10 +472,6 @@
     "search-placeholder": "Search content"
   },
   "resource": {
-    "delete-all-unused": "Delete all unused",
-    "delete-all-unused-confirm": "Are you sure you want to delete all unused resources? THIS ACTION IS IRREVERSIBLE",
-    "delete-all-unused-error": "Failed to delete unused resources",
-    "delete-all-unused-success": "Resources deleted successfully",
     "fetching-data": "Fetching data…"
   },
   "router": {
@@ -1199,8 +1152,8 @@
     "attach-text": "Images, files, audio and a place come in through ＋.",
     "keep": "Keep",
     "keep-sub": "Each memo stays with the day you wrote it.",
-    "calendar-text": "The calendar leads back to any day.",
-    "tags-text": "A word after # becomes a tag, and a tag filters the timeline.",
+    "calendar-text": "Pick a day in the sidebar to see notes for that date.",
+    "tags-text": "A word after # becomes a tag you can use to filter notes.",
     "views-text": "A custom view saves a filter.",
     "share": "Personal notes",
     "share-sub": "Organize topics in Spaces and add follow-up thoughts to your notes.",

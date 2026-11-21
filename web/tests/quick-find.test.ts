@@ -16,12 +16,9 @@ describe("Quick Find", () => {
     "space == null",
     'content.contains("50%, café & C++")\n || pinned',
   ])("retains CEL verbatim through a navigation URL: %s", (expression) => {
-    const submission = resolveQuickFindSubmission("/attachments", expression, scopedFilters, "cel");
+    const submission = resolveQuickFindSubmission("/setting", expression, scopedFilters, "cel");
     const decoded = parseFilterQuery(new URL(submission.destination!, "https://memos.test").searchParams.get("filter"));
-    expect(decoded).toEqual([
-      ...scopedFilters.filter((filter) => filter.factor !== "contentSearch"),
-      { factor: "celSearch", value: expression },
-    ]);
+    expect(decoded).toEqual([{ factor: "celSearch", value: expression }]);
   });
 
   it("replaces both kinds of search without dropping facets", () => {
@@ -76,28 +73,6 @@ describe("Quick Find", () => {
         { factor: "contentSearch", value: "project" },
       ],
       destination: undefined,
-    });
-  });
-
-  it("keeps the collection filters when searching from Attachments", () => {
-    expect(resolveQuickFindSubmission("/attachments", "project", scopedFilters, "text")).toEqual({
-      filters: [
-        { factor: "tagSearch", value: "work" },
-        { factor: "displayTime", value: "2026-08-03" },
-        { factor: "contentSearch", value: "project" },
-      ],
-      destination: "/explore?filter=tagSearch%3Awork%2CdisplayTime%3A2026-08-03%2CcontentSearch%3Aproject",
-    });
-  });
-
-  it("keeps the collection on a normalized Attachments route", () => {
-    expect(resolveQuickFindSubmission("/Attachments/", "project", scopedFilters, "text")).toEqual({
-      filters: [
-        { factor: "tagSearch", value: "work" },
-        { factor: "displayTime", value: "2026-08-03" },
-        { factor: "contentSearch", value: "project" },
-      ],
-      destination: "/explore?filter=tagSearch%3Awork%2CdisplayTime%3A2026-08-03%2CcontentSearch%3Aproject",
     });
   });
 

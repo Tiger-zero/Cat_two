@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { getCurrentMonth, getLocalDayTimestampRange, getLocalMonthTimestampRange, getToday } from "@/lib/calendar-utils";
+import { getCurrentMonth, getLocalDayTimestampRange, getToday } from "@/lib/calendar-utils";
 import { APP_DATE_TIME_FORMAT, inAppTimeZone, parseAppDateTime } from "@/lib/time-zone";
 
 describe("Shanghai calendar time", () => {
@@ -15,14 +15,10 @@ describe("Shanghai calendar time", () => {
     expect(getCurrentMonth()).toBe("2026-12");
   });
 
-  it("queries day and month boundaries as half-open ranges of epoch seconds", () => {
+  it("queries day boundaries as a half-open range of epoch seconds", () => {
     expect(getLocalDayTimestampRange("2026-12-01")).toEqual({
       startTimestamp: Date.parse("2026-11-30T16:00:00Z") / 1000,
       endTimestamp: Date.parse("2026-12-01T16:00:00Z") / 1000,
-    });
-    expect(getLocalMonthTimestampRange("2026-12")).toEqual({
-      startTimestamp: Date.parse("2026-11-30T16:00:00Z") / 1000,
-      endTimestamp: Date.parse("2026-12-31T16:00:00Z") / 1000,
     });
   });
 

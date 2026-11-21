@@ -126,11 +126,11 @@ describe("SpaceSwitcher", () => {
   it("changes creator while preserving the Space and other query parameters", () => {
     state.selectedSpaceName = "spaces/product";
     state.selectedSpace = state.spaces[0];
-    const router = renderAt("/spaces/product/calendar/2026/09?filter=tag%3Awork");
+    const router = renderAt("/spaces/product/explore?filter=tag%3Awork");
     openSwitcher();
     fireEvent.click(screen.getByRole("link", { name: "common.home" }));
-    expect(router.state.location.pathname).toBe("/spaces/product/calendar/2026/09");
-    expect(new URLSearchParams(router.state.location.search).get("creator")).toBe("steven");
+    expect(router.state.location.pathname).toBe("/spaces/product");
+    expect(new URLSearchParams(router.state.location.search).get("creator")).toBeNull();
     expect(new URLSearchParams(router.state.location.search).get("filter")).toBe("tag:work");
     expect(screen.getByRole("dialog")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "common.home" })).toHaveAttribute("aria-current", "page");
@@ -173,7 +173,7 @@ describe("SpaceSwitcher", () => {
   it("returns from another creator to the selected Space Home without closing the menu", () => {
     state.selectedSpaceName = "spaces/product";
     state.selectedSpace = state.spaces[0];
-    const router = renderAt("/spaces/product/calendar?creator=alice");
+    const router = renderAt("/spaces/product?creator=alice");
     openSwitcher();
     fireEvent.click(screen.getByRole("link", { name: "Back to common.home" }));
     expect(router.state.location.pathname).toBe("/spaces/product");
@@ -185,7 +185,7 @@ describe("SpaceSwitcher", () => {
   });
 
   it("treats an explicit current creator as Home", () => {
-    renderAt("/calendar/2026/09?creator=steven");
+    renderAt("/?creator=steven");
     openSwitcher();
     expect(screen.getByRole("link", { name: "common.home" })).toHaveAttribute("aria-current", "page");
     expect(screen.queryByRole("link", { name: /Back to/ })).not.toBeInTheDocument();

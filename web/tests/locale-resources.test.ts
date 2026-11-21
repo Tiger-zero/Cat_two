@@ -30,7 +30,6 @@ const referenceFor = (key: string) => source[key] ?? (pluralSuffix.test(key) ? s
 // These are the finite values used by computed translation keys. Apply them only
 // when the matching t() call exists; never exempt an entire namespace from checks.
 const dynamicKeyParts: Record<string, readonly string[]> = {
-  "attachment-library.tabs.${}": ["audio", "documents", "media"],
   "editor.drawing.color-${}": ["blue", "gray", "green", "ink", "orange", "red", "teal", "violet"],
   "live-update.${}": ["connected", "connecting", "disconnected"],
   "memo.${}": ["layout-auto", "layout-columns", "layout-list"],

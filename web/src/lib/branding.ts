@@ -1,6 +1,6 @@
-export const DEFAULT_FAVICON = "/favicon.svg?v=bird-blue";
+export const DEFAULT_FAVICON = "/favicon.png?v=cat-two";
+export const DEFAULT_LOGO = "/logo.webp?v=cat-two";
 
-// Earlier versions persisted /logo.webp when restoring the default profile.
-// Treat built-in URLs as defaults so those instances also get the themeable SVG.
+// Older profiles can contain a built-in asset URL instead of inheriting the default.
 export const getCustomLogoUrl = (logoUrl?: string): string | undefined =>
-  !logoUrl || logoUrl === "/logo.webp" || logoUrl === "/logo.svg" ? undefined : logoUrl;
+  !logoUrl || logoUrl === "/logo.webp" || logoUrl === "/logo.svg" || logoUrl === "/logo-small.svg" ? undefined : logoUrl;
