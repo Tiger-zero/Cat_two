@@ -70,4 +70,4 @@ Cat_two 面向单人自托管。新实例在首次设置时创建一个管理员
 - **2026-11-21 22:00**　重写开发 Skill，精简功能说明并迁移历史设计。文档链接、ZIP Schema 字节比对和归档、配置、限流测试通过。 [优化方案](references/optimization-plan.md)
 - **2026-11-21 22:20**　完成笔记时间、草稿、归档导入和回收站清理修复。搜索支持归档范围，SQLite 默认列表和 MCP 标签读取已优化。 [P1、P2 修复与验证](references/development-log.md#p1-与-p2-修复)
 - **2026-11-21 22:31**　将本地默认存储测试、后端 CI 和升级验证统一到 SQLite。默认存储全量、单项迁移筛选和工作流语法检查通过。 [存储测试命令](../../../store/test/README.md)
-- **2026-11-21 22:46**　按改动路径运行日常 CI，合并前端生产构建，移除 Codecov 和上游发布工作流。Stale 和旧版 Memos 升级改为手动运行。SQLite 全套、旧版升级、启动脚本和容器触发条件验证通过。 [工作流](../../../.github/workflows/)
+- **2026-11-21 22:46**　按改动路径运行日常 CI，合并前端生产构建，移除 Codecov 和上游发布工作流。Stale 和旧版 Memos 升级改为手动运行。SQLite 全套、旧版升级、启动脚本和容器触发条件验证通过。 [工作流](../../../.github/workflows/) · [容器 CI](https://github.com/Tiger-zero/Cat_two/actions/runs/44915807863)
