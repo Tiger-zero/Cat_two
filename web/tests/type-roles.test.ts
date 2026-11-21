@@ -31,21 +31,21 @@ describe("type roles", () => {
     ]);
   });
 
-  it("keeps memo text at the editor's regular 16px, not a title style", () => {
-    for (const path of ["components/MemoEditor/view/MemoContentView.tsx", "components/MemoEditor/edit/Editor.tsx"]) {
+  it("uses shared memo typography in the reader, composer and loading placeholder", () => {
+    for (const path of [
+      "components/MemoEditor/view/MemoContentView.tsx",
+      "components/MemoEditor/edit/Editor.tsx",
+      "components/MemoEditor/MemoEditor.tsx",
+    ]) {
       const text = sourceFiles.find((file) => file.path === path)?.text ?? "";
-      expect(text, path).toContain("text-base leading-6");
+      expect(text, path).toContain("memo-text");
       expect(text, path).not.toMatch(/\bmu-(title|label|heading)\b/);
     }
   });
 
-  it("uses Tailwind text sizes only for memo text, the wordmark and glyph-sized icons", () => {
+  it("uses Tailwind text sizes only for the documented exceptions", () => {
     expect(filesUsing(/\btext-(xs|sm|base|lg|xl|2xl|3xl|\[\d+(\.\d+)?(px|rem|em)\])(?![\w-])/)).toEqual(
       [
-        // Memo text and the composer: the editor's 16px reading size.
-        "components/MemoEditor/MemoEditor.tsx",
-        "components/MemoEditor/edit/Editor.tsx",
-        "components/MemoEditor/view/MemoContentView.tsx",
         // Emoji and custom icons, whose font size is the icon box.
         "components/AppSidebar/ViewsSection.tsx",
         "components/CustomIconPicker.tsx",
