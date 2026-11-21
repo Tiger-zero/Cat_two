@@ -49,9 +49,11 @@ A reducer (`edit/state/reducer.ts`) drives an external store; consumers subscrib
 
 ### Formatting and source mode
 
-The composer toolbar offers bold, bulleted list, numbered list and code block in both modes. The controls use the editor's commands on the current selection or block and return focus to the editing surface. Rich text also highlights active formatting in the composer toolbar and provides the editor's floating selection toolbar, slash menu, block handle and link card.
+The toolbar beneath the editor offers bold, italic, bulleted list, numbered list and code block. **More formatting** offers paragraph and headings, strikethrough, inline code, blockquote, tasks, tables, dividers and links. The controls apply to the current selection or block and return focus to the editor. Rich text also shows active formatting and provides the editor's floating selection toolbar, slash menu, block handle and link card.
 
 Markdown mode opens from the ＋ menu and shows the entire memo as syntax-highlighted Markdown in the body font. `useSourceMode` (`@/hooks/useSourceMode`) shares the account's `EDITOR` user setting (`source_mode`) with Settings → Editor. A switch applies immediately, preserves the memo text and reverts if saving the preference fails. In Markdown mode the composer controls and formatting shortcuts edit the Markdown text. The `#tag` and `:emoji` popups work in both modes, and the checklist chip uses the same `toggleTaskList` command to toggle the caret's line. The controller parses the memo to read its tags and checklist items.
+
+Markdown submitted through the API or MCP uses the same rendering as notes written in the editor. The memo renderer supports ATX headings, tables, task lists, blockquotes, code fences, links, GitHub-style alerts, footnotes and math. Both the editor and reader use the same Markdown dialect and URL policy.
 
 ### Saving
 

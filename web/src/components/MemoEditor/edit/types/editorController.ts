@@ -7,7 +7,22 @@ export type EditorPosition = Position;
 /** A selection that survives reloading the same Markdown, for restoring the caret across mounts. */
 export type EditorSelection = SelectionJSON;
 
-export type EditorFormat = "bold" | "bulletList" | "orderedList" | "codeBlock";
+export type EditorFormat =
+  | "bold"
+  | "italic"
+  | "strike"
+  | "inlineCode"
+  | "paragraph"
+  | "heading1"
+  | "heading2"
+  | "heading3"
+  | "blockquote"
+  | "bulletList"
+  | "orderedList"
+  | "taskList"
+  | "codeBlock"
+  | "table"
+  | "divider";
 
 /**
  * The contract the memo editor (Editor) implements. Everything outside the
@@ -43,6 +58,8 @@ export interface EditorController {
   selectAll(): void;
   /** Applies a formatting command to the selection and returns focus to the editor. */
   toggleFormat(format: EditorFormat): boolean;
+  /** Links the selected text, or inserts the URL as its own label at the caret. */
+  setLink(href: string): boolean;
   /** Formats applied across the selection in rich text mode. */
   getActiveFormats(): EditorFormat[];
   /** Notifies controls when the selection or its formatting changes. */

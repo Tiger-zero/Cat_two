@@ -10,7 +10,7 @@ import { useNearViewport } from "@/hooks/useNearViewport";
 import { markdownStyles } from "@/lib/markdownStyles";
 import { cn } from "@/lib/utils";
 import type { Attachment } from "@/types/proto/api/attachment_service_pb";
-import { findAnchorTarget } from "@/utils/markdown-manipulation";
+import { decodeMemoAnchor, findAnchorTarget } from "@/utils/markdown-manipulation";
 import { headingSlugs } from "./headings";
 import LinkMetadataCard from "./LinkMetadataCard";
 import { type LinkCardMount, linkCardsExtension } from "./linkCards";
@@ -101,7 +101,7 @@ const MemoContentViewImpl = (props: MemoContentViewProps) => {
   // In-memo anchors scroll within this memo; a collapsed card may hide the target, so it opens the detail page.
   const handleLinkClick = ({ href }: { href: string }) => {
     if (!href.startsWith("#")) return false;
-    const id = decodeURIComponent(href.slice(1));
+    const id = decodeMemoAnchor(href);
     const target = !compact && id && contentRef.current ? findAnchorTarget(contentRef.current, id) : null;
     if (target) {
       target.scrollIntoView({ behavior: "smooth", block: "center" });

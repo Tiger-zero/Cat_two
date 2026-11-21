@@ -18,7 +18,7 @@ import { isMemoBlurred } from "@/lib/tag";
 import { State } from "@/types/proto/api/common_pb";
 import type { Memo } from "@/types/proto/api/memo_service_pb";
 import { useTranslate } from "@/utils/i18n";
-import { findMemoAnchorTarget } from "@/utils/markdown-manipulation";
+import { decodeMemoAnchor, findMemoAnchorTarget } from "@/utils/markdown-manipulation";
 
 const MemoSidebarRegistration = ({
   memo,
@@ -159,7 +159,7 @@ const MemoDetail = () => {
     if (!hash) return;
     const scrollKey = `${memoName}\0${hash}`;
     if (scrolledHashRef.current === scrollKey) return;
-    const fragment = decodeURIComponent(hash.slice(1));
+    const fragment = decodeMemoAnchor(hash);
     const commentSection = commentSectionRef.current;
     if (commentSection && (fragment === MEMO_COMMENTS_ANCHOR_ID || fragment === LEGACY_MEMO_COMMENTS_ANCHOR_ID)) {
       scrolledHashRef.current = scrollKey;

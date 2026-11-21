@@ -76,6 +76,16 @@ function legacySlugify(text: string): string {
     .replace(/^-|-$/g, "");
 }
 
+/** Decode a memo link's hash, allowing literal percent signs in anchor IDs. */
+export function decodeMemoAnchor(hash: string): string {
+  const fragment = hash.slice(1);
+  try {
+    return decodeURIComponent(fragment);
+  } catch {
+    return fragment;
+  }
+}
+
 /**
  * Resolve an in-page fragment to its element, retrying against the pre-Unicode slug scheme so
  * anchors minted by older versions still land.

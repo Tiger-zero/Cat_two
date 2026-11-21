@@ -1,5 +1,22 @@
-import { type Block, commands, type Editor, inlineText, type Widget } from "@usememos/editor";
+import {
+  type Block,
+  commands,
+  divider,
+  type Editor,
+  emptyTable,
+  getBlock,
+  inlineText,
+  isCollapsed,
+  isPlainTextBlock,
+  isTextless,
+  lineTable,
+  serializeInline,
+  serializeMarkdown,
+  type Widget,
+} from "@usememos/editor";
+import { MEMO_MARKDOWN, MEMO_SYNTAX, parseMemoAst } from "@/lib/memo-ast";
 import { collectTags, parseMemoMarkdown } from "@/lib/memo-markdown";
+import { isAllowedLinkUrl } from "@/lib/url-policy";
 import { isCompleteTagValue } from "@/utils/tag-grammar";
 import type { EditorController, EditorFormat } from "./types/editorController";
 import { renderUploadAnchor } from "./uploadAnchors";
@@ -22,12 +39,70 @@ const memoBlocks = (editor: Editor): readonly Block[] =>
 /** An empty paragraph, which inserted blocks take the place of rather than follow. */
 const isEmptyParagraph = (block: Block): boolean => block.type === "paragraph" && inlineText(block.content) === "";
 
-const formatCommands = {
-  bold: "toggleBold",
-  bulletList: "toggleBulletList",
-  orderedList: "toggleOrderedList",
-  codeBlock: "toggleCodeBlock",
-} as const satisfies Record<EditorFormat, keyof Editor["commands"]>;
+const insertSourceBlock = (editor: Editor, block: Block): boolean => {
+  const source = editor.getMarkdown();
+  const { focus } = editor.getSelection();
+  const { ends } = lineTable(source);
+  const line = ends.findIndex((end) => focus.offset <= end) + 1;
+  // Insert after the current block to keep existing tables, fences and selected text intact.
+  const current = parseMemoAst(source).lines.find(({ start, end }) => start <= line && line <= end);
+  const offset = ends[(current?.end ?? line) - 1] ?? source.length;
+  const before = source.slice(0, offset);
+  const after = source.slice(offset);
+  const beforeBreaks = before.slice(-4).replace(/\r\n?/g, "\n");
+  const afterBreaks = after.slice(0, 4).replace(/\r\n?/g, "\n");
+  const prefix = !before || beforeBreaks.endsWith("\n\n") ? "" : beforeBreaks.endsWith("\n") ? "\n" : "\n\n";
+  const suffix = !after || afterBreaks.startsWith("\n\n") ? "" : afterBreaks.startsWith("\n") ? "\n" : "\n\n";
+  const markdown = prefix + serializeMarkdown({ blocks: [block] }).trimEnd() + suffix;
+  // An unclosed code fence or an HTML block can swallow Markdown after a blank line.
+  const insertedLine = lineTable(before + prefix).starts.length;
+  const result = parseMemoAst(before + markdown + after);
+  const type = block.type === "table" ? "table" : "thematicBreak";
+  if (!result.children.some((node, index) => node.type === type && result.lines[index]?.start === insertedLine)) return false;
+  return editor.commands.insertMarkdown(markdown, { at: { ...focus, offset } });
+};
+
+const formatCommands: Record<EditorFormat, (editor: Editor) => boolean> = {
+  bold: (editor) => editor.commands.toggleBold(),
+  italic: (editor) => editor.commands.toggleItalic(),
+  strike: (editor) => editor.commands.toggleStrike(),
+  inlineCode: (editor) => editor.commands.toggleCode(),
+  paragraph: (editor) => editor.commands.setParagraph(),
+  heading1: (editor) => editor.commands.toggleHeading({ level: 1 }),
+  heading2: (editor) => editor.commands.toggleHeading({ level: 2 }),
+  heading3: (editor) => editor.commands.toggleHeading({ level: 3 }),
+  blockquote: (editor) => editor.commands.toggleBlockquote(),
+  bulletList: (editor) => editor.commands.toggleBulletList(),
+  orderedList: (editor) => editor.commands.toggleOrderedList(),
+  taskList: (editor) => editor.commands.toggleTaskList(),
+  codeBlock: (editor) => editor.commands.toggleCodeBlock(),
+  table: (editor) => (editor.mode === "source" ? insertSourceBlock(editor, emptyTable()) : editor.commands.insertTable()),
+  divider: (editor) => (editor.mode === "source" ? insertSourceBlock(editor, divider()) : editor.commands.insertDivider()),
+};
+
+const linkMarkdown = (label: string, href: string): string =>
+  // An empty title keeps explicit brackets even when the label equals the URL.
+  // Encode pipes so the link can also be inserted in a Markdown table cell.
+  serializeInline([{ text: label, link: href, linkTitle: "", marks: [] }], { ...MEMO_MARKDOWN, syntax: MEMO_SYNTAX }).replace(
+    /\|/g,
+    "&#124;",
+  );
+
+const applyLink = (editor: Editor, href: string): boolean => {
+  const selection = editor.getSelection();
+  const collapsed = isCollapsed(selection);
+  if (editor.mode === "rich") {
+    if (!collapsed) return editor.commands.setLink({ href });
+    const block = getBlock(editor.state.doc, selection.focus.blockId);
+    return !isPlainTextBlock(block) && !isTextless(block) && editor.commands.insertMarkdown(linkMarkdown(href, href));
+  }
+
+  const { anchor, focus } = selection;
+  const start = Math.min(anchor.offset, focus.offset);
+  const end = Math.max(anchor.offset, focus.offset);
+  const label = collapsed ? href : editor.getMarkdown().slice(start, end);
+  return editor.commands.insertMarkdown(linkMarkdown(label, href));
+};
 
 /**
  * EditorController over a @usememos/editor instance. Every method reads the
@@ -122,16 +197,27 @@ export function createController(getEditor: EditorGetter, onReplace: (markdown: 
     toggleFormat: (format) => {
       const editor = live(getEditor);
       if (!editor || editor.isComposing) return false;
-      const changed = editor.commands[formatCommands[format]]();
+      const changed = formatCommands[format](editor);
       editor.commands.focus();
       if (changed) editor.commands.scrollIntoView();
       return changed;
+    },
+    setLink: (href) => {
+      const editor = live(getEditor);
+      if (!editor || editor.isComposing) return false;
+      const url = href.trim();
+      if (!url || /[\r\n]/.test(url) || !isAllowedLinkUrl(url) || !applyLink(editor, url)) return false;
+      editor.commands.focus();
+      editor.commands.scrollIntoView();
+      return true;
     },
     getActiveFormats: () => {
       const editor = live(getEditor);
       if (!editor || editor.mode !== "rich") return [];
 
-      const active: EditorFormat[] = editor.isActive("bold") ? ["bold"] : [];
+      const active: EditorFormat[] = [];
+      if (editor.isActive("bold")) active.push("bold");
+      if (editor.isActive("italic")) active.push("italic");
       // Block commands toggle off only when every convertible block already has the format.
       const blocks = commands.convertibleBlocks(editor.state);
       const first = blocks[0];
@@ -146,6 +232,9 @@ export function createController(getEditor: EditorGetter, onReplace: (markdown: 
       return active;
     },
     subscribeToFormatting: (listener) => live(getEditor)?.on("selectionChange", listener) ?? (() => {}),
-    toggleTaskList: () => live(getEditor)?.commands.toggleTaskList() ?? false,
+    toggleTaskList: () => {
+      const editor = live(getEditor);
+      return !!editor && !editor.isComposing && formatCommands.taskList(editor);
+    },
   };
 }

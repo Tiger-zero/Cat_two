@@ -207,6 +207,7 @@
     "back-to-reference": "Back to reference",
     "format": {
       "label": "Formatting",
+      "more": "More formatting",
       "paragraph": "Paragraph",
       "heading-1": "Heading 1",
       "heading-2": "Heading 2",
@@ -215,11 +216,18 @@
       "bold": "Bold",
       "italic": "Italic",
       "strikethrough": "Strikethrough",
+      "inline-code": "Inline code",
       "code-block": "Code block",
       "bullet-list": "Bullet list",
       "ordered-list": "Numbered list",
       "task-list": "To-do list",
-      "link": "Link"
+      "link": "Link",
+      "web-link": "Web link",
+      "add-web-link": "Add web link",
+      "link-address": "Link address",
+      "add-link": "Add link",
+      "invalid-link-address": "Enter a valid link address.",
+      "link-not-applied": "Could not add a link at the current selection."
     },
     "insert-menu": {
       "add-attachment": "Add attachment",

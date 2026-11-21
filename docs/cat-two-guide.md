@@ -11,7 +11,7 @@
 | 排序和来源 | 「全部笔记」菜单可按创建或更新时间升序、降序查看。侧栏的热度和日期筛选也使用所选时间类型。来源菜单可选「全部」「网页端」或「未记录」。 | [菜单](../web/src/components/MemoFeedMenu.tsx)、[排序](../web/src/hooks/useMemoSorting.ts)、[筛选](../web/src/hooks/useMemoFilters.ts) |
 | 搜索、标签和视图 | 搜索支持关键词和 CEL 表达式。侧栏默认按层级展示标签。点击一个目录会列出该路径及子路径下的笔记。标签与日期可以一起筛选，普通浏览条件可以从 URL 恢复，常用条件可以保存为视图。 | [搜索](../web/src/components/AppSidebar/QuickFindDialog.tsx)、[标签侧栏](../web/src/components/AppSidebar/TagsSection.tsx)、[筛选状态](../web/src/contexts/MemoFilterContext.tsx)、[视图管理](../web/src/pages/MemoViews.tsx)、[CEL 字段与语法](../filter/README.md) |
 | 标签整理 | 标签菜单支持置顶和编辑名称。置顶在当前浏览器按账户保存。重命名目录会移动它的子路径，改成已存在的标签时两边笔记合并。在「设置 → 标签」可手动整理斜杠两侧的空格，比如将 `#2027/ 08` 整理为 `#2027/08`。 | [标签接口](../server/api/memo_tag_routes.go)、[Markdown 解析](../markdown/) |
-| 编辑和草稿 | 工具栏提供加粗、无序列表、有序列表和代码块，富文本与 Markdown 源码模式都可使用。编辑器也支持清单、链接及专注编辑。新笔记草稿按账户和写作位置保存在当前浏览器。已有笔记在原卡片或详情页编辑，保存后服务端更新。 | [编辑器说明](../web/src/components/MemoEditor/README.md)、[保存流程](../web/src/components/MemoEditor/edit/hooks/useMemoSave.ts) |
+| 编辑和草稿 | 笔记底部提供粗体、斜体、无序列表、有序列表和代码块。「更多格式」可设置正文、一级至三级标题、删除线、行内代码、引用、任务列表，也可插入表格、分隔线和链接。富文本和 Markdown 源码共用这些操作，通过「＋ → Markdown 模式」切换。新笔记草稿按账户和写作位置保存在当前浏览器。已有笔记可在原卡片或详情页编辑。 | [编辑器说明](../web/src/components/MemoEditor/README.md)、[保存流程](../web/src/components/MemoEditor/edit/hooks/useMemoSave.ts) |
 | 笔记内附件 | 点工具栏的回形针可选择图片、PDF、Word（`.doc`、`.docx`）、Excel（`.xls`、`.xlsx`）等文件。保存后，可以预览图片，也可以下载文档。站内文档下载使用当前网页会话，失败时可在页面查看提示和服务端返回的 HTTP 状态。只添加附件也能保存笔记。部分图片支持涂画标注，媒体元数据可在偏好设置中开启。 | [附件编辑与显示](../web/src/components/MemoMetadata/Attachment/)、[上传 API](../server/api/attachment_upload.go)、[文件服务](../server/fileserver/) |
 | 整理与详情 | 笔记可置顶、归档或移入回收站。详情页提供目录、笔记引用和评论，可对笔记加表情反应，也可将笔记导出为图片。归档列表按当前账户查阅。 | [卡片菜单](../web/src/components/MemoActionMenu/)、[详情页](../web/src/pages/MemoDetail.tsx)、[归档页](../web/src/pages/Archived.tsx) |
 | 回收站 | 从侧栏底部打开。只有笔记创建者能查看、恢复或彻底删除。恢复后笔记回到之前的列表或归档，附件和引用随笔记保留。到期 30 天后，服务端会定期彻底清理。 | [回收站页面](../web/src/pages/Trash.tsx)、[回收站接口](../server/api/memo_trash_handler.go)、[保留期限](../store/memo_trash.go) |
@@ -19,6 +19,8 @@
 | 导出和导入 | 「全部笔记」可多选最多 100 条后导出 ZIP，也可在「设置 → 导出和导入」导出自己的全部笔记。导入先读取并预演归档，遇到同标识的笔记可保留现有、覆盖或创建副本。最后返回逐项处理报告。 | [导出和导入页面](../web/src/components/Settings/MemoExportSection.tsx)、[ZIP 客户端](../web/src/lib/memo-export.ts)、[归档格式](../core/memoexport/format.go) |
 | 外观和设备 | 默认简体中文，可切换英语。主题可选跟随系统、浅色、深色和纸张。页头提供浅色与深色快捷切换，浅色背景为 `#fafafa`。普通笔记正文为 14px，行高 25.2px，英文和数字使用内置 Barlow，中文按系统可用字体回退。网页及手机主屏幕使用小猫图标，默认显示名称为 Memos，浏览器标签标题可在站点设置中调整。 | [语言](../web/src/i18n.ts)、[主题](../web/src/themes/)、[笔记字体](../web/src/index.css)、[应用图标](../web/public/site.webmanifest) |
 | 账户与实例设置 | 可以管理资料、密码、两步验证、编辑偏好和标签，在「MCP 和 API」管理访问令牌和查看接入示例。管理员可调整站点和存储设置。 | [设置项清单](../web/src/components/Settings/settingSections.ts) |
+
+同步总结时，可通过 MCP 或 API 提交原始 Markdown。已有的标题、表格、任务列表、代码、引用、提示块与脚注会按笔记内容渲染。手动粘贴原始 Markdown 时，可在 Markdown 模式用纯文本粘贴保留原写法。
 
 ## 前端、服务端和数据库
 

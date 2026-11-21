@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { findAnchorTarget, findMemoAnchorTarget, slugify } from "@/utils/markdown-manipulation";
+import { decodeMemoAnchor, findAnchorTarget, findMemoAnchorTarget, slugify } from "@/utils/markdown-manipulation";
 
 describe("slugify", () => {
   it("keeps non-Latin headings addressable", () => {
@@ -20,6 +20,11 @@ describe("slugify", () => {
 });
 
 describe("findAnchorTarget", () => {
+  it("decodes Unicode fragments and accepts literal percent signs in links", () => {
+    expect(decodeMemoAnchor("#%E6%80%BB%E7%BB%93")).toBe("总结");
+    expect(decodeMemoAnchor("#100%")).toBe("100%");
+  });
+
   it("resolves duplicate anchors minted by the legacy ASCII slugger", () => {
     const root = document.createElement("div");
     root.innerHTML = '<h2 id="café">Café</h2><h2 id="café-1">Café</h2>';

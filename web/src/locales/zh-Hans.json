@@ -173,6 +173,7 @@
     "markdown-mode": "Markdown 模式",
     "format": {
       "label": "格式",
+      "more": "更多格式",
       "paragraph": "正文",
       "heading-1": "一级标题",
       "heading-2": "二级标题",
@@ -181,11 +182,18 @@
       "bold": "粗体",
       "italic": "斜体",
       "strikethrough": "删除线",
+      "inline-code": "行内代码",
       "code-block": "代码块",
       "bullet-list": "无序列表",
       "ordered-list": "有序列表",
       "task-list": "任务列表",
-      "link": "链接"
+      "link": "链接",
+      "web-link": "网页链接",
+      "add-web-link": "添加网页链接",
+      "link-address": "链接地址",
+      "add-link": "添加链接",
+      "invalid-link-address": "请输入有效的链接地址。",
+      "link-not-applied": "无法在当前位置添加链接。"
     },
     "new-memo": "新建备忘录",
     "no-changes-detected": "未检测到更改",

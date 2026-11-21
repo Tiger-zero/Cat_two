@@ -1,10 +1,10 @@
-import { act, fireEvent, render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { createRef } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { EditorContent } from "@/components/MemoEditor/edit/components/EditorContent";
 import { createInitialState, EditorProvider } from "@/components/MemoEditor/edit/state";
 import { EditorToolbar } from "@/components/MemoEditor/edit/Toolbar/EditorToolbar";
-import type { EditorController } from "@/components/MemoEditor/edit/types/editorController";
+import type { EditorController, EditorSelection } from "@/components/MemoEditor/edit/types/editorController";
 
 vi.mock("@/components/MemoEditor/edit/Toolbar/InsertMenu", () => ({ default: () => null }));
 vi.mock("@/hooks/useUserQueries", () => ({
@@ -31,11 +31,24 @@ function setup(markdown: string, isSourceMode = false) {
       />
     </EditorProvider>,
   );
+  const button = (name: string) => within(screen.getByRole("group", { name: "Formatting" })).getByRole("button", { name });
   return {
     container,
     editor: editorRef.current!,
-    button: (name: string) => within(screen.getByRole("group", { name: "Formatting" })).getByRole("button", { name }),
+    button,
+    chooseFormat: async (name: string) => {
+      fireEvent.click(button("More formatting"));
+      const menu = within(await screen.findByRole("menu"));
+      fireEvent.click(menu.getByRole("menuitem", { name }));
+    },
   };
+}
+
+function select(editor: EditorController, anchor: EditorSelection["anchor"], focus = anchor) {
+  act(() => {
+    editor.focus();
+    editor.setSelection({ anchor, focus });
+  });
 }
 
 describe("composer formatting toolbar", () => {
@@ -83,6 +96,108 @@ describe("composer formatting toolbar", () => {
     fireEvent.keyDown(container.querySelector(".memo-editor-root")!, { key: "b", ctrlKey: true });
     expect(bold).toHaveAttribute("aria-pressed", "true");
     expect(editor.getMarkdown()).toBe("Keep **bold** word.");
+  });
+
+  it.each([false, true])("formats selected text as italic and restores editor focus (source: %s)", (isSourceMode) => {
+    const { editor, button } = setup("Keep word safe.", isSourceMode);
+    select(editor, { block: 0, offset: 5 }, { block: 0, offset: 9 });
+    const italic = button("Italic");
+
+    expect(fireEvent.mouseDown(italic)).toBe(false);
+    fireEvent.click(italic);
+    expect(editor.getMarkdown()).toMatch(/^Keep ([_*])word\1 safe\.$/);
+    expect(editor.hasFocus()).toBe(true);
+    if (!isSourceMode) expect(italic).toHaveAttribute("aria-pressed", "true");
+    fireEvent.click(italic);
+    expect(editor.getMarkdown()).toBe("Keep word safe.");
+  });
+
+  describe.each([false, true])("extended menu (source: %s)", (isSourceMode) => {
+    it.each([
+      { name: "Strikethrough", markdown: "Keep ~~word~~ safe." },
+      { name: "Inline code", markdown: "Keep `word` safe." },
+    ])("applies $name to the selected text", async ({ name, markdown }) => {
+      const { editor, chooseFormat } = setup("Keep word safe.", isSourceMode);
+      select(editor, { block: 0, offset: 5 }, { block: 0, offset: 9 });
+
+      await chooseFormat(name);
+
+      await waitFor(() => {
+        expect(editor.getMarkdown()).toBe(markdown);
+        const focused = document.activeElement;
+        expect(editor.hasFocus(), `Focus landed on ${focused?.tagName} ${focused?.getAttribute("aria-label") ?? ""}`).toBe(true);
+      });
+    });
+
+    it.each([
+      { name: "Heading 2", first: "## One", second: "## Two" },
+      { name: "Quote", first: "> One", second: "> Two" },
+      { name: "To-do list", first: "- [ ] One", second: "- [ ] Two" },
+    ])("applies $name across two selected paragraphs", async ({ name, first, second }) => {
+      const { editor, chooseFormat } = setup(isSourceMode ? "Intro\n\nOne\nTwo\n\nOutro" : "Intro\n\nOne\n\nTwo\n\nOutro", isSourceMode);
+      if (isSourceMode) {
+        select(editor, { block: 0, offset: 7 }, { block: 0, offset: 14 });
+      } else {
+        select(editor, { block: 1, offset: 0 }, { block: 2, offset: 3 });
+      }
+
+      await chooseFormat(name);
+
+      await waitFor(() => {
+        const lines = editor
+          .getMarkdown()
+          .split("\n")
+          .filter((line) => line.trim() && line.trim() !== ">");
+        expect(lines).toEqual(["Intro", first, second, "Outro"]);
+      });
+    });
+
+    it("converts a heading to a plain paragraph in the middle of the memo", async () => {
+      const { editor, chooseFormat } = setup("Lead\n\n## Topic\n\nTail", isSourceMode);
+      select(editor, isSourceMode ? { block: 0, offset: 10 } : { block: 1, offset: 1 });
+
+      await chooseFormat("Paragraph");
+
+      await waitFor(() => expect(editor.getMarkdown()).toBe("Lead\n\nTopic\n\nTail"));
+    });
+
+    it.each([
+      { name: "Table", markup: /\|\s*-+\s*\|/ },
+      { name: "Divider", markup: /^---$/m },
+    ])("inserts a $name without replacing the selected text or the next paragraph", async ({ name, markup }) => {
+      const { editor, chooseFormat } = setup("Before\n\nAfter", isSourceMode);
+      select(editor, { block: 0, offset: 1 }, { block: 0, offset: 5 });
+
+      await chooseFormat(name);
+
+      await waitFor(() => {
+        const markdown = editor.getMarkdown();
+        expect(markdown).toMatch(/^Before\n\n/);
+        expect(markdown.trimEnd()).toMatch(/\n\nAfter$/);
+        expect(markdown).toMatch(markup);
+      });
+    });
+
+    it("validates web links and preserves the selection while the dialog has focus", async () => {
+      const { editor, chooseFormat } = setup("Read this later.", isSourceMode);
+      select(editor, { block: 0, offset: 9 }, { block: 0, offset: 5 });
+
+      await chooseFormat("Web link");
+
+      const dialog = await screen.findByRole("dialog", { name: "Add web link" });
+      const address = within(dialog).getByRole("textbox", { name: "Link address" });
+      const submit = within(dialog).getByRole("button", { name: "Add link" });
+      fireEvent.change(address, { target: { value: "javascript:alert(1)" } });
+      fireEvent.click(submit);
+      expect(await within(dialog).findByText("Enter a valid link address.")).toBeInTheDocument();
+      expect(editor.getMarkdown()).toBe("Read this later.");
+
+      fireEvent.change(address, { target: { value: "https://example.com/read" } });
+      fireEvent.click(submit);
+      await waitFor(() => expect(editor.getMarkdown()).toBe("Read [this](https://example.com/read) later."));
+      await waitFor(() => expect(dialog).not.toBeInTheDocument());
+      await waitFor(() => expect(editor.hasFocus()).toBe(true));
+    });
   });
 
   it("reports list formatting as active only when applied to the whole rich text selection", () => {
