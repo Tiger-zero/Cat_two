@@ -6,7 +6,7 @@ import { cva } from "class-variance-authority";
  * visible artwork starts at 20px, and first-level labels start at 44px. The full-bleed
  * footer action pads its content directly onto those same rails. Rows reserve a 20px
  * artwork column. The sidebar carries the package's `mu-compact`, so its md rows and
- * controls are 28px tall: rows read their height and radius from the md row variables,
+ * controls are 28px tall. The desktop collection lists use the standard 32px md height,
  * and compact navigation is a 28px square like the header's compose control.
  */
 export const SIDEBAR_RAIL_CLASSES = "px-3";
@@ -14,6 +14,9 @@ export const SIDEBAR_RAIL_CLASSES = "px-3";
 export const SIDEBAR_LEADING_SLOT_CLASSES = "flex size-5 shrink-0 items-center justify-center";
 // Compact nav uses the visible 16px glyph itself as the cell, keeping 6px x/y padding.
 export const SIDEBAR_NAV_LEADING_SLOT_CLASSES = "flex size-4 shrink-0 items-center justify-center";
+export const SIDEBAR_LIST_GAP_CLASSES = "gap-0.5 in-[[data-sidebar-collection-list]]:gap-1";
+export const SIDEBAR_PINNED_TAGS_DIVIDER_CLASSES =
+  "mb-1 border-b border-mu-line pb-1 in-[[data-sidebar-collection-list]]:mb-2 in-[[data-sidebar-collection-list]]:pb-2";
 
 /**
  * Brand controls hug their content, ordinary rows fill the inset rail, and the account
@@ -25,7 +28,7 @@ export const SIDEBAR_NAV_LEADING_SLOT_CLASSES = "flex size-4 shrink-0 items-cent
 export const sidebarSurfaceVariants = cva("min-w-0 items-center", {
   variants: {
     role: {
-      row: "mu-s-md flex h-(--mu-row-height) w-full gap-1 rounded-(--mu-row-radius) px-2 mu-body",
+      row: "mu-s-md flex h-(--mu-row-height) w-full gap-1 rounded-(--mu-row-radius) px-2 mu-body in-[[data-sidebar-collection-list]]:h-8",
       navPill: "mu-s-md relative flex h-(--mu-row-height) shrink-0 rounded-(--mu-row-radius) px-1.5",
       headerBrand: "flex h-9 max-w-full gap-2 rounded-mu-md px-2",
       mobileBrand: "flex h-9 max-w-full gap-1.5 rounded-mu-md px-1",

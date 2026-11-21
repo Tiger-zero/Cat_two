@@ -1,8 +1,9 @@
 import type { ReactNode } from "react";
 import SidebarSectionHeader from "./SidebarSectionHeader";
+import { SIDEBAR_LIST_GAP_CLASSES } from "./sidebar-layout";
 
 export const SIDEBAR_SECTION_STACK_CLASSES = "flex flex-col gap-3";
-export const SIDEBAR_SECTION_CONTENT_CLASSES = "flex flex-col gap-0.5";
+export const SIDEBAR_SECTION_CONTENT_CLASSES = `flex flex-col ${SIDEBAR_LIST_GAP_CLASSES}`;
 
 interface Props {
   label?: ReactNode;

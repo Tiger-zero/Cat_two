@@ -31,6 +31,10 @@
   box-shadow: var(--memos-panel-shadow, none);
 }
 
+@utility memo-list-gap {
+  margin-bottom: var(--memos-list-gap, 0.5rem);
+}
+
 @utility memo-text {
   font-family: var(--memos-note-font);
   font-size: var(--memos-note-font-size);

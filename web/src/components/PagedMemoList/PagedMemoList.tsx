@@ -295,7 +295,13 @@ const PagedMemoList = (props: Props) => {
   const children = (
     <MentionResolutionProvider contents={contents} userNames={userNames}>
       <div ref={layoutMeasureRef} className="w-full">
-        <div className={cn("flex flex-col justify-start w-full mx-auto", useGrid || fullWidth ? "max-w-none" : "max-w-2xl")}>
+        <div
+          className={cn(
+            "flex flex-col justify-start w-full mx-auto",
+            useGrid || fullWidth ? "max-w-none" : "max-w-2xl",
+            !useGrid && "md:[--memos-list-gap:1rem]",
+          )}
+        >
           {useGrid ? (
             <>
               <ColumnGridUntrappedProvider>
@@ -317,7 +323,7 @@ const PagedMemoList = (props: Props) => {
             <>
               {headerContent}
               {leadingContent}
-              <MemoFilters className="mb-2" />
+              <MemoFilters className="memo-list-gap" />
               {initialLoader}
               {initialError}
               {displayMemoList.map((memo) => props.renderer(memo, { compact: effectiveCompact }))}

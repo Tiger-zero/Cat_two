@@ -3,7 +3,7 @@ import { cn } from "@/lib/utils";
 export const MEMO_CARD_CONTENT_CLASSES =
   "relative group flex w-full flex-col items-start justify-start gap-2 px-4 py-3 text-mu-text transition-colors";
 
-export const MEMO_CARD_BASE_CLASSES = `${MEMO_CARD_CONTENT_CLASSES} memos-panel mb-2`;
+export const MEMO_CARD_BASE_CLASSES = `${MEMO_CARD_CONTENT_CLASSES} memos-panel memo-list-gap`;
 
 /**
  * A memo's timestamp as a control, on the card header and in the editor: one line of muted

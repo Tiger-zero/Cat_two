@@ -71,7 +71,7 @@ function MemoFeedMenu({ canExport, selectedCount, exporting, onBeginSelection, o
   ];
 
   return (
-    <div className="mb-3 flex w-full flex-col gap-2">
+    <div className="mb-[var(--memos-list-gap,0.75rem)] flex w-full flex-col gap-2">
       <div className="flex min-w-0 items-center justify-between gap-2">
         <h1 className="min-w-0">
           <Menu.Root>

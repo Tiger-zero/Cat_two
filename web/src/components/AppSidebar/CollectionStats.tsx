@@ -1,12 +1,14 @@
 import type { CollectionSummary } from "@/hooks/useFilteredMemoStats";
+import { cn } from "@/lib/utils";
 import { useTranslate } from "@/utils/i18n";
 
 interface Props {
   summary?: CollectionSummary;
   loading: boolean;
+  desktop: boolean;
 }
 
-const CollectionStats = ({ summary, loading }: Props) => {
+const CollectionStats = ({ summary, loading, desktop }: Props) => {
   const t = useTranslate();
   const metrics = [
     { label: t("common.notes"), value: summary?.memoCount },
@@ -16,9 +18,14 @@ const CollectionStats = ({ summary, loading }: Props) => {
 
   return (
     <section aria-label={t("common.statistics")} aria-busy={loading}>
-      <dl className="grid grid-cols-3 divide-x divide-mu-line/70 rounded-mu-lg border border-mu-line/70 bg-mu-surface py-2.5 dark:bg-mu-canvas">
+      <dl
+        className={cn(
+          "grid grid-cols-3 divide-x divide-mu-line/70 rounded-mu-lg border border-mu-line/70 bg-mu-surface dark:bg-mu-canvas",
+          desktop ? "py-3" : "py-2.5",
+        )}
+      >
         {metrics.map(({ label, value }) => (
-          <div key={label} className="flex min-w-0 flex-col gap-0.5 px-2.5">
+          <div key={label} className={cn("flex min-w-0 flex-col", desktop ? "gap-1 px-3" : "gap-0.5 px-2.5")}>
             <dt className="mu-caption text-mu-text-secondary">{label}</dt>
             <dd className="mu-label text-mu-text tabular-nums wrap-anywhere">{value === undefined ? "—" : value.toLocaleString()}</dd>
           </div>

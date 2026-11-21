@@ -122,7 +122,7 @@ const Home = () => {
               <MemoEditor
                 draft={{ scope: "home", createTime: defaultCreateTime }}
                 autoFocus={claimHomeAutoFocus}
-                className={useGrid ? undefined : "mb-2"}
+                className={useGrid ? undefined : "memo-list-gap md:px-5 md:pt-4"}
                 placeholder={t("editor.any-thoughts")}
                 suggestions={suggestions}
               />

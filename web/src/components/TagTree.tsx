@@ -10,6 +10,7 @@ import {
   sidebarRowStateAttributes,
   sidebarRowStateClasses,
 } from "@/components/AppSidebar/SidebarRow";
+import { SIDEBAR_LIST_GAP_CLASSES, SIDEBAR_PINNED_TAGS_DIVIDER_CLASSES } from "@/components/AppSidebar/sidebar-layout";
 import { useLocalStorage, useOverflowTitle } from "@/hooks";
 import { cn } from "@/lib/utils";
 import { useTranslate } from "@/utils/i18n";
@@ -186,7 +187,10 @@ const TagItem = ({ tag, depth, activeTag, expanded, onTagClick, onToggle, pinned
       </div>
 
       {open && (
-        <div className="relative mt-0.5 flex w-full min-w-0 flex-col gap-0.5" role="group">
+        <div
+          className={cn("relative mt-0.5 flex w-full min-w-0 flex-col in-[[data-sidebar-collection-list]]:mt-1", SIDEBAR_LIST_GAP_CLASSES)}
+          role="group"
+        >
           <span
             aria-hidden="true"
             className="pointer-events-none absolute inset-y-1 w-px bg-mu-line"
@@ -248,8 +252,9 @@ const TagTree = ({ tagAmounts, activeTag, scope, onTagClick, pinnedPaths = NO_PI
     nodes.length > 0 && (
       <div
         className={cn(
-          "relative flex h-auto w-full flex-col items-stretch gap-0.5",
-          isPinned && unpinned.length > 0 && "mb-1 border-b border-mu-line pb-1",
+          "relative flex h-auto w-full flex-col items-stretch",
+          SIDEBAR_LIST_GAP_CLASSES,
+          isPinned && unpinned.length > 0 && SIDEBAR_PINNED_TAGS_DIVIDER_CLASSES,
         )}
         role="tree"
         aria-label={label}

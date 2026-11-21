@@ -314,6 +314,9 @@ describe("App sidebar", () => {
     const calendar = screen.getByText("Calendar");
     const views = screen.getByText("common.views");
     const statistics = screen.getByRole("region", { name: "common.statistics" });
+    expect(statistics.parentElement).toHaveClass("gap-6");
+    expect(views.closest("[data-sidebar-collection-list]")).toContainElement(screen.getByText("Tags"));
+    expect(calendar.closest("[data-sidebar-collection-list]")).toBeNull();
     const counts = within(statistics).getAllByRole("definition");
     expect(counts.map((count) => count.textContent)).toEqual(["3", "2", "1"]);
     expect(statistics.compareDocumentPosition(calendar) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
@@ -439,13 +442,15 @@ describe("App sidebar", () => {
   it("exposes Compose in the mobile navigation drawer", () => {
     sidebarState.mobileOpen = true;
     render(
-      <MemoryRouter initialEntries={["/about"]}>
+      <MemoryRouter initialEntries={["/"]}>
         <MobileAppSidebar />
       </MemoryRouter>,
     );
 
     expect(screen.getByRole("button", { name: "common.search" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /setting.preference.theme-(dark|light)/ })).not.toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "common.statistics" }).parentElement).toHaveClass("gap-3");
+    expect(screen.getByText("Tags").closest("[data-sidebar-collection-list]")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "editor.new-memo" }));
     expect(globalEditorState.openEditor).toHaveBeenCalledOnce();
   });

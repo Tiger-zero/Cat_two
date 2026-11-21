@@ -16,6 +16,7 @@ import {
   sidebarRowStateClasses,
 } from "./SidebarRow";
 import SidebarSection from "./SidebarSection";
+import { SIDEBAR_LIST_GAP_CLASSES, SIDEBAR_PINNED_TAGS_DIVIDER_CLASSES } from "./sidebar-layout";
 import TagRenameDialog from "./TagRenameDialog";
 
 interface Props {
@@ -195,7 +196,7 @@ const TagsSectionForAccount = ({ tagCount, onSelect, scope, account }: Props & {
         <>
           {visiblePins.length > 0 && (
             <div
-              className={cn("flex flex-col gap-0.5", flatTags.length > 0 && "mb-1 border-b border-mu-line pb-1")}
+              className={cn("flex flex-col", SIDEBAR_LIST_GAP_CLASSES, flatTags.length > 0 && SIDEBAR_PINNED_TAGS_DIVIDER_CLASSES)}
               role="group"
               aria-label={t("setting.tags.pinned")}
             >

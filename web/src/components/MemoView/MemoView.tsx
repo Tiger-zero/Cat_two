@@ -203,7 +203,7 @@ const MemoView = forwardRef<MemoViewHandle, MemoViewProps>((props, ref) => {
   );
 
   const memoDisplay = showCommentPreview ? (
-    <div className="memos-panel mb-2 w-full">
+    <div className="memos-panel memo-list-gap w-full">
       {article}
       <MemoCommentListView />
     </div>

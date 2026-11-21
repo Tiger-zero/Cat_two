@@ -29,7 +29,7 @@ import { User_Role } from "@/types/proto/api/user_service_pb";
 import { useTranslate } from "@/utils/i18n";
 import AccountMenu from "./AccountMenu";
 import CollectionStats from "./CollectionStats";
-import { getSidebarRouteKind } from "./routes";
+import { getSidebarRouteKind, type SidebarRouteKind } from "./routes";
 import { SIDEBAR_ROW_CLASSES, SidebarRowIconSlot, sidebarRowStateClasses } from "./SidebarRow";
 import SidebarSection, { SIDEBAR_SECTION_STACK_CLASSES } from "./SidebarSection";
 import {
@@ -56,7 +56,7 @@ const NewMemoAction = ({ onClick }: { onClick: () => void }) => {
   );
 };
 
-const CollectionSidebarContent = ({ context }: { context: "home" | "archived" }) => {
+const CollectionSidebarContent = ({ context, desktop }: { context: "home" | "archived"; desktop: boolean }) => {
   const t = useTranslate();
   const currentUser = useCurrentUser();
   const md = useMediaQuery("md");
@@ -70,14 +70,15 @@ const CollectionSidebarContent = ({ context }: { context: "home" | "archived" })
   });
 
   return (
-    <div className={SIDEBAR_SECTION_STACK_CLASSES}>
-      {context === "home" && currentUser && <CollectionStats summary={summary} loading={loading} />}
+    <div className={cn(SIDEBAR_SECTION_STACK_CLASSES, desktop && "gap-6")}>
+      {context === "home" && currentUser && <CollectionStats summary={summary} loading={loading} desktop={desktop} />}
       <SidebarSection ariaLabel={t("common.calendar")}>
         <StatisticsView statisticsData={statistics} onDateSelect={() => setMobileOpen(false)} />
       </SidebarSection>
-      {/* Every collection route narrows the same way: views (yours, so signed-in only), days, tags. */}
-      {currentUser && <ViewsSection />}
-      <TagsSection tagCount={tags} scope={`${currentUser?.name ?? "anonymous"}:${context}`} onSelect={() => setMobileOpen(false)} />
+      <div className="contents" data-sidebar-collection-list={desktop || undefined}>
+        {currentUser && <ViewsSection />}
+        <TagsSection tagCount={tags} scope={`${currentUser?.name ?? "anonymous"}:${context}`} onSelect={() => setMobileOpen(false)} />
+      </div>
     </div>
   );
 };
@@ -136,11 +137,9 @@ const MemoDetailSidebarContent = () => {
   );
 };
 
-const RouteSidebarContent = () => {
-  const location = useLocation();
-  const kind = getSidebarRouteKind(location.pathname);
+const RouteSidebarContent = ({ kind, desktopCollection }: { kind: SidebarRouteKind; desktopCollection: boolean }) => {
   if (kind === "home" || kind === "archived") {
-    return <CollectionSidebarContent context={kind} />;
+    return <CollectionSidebarContent context={kind} desktop={desktopCollection} />;
   }
   if (kind === "views") return <ViewsSection manageActive />;
   if (kind === "settings") return <SettingsSidebarContent />;
@@ -247,10 +246,12 @@ const GlobalNavigation = () => {
   );
 };
 
-const AppSidebar = ({ className, showThemeToggle = true }: { className?: string; showThemeToggle?: boolean }) => {
+const AppSidebar = ({ className, mobile = false }: { className?: string; mobile?: boolean }) => {
   const t = useTranslate();
   const currentUser = useCurrentUser();
   const { pathname } = useLocation();
+  const routeKind = getSidebarRouteKind(pathname);
+  const desktopCollection = !mobile && (routeKind === "home" || routeKind === "archived");
   const { setMobileOpen } = useAppSidebar();
   const { canOpen: canCompose, openEditor } = useGlobalMemoEditor();
   return (
@@ -260,14 +261,20 @@ const AppSidebar = ({ className, showThemeToggle = true }: { className?: string;
       <div data-sidebar-header className={cn("flex h-13 shrink-0 items-center justify-between gap-2", SIDEBAR_RAIL_CLASSES)}>
         <AccountMenu className="min-w-0" size="header" />
         <div className="flex shrink-0 items-center gap-1">
-          {showThemeToggle && <ThemeToggle />}
+          {!mobile && <ThemeToggle />}
           {canCompose && <NewMemoAction onClick={openEditor} />}
         </div>
       </div>
       <GlobalNavigation />
-      <div className="mx-3 mt-2 border-t border-mu-line/70" />
-      <div className={cn("min-h-0 flex-1 overflow-y-auto overflow-x-hidden pt-2 pb-3 [scrollbar-width:thin]", SIDEBAR_RAIL_CLASSES)}>
-        <RouteSidebarContent />
+      <div className={cn("mx-3 border-t border-mu-line/70", desktopCollection ? "mt-3" : "mt-2")} />
+      <div
+        className={cn(
+          "min-h-0 flex-1 overflow-y-auto overflow-x-hidden pb-3 [scrollbar-width:thin]",
+          desktopCollection ? "pt-3" : "pt-2",
+          SIDEBAR_RAIL_CLASSES,
+        )}
+      >
+        <RouteSidebarContent kind={routeKind} desktopCollection={desktopCollection} />
       </div>
       {currentUser && (
         <div className={cn("shrink-0 border-t border-mu-line/70 py-2", SIDEBAR_RAIL_CLASSES)}>
@@ -343,7 +350,7 @@ export const MobileAppSidebar = () => {
     <Drawer.Root side="start" open={mobileOpen} onOpenChange={setMobileOpen} onOpenChangeComplete={completeMobileClose}>
       <Drawer.Popup variant="bare" closeLabel={t("common.close")} className="w-72 max-w-[calc(100%-2rem)]">
         <Drawer.Title className="mu-visually-hidden">{t("common.navigation")}</Drawer.Title>
-        <AppSidebar showThemeToggle={false} />
+        <AppSidebar mobile />
       </Drawer.Popup>
     </Drawer.Root>
   );
