@@ -1,5 +1,8 @@
 # Design Documents
 
+This archive preserves design records inherited from Memos and their historical status labels.
+The [Cat_two development guide](../../SKILL.md) describes current development practices.
+
 A design document records a decision and the reasoning behind it. Source code, tests, and package `README.md` or `doc.go` files describe current
 behavior; a design document does not have to.
 
@@ -28,3 +31,7 @@ Implemented and frozen:
 - [Multi-Spaces](multi-spaces.md)
 - [Unique email](unique-email.md)
 - [User usage limits](user-usage-limits.md)
+
+## Historical links
+
+- The Unique Email design cites `signup-abuse-controls.md` as “Signup Abuse Controls.” The file is absent from the recorded repository history. The archived API Abuse Controls design describes the [signup policy seam](api-abuse-controls.md#signup-policy-seam).

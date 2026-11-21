@@ -4,8 +4,8 @@ Status: Implemented; awaiting a tagged release.
 
 Date: 2026-11-16
 
-Related: [PR #6571](https://github.com/usememos/memos/pull/6571), [store tests](../../store/test/README.md),
-[migration procedure](../../store/migration/README.md).
+Related: [PR #6571](https://github.com/usememos/memos/pull/6571), [store tests](../../../../../store/test/README.md),
+[migration procedure](../../../../../store/migration/README.md).
 
 ## Decision and scope
 
@@ -235,7 +235,7 @@ so this also adds MariaDB to the release prerequisite. This is an intended chang
 | `.github/workflows/backend-tests.yml` | Update target comments and migration path coverage |
 | `.github/workflows/upgrade-smoke.yml` | Add the MariaDB target and relevant trigger paths |
 | `store/test/README.md`, `AGENTS.md` | Document commands, tested scope, and the shared-SQL preference |
-| `store/migration/README.md`, `docs/design/memo-attachment-filters.md` | Document the simpler index migration contract |
+| `store/migration/README.md`, [`memo-attachment-filters.md`](memo-attachment-filters.md) | Document the simpler index migration contract |
 
 `store/test/store.go` and `migrator_upgrade_test.go` should keep their existing driver dispatch. Update their comments only if
 needed. The existing attachment index migration is simplified on all three drivers. It creates the same indexes, so there is no

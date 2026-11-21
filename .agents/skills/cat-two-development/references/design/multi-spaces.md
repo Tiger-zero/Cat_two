@@ -4,7 +4,7 @@ Status: Implemented
 
 Date: 2026-08-23
 
-Existing domain language: [Memos context](../../CONTEXT.md)
+Existing domain language: [Memos context](../../../../../CONTEXT.md)
 
 ## Summary
 
@@ -142,7 +142,7 @@ General account erasure remains deferred. As a fail-closed guard, user hard dele
 
 Historical upgrade scripts are now provided by the v0.31.0 release, with the
 current binary retaining the fresh-install schemas. See the
-[database migration baseline](../../store/migration/README.md).
+[database migration baseline](../../../../../store/migration/README.md).
 
 ```text
 space(id, uid, title, description)

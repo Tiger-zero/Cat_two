@@ -26,10 +26,10 @@ Cat_two is a self-hosted personal note-taking app based on Fumos and Memos.
 ## Documentation
 
 - ADRs and their companion glossary have been retired. Do not recreate them unless explicitly requested.
-- Design documents in `docs/design/` stay editable until the feature ships in a tagged release; keep a merged-but-unreleased design in step
-  with its implementation. After release the body is frozen: record later design changes in a dated `## Amendments` section at the end, never by
-  rewriting the body. See `docs/design/README.md`. Verify current behavior in source code and tests, not in design documents.
-- Keep the Cat_two [README](README.md) and [feature guide](docs/cat-two-guide.md) aligned with the app users deploy.
+- Keep active design documents in step with their implementation until a tagged release ships the feature. After release, freeze the body and
+  record later design changes in a dated `## Amendments` section. See the [design archive](.agents/skills/cat-two-development/references/design/README.md).
+  Verify current behavior in source code and tests.
+- Keep the Cat_two [deployment README](README.md) and [feature guide](.agents/skills/cat-two-development/references/product-guide.md) current.
 - Keep contributor guidance in this file and package-local `README.md` or `doc.go` files current when relevant code changes.
 
 ## Commands

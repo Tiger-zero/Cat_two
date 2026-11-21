@@ -41,7 +41,7 @@ const (
 	challengeTokenMetadataKey = "challenge-token"
 )
 
-// newRateLimitError builds the refusal described in docs/design/api-abuse-controls.md:
+// newRateLimitError builds the refusal described in .agents/skills/cat-two-development/references/design/api-abuse-controls.md:
 // RESOURCE_EXHAUSTED with an ErrorInfo naming the reason and scope and a RetryInfo
 // carrying the delay, so an AIP-194 client knows this recovers in seconds.
 func newRateLimitError(scope ratelimit.Scope, decision ratelimit.Decision) error {

@@ -2,7 +2,7 @@
 
 Cat_two 是面向个人使用的自托管笔记应用。通过网页记录 Markdown 笔记和附件，按日期、标签或关键词找回内容。笔记仅限创建者登录后访问。默认使用 Docker Compose 和 SQLite，可部署在 NAS 上。界面默认是简体中文，网页时间和日历按上海时区显示。
 
-[部署服务端](#部署服务端) · [在 NAS 上部署](#在-nas-上部署) · [备份和升级](#备份和升级) · [重置两步验证](#重置两步验证) · [连接 Codex](#连接-codex) · [功能与实现](docs/cat-two-guide.md)
+[部署服务端](#部署服务端) · [在 NAS 上部署](#在-nas-上部署) · [备份和升级](#备份和升级) · [重置两步验证](#重置两步验证) · [连接 Codex](#连接-codex) · [功能与实现](.agents/skills/cat-two-development/references/product-guide.md)
 
 ## 部署服务端
 
@@ -91,7 +91,7 @@ docker compose pull
 docker compose up -d
 ```
 
-若通过 `CAT_TWO_IMAGE` 固定了镜像标签，拉取前请把标签改为希望升级到的版本。想迁移笔记时，可在「设置 → 导出和导入」导出 ZIP。 [数据备份与恢复](docs/cat-two-guide.md#数据备份和升级)
+若通过 `CAT_TWO_IMAGE` 固定了镜像标签，拉取前请把标签改为希望升级到的版本。想迁移笔记时，可在「设置 → 导出和导入」导出 ZIP。 [数据备份与恢复](.agents/skills/cat-two-development/references/product-guide.md#数据备份和升级)
 
 ## 构建和发布镜像
 

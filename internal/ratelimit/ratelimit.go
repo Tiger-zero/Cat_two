@@ -14,7 +14,7 @@ import (
 // Scope names one counted activity. Scopes are the rows of the policy table.
 type Scope string
 
-// Scopes shipped by the open-source binary. See docs/design/api-abuse-controls.md.
+// Scopes shipped by the open-source binary. See .agents/skills/cat-two-development/references/design/api-abuse-controls.md.
 const (
 	// ScopeAnonymous is the catch-all budget for requests without an identity, per client address.
 	ScopeAnonymous Scope = "anonymous"

@@ -66,7 +66,7 @@ The draft's attachments take the saved memo's shape. Images, videos and drawings
 ### Drawings
 
 The contract and acceptance cases are in
-[`docs/design/drawing-annotation-and-recovery.md`](../../../../docs/design/drawing-annotation-and-recovery.md).
+[the drawing annotation and recovery design](../../../../.agents/skills/cat-two-development/references/design/drawing-annotation-and-recovery.md).
 Canvas is pinned to `26.11.3`; its editable PNG remains an ordinary image outside the drawing UI.
 
 The insert menu starts a drawing. Ordinary local and instance-hosted images offer **Markup**; editable PNGs offer

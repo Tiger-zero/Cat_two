@@ -4,7 +4,7 @@ Status: Implemented
 
 Date: 2026-10-11, revised 2026-10-14
 
-Existing domain language: [Memos context](../../CONTEXT.md)
+Existing domain language: [Memos context](../../../../../CONTEXT.md)
 
 Related: [API Abuse Controls Design](api-abuse-controls.md)
 

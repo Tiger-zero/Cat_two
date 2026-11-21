@@ -4,7 +4,7 @@ Status: Implemented
 
 Date: 2026-10-22
 
-Existing domain language: [Memos context](../../CONTEXT.md)
+Existing domain language: [Memos context](../../../../../CONTEXT.md)
 
 Related: [Multi-Spaces](multi-spaces.md) for the memo list query shape, `filter/README.md` and `filter/MAINTENANCE.md` for the filter engine.
 
@@ -262,7 +262,7 @@ MySQL use `(memo_id, type)` to cover both existence predicates. PostgreSQL uses
 
 Index creation runs in the existing startup migration. Upgrades require stopping
 all instances and other writers, migrating once, then restarting, as described in
-[the migration procedure](../../store/migration/README.md#coordinating-an-upgrade).
+[the migration procedure](../../../../../store/migration/README.md#coordinating-an-upgrade).
 The migrations reject conflicting index definitions; MySQL also accepts a
 completed index when retrying after an implicit DDL commit.
 

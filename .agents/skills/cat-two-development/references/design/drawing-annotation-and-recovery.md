@@ -4,7 +4,7 @@ Status: Implemented; awaiting a tagged release.
 
 Date: 2026-11-15
 
-Related: [MemoEditor](../../web/src/components/MemoEditor/README.md),
+Related: [MemoEditor](../../../../../web/src/components/MemoEditor/README.md),
 [Canvas product definition](https://github.com/usememos/canvas/blob/main/docs/product-definition.md),
 [Canvas checkpoint contract](https://github.com/usememos/canvas/blob/main/docs/recovery-checkpoints.md).
 

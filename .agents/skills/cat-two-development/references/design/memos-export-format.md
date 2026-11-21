@@ -4,7 +4,7 @@ Status: Implemented
 
 Date: 2026-09-16
 
-Existing domain language: [Memos context](../../CONTEXT.md)
+Existing domain language: [Memos context](../../../../../CONTEXT.md)
 
 Related: [Multi-Spaces Design](multi-spaces.md)
 
@@ -267,7 +267,7 @@ A change is a minor bump when it only adds optional members, adds entries, adds 
 
 Within a major version a member is never removed. A member that stops being useful is marked deprecated in the schema and writers keep emitting it.
 
-Each version has its own schema directory, `docs/design/memo-export/<MAJOR.MINOR>/`, and a golden archive under test data. CI validates every golden archive against its schema and imports every golden archive ever published, so a reader regression against an older version fails the build.
+Each version has its own schema directory, `memo-export/<MAJOR.MINOR>/`, and a golden archive under test data. CI validates every golden archive against its schema and imports every golden archive ever published, so a reader regression against an older version fails the build.
 
 ### Security invariants
 

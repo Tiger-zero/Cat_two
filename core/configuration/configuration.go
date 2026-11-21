@@ -7,7 +7,7 @@
 // memos.api.Configuration, checks the schema rules that need no database,
 // merges the files into one desired state, and runs each resource's own rules
 // from core/identityprovider and core/instancesetting. See
-// docs/design/declarative-configuration.md.
+// .agents/skills/cat-two-development/references/design/declarative-configuration.md.
 package configuration
 
 import (
