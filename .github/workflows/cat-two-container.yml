@@ -19,6 +19,7 @@ on:
       - 'scripts/entrypoint.sh'
       - 'scripts/release_smoke_test.sh'
       - 'scripts/release_version.sh'
+      - 'scripts/cat_two_docker_release.py'
       - '.github/actions/setup-web/**'
       - '.github/workflows/cat-two-container.yml'
   workflow_dispatch:
@@ -120,8 +121,10 @@ jobs:
         with:
           images: ${{ inputs.registry == 'ghcr' && format('ghcr.io/{0}', github.repository) || 'docker.io/tiger2896/cat_two' }}
           tags: |
-            type=raw,value=latest
+            type=raw,value=latest,enable=${{ inputs.registry == 'ghcr' }}
             type=sha,format=long
+          labels: |
+            io.github.tiger-zero.cat-two.release-run=${{ github.run_number }}
 
       - name: Sign in to Docker Hub
         if: inputs.registry != 'ghcr'
@@ -139,6 +142,7 @@ jobs:
           password: ${{ github.token }}
 
       - name: Publish amd64 and arm64 images
+        id: image
         uses: docker/build-push-action@v7
         with:
           context: .
@@ -151,3 +155,9 @@ jobs:
             VERSION=${{ needs.verify.outputs.version }}
             COMMIT=${{ github.sha }}
           cache-from: type=gha,scope=cat-two-container
+
+      - name: Publish the numbered Docker Hub release and latest
+        if: inputs.registry != 'ghcr'
+        env:
+          IMAGE_DIGEST: ${{ steps.image.outputs.digest }}
+        run: python3 scripts/cat_two_docker_release.py "$IMAGE_DIGEST" "$GITHUB_RUN_NUMBER"

@@ -98,6 +98,6 @@ pnpm dev
 | 导入和导出 | 用带图片、标签、笔记引用和空间的测试笔记导出 ZIP，再在独立实例里试导入。确认首次导入、跳过、覆盖和创建副本的结果，检查重复导入后的图片显示。 |
 | Compose 和镜像 | 用 `docker compose config --quiet` 和 `docker compose -f compose.nas.yaml config --quiet` 检查配置。使用镜像时验证 `/healthz`，再重建容器确认数据卷仍可读写。 |
 
-`pnpm release` 将网页构建到 `server/frontend/dist`，Go 二进制将其嵌入。Docker 的构建和发布由 [Cat_two Container 工作流](../.github/workflows/cat-two-container.yml)完成。向 `main` 推送会触发验证，使用工作流的手动触发或 `[publish dockerhub]` 标记可发布 AMD64 和 ARM64 镜像。发布后在 Docker Hub 核对 `latest` 和对应的 `sha-<完整提交 SHA>` 标签，再更新 NAS。
+`pnpm release` 将网页构建到 `server/frontend/dist`，Go 二进制将其嵌入。Docker 的构建和发布由 [Cat_two Container 工作流](../.github/workflows/cat-two-container.yml)完成。向 `main` 推送会触发验证，使用工作流的手动触发或 `[publish dockerhub]` 标记可发布 AMD64 和 ARM64 镜像。Docker Hub 编号从 `0.01` 起，每次发布递增 `0.01`。发布后核对编号、`latest` 和 `sha-<完整提交 SHA>` 是否指向同一镜像，再更新 NAS。[编号逻辑](../scripts/cat_two_docker_release.py)
 
 改变用户可见行为时，同步更新功能表和对应的核对方式。

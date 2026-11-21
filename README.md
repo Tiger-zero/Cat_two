@@ -15,7 +15,9 @@ docker compose logs -f cat-two
 
 在浏览器打开服务器的 5230 端口，按页面提示创建管理员账号。SQLite 数据和本地附件保存在 Compose 管理的 `cat_two_data` 卷中，容器内的挂载路径为 `/var/opt/memos`。升级前请备份这个卷。镜像更新后可以运行 `docker compose pull` 和 `docker compose up -d`。镜像和 Compose 默认使用 `Asia/Shanghai` 时区，可用 `TZ` 覆盖。
 
-在 GitHub Actions 中打开 **Cat_two Container**，选择 `main` 和 `dockerhub` 并运行工作流。它使用仓库的 `DOCKERHUB_USERNAME` 和 `DOCKERHUB_TOKEN` Secrets 登录 Docker Hub。通过启动验证后，工作流会将 AMD64 和 ARM64 镜像发布到 `docker.io/tiger2896/cat_two`，标签为 `latest` 和 `sha-<完整提交 SHA>`。也可在推送到 `main` 的最新提交消息中加上 `[publish dockerhub]` 来触发发布。手动选择 `ghcr` 时，目标为 `ghcr.io/tiger-zero/cat_two`。
+在 GitHub Actions 中打开 **Cat_two Container**，选择 `main` 和 `dockerhub` 并运行工作流。它使用仓库的 `DOCKERHUB_USERNAME` 和 `DOCKERHUB_TOKEN` Secrets 登录 Docker Hub。通过启动验证后，工作流会将 AMD64 和 ARM64 镜像发布到 `docker.io/tiger2896/cat_two`，并提供 `sha-<完整提交 SHA>` 标签。Docker Hub 的发布编号从 `0.01` 开始，每次发布递增 `0.01`，例如 `0.09` 之后是 `0.10`。`latest` 指向同一次编号发布的镜像。需要固定版本时，在 Compose 环境中设置 `CAT_TWO_IMAGE=docker.io/tiger2896/cat_two:0.01`。
+
+也可在推送到 `main` 的最新提交消息中加上 `[publish dockerhub]` 来触发发布。手动选择 `ghcr` 时，目标为 `ghcr.io/tiger-zero/cat_two`。
 
 也可以在单独的干净检出目录里构建本地镜像。前端发布命令会生成嵌入 Go 程序的静态文件。
 
