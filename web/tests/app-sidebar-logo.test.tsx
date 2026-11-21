@@ -311,11 +311,18 @@ describe("App sidebar", () => {
       </MemoryRouter>,
     );
 
+    const sidebar = screen.getByRole("complementary");
     const calendar = screen.getByText("Calendar");
     const views = screen.getByText("common.views");
+    const tags = screen.getByText("Tags");
     const statistics = screen.getByRole("region", { name: "common.statistics" });
+    const trash = screen.getByRole("link", { name: "trash.title" });
+    expect(sidebar).toHaveClass("overflow-y-auto", "overscroll-y-contain");
+    expect(sidebar).toContainElement(trash);
+    expect(tags.compareDocumentPosition(trash) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(trash.parentElement).not.toHaveClass("border-t");
     expect(statistics.parentElement).toHaveClass("gap-6");
-    expect(views.closest("[data-sidebar-collection-list]")).toContainElement(screen.getByText("Tags"));
+    expect(views.closest("[data-sidebar-collection-list]")).toContainElement(tags);
     expect(calendar.closest("[data-sidebar-collection-list]")).toBeNull();
     const counts = within(statistics).getAllByRole("definition");
     expect(counts.map((count) => count.textContent)).toEqual(["3", "2", "1"]);

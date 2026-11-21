@@ -6,10 +6,9 @@ import { useLocalStorage, useOverflowTitle } from "@/hooks";
 import useCurrentUser from "@/hooks/useCurrentUser";
 import { cn } from "@/lib/utils";
 import { useTranslate } from "@/utils/i18n";
-import TagTree, { tagRowAriaLabel } from "../TagTree";
+import TagTree, { TAG_ROW_COUNT_CLASSES, tagRowAriaLabel } from "../TagTree";
 import {
   SIDEBAR_ROW_BOX_CLASSES,
-  SIDEBAR_ROW_COUNT_RAIL_CLASSES,
   SIDEBAR_ROW_LABEL_CLASSES,
   SidebarRowIconSlot,
   sidebarRowStateAttributes,
@@ -69,7 +68,7 @@ const FlatTagRow = ({ tag, amount, active, ariaLabel, onClick, pinned, actions }
       >
         <SidebarRowIconSlot icon={pinned ? PinIcon : HashIcon} />
         <TagPath ref={ref} tag={tag} />
-        <span className={SIDEBAR_ROW_COUNT_RAIL_CLASSES}>{amount}</span>
+        <span className={TAG_ROW_COUNT_CLASSES}>{amount}</span>
       </button>
       {actions}
     </div>
@@ -157,6 +156,7 @@ const TagsSectionForAccount = ({ tagCount, onSelect, scope, account }: Props & {
 
   return (
     <SidebarSection
+      className="group/tags"
       label={t("common.tags")}
       action={
         <Menu.Root modal={false}>

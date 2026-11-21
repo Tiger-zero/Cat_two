@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { cn } from "@/lib/utils";
 import SidebarSectionHeader from "./SidebarSectionHeader";
 import { SIDEBAR_LIST_GAP_CLASSES } from "./sidebar-layout";
 
@@ -10,10 +11,11 @@ interface Props {
   ariaLabel?: string;
   children: ReactNode;
   action?: ReactNode;
+  className?: string;
 }
 
-const SidebarSection = ({ label, ariaLabel, children, action }: Props) => (
-  <section className="w-full" aria-label={ariaLabel}>
+const SidebarSection = ({ label, ariaLabel, children, action, className }: Props) => (
+  <section className={cn("w-full", className)} aria-label={ariaLabel}>
     {label !== undefined && <SidebarSectionHeader action={action}>{label}</SidebarSectionHeader>}
     {/* Flex gap keeps popup focus guards from affecting the visible row rhythm. */}
     <div className={SIDEBAR_SECTION_CONTENT_CLASSES}>{children}</div>

@@ -49,6 +49,9 @@ const EMPTY_EXPANSION: TagTreeExpansion = { expanded: [] };
 export const tagRowAriaLabel = (t: ReturnType<typeof useTranslate>, tag: string, amount?: number) =>
   amount === undefined ? `#${tag}` : `#${tag}, ${t("setting.tags.used-count", { count: amount })}`;
 
+// Keep count widths stable while revealing every row from the same desktop tag section.
+export const TAG_ROW_COUNT_CLASSES = `${SIDEBAR_ROW_COUNT_RAIL_CLASSES} in-[[data-sidebar-collection-list]]:opacity-0 group-hover/tags:opacity-100 group-has-[:focus-visible]/tags:opacity-100`;
+
 export const buildTagTree = (tagAmounts: [tag: string, amount: number][]) => {
   const root: TagTreeNode = {
     key: "",
@@ -181,7 +184,7 @@ const TagItem = ({ tag, depth, activeTag, expanded, onTagClick, onToggle, pinned
           <span ref={labelRef} className="min-w-0 flex-1 truncate">
             {pinned ? tag.text : tag.key}
           </span>
-          <span className={SIDEBAR_ROW_COUNT_RAIL_CLASSES}>{tag.amount}</span>
+          <span className={TAG_ROW_COUNT_CLASSES}>{tag.amount}</span>
         </button>
         {renderActions?.(tag.text)}
       </div>

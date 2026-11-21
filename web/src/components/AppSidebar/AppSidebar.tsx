@@ -223,7 +223,7 @@ const GlobalNavigation = () => {
   return (
     <Tooltip.Provider>
       <nav
-        className={cn("@container mu-s-md flex h-(--mu-row-height) items-center gap-0.5", SIDEBAR_RAIL_CLASSES)}
+        className={cn("@container mu-s-md flex h-(--mu-row-height) shrink-0 items-center gap-0.5", SIDEBAR_RAIL_CLASSES)}
         aria-label={t("common.primary-navigation")}
       >
         <div
@@ -256,7 +256,11 @@ const AppSidebar = ({ className, mobile = false }: { className?: string; mobile?
   const { canOpen: canCompose, openEditor } = useGlobalMemoEditor();
   return (
     <aside
-      className={cn("memos-sidebar mu-compact flex h-full w-full select-none flex-col bg-mu-canvas text-mu-text-secondary", className)}
+      className={cn(
+        "memos-sidebar mu-compact flex h-full w-full select-none flex-col bg-mu-canvas text-mu-text-secondary",
+        !mobile && "overflow-x-hidden overflow-y-auto overscroll-y-contain border-e-4 border-transparent [scrollbar-gutter:stable]",
+        className,
+      )}
     >
       <div data-sidebar-header className={cn("flex h-13 shrink-0 items-center justify-between gap-2", SIDEBAR_RAIL_CLASSES)}>
         <AccountMenu className="min-w-0" size="header" />
@@ -269,7 +273,7 @@ const AppSidebar = ({ className, mobile = false }: { className?: string; mobile?
       <div className={cn("mx-3 border-t border-mu-line/70", desktopCollection ? "mt-3" : "mt-2")} />
       <div
         className={cn(
-          "min-h-0 flex-1 overflow-y-auto overflow-x-hidden pb-3 [scrollbar-width:thin]",
+          mobile ? "min-h-0 flex-1 overflow-y-auto overflow-x-hidden pb-3" : "shrink-0",
           desktopCollection ? "pt-3" : "pt-2",
           SIDEBAR_RAIL_CLASSES,
         )}
@@ -277,12 +281,12 @@ const AppSidebar = ({ className, mobile = false }: { className?: string; mobile?
         <RouteSidebarContent kind={routeKind} desktopCollection={desktopCollection} />
       </div>
       {currentUser && (
-        <div className={cn("shrink-0 border-t border-mu-line/70 py-2", SIDEBAR_RAIL_CLASSES)}>
+        <div className={cn("shrink-0", mobile ? "border-t border-mu-line/70 py-2" : "pt-1 pb-4", SIDEBAR_RAIL_CLASSES)}>
           <Link
             to={ROUTES.TRASH}
             onClick={() => setMobileOpen(false)}
             aria-current={pathname === ROUTES.TRASH ? "page" : undefined}
-            className={cn(SIDEBAR_ROW_CLASSES, sidebarRowStateClasses(pathname === ROUTES.TRASH ? "current" : "idle"))}
+            className={cn(SIDEBAR_ROW_CLASSES, !mobile && "h-8", sidebarRowStateClasses(pathname === ROUTES.TRASH ? "current" : "idle"))}
           >
             <SidebarRowIconSlot icon={Trash2Icon} />
             <span className="truncate">{t("trash.title")}</span>
