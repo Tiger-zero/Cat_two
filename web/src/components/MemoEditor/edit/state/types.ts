@@ -2,7 +2,7 @@ import type { Attachment } from "@/types/proto/api/attachment_service_pb";
 import type { MemoRelation } from "@/types/proto/api/memo_service_pb";
 import type { LocalFile } from "../types/attachment";
 
-export type LoadingKey = "saving" | "uploading" | "loading" | "transcribing";
+export type LoadingKey = "saving" | "uploading" | "loading";
 
 export interface EditorState {
   content: string;
@@ -19,7 +19,6 @@ export interface EditorState {
       saving: boolean;
       uploading: boolean;
       loading: boolean;
-      transcribing: boolean;
     };
   };
   timestamps: {
@@ -71,7 +70,6 @@ const defaultState: EditorState = {
       saving: false,
       uploading: false,
       loading: false,
-      transcribing: false,
     },
   },
   timestamps: {

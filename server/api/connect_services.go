@@ -729,16 +729,6 @@ func (s *ConnectServiceHandler) BatchDeleteAttachments(ctx context.Context, req 
 	return connect.NewResponse(resp), nil
 }
 
-// AIService
-
-func (s *ConnectServiceHandler) Transcribe(ctx context.Context, req *connect.Request[apipb.TranscribeRequest]) (*connect.Response[apipb.TranscribeResponse], error) {
-	resp, err := s.APIService.Transcribe(ctx, req.Msg)
-	if err != nil {
-		return nil, convertGRPCError(err)
-	}
-	return connect.NewResponse(resp), nil
-}
-
 // IdentityProviderService
 
 func (s *ConnectServiceHandler) ListIdentityProviders(ctx context.Context, req *connect.Request[apipb.ListIdentityProvidersRequest]) (*connect.Response[apipb.ListIdentityProvidersResponse], error) {

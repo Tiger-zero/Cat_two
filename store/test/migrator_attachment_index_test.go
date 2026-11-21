@@ -20,6 +20,23 @@ func attachmentLookupIndex(driver string) string {
 	return "idx_attachment_memo_id_type"
 }
 
+func removeMemoTrashSchema(ctx context.Context, t *testing.T, ts *store.Store, driver string) {
+	t.Helper()
+	db := ts.GetDriver().GetDB()
+	for _, index := range []string{"idx_memo_trash_expiry", "idx_memo_trash_creator", "idx_memo_trash_root"} {
+		drop := "DROP INDEX " + index
+		if driver == "mysql" {
+			drop += " ON memo"
+		}
+		_, err := db.ExecContext(ctx, drop)
+		require.NoError(t, err)
+	}
+	for _, column := range []string{"trash_root_id", "deleted_ts"} {
+		_, err := db.ExecContext(ctx, "ALTER TABLE memo DROP COLUMN "+column)
+		require.NoError(t, err)
+	}
+}
+
 // TestMigrationAttachmentIndex preserves attachment data through the index upgrade and a restart.
 func TestMigrationAttachmentIndex(t *testing.T) {
 	t.Parallel()
@@ -43,13 +60,19 @@ func TestMigrationAttachmentIndex(t *testing.T) {
 	}
 	_, err = ts.GetDriver().GetDB().ExecContext(ctx, query)
 	require.NoError(t, err)
+	removeMemoTrashSchema(ctx, t, ts, driver)
 	setSchemaVersion(ctx, t, ts, "26.10.1")
 	require.NoError(t, ts.Migrate(ctx))
 	requireLookupIndexes(ctx, t, ts, driver)
 	require.NoError(t, ts.Migrate(ctx), "a completed upgrade can restart")
 	setting, err := ts.GetUncachedInstanceSetting(ctx, &store.FindInstanceSetting{Name: "BASIC"})
 	require.NoError(t, err)
-	require.Equal(t, "26.11.1", setting.GetBasicSetting().SchemaVersion)
+	require.Equal(t, "26.11.2", setting.GetBasicSetting().SchemaVersion)
+	migratedMemo, err := ts.GetMemo(ctx, &store.FindMemo{ID: &memo.ID})
+	require.NoError(t, err)
+	require.NotNil(t, migratedMemo)
+	require.Equal(t, memo.Content, migratedMemo.Content)
+	require.Nil(t, migratedMemo.DeletedTs)
 	stored, err := ts.GetAttachment(ctx, &store.FindAttachment{ID: &attachment.ID, GetBlob: true})
 	require.NoError(t, err)
 	require.Equal(t, []byte("preserved blob"), stored.Blob)
@@ -77,6 +100,7 @@ func TestMigrationAttachmentLongType(t *testing.T) {
 			if upgrade {
 				_, err := ts.GetDriver().GetDB().ExecContext(ctx, "DROP INDEX "+attachmentLookupIndex("postgres"))
 				require.NoError(t, err)
+				removeMemoTrashSchema(ctx, t, ts, "postgres")
 				setSchemaVersion(ctx, t, ts, "26.10.1")
 			}
 			attachment, err := ts.CreateAttachment(ctx, &store.Attachment{UID: "long-type", CreatorID: user.ID, Type: mime.String()})

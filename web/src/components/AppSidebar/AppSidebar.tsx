@@ -9,6 +9,7 @@ import {
   MenuIcon,
   SearchIcon,
   SquarePenIcon,
+  Trash2Icon,
   UserRoundIcon,
 } from "lucide-react";
 import { useRef } from "react";
@@ -41,6 +42,7 @@ import {
   sidebarSurfaceVariants,
 } from "./sidebar-layout";
 import TagsSection from "./TagsSection";
+import ThemeToggle from "./ThemeToggle";
 import ViewsSection from "./ViewsSection";
 
 const NewMemoAction = ({ onClick }: { onClick: () => void }) => {
@@ -289,22 +291,39 @@ const GlobalNavigation = () => {
   );
 };
 
-const AppSidebar = ({ className }: { className?: string }) => {
+const AppSidebar = ({ className, showThemeToggle = true }: { className?: string; showThemeToggle?: boolean }) => {
   const t = useTranslate();
   const currentUser = useCurrentUser();
+  const { pathname } = useLocation();
   const { setMobileOpen } = useAppSidebar();
   const { canOpen: canCompose, openEditor } = useGlobalMemoEditor();
   return (
     <aside className={cn("mu-compact flex h-full w-full select-none flex-col bg-mu-canvas text-mu-text-secondary", className)}>
       <div data-sidebar-header className={cn("flex h-13 shrink-0 items-center justify-between gap-2", SIDEBAR_RAIL_CLASSES)}>
         <SpaceSwitcher className="min-w-0" size="header" />
-        {canCompose && <NewMemoAction onClick={openEditor} />}
+        <div className="flex shrink-0 items-center gap-1">
+          {showThemeToggle && <ThemeToggle />}
+          {canCompose && <NewMemoAction onClick={openEditor} />}
+        </div>
       </div>
       <GlobalNavigation />
       <div className="mx-3 mt-2 border-t border-mu-line/70" />
       <div className={cn("min-h-0 flex-1 overflow-y-auto overflow-x-hidden pt-2 pb-3 [scrollbar-width:thin]", SIDEBAR_RAIL_CLASSES)}>
         <RouteSidebarContent />
       </div>
+      {currentUser && (
+        <div className={cn("shrink-0 border-t border-mu-line/70 py-2", SIDEBAR_RAIL_CLASSES)}>
+          <Link
+            to={ROUTES.TRASH}
+            onClick={() => setMobileOpen(false)}
+            aria-current={pathname === ROUTES.TRASH ? "page" : undefined}
+            className={cn(SIDEBAR_ROW_CLASSES, sidebarRowStateClasses(pathname === ROUTES.TRASH ? "current" : "idle"))}
+          >
+            <SidebarRowIconSlot icon={Trash2Icon} />
+            <span className="truncate">{t("trash.title")}</span>
+          </Link>
+        </div>
+      )}
       {!currentUser && (
         <footer className="shrink-0 border-t border-mu-line/70">
           <Link
@@ -352,6 +371,9 @@ export const MobileAppHeader = () => {
         <Tooltip.Popup side="bottom">{t("common.open-navigation")}</Tooltip.Popup>
       </Tooltip.Root>
       <SpaceSwitcher className="max-w-[12rem]" size="md" />
+      <div className="ms-auto">
+        <ThemeToggle />
+      </div>
     </header>
   );
 };
@@ -363,7 +385,7 @@ export const MobileAppSidebar = () => {
     <Drawer.Root side="start" open={mobileOpen} onOpenChange={setMobileOpen} onOpenChangeComplete={completeMobileClose}>
       <Drawer.Popup variant="bare" closeLabel={t("common.close")} className="w-72 max-w-[calc(100%-2rem)]">
         <Drawer.Title className="mu-visually-hidden">{t("common.navigation")}</Drawer.Title>
-        <AppSidebar />
+        <AppSidebar showThemeToggle={false} />
       </Drawer.Popup>
     </Drawer.Root>
   );

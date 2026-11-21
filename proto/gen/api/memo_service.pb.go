@@ -696,11 +696,11 @@ func (x *UpdateMemoRequest) GetUpdateMask() *fieldmaskpb.FieldMask {
 // Request message for MemoService.DeleteMemo.
 type DeleteMemoRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Required. The resource name of the memo to delete.
+	// Required. The resource name of the memo to move to the recycle bin.
 	// Format: memos/{memo}
 	Name string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	// Optional. Currently ignored by the server; deletion always includes the
-	// comment subtree.
+	// Optional. Ignored by the server. The memo and its comment subtree always
+	// move to the recycle bin.
 	Force         bool `protobuf:"varint,2,opt,name=force,proto3" json:"force,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache

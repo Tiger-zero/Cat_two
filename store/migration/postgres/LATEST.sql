@@ -59,6 +59,8 @@ CREATE TABLE memo (
   updated_ts BIGINT NOT NULL DEFAULT EXTRACT(EPOCH FROM NOW()),
   row_status TEXT NOT NULL DEFAULT 'NORMAL',
   content TEXT NOT NULL,
+  deleted_ts BIGINT,
+  trash_root_id INTEGER,
   visibility TEXT NOT NULL DEFAULT 'PRIVATE',
   pinned BOOLEAN NOT NULL DEFAULT FALSE,
   payload JSONB NOT NULL DEFAULT '{}',
@@ -66,6 +68,9 @@ CREATE TABLE memo (
 );
 
 CREATE INDEX idx_memo_space_id ON memo(space_id, row_status, created_ts DESC, id DESC);
+CREATE INDEX idx_memo_trash_expiry ON memo(deleted_ts, id);
+CREATE INDEX idx_memo_trash_creator ON memo(creator_id, deleted_ts, id);
+CREATE INDEX idx_memo_trash_root ON memo(trash_root_id);
 CREATE INDEX idx_memo_creator_id ON memo(creator_id);
 
 -- memo_relation

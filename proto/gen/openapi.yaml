@@ -6,33 +6,6 @@ info:
     title: ""
     version: 0.0.1
 paths:
-    /api/ai:transcribe:
-        post:
-            tags:
-                - AIService
-            description: |-
-                Transcribe transcribes an audio file with the instance's configured
-                 transcription provider. The caller must be signed in, and requests are rate limited per user.
-            operationId: AIService_Transcribe
-            requestBody:
-                content:
-                    application/json:
-                        schema:
-                            $ref: '#/components/schemas/TranscribeRequest'
-                required: true
-            responses:
-                "200":
-                    description: OK
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/TranscribeResponse'
-                default:
-                    description: Default error response
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Status'
     /api/attachments:
         get:
             tags:
@@ -891,9 +864,10 @@ paths:
             tags:
                 - MemoService
             description: |-
-                DeleteMemo deletes the named memo and its comment subtree, including nested
-                 replies and their owned resources. It removes incident relations for all
-                 deleted memos. Requires the memo creator or an instance administrator.
+                DeleteMemo moves the named memo and its comment subtree to the recycle bin.
+                 Only the memo creator can move it. The owner can restore it within 30 days
+                 with POST /api/trash/{uid}/restore or permanently delete it sooner with
+                 DELETE /api/trash/{uid}. The server purges expired entries.
             operationId: MemoService_DeleteMemo
             parameters:
                 - name: memo
@@ -905,8 +879,8 @@ paths:
                 - name: force
                   in: query
                   description: |-
-                    Optional. Currently ignored by the server; deletion always includes the
-                     comment subtree.
+                    Optional. Ignored by the server. The memo and its comment subtree always
+                     move to the recycle bin.
                   schema:
                     type: boolean
             responses:
@@ -5362,41 +5336,6 @@ components:
                     type: string
                     description: Optional. The recipient email address. If omitted, the current user's email address is used.
             description: Request message for InstanceService.TestInstanceEmailSetting.
-        TranscribeRequest:
-            required:
-                - audio
-            type: object
-            properties:
-                audio:
-                    allOf:
-                        - $ref: '#/components/schemas/TranscriptionAudio'
-                    description: Required. The audio to transcribe.
-            description: Request message for AIService.Transcribe.
-        TranscribeResponse:
-            type: object
-            properties:
-                text:
-                    type: string
-                    description: The transcribed text.
-            description: Response message for AIService.Transcribe.
-        TranscriptionAudio:
-            type: object
-            properties:
-                content:
-                    writeOnly: true
-                    type: string
-                    description: Input only. Inline audio bytes, at most 25 MiB.
-                    format: bytes
-                uri:
-                    type: string
-                    description: URI of the audio content. Reserved for future use; the service rejects requests that set it.
-                filename:
-                    type: string
-                    description: Optional. The uploaded filename, at most 255 characters.
-                contentType:
-                    type: string
-                    description: Optional. The MIME type of the audio. If empty, the service detects it from the content.
-            description: TranscriptionAudio is the audio input for a transcription.
         UploadAttachmentRequest:
             required:
                 - writeOffset
@@ -5969,8 +5908,6 @@ components:
                     format: double
             description: VideoMetadata is metadata recorded by the source of a video.
 tags:
-    - name: AIService
-      description: AIService runs AI tasks through the AI providers configured on the instance.
     - name: AttachmentService
       description: AttachmentService manages files attached to memos.
     - name: AuthService

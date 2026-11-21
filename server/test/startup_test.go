@@ -208,11 +208,16 @@ func (i *instance) createAdmin(t *testing.T) {
 // signIn authenticates as the admin created by createAdmin.
 func (i *instance) signIn(t *testing.T) string {
 	t.Helper()
+	return i.signInUser(t, testAdminUsername, testAdminPassword)
+}
+
+func (i *instance) signInUser(t *testing.T, username, password string) string {
+	t.Helper()
 
 	status, body := i.do(t, http.MethodPost, "/api/auth/signin", "", map[string]any{
 		"passwordCredentials": map[string]any{
-			"username": testAdminUsername,
-			"password": testAdminPassword,
+			"username": username,
+			"password": password,
 		},
 	})
 	require.Equal(t, http.StatusOK, status, "sign-in should succeed: %s", body)
@@ -360,6 +365,36 @@ func TestStartupFreshInstallRoundTrip(t *testing.T) {
 	token := inst.signIn(t)
 	inst.createMemo(t, token, "startup-fresh", "fresh install sentinel")
 	inst.requireMemo(t, token, "startup-fresh", "fresh install sentinel")
+}
+
+func TestStartupRetiredTranscriptionAcceptsLegacyConfiguration(t *testing.T) {
+	ctx := context.Background()
+	configDir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(configDir, "legacy-ai.json"), []byte(`{
+		"instanceSettings": [{
+			"name": "instance/settings/AI",
+			"aiSetting": {
+				"providers": [{"id": "legacy", "title": "Legacy", "type": "OPENAI", "endpoint": "http://127.0.0.1:1", "apiKey": "${env:MEMOS_TEST_AI_KEY}"}],
+				"transcription": {"providerId": "legacy"}
+			}
+		}]
+	}`), 0o600))
+	t.Setenv("MEMOS_TEST_AI_KEY", "legacy-test-key")
+	inst := bootInstance(ctx, t, instanceOptions{configDir: configDir})
+	legacySetting, err := inst.server.Store.GetInstanceAISetting(ctx)
+	require.NoError(t, err)
+	require.Equal(t, "legacy", legacySetting.GetTranscription().GetProviderId())
+	require.Len(t, legacySetting.GetProviders(), 1)
+	require.Equal(t, "legacy-test-key", legacySetting.GetProviders()[0].GetApiKey())
+
+	inst.createAdmin(t)
+	token := inst.signIn(t)
+	for _, path := range []string{"/api/ai:transcribe", "/memos.api.AIService/Transcribe"} {
+		status, body := inst.do(t, http.MethodPost, path, token, map[string]any{
+			"audio": map[string]string{"content": "YXVkaW8=", "filename": "note.wav", "contentType": "audio/wav"},
+		})
+		require.Equal(t, http.StatusNotFound, status, "%s: %s", path, body)
+	}
 }
 
 // TestStartupRestartPreservesData boots, writes data, shuts down, then boots a

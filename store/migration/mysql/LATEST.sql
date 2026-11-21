@@ -59,6 +59,8 @@ CREATE TABLE `memo` (
   `updated_ts` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `row_status` VARCHAR(256) NOT NULL DEFAULT 'NORMAL',
   `content` TEXT NOT NULL,
+  deleted_ts BIGINT,
+  trash_root_id INTEGER,
   `visibility` VARCHAR(256) NOT NULL DEFAULT 'PRIVATE',
   `pinned` BOOLEAN NOT NULL DEFAULT FALSE,
   `payload` JSON NOT NULL,
@@ -66,6 +68,9 @@ CREATE TABLE `memo` (
 );
 
 CREATE INDEX `idx_memo_space_id` ON `memo`(`space_id`, `row_status`, `created_ts`, `id`);
+CREATE INDEX idx_memo_trash_expiry ON memo(deleted_ts, id);
+CREATE INDEX idx_memo_trash_creator ON memo(creator_id, deleted_ts, id);
+CREATE INDEX idx_memo_trash_root ON memo(trash_root_id);
 CREATE INDEX `idx_memo_creator_id` ON `memo`(`creator_id`);
 
 -- memo_relation

@@ -182,10 +182,8 @@ func (s *APIService) getInstanceSettingByName(ctx context.Context, name string, 
 		return nil, err
 	}
 	if instanceSetting.Key == storepb.InstanceSettingKey_AI && !isAdminCaller {
-		// Non-admin callers only need transcription.provider_id to gate the
-		// editor's Transcribe button. Model / language / prompt are
-		// admin-entered defaults that may contain proprietary glossary terms,
-		// so they are redacted from non-admin responses.
+		// Legacy AI settings remain readable. Redact administrator-entered
+		// defaults that may contain private information from non-admin callers.
 		if ai := result.GetAiSetting(); ai != nil && ai.Transcription != nil {
 			ai.Transcription.Model = ""
 			ai.Transcription.Language = ""

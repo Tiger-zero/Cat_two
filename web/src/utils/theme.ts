@@ -19,6 +19,8 @@ export interface ThemeOption {
 }
 
 const STORAGE_KEY = "memos-theme";
+const THEME_CHANGE_EVENT = "memos:theme-change";
+let sessionTheme: Theme | undefined;
 
 const APPEARANCES: Record<ResolvedTheme, Appearance> = {
   default: "light",
@@ -28,7 +30,7 @@ const APPEARANCES: Record<ResolvedTheme, Appearance> = {
 
 /** Each theme's canvas, for the browser chrome on phones; the values in index.html match. */
 const THEME_COLORS: Record<Appearance, string> = {
-  light: "#f6f6f3",
+  light: "#fafafa",
   dark: "#0f1013",
   paper: "#f5ede4",
 };
@@ -95,13 +97,14 @@ const getStoredTheme = (): Theme | null => {
 };
 
 /**
- * Safely stores the theme to localStorage.
+ * Stores the theme to localStorage, falling back to in-memory state when unavailable.
  */
 const setStoredTheme = (theme: Theme): void => {
   try {
     localStorage.setItem(STORAGE_KEY, theme);
+    sessionTheme = undefined;
   } catch {
-    // localStorage might not be available (SSR, private browsing, etc.)
+    sessionTheme = theme;
   }
 };
 
@@ -114,7 +117,22 @@ const setStoredTheme = (theme: Theme): void => {
  * Priority: localStorage -> system preference
  */
 export const getInitialTheme = (): Theme => {
-  return getStoredTheme() ?? "system";
+  return sessionTheme ?? getStoredTheme() ?? "system";
+};
+
+/** Reads the applied scheme, including quick changes ahead of an account refresh. */
+export const getAppliedTheme = (): ResolvedTheme => {
+  const appearance = typeof document === "undefined" ? undefined : document.documentElement.dataset.theme;
+  if (appearance === "dark") return "default-dark";
+  if (appearance === "paper") return "paper";
+  if (appearance === "light") return "default";
+  return resolveTheme(getInitialTheme());
+};
+
+export const subscribeToTheme = (listener: () => void): (() => void) => {
+  if (typeof window === "undefined") return () => {};
+  window.addEventListener(THEME_CHANGE_EVENT, listener);
+  return () => window.removeEventListener(THEME_CHANGE_EVENT, listener);
 };
 
 /**
@@ -130,14 +148,7 @@ export const getThemeWithFallback = (userTheme?: string): Theme => {
     return userTheme as Theme;
   }
 
-  // Priority 2: localStorage
-  const stored = getStoredTheme();
-  if (stored) {
-    return stored;
-  }
-
-  // Priority 3: System preference
-  return "system";
+  return getInitialTheme();
 };
 
 // ============================================================================
@@ -205,6 +216,7 @@ export const loadTheme = (themeName: string): void => {
   setThemeAttribute(toAppearance(resolvedTheme));
   updateThemeColorMeta(validTheme);
   setStoredTheme(validTheme); // Store original theme preference (not resolved)
+  window.dispatchEvent(new Event(THEME_CHANGE_EVENT));
 };
 
 /**

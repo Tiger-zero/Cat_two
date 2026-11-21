@@ -3,7 +3,6 @@ import {
   EllipsisIcon,
   FileAudioIcon,
   FileIcon,
-  FileTextIcon,
   GripVerticalIcon,
   ImagePlusIcon,
   PaletteIcon,
@@ -73,9 +72,6 @@ interface ReorderAttributes {
 }
 
 interface AttachmentListEditorProps {
-  onTranscribeAttachment?: (attachment: Attachment) => void;
-  transcribingAttachment?: string;
-  transcriptionDisabled?: boolean;
   attachments: Attachment[];
   localFiles?: LocalFile[];
   onAttachmentsChange?: (attachments: Attachment[]) => void;
@@ -108,7 +104,6 @@ interface ItemActions {
   /** Inserts the image into the text. */
   placement?: ItemAction;
   drawing?: ItemAction;
-  transcription?: ItemAction;
   onRemove?: () => void;
   onPreview?: () => void;
   isUploadingInline: boolean;
@@ -317,22 +312,6 @@ const AttachmentRow: FC<{
       <MetadataRowDetail parts={detailParts} />
 
       <div className={METADATA_ROW_CONTROLS_CLASSES}>
-        {actions.transcription && (
-          <Button
-            variant="ghost"
-            size="sm"
-            disabled={actions.transcription.disabled}
-            loading={actions.transcription.busy}
-            loadingLabel={actions.transcription.label}
-            onClick={(event) => {
-              stop(event);
-              actions.transcription?.onClick();
-            }}
-            icon={<FileTextIcon />}
-          >
-            {actions.transcription.label}
-          </Button>
-        )}
         {actions.onRemove && (
           <Tooltip.Root>
             <Tooltip.Trigger
@@ -393,9 +372,6 @@ const AttachmentListEditor: FC<AttachmentListEditorProps> = ({
   onInsertLocalFiles,
   placementActionsDisabled = false,
   uploadingLocalFileURLs = new Set(),
-  onTranscribeAttachment,
-  transcribingAttachment,
-  transcriptionDisabled = false,
   onEditDrawing,
   openingDrawing,
   children,
@@ -487,21 +463,7 @@ const AttachmentListEditor: FC<AttachmentListEditorProps> = ({
     const itemAttachments = collectMembers(attachmentsByName, item.memberIds);
     const itemLocalFiles = collectMembers(localFilesByPreviewUrl, item.memberIds);
     const isUploadingInline = item.isLocal && item.memberIds.some((memberID) => uploadingLocalFileURLs.has(memberID));
-    const isTranscribing = item.id === transcribingAttachment;
     const isPendingReplacement = itemLocalFiles.some((localFile) => localFile.replaces);
-
-    // External links are fetched cross-origin by the browser, which most hosts refuse.
-    const transcribableAttachment =
-      !item.isLocal && item.category === "audio" && !itemAttachments[0]?.externalLink ? itemAttachments[0] : undefined;
-    const transcription =
-      transcribableAttachment && onTranscribeAttachment
-        ? {
-            label: t(isTranscribing ? "editor.audio-recorder.transcribing" : "editor.audio-recorder.transcribe"),
-            onClick: () => onTranscribeAttachment(transcribableAttachment),
-            disabled: transcriptionDisabled || Boolean(transcribingAttachment),
-            busy: isTranscribing,
-          }
-        : undefined;
 
     // A drawing opens from the original file: a saved one is downloaded, so it must live on this server.
     const drawingSource: DrawingSource | undefined =
@@ -538,9 +500,8 @@ const AttachmentListEditor: FC<AttachmentListEditorProps> = ({
     return {
       placement,
       drawing,
-      transcription,
       isUploadingInline,
-      onRemove: isUploadingInline || isTranscribing ? undefined : () => handleRemoveItem(item),
+      onRemove: isUploadingInline ? undefined : () => handleRemoveItem(item),
       onPreview: isMediaItem(item)
         ? () => {
             const previewIndex = previewItems.findIndex((previewItem) => previewItem.id === item.id);

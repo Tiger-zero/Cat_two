@@ -1,10 +1,15 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { expect, it, vi } from "vitest";
 import TagsSection from "@/components/Settings/TagsSection";
 
-const { getUserStats } = vi.hoisted(() => ({ getUserStats: vi.fn() }));
-vi.mock("@/connect", () => ({ userServiceClient: { getUserStats } }));
+const { authenticatedFetch, getUserStats, toast } = vi.hoisted(() => ({
+  authenticatedFetch: vi.fn(),
+  getUserStats: vi.fn(),
+  toast: vi.fn(),
+}));
+vi.mock("@/connect", () => ({ authenticatedFetch, userServiceClient: { getUserStats } }));
+vi.mock("@/lib/toast", () => ({ toast: { add: toast }, showErrorToast: vi.fn() }));
 vi.mock("@/utils/i18n", () => ({
   useTranslate: () => (key: string, options?: { count: number }) =>
     options ? `${options.count} ${options.count === 1 ? "memo" : "memos"}` : key,
@@ -37,4 +42,27 @@ it("shows distinct totals from filtered stats and omits oversized rules without 
   expect(await row("a+").findByText("3 memos")).toBeVisible();
   expect(row(".+").queryByText(/memos?$/)).toBeNull();
   expect(getUserStats).toHaveBeenCalledTimes(3);
+});
+
+it("asks for confirmation before normalizing and refreshes note and tag queries", async () => {
+  getUserStats.mockResolvedValue({ tagCounts: {} });
+  authenticatedFetch.mockImplementation(async () => Response.json({ updatedCount: 2 }));
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const invalidate = vi.spyOn(queryClient, "invalidateQueries");
+  render(
+    <QueryClientProvider client={queryClient}>
+      <TagsSection />
+    </QueryClientProvider>,
+  );
+
+  fireEvent.click(screen.getByRole("button", { name: "setting.tags.normalize" }));
+  const dialog = await screen.findByRole("alertdialog", { name: "setting.tags.normalize-title" });
+  expect(authenticatedFetch).not.toHaveBeenCalled();
+  fireEvent.click(within(dialog).getByRole("button", { name: "setting.tags.normalize" }));
+
+  await waitFor(() => expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument());
+  expect(authenticatedFetch).toHaveBeenCalledWith("/api/tags/normalize", { method: "POST" });
+  expect(invalidate).toHaveBeenCalledWith({ queryKey: ["memos"] });
+  expect(invalidate).toHaveBeenCalledWith({ queryKey: ["users", "stats"] });
+  expect(toast).toHaveBeenCalledWith({ title: "2 memos", type: "success" });
 });

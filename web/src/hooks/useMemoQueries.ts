@@ -18,6 +18,7 @@ import { attachmentKeys } from "@/hooks/useAttachmentQueries";
 import { userKeys } from "@/hooks/useUserQueries";
 import { DEFAULT_LIST_MEMOS_PAGE_SIZE } from "@/lib/constants";
 import { shouldRetry } from "@/lib/query-client";
+import { trashQueryKey } from "@/lib/trash";
 import type { ListMemosRequest, ListMemosResponse, Memo, Reaction } from "@/types/proto/api/memo_service_pb";
 import { ListMemoCommentsRequestSchema, ListMemosRequestSchema, MemoSchema } from "@/types/proto/api/memo_service_pb";
 
@@ -481,6 +482,7 @@ export function useDeleteMemo() {
       queryClient.invalidateQueries({ queryKey: userKeys.stats() });
       // Memo deletion can remove or unlink associated attachments.
       queryClient.invalidateQueries({ queryKey: attachmentKeys.lists() });
+      queryClient.invalidateQueries({ queryKey: trashQueryKey });
     },
   });
 }

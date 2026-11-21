@@ -29,6 +29,12 @@ instead, and update `core/configuration/testdata/compat/` in the same change. Af
 
 ### Breaking
 
+- Cat_two removed the built-in transcription service. `POST /api/ai:transcribe` and
+  `/memos.api.AIService/Transcribe` return `404 Not Found`. Existing `instance/settings/AI` values and
+  declarative configuration remain compatible. They no longer drive server-side model calls.
+- `MemoService.DeleteMemo` moves the owner's note and its replies to the recycle bin for 30 days. Owners can list
+  their deleted notes at `GET /api/trash`, restore one with `POST /api/trash/{uid}/restore`, or permanently remove
+  one with `DELETE /api/trash/{uid}`. Restoring recovers the prior normal or archived state.
 - Cat_two restricts note and attachment reads, statistics derived from notes, and memo archive exports to their owners.
   Existing audience values stay stored and notes are returned as `PRIVATE`. Legacy share links return `NOT_FOUND`
   and `CreateMemoShare` returns `FAILED_PRECONDITION`.

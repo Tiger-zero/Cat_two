@@ -5,7 +5,6 @@ import {
   CogIcon,
   DatabaseIcon,
   FileCogIcon,
-  HeartHandshakeIcon,
   KeyIcon,
   KeyRoundIcon,
   type LucideIcon,
@@ -18,7 +17,6 @@ import {
 } from "lucide-react";
 import { type ComponentType } from "react";
 import AccessTokenSection from "@/components/Settings/AccessTokenSection";
-import AISection from "@/components/Settings/AISection";
 import ConfigurationSection from "@/components/Settings/ConfigurationSection";
 import EditorSection from "@/components/Settings/EditorSection";
 import InstanceSection from "@/components/Settings/InstanceSection";
@@ -47,7 +45,6 @@ export type SettingSectionKey =
   | "notification"
   | "sso"
   | "tags"
-  | "ai"
   | "resource-stats"
   | "configuration";
 
@@ -148,14 +145,6 @@ export const SETTINGS_SECTIONS: SettingSectionDefinition[] = [
     labelKey: "setting.sso.label",
     icon: KeyIcon,
     component: SSOSection,
-  },
-  {
-    key: "ai",
-    scope: "admin",
-    labelKey: "setting.ai.label",
-    icon: HeartHandshakeIcon,
-    component: AISection,
-    preloadSettingKeys: [InstanceSetting_Key.AI],
   },
   {
     key: "resource-stats",

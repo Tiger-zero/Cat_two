@@ -8,8 +8,6 @@ import {
   InstanceSetting,
   InstanceSetting_AccessSetting,
   InstanceSetting_AccessSettingSchema,
-  InstanceSetting_AISetting,
-  InstanceSetting_AISettingSchema,
   InstanceSetting_GeneralSetting,
   InstanceSetting_GeneralSettingSchema,
   InstanceSetting_Key,
@@ -45,7 +43,6 @@ interface InstanceContextValue extends InstanceState {
   generalSetting: InstanceSetting_GeneralSetting;
   storageSetting: InstanceSetting_StorageSetting;
   notificationSetting: InstanceSetting_NotificationSetting;
-  aiSetting: InstanceSetting_AISetting;
   initialize: () => Promise<void>;
   fetchSetting: (key: InstanceSetting_Key) => Promise<void>;
   fetchSettings: (keys: InstanceSetting_Key[]) => Promise<void>;
@@ -98,14 +95,6 @@ export function InstanceProvider({ children }: { children: ReactNode }) {
       return setting.value.value;
     }
     return create(InstanceSetting_NotificationSettingSchema, {});
-  }, [state.settings]);
-
-  const aiSetting = useMemo((): InstanceSetting_AISetting => {
-    const setting = state.settings.find((s) => s.name === `${instanceSettingNamePrefix}AI`);
-    if (setting?.value.case === "aiSetting") {
-      return setting.value.value;
-    }
-    return create(InstanceSetting_AISettingSchema, {});
   }, [state.settings]);
 
   const initialize = useCallback(async () => {
@@ -234,24 +223,12 @@ export function InstanceProvider({ children }: { children: ReactNode }) {
       generalSetting,
       storageSetting,
       notificationSetting,
-      aiSetting,
       initialize,
       fetchSetting,
       fetchSettings,
       updateSetting,
     }),
-    [
-      state,
-      accessSetting,
-      generalSetting,
-      storageSetting,
-      notificationSetting,
-      aiSetting,
-      initialize,
-      fetchSetting,
-      fetchSettings,
-      updateSetting,
-    ],
+    [state, accessSetting, generalSetting, storageSetting, notificationSetting, initialize, fetchSetting, fetchSettings, updateSetting],
   );
 
   return <InstanceContext.Provider value={value}>{children}</InstanceContext.Provider>;

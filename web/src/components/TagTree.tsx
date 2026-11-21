@@ -1,12 +1,11 @@
-import { ChevronRightIcon, HashIcon } from "lucide-react";
-import { useEffect, useMemo } from "react";
+import { ChevronRightIcon, HashIcon, PinIcon } from "lucide-react";
+import { type ReactNode, useEffect, useMemo } from "react";
 import {
   SIDEBAR_ROW_BOX_CLASSES,
   SIDEBAR_ROW_COUNT_RAIL_CLASSES,
   SIDEBAR_ROW_ICON_CLASSES,
   SIDEBAR_ROW_LABEL_CLASSES,
   SIDEBAR_ROW_SLOT_BUTTON_CLASSES,
-  SIDEBAR_ROW_SLOT_CLASSES,
   SidebarRowIconSlot,
   sidebarRowStateAttributes,
   sidebarRowStateClasses,
@@ -31,6 +30,8 @@ interface Props {
   /** Identifies whose tags these are, so expansion persists per tenant rather than per browser. */
   scope: string;
   onTagClick: (tag: string) => void;
+  pinnedPaths?: readonly string[];
+  renderActions?: (tag: string) => ReactNode;
 }
 
 /** Persisted per scope: which branches are open, and the selection already revealed. */
@@ -41,12 +42,9 @@ interface TagTreeExpansion {
 
 const EMPTY_EXPANSION: TagTreeExpansion = { expanded: [] };
 
-// A structural row toggles like any other, so it hovers like one too — just quieter at rest.
-const STRUCTURAL_ROW_CLASSES = cn(sidebarRowStateClasses(), "font-medium text-mu-text-secondary/65");
-
 /** One announcement for a tag row in either layout, so tree and flat mode never drift apart. */
-export const tagRowAriaLabel = (t: ReturnType<typeof useTranslate>, tag: string, amount: number) =>
-  `#${tag}, ${t("setting.tags.used-count", { count: amount })}`;
+export const tagRowAriaLabel = (t: ReturnType<typeof useTranslate>, tag: string, amount?: number) =>
+  amount === undefined ? `#${tag}` : `#${tag}, ${t("setting.tags.used-count", { count: amount })}`;
 
 export const buildTagTree = (tagAmounts: [tag: string, amount: number][]) => {
   const root: TagTreeNode = {
@@ -88,9 +86,25 @@ const parentPathsOf = (tag: string): string[] => {
   return segments.slice(0, -1).map((_, index) => segments.slice(0, index + 1).join("/"));
 };
 
-const TagMark = ({ className }: { className?: string }) => (
-  <HashIcon aria-hidden="true" className={cn(SIDEBAR_ROW_ICON_CLASSES, className)} />
-);
+/** Lift pinned branches out of their usual position while retaining their descendants. */
+function partitionPinnedTags(tags: TagTreeNode[], pinnedPaths: readonly string[]) {
+  if (pinnedPaths.length === 0) return { pinned: [], unpinned: tags };
+  const paths = new Set(pinnedPaths);
+  const pinnedByPath = new Map<string, TagTreeNode>();
+  const partition = (nodes: TagTreeNode[]): TagTreeNode[] =>
+    nodes.flatMap((tag) => {
+      const node = { ...tag, subTags: partition(tag.subTags) };
+      if (!paths.has(tag.text)) return [node];
+      pinnedByPath.set(tag.text, node);
+      return [];
+    });
+  const unpinned = partition(tags);
+  const pinned = pinnedPaths.flatMap((path) => {
+    const tag = pinnedByPath.get(path);
+    return tag ? [tag] : [];
+  });
+  return { pinned, unpinned };
+}
 
 const Chevron = ({ open, className }: { open: boolean; className?: string }) => (
   <ChevronRightIcon
@@ -111,17 +125,18 @@ interface TagItemProps {
   expanded: ReadonlySet<string>;
   onTagClick: (tag: string) => void;
   onToggle: (path: string) => void;
+  pinned?: boolean;
+  renderActions?: (tag: string) => ReactNode;
 }
 
-const TagItem = ({ tag, depth, activeTag, expanded, onTagClick, onToggle }: TagItemProps) => {
+const TagItem = ({ tag, depth, activeTag, expanded, onTagClick, onToggle, pinned, renderActions }: TagItemProps) => {
   const t = useTranslate();
-  const isTag = tag.amount !== undefined;
   const isActive = activeTag === tag.text;
   const isAncestorOfActiveTag = activeTag?.startsWith(`${tag.text}/`) ?? false;
   const hasSubTags = tag.subTags.length > 0;
   const open = hasSubTags && expanded.has(tag.text);
-  const { ref: labelRef, title } = useOverflowTitle<HTMLSpanElement>(isTag ? `#${tag.text}` : tag.text);
-  const tagLabel = tag.amount !== undefined ? tagRowAriaLabel(t, tag.text, tag.amount) : undefined;
+  const { ref: labelRef, title } = useOverflowTitle<HTMLSpanElement>(`#${tag.text}`);
+  const Icon = pinned ? PinIcon : HashIcon;
   const state = isActive ? "checked" : "idle";
 
   return (
@@ -132,16 +147,12 @@ const TagItem = ({ tag, depth, activeTag, expanded, onTagClick, onToggle }: TagI
         aria-selected={isActive || undefined}
         aria-expanded={hasSubTags ? open : undefined}
         {...sidebarRowStateAttributes(state)}
-        className={cn(
-          SIDEBAR_ROW_BOX_CLASSES,
-          isTag ? sidebarRowStateClasses(state) : STRUCTURAL_ROW_CLASSES,
-          isAncestorOfActiveTag && !isActive && "text-mu-text/75",
-        )}
+        className={cn(SIDEBAR_ROW_BOX_CLASSES, sidebarRowStateClasses(state), isAncestorOfActiveTag && !isActive && "text-mu-text/75")}
         // Overrides the start half of the box's `px-2`, leaving the trailing 8px intact.
         // Same 12px step the memo outline indents by.
         style={{ paddingInlineStart: 8 + depth * INDENT_STEP }}
       >
-        {isTag && hasSubTags && (
+        {hasSubTags && (
           // At rest the slot holds the row's # mark like any other tag; pointing at the row
           // (or tabbing into it) swaps in the chevron, so branches only look different while
           // the disclosure is actually reachable.
@@ -152,45 +163,25 @@ const TagItem = ({ tag, depth, activeTag, expanded, onTagClick, onToggle }: TagI
             className={SIDEBAR_ROW_SLOT_BUTTON_CLASSES}
             onClick={() => onToggle(tag.text)}
           >
-            <TagMark className="group-hover:hidden group-has-[:focus-visible]:hidden" />
+            <Icon aria-hidden="true" className={cn(SIDEBAR_ROW_ICON_CLASSES, "group-hover:hidden group-has-[:focus-visible]:hidden")} />
             <Chevron open={open} className="hidden group-hover:block group-has-[:focus-visible]:block" />
           </button>
         )}
-        {isTag ? (
-          <button
-            type="button"
-            aria-label={tagLabel}
-            aria-pressed={isActive || undefined}
-            title={title}
-            className={SIDEBAR_ROW_LABEL_CLASSES}
-            onClick={() => onTagClick(tag.text)}
-          >
-            {!hasSubTags && <SidebarRowIconSlot icon={HashIcon} />}
-            <span ref={labelRef} className="min-w-0 flex-1 truncate">
-              {tag.key}
-            </span>
-            <span className={SIDEBAR_ROW_COUNT_RAIL_CLASSES}>{tag.amount}</span>
-          </button>
-        ) : (
-          // A structural segment only exists to reach its children, so the whole row is the
-          // disclosure — one control, rather than a row and a chevron doing the same thing.
-          <button
-            type="button"
-            aria-label={`${open ? t("common.collapse") : t("common.expand")} ${tag.text}`}
-            aria-expanded={open}
-            className={SIDEBAR_ROW_LABEL_CLASSES}
-            onClick={() => onToggle(tag.text)}
-          >
-            <span className={SIDEBAR_ROW_SLOT_CLASSES} aria-hidden="true">
-              <Chevron open={open} />
-            </span>
-            <span ref={labelRef} className="min-w-0 flex-1 truncate" title={title}>
-              {tag.key}
-            </span>
-            {/* Empty count rail keeps structural labels truncating at the same edge as tag labels. */}
-            <span aria-hidden="true" className={SIDEBAR_ROW_COUNT_RAIL_CLASSES} />
-          </button>
-        )}
+        <button
+          type="button"
+          aria-label={tagRowAriaLabel(t, tag.text, tag.amount)}
+          aria-pressed={isActive || undefined}
+          title={title}
+          className={SIDEBAR_ROW_LABEL_CLASSES}
+          onClick={() => onTagClick(tag.text)}
+        >
+          {!hasSubTags && <SidebarRowIconSlot icon={Icon} />}
+          <span ref={labelRef} className="min-w-0 flex-1 truncate">
+            {pinned ? tag.text : tag.key}
+          </span>
+          <span className={SIDEBAR_ROW_COUNT_RAIL_CLASSES}>{tag.amount}</span>
+        </button>
+        {renderActions?.(tag.text)}
       </div>
 
       {open && (
@@ -204,6 +195,7 @@ const TagItem = ({ tag, depth, activeTag, expanded, onTagClick, onToggle }: TagI
               expanded={expanded}
               onTagClick={onTagClick}
               onToggle={onToggle}
+              renderActions={renderActions}
             />
           ))}
         </div>
@@ -212,9 +204,12 @@ const TagItem = ({ tag, depth, activeTag, expanded, onTagClick, onToggle }: TagI
   );
 };
 
-const TagTree = ({ tagAmounts, activeTag, scope, onTagClick }: Props) => {
+const NO_PINS: readonly string[] = [];
+
+const TagTree = ({ tagAmounts, activeTag, scope, onTagClick, pinnedPaths = NO_PINS, renderActions }: Props) => {
   const t = useTranslate();
   const tags = useMemo(() => buildTagTree(tagAmounts), [tagAmounts]);
+  const { pinned, unpinned } = useMemo(() => partitionPinnedTags(tags, pinnedPaths), [tags, pinnedPaths]);
   // Scoped per tenant: the paths are one account's tag names, so another user's profile tree
   // must not decide what your own library shows.
   const [state, setState] = useLocalStorage<TagTreeExpansion>(`tag-tree-expanded:${scope}`, EMPTY_EXPANSION);
@@ -243,20 +238,30 @@ const TagTree = ({ tagAmounts, activeTag, scope, onTagClick }: Props) => {
     });
   }, [activeTag, setState]);
 
+  const renderTree = (nodes: TagTreeNode[], isPinned: boolean, label: string) =>
+    nodes.length > 0 && (
+      <div className="relative flex h-auto w-full flex-col items-stretch gap-0.5" role="tree" aria-label={label}>
+        {nodes.map((tag) => (
+          <TagItem
+            key={tag.text}
+            tag={tag}
+            depth={0}
+            activeTag={activeTag}
+            expanded={expanded}
+            onTagClick={onTagClick}
+            onToggle={handleToggle}
+            pinned={isPinned}
+            renderActions={renderActions}
+          />
+        ))}
+      </div>
+    );
+
   return (
-    <div className="relative flex h-auto w-full flex-col items-stretch gap-0.5" role="tree" aria-label={t("common.tags")}>
-      {tags.map((tag) => (
-        <TagItem
-          key={tag.text}
-          tag={tag}
-          depth={0}
-          activeTag={activeTag}
-          expanded={expanded}
-          onTagClick={onTagClick}
-          onToggle={handleToggle}
-        />
-      ))}
-    </div>
+    <>
+      {renderTree(pinned, true, t("setting.tags.pinned"))}
+      {renderTree(unpinned, false, t("common.tags"))}
+    </>
   );
 };
 

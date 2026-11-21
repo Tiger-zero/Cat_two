@@ -60,7 +60,7 @@ func (s *APIService) PlanMemoImport(ctx context.Context, user *store.User, archi
 		switch memo := existing[record.UID]; {
 		case memo == nil:
 			plan.New++
-		case memo.CreatorID == user.ID:
+		case memo.CreatorID == user.ID && memo.DeletedTs == nil:
 			plan.Existing++
 		default:
 			plan.Renamed++
@@ -77,7 +77,7 @@ func (s *APIService) findMemosByUID(ctx context.Context, archive *memoexport.Fil
 	}
 	found := make(map[string]*store.Memo, len(uids))
 	for chunk := range slices.Chunk(uids, archiveQueryChunk) {
-		memos, err := s.Store.ListMemos(ctx, &store.FindMemo{UIDList: chunk, ExcludeContent: excludeContent})
+		memos, err := s.Store.ListMemos(ctx, &store.FindMemo{UIDList: chunk, ExcludeContent: excludeContent, Trash: store.MemoTrashInclude})
 		if err != nil {
 			return nil, errors.Wrap(err, "failed to look up memos")
 		}
@@ -195,7 +195,7 @@ func (i *memoImporter) importMemo(record *memoexport.Memo) error {
 	}
 	targetUID := record.UID
 	if existing := i.existing[record.UID]; existing != nil {
-		if existing.CreatorID == i.user.ID {
+		if existing.CreatorID == i.user.ID && existing.DeletedTs == nil {
 			switch i.policy {
 			case apipb.ImportMemosRequest_SKIP:
 				i.resolved[record.UID] = existing

@@ -2,7 +2,6 @@ import { timestampDate } from "@bufbuild/protobuf/wkt";
 import { Code, ConnectError, createClient, type Interceptor } from "@connectrpc/connect";
 import { createConnectTransport } from "@connectrpc/connect-web";
 import { getAccessToken, hasStoredToken, isTokenExpired, REQUEST_TOKEN_EXPIRY_BUFFER_MS, setAccessToken } from "./auth-state";
-import { AIService } from "./types/proto/api/ai_service_pb";
 import { AttachmentService } from "./types/proto/api/attachment_service_pb";
 import { AuthService } from "./types/proto/api/auth_service_pb";
 import { IdentityProviderService } from "./types/proto/api/idp_service_pb";
@@ -149,6 +148,29 @@ export async function getRequestToken(): Promise<string | null> {
   return token;
 }
 
+/** Makes a same-origin HTTP request using the API client's session and refresh handling. */
+export async function authenticatedFetch(path: string, init: RequestInit = {}): Promise<Response> {
+  const url = new URL(path, window.location.origin);
+  if (url.origin !== window.location.origin) throw new Error("Authenticated requests must use the current origin");
+
+  const send = (token: string | null) => {
+    const header = new Headers(init.headers);
+    setAuthorizationHeader({ header }, token);
+    return fetchWithCredentials(url, { ...init, headers: header, redirect: "error" });
+  };
+  const response = await send(await getRequestToken());
+  if (response.status !== 401) return response;
+
+  let token: string;
+  try {
+    token = await refreshAndGetAccessToken();
+  } catch (error) {
+    redirectOnAuthFailure();
+    throw error;
+  }
+  return send(token);
+}
+
 // ============================================================================
 // Authentication Interceptor
 // ============================================================================
@@ -196,7 +218,6 @@ export const userServiceClient = createClient(UserService, transport);
 // Content service clients
 export const memoServiceClient = createClient(MemoService, transport);
 export const attachmentServiceClient = createClient(AttachmentService, transport);
-export const aiServiceClient = createClient(AIService, transport);
 export const spaceServiceClient = createClient(SpaceService, transport);
 
 // Configuration service clients

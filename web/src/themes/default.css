@@ -10,11 +10,11 @@
 @layer mu {
   @media (forced-colors: none) {
     [data-theme="light"] {
-      --mu-canvas: #f6f6f3;
+      --mu-canvas: #fafafa;
       --mu-well: #eeefeb;
       --mu-hover: #eeefeb;
       --mu-selected: #ddf5e6;
-      --mu-key-hover: #f6f6f3;
+      --mu-key-hover: #fafafa;
       --mu-edge: #dadcd5;
       --mu-line: #e3e5df;
       --mu-text: #1d1f23;

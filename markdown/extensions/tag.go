@@ -35,15 +35,30 @@ func (*tagExtension) Extend(m goldmark.Markdown) {
 
 type tagASTTransformer struct{}
 
-func (*tagASTTransformer) Transform(document *ast.Document, reader text.Reader, _ parser.Context) {
+var spacedTagSeparatorsKey = parser.NewContextKey()
+
+// AllowSpacedTagSeparators makes the tag transformer recognize hierarchy separators
+// with horizontal whitespace during an explicit source repair.
+func AllowSpacedTagSeparators(context parser.Context) {
+	context.Set(spacedTagSeparatorsKey, true)
+}
+
+func (*tagASTTransformer) Transform(document *ast.Document, reader text.Reader, context parser.Context) {
 	source := reader.Source()
+	findTagMatches := mparser.FindTagMatches
+	if allowSpacedSeparators, ok := context.Get(spacedTagSeparatorsKey).(bool); ok && allowSpacedSeparators {
+		findTagMatches = mparser.FindTagMatchesWithSpacedSeparators
+	}
 	textNodes := eligibleLiteralTextNodes(document)
 	mergeAdjacentLiteralText(textNodes, source)
 	for _, textNode := range textNodes {
 		if textNode.Parent() == nil {
 			continue
 		}
-		replaceTagsInText(textNode, source)
+		matches := findTagMatches(textNode.Segment.Value(source))
+		if len(matches) > 0 {
+			replaceTagsInText(textNode, source, matches)
+		}
 	}
 }
 
@@ -90,12 +105,8 @@ func isEligibleLiteralText(textNode *ast.Text) bool {
 	return true
 }
 
-func replaceTagsInText(textNode *ast.Text, source []byte) {
+func replaceTagsInText(textNode *ast.Text, source []byte, matches []mparser.TagMatch) {
 	segment := textNode.Segment
-	matches := mparser.FindTagMatches(segment.Value(source))
-	if len(matches) == 0 {
-		return
-	}
 
 	parent := textNode.Parent()
 	cursor := segment.Start

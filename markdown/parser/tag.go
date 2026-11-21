@@ -1,6 +1,7 @@
 package parser
 
 import (
+	"unicode"
 	"unicode/utf8"
 
 	"github.com/yuin/goldmark/util"
@@ -167,20 +168,47 @@ starter:
 	return pos, value, true
 }
 
-func scanTagIdentifier(source []byte) (int, []byte, bool) {
+// IsTagHierarchyWhitespace reports whether r is horizontal whitespace around a tag separator.
+func IsTagHierarchyWhitespace(r rune) bool {
+	return r == '\t' || unicode.Is(unicode.Zs, r)
+}
+
+func skipTagHierarchyWhitespace(source []byte, pos int) int {
+	for pos < len(source) {
+		r, size := utf8.DecodeRune(source[pos:])
+		if !IsTagHierarchyWhitespace(r) {
+			break
+		}
+		pos += size
+	}
+	return pos
+}
+
+func scanTagIdentifier(source []byte, allowSeparatorWhitespace bool) (int, []byte, bool) {
 	consumed, value, ok := scanTagSegment(source)
 	if !ok {
 		return 0, nil, false
 	}
 
-	for consumed < len(source) && source[consumed] == '/' {
-		segmentLength, segmentValue, segmentOK := scanTagSegment(source[consumed+1:])
+	for consumed < len(source) {
+		separator := consumed
+		if allowSeparatorWhitespace {
+			separator = skipTagHierarchyWhitespace(source, separator)
+		}
+		if separator == len(source) || source[separator] != '/' {
+			break
+		}
+		segmentStart := separator + 1
+		if allowSeparatorWhitespace {
+			segmentStart = skipTagHierarchyWhitespace(source, segmentStart)
+		}
+		segmentLength, segmentValue, segmentOK := scanTagSegment(source[segmentStart:])
 		if !segmentOK {
 			break
 		}
 		value = append(value, '/')
 		value = append(value, segmentValue...)
-		consumed += 1 + segmentLength
+		consumed = segmentStart + segmentLength
 	}
 
 	return consumed, value, true
@@ -227,6 +255,16 @@ func characterReferenceLength(source []byte) int {
 // FindTagMatches enumerates tag candidates in one eligible
 // literal-source run. Markdown structure must be resolved before calling it.
 func FindTagMatches(source []byte) []TagMatch {
+	return scanTagMatches(source, false)
+}
+
+// FindTagMatchesWithSpacedSeparators recognizes tags whose slash separators
+// have horizontal whitespace. It is only used for explicit source repair.
+func FindTagMatchesWithSpacedSeparators(source []byte) []TagMatch {
+	return scanTagMatches(source, true)
+}
+
+func scanTagMatches(source []byte, allowSeparatorWhitespace bool) []TagMatch {
 	var matches []TagMatch
 	for pos := 0; pos < len(source); {
 		if emojiLength := matchFullyQualifiedEmoji(source[pos:]); emojiLength > 0 {
@@ -247,7 +285,7 @@ func FindTagMatches(source []byte) []TagMatch {
 			continue
 		}
 
-		consumed, value, ok := scanTagIdentifier(source[pos+1:])
+		consumed, value, ok := scanTagIdentifier(source[pos+1:], allowSeparatorWhitespace)
 		if !ok {
 			pos++
 			continue

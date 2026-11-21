@@ -9,14 +9,16 @@
 | 登录与初始化 | 首次启动按页面引导建立管理员账户。登录后进入笔记工作区，普通账户和管理员都有自己的笔记。 | [路由与登录保护](../web/src/router/index.tsx)、[账户权限](../server/api/acl_config.go) |
 | 日历和笔记列表 | 侧栏「日历」打开原时间线的列表。点日期筛选当天笔记，通过筛选标签上的「×」清除。选中日期后，编辑器会给新笔记带上这一天。打开旧的按日链接或恢复历史日期，列表与侧栏会定位到对应日期。 | [首页](../web/src/pages/Home.tsx)、[侧栏日历](../web/src/components/StatisticsView/)、[旧链接跳转](../web/src/router/LegacyCalendarRedirect.tsx) |
 | 排序和来源 | 「全部笔记」菜单可按创建或更新时间升序、降序查看。侧栏的热度和日期筛选也使用所选时间类型。来源菜单可选「全部」「网页端」或「未记录」。 | [菜单](../web/src/components/MemoFeedMenu.tsx)、[排序](../web/src/hooks/useMemoSorting.ts)、[筛选](../web/src/hooks/useMemoFilters.ts) |
-| 搜索、标签和视图 | 搜索支持关键词和 CEL 表达式。点击标签可筛选笔记。把常用条件保存为视图后，可在侧栏重复使用。标签与日期可以一起筛选，普通浏览条件也可以从 URL 恢复。 | [搜索](../web/src/components/AppSidebar/QuickFindDialog.tsx)、[筛选状态](../web/src/contexts/MemoFilterContext.tsx)、[视图管理](../web/src/pages/MemoViews.tsx)、[CEL 字段与语法](../filter/README.md) |
+| 搜索、标签和视图 | 搜索支持关键词和 CEL 表达式。侧栏默认按层级展示标签。点击一个目录会列出该路径及子路径下的笔记。标签与日期可以一起筛选，普通浏览条件可以从 URL 恢复，常用条件可以保存为视图。 | [搜索](../web/src/components/AppSidebar/QuickFindDialog.tsx)、[标签侧栏](../web/src/components/AppSidebar/TagsSection.tsx)、[筛选状态](../web/src/contexts/MemoFilterContext.tsx)、[视图管理](../web/src/pages/MemoViews.tsx)、[CEL 字段与语法](../filter/README.md) |
+| 标签整理 | 标签菜单支持置顶和编辑名称。置顶在当前浏览器按账户保存。重命名目录会移动它的子路径，改成已存在的标签时两边笔记合并。在「设置 → 标签」可手动整理斜杠两侧的空格，比如将 `#2027/ 08` 整理为 `#2027/08`。 | [标签接口](../server/api/memo_tag_routes.go)、[Markdown 解析](../markdown/) |
 | 编辑和草稿 | 支持富文本编辑、Markdown 源码模式、清单、代码、链接及专注编辑。新笔记草稿按账户和写作位置保存在当前浏览器。已有笔记在原卡片或详情页编辑，保存后服务端更新。 | [编辑器说明](../web/src/components/MemoEditor/README.md)、[保存流程](../web/src/components/MemoEditor/edit/hooks/useMemoSave.ts) |
 | 笔记内附件 | 从编辑器添加文件、图片、视频或音频，在笔记内预览和下载。部分图片支持涂画标注，媒体元数据可在偏好设置中开启。旧的独立附件库链接进入未找到页面。 | [附件编辑与显示](../web/src/components/MemoMetadata/Attachment/)、[上传 API](../server/api/attachment_upload.go)、[文件服务](../server/fileserver/) |
-| 整理与详情 | 笔记可置顶、归档、恢复或删除。详情页提供目录、笔记引用和评论，可对笔记加表情反应，也可将笔记导出为图片。归档列表按当前账户查阅。 | [卡片菜单](../web/src/components/MemoActionMenu/)、[详情页](../web/src/pages/MemoDetail.tsx)、[归档页](../web/src/pages/Archived.tsx) |
+| 整理与详情 | 笔记可置顶、归档或移入回收站。详情页提供目录、笔记引用和评论，可对笔记加表情反应，也可将笔记导出为图片。归档列表按当前账户查阅。 | [卡片菜单](../web/src/components/MemoActionMenu/)、[详情页](../web/src/pages/MemoDetail.tsx)、[归档页](../web/src/pages/Archived.tsx) |
+| 回收站 | 从侧栏底部打开。只有笔记创建者能查看、恢复或彻底删除。恢复后笔记回到之前的列表或归档，附件和引用随笔记保留。到期 30 天后，服务端会定期彻底清理。 | [回收站页面](../web/src/pages/Trash.tsx)、[回收站接口](../server/api/memo_trash_handler.go)、[保留期限](../store/memo_trash.go) |
 | 空间 | 可以把笔记放在某个空间，切换空间查看相应笔记，或在设置管理空间和成员。空间控制组织范围和成员操作。笔记内容由服务端校验创建者身份。 | [空间上下文](../web/src/contexts/SpaceContext.tsx)、[空间设置](../web/src/components/Settings/SpacesSection.tsx)、[空间服务](../server/api/space_service.go) |
 | 导出和导入 | 「全部笔记」可多选最多 100 条后导出 ZIP，也可在「设置 → 导出和导入」导出自己的全部笔记。导入先读取并预演归档，遇到同标识的笔记可保留现有、覆盖或创建副本。最后返回逐项处理报告。 | [导出和导入页面](../web/src/components/Settings/MemoExportSection.tsx)、[ZIP 客户端](../web/src/lib/memo-export.ts)、[归档格式](../core/memoexport/format.go) |
-| 外观和设备 | 默认简体中文，可切换英语。主题可选跟随系统、浅色、深色和纸张。普通笔记正文为 14px，行高 25.2px，英文和数字使用内置 Barlow，中文按系统可用字体回退。网页及手机主屏幕使用小猫图标，默认显示名称为 Memos，浏览器标签标题可在站点设置中调整。 | [语言](../web/src/i18n.ts)、[主题](../web/src/themes/)、[笔记字体](../web/src/index.css)、[应用图标](../web/public/site.webmanifest) |
-| 账户与实例设置 | 账户可管理资料、密码、个人访问令牌、编辑偏好、标签和 Webhook。管理员可配置站点、存储、邮件通知、单点登录、语音转写和实例配置。 | [设置项清单](../web/src/components/Settings/settingSections.ts)、[声明式配置](../docs/design/declarative-configuration.md) |
+| 外观和设备 | 默认简体中文，可切换英语。主题可选跟随系统、浅色、深色和纸张。页头提供浅色与深色快捷切换，浅色背景为 `#fafafa`。普通笔记正文为 14px，行高 25.2px，英文和数字使用内置 Barlow，中文按系统可用字体回退。网页及手机主屏幕使用小猫图标，默认显示名称为 Memos，浏览器标签标题可在站点设置中调整。 | [语言](../web/src/i18n.ts)、[主题](../web/src/themes/)、[笔记字体](../web/src/index.css)、[应用图标](../web/public/site.webmanifest) |
+| 账户与实例设置 | 账户可管理资料、密码、编辑偏好、标签和 Webhook，或在「MCP 和 API」管理访问令牌和查看接入示例。管理员可配置站点、存储、邮件通知、单点登录和实例配置。 | [设置项清单](../web/src/components/Settings/settingSections.ts)、[声明式配置](../docs/design/declarative-configuration.md) |
 
 ## 前端、服务端和数据库
 
@@ -69,13 +71,12 @@ flowchart LR
 
 | 入口 | 能力 |
 | --- | --- |
-| REST / Connect | Web 客户端使用 Connect，第三方可以通过 `/api/…` 的 REST 接口或 `/memos.api.…` 的 Connect 接口调用服务。个人访问令牌在设置中创建，持有该令牌的程序按对应账户权限访问。 |
+| REST / Connect | Web 客户端使用 Connect，第三方可以通过 `/api/…` 的 REST 接口或 `/memos.api.…` 的 Connect 接口调用服务。在「设置 → MCP 和 API」可复制 REST 地址及调用示例，并创建个人访问令牌。持有令牌的程序按对应账户权限访问。 |
 | Webhook | 账户可配置对外发送的笔记创建、修改、删除等事件。Webhook 采用异步队列，可配置签名。 |
-| MCP | 服务挂载 `/mcp`，外部 MCP 客户端可带着访问令牌操作同一个账户的笔记、附件和空间。工具调用仍走原有 API 权限。 |
-| 语音转写 | 管理员为实例配置支持的 AI 服务后，编辑器可将音频转成文字。 |
+| MCP | 支持 Streamable HTTP 和 Bearer 令牌的 MCP 客户端可连接 `/mcp`，再用工具读取笔记或把生成内容保存为笔记。工具调用走原有 API 权限。 |
 | 手机访问 | 当前仓库交付的是 Web 服务和容器镜像。支持的浏览器可以添加到主屏幕。原生 Android 客户端可作为独立项目，调用同一个服务端。 |
 
-[API 说明](../proto/api/README.md) · [Webhook](../server/api/memo_service_webhooks.go) · [MCP](../server/mcp/README.md) · [语音转写](../server/api/ai_service.go)
+[API 说明](../proto/api/README.md) · [Webhook](../server/api/memo_service_webhooks.go) · [MCP](../server/mcp/README.md)
 
 ## 开发、验证和发布
 
@@ -96,6 +97,7 @@ pnpm dev
 | 编辑、日历和界面 | 在 `web/` 执行 `pnpm lint`、`pnpm test`、`pnpm build`。在桌面和手机核对登录、写笔记、切换后返回历史日期、打开附件。 |
 | API、数据和迁移 | 在仓库根目录执行 `go test ./...`，按改动重点运行 `server/api/test`、`server/fileserver`、`core` 或 `store` 套件。用两个账户验证各自笔记和附件的读取权限。 |
 | 导入和导出 | 用带图片、标签、笔记引用和空间的测试笔记导出 ZIP，再在独立实例里试导入。确认首次导入、跳过、覆盖和创建副本的结果，检查重复导入后的图片显示。 |
+| 回收站和标签整理 | 用两个账户验证回收站只显示自己的笔记，恢复后原状态和附件可用。准备两个同级标签和子标签，重命名其中一个到另一个后核对筛选结果，再整理带空格的标签路径。 |
 | Compose 和镜像 | 用 `docker compose config --quiet` 和 `docker compose -f compose.nas.yaml config --quiet` 检查配置。使用镜像时验证 `/healthz`，再重建容器确认数据卷仍可读写。 |
 
 `pnpm release` 将网页构建到 `server/frontend/dist`，Go 二进制将其嵌入。Docker 的构建和发布由 [Cat_two Container 工作流](../.github/workflows/cat-two-container.yml)完成。向 `main` 推送会触发验证，使用工作流的手动触发或 `[publish dockerhub]` 标记可发布 AMD64 和 ARM64 镜像。Docker Hub 编号从 `0.01` 起，每次发布递增 `0.01`。发布后核对编号、`latest` 和 `sha-<完整提交 SHA>` 是否指向同一镜像，再更新 NAS。[编号逻辑](../scripts/cat_two_docker_release.py)

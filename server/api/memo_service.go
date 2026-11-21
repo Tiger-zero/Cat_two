@@ -512,7 +512,9 @@ func (s *APIService) DeleteMemo(ctx context.Context, request *apipb.DeleteMemoRe
 		}
 	}
 
-	deleteResult, err := s.Store.DeleteMemoWithPolicy(ctx, &store.DeleteMemoWithPolicy{MemoID: memo.ID, ActorUserID: user.ID})
+	_, err = s.Store.ApplyMemoTrash(ctx, &store.MemoTrashMutation{
+		MemoID: memo.ID, ActorUserID: user.ID, Action: store.MemoTrashMove, NowTs: time.Now().Unix(),
+	})
 	if err != nil {
 		switch {
 		case stderrors.Is(err, store.ErrMemoPermissionDenied):
@@ -523,20 +525,12 @@ func (s *APIService) DeleteMemo(ctx context.Context, request *apipb.DeleteMemoRe
 			return nil, status.Errorf(codes.Internal, "failed to delete memo: %v", err)
 		}
 	}
-	if deleteResult == nil {
-		return nil, status.Error(codes.Internal, "memo was deleted without authorization state")
-	}
-
 	s.SSEHub.publishMemoChanged()
-	if deletedMemoMessage != nil && deleteResult.ActorCanRead {
+	if deletedMemoMessage != nil {
 		if err := s.DispatchMemoDeletedWebhook(ctx, deletedMemoMessage); err != nil {
 			slog.Warn("Failed to dispatch memo deleted webhook", slog.Any("err", err))
 		}
 	}
-	if err := s.cleanupDeletedAttachmentStorage(ctx, deleteResult.Attachments); err != nil {
-		return nil, status.Errorf(codes.Internal, "memo was deleted but attachment storage cleanup failed: %v", err)
-	}
-
 	return &emptypb.Empty{}, nil
 }
 

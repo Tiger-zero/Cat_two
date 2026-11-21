@@ -2,6 +2,7 @@ import { create } from "@bufbuild/protobuf";
 import { Switch } from "@usememos/ui";
 import { useAuth } from "@/contexts/AuthContext";
 import { updateDevicePreferences, useDevicePreferences } from "@/hooks/useDevicePreferences";
+import { useThemePreference } from "@/hooks/useResolvedTheme";
 import { useUpdateUserGeneralSetting } from "@/hooks/useUserQueries";
 import { DEFAULT_LOCALE } from "@/i18n";
 import { UserSetting_GeneralSetting, UserSetting_GeneralSettingSchema } from "@/types/proto/api/user_service_pb";
@@ -18,6 +19,7 @@ const PreferencesSection = () => {
   const { currentUser, userGeneralSetting: generalSetting, refetchSettings } = useAuth();
   const { mutate: updateUserGeneralSetting, isPending: isUpdatingGeneralSetting } = useUpdateUserGeneralSetting(currentUser?.name);
   const devicePreferences = useDevicePreferences();
+  const theme = useThemePreference();
 
   const handleLocaleSelectChange = (locale: Locale) => {
     // Apply locale immediately for instant UI feedback and persist to localStorage
@@ -76,7 +78,7 @@ const PreferencesSection = () => {
           </SettingListItem>
 
           <SettingListItem label={t("setting.preference.theme")} description={t("setting.preference.theme-description")}>
-            <ThemeSelect value={setting.theme} onValueChange={handleThemeChange} />
+            <ThemeSelect value={theme} onValueChange={handleThemeChange} />
           </SettingListItem>
         </SettingList>
       </SettingGroup>

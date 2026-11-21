@@ -93,9 +93,6 @@ export interface EditorToolbarProps {
 }
 
 export interface EditorMetadataProps {
-  onTranscribeAttachment?: (attachment: Attachment) => void;
-  transcribingAttachment?: string;
-  transcriptionDisabled?: boolean;
   memoName?: string;
   uploadingLocalFileURLs: ReadonlySet<string>;
   onInsertAttachments: (attachments: Attachment[]) => void;
@@ -112,9 +109,6 @@ export interface AudioRecorderPanelProps {
   mediaStream: MediaStream | null;
   onStop: () => void;
   onCancel: () => void;
-  onTranscribe?: () => void;
-  canTranscribe?: boolean;
-  isTranscribing?: boolean;
 }
 
 export interface FocusModeOverlayProps {

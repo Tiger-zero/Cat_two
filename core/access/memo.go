@@ -63,7 +63,7 @@ func CanManageAttachment(actor *store.User, attachment *store.Attachment) bool {
 // stay stored, but do not grant access to other people.
 func CheckMemoReadContext(ctx MemoReadContext) MemoReadDecision {
 	memo := ctx.Memo
-	if memo == nil || !ctx.CreatorValid {
+	if memo == nil || memo.DeletedTs != nil || !ctx.CreatorValid {
 		return MemoReadDecision{Denial: MemoReadDenialNotFound}
 	}
 	if memo.Visibility != store.Public && memo.Visibility != store.Protected && memo.Visibility != store.Private && memo.Visibility != store.SpaceAudience {

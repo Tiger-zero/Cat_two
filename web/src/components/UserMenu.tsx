@@ -9,6 +9,7 @@ import { useAppSidebar } from "@/contexts/AppSidebarContext";
 import { useAuth } from "@/contexts/AuthContext";
 import useCurrentUser from "@/hooks/useCurrentUser";
 import { useSSEConnectionStatus } from "@/hooks/useLiveMemoRefresh";
+import { useThemePreference } from "@/hooks/useResolvedTheme";
 import { useNotifications, useUpdateUserGeneralSetting } from "@/hooks/useUserQueries";
 import { locales } from "@/i18n";
 import { cn } from "@/lib/utils";
@@ -16,7 +17,7 @@ import { Routes } from "@/router";
 import { UserNotification_Status } from "@/types/proto/api/user_service_pb";
 import { buildAuthRoute } from "@/utils/auth-redirect";
 import { getLocaleDisplayName, getLocaleWithFallback, loadLocale, useTranslate } from "@/utils/i18n";
-import { getThemeWithFallback, loadTheme, THEME_OPTIONS } from "@/utils/theme";
+import { loadTheme, THEME_OPTIONS } from "@/utils/theme";
 
 interface PreferenceSubmenuProps {
   icon: LucideIcon;
@@ -68,13 +69,11 @@ const UserPreferenceMenu = () => {
   const { userGeneralSetting, refetchSettings } = useAuth();
   const { mutate: updateUserGeneralSetting } = useUpdateUserGeneralSetting(currentUser?.name);
   // The chosen value shows immediately, before a signed-in save round-trips.
-  const [theme, setTheme] = useState<string>();
   const [locale, setLocale] = useState<string>();
-  const currentTheme = theme ?? getThemeWithFallback(userGeneralSetting?.theme);
+  const currentTheme = useThemePreference();
   const currentLocale = locale ?? getLocaleWithFallback(userGeneralSetting?.locale);
 
   const handleThemeChange = (value: string) => {
-    setTheme(value);
     loadTheme(value);
     if (currentUser) {
       updateUserGeneralSetting({ generalSetting: { theme: value }, updateMask: ["theme"] }, { onSuccess: () => refetchSettings() });

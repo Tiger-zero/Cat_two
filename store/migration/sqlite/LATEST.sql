@@ -60,6 +60,8 @@ CREATE TABLE memo (
   updated_ts BIGINT NOT NULL DEFAULT (strftime('%s', 'now')),
   row_status TEXT NOT NULL CHECK (row_status IN ('NORMAL', 'ARCHIVED')) DEFAULT 'NORMAL',
   content TEXT NOT NULL DEFAULT '',
+  deleted_ts INTEGER,
+  trash_root_id INTEGER,
   visibility TEXT NOT NULL CHECK (visibility IN ('PUBLIC', 'PROTECTED', 'PRIVATE', 'SPACE')) DEFAULT 'PRIVATE',
   pinned INTEGER NOT NULL CHECK (pinned IN (0, 1)) DEFAULT 0,
   payload TEXT NOT NULL DEFAULT '{}',
@@ -68,6 +70,9 @@ CREATE TABLE memo (
 
 CREATE INDEX idx_memo_creator_id ON memo(creator_id);
 CREATE INDEX idx_memo_space_id ON memo(space_id, row_status, created_ts DESC, id DESC);
+CREATE INDEX idx_memo_trash_expiry ON memo(deleted_ts, id);
+CREATE INDEX idx_memo_trash_creator ON memo(creator_id, deleted_ts, id);
+CREATE INDEX idx_memo_trash_root ON memo(trash_root_id);
 
 -- memo_relation
 CREATE TABLE memo_relation (

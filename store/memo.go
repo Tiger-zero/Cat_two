@@ -77,6 +77,7 @@ type Memo struct {
 	Pinned     bool
 	Payload    *storepb.MemoPayload
 	SpaceID    *int32
+	DeletedTs  *int64
 
 	// Composed fields
 	ParentUID *string
@@ -100,6 +101,9 @@ type FindMemo struct {
 	ExcludeContent       bool
 	ExcludeComments      bool
 	Filters              []string
+	Trash                MemoTrashScope
+	DeletedAfterTs       *int64
+	DeletedThroughTs     *int64
 
 	// Pagination
 	Limit  *int

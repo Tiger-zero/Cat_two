@@ -33,7 +33,7 @@ func loadMySQLMemoParticipation(ctx context.Context, tx *sql.Tx, memoID, actorUs
 	}
 	var contextSpace sql.NullInt64
 	err = tx.QueryRowContext(ctx, `SELECT creator_id, row_status, visibility, space_id
-		FROM memo WHERE id = ?`, memoID).Scan(
+		FROM memo WHERE id = ? AND deleted_ts IS NULL`, memoID).Scan(
 		&snapshot.ContextCreatorID, &snapshot.ContextRowStatus, &snapshot.ContextVisibility, &contextSpace,
 	)
 	if err != nil {

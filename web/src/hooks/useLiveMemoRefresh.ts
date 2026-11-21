@@ -6,6 +6,7 @@ import { attachmentKeys } from "@/hooks/useAttachmentQueries";
 import { memoKeys } from "@/hooks/useMemoQueries";
 import { spaceKeys } from "@/hooks/useSpaceQueries";
 import { userKeys } from "@/hooks/useUserQueries";
+import { trashQueryKey } from "@/lib/trash";
 
 /**
  * Reconnection parameters for SSE connection.
@@ -479,6 +480,7 @@ function invalidateAllLiveQueries(queryClient: ReturnType<typeof useQueryClient>
 
 function invalidateLiveMemoQueries(queryClient: ReturnType<typeof useQueryClient>) {
   queryClient.invalidateQueries({ queryKey: memoKeys.all, refetchType: "active" });
+  queryClient.invalidateQueries({ queryKey: trashQueryKey, refetchType: "active" });
   queryClient.invalidateQueries({ queryKey: userKeys.stats(), refetchType: "active" });
   queryClient.invalidateQueries({ queryKey: attachmentKeys.lists(), refetchType: "active" });
 }

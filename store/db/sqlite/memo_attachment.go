@@ -70,7 +70,7 @@ func (d *DB) ApplyMemoMutation(ctx context.Context, mutation *store.MemoMutation
 
 	var creatorID int32
 	var content string
-	if err := conn.QueryRowContext(ctx, `SELECT creator_id, content FROM memo WHERE id = ?`, mutation.MemoID).Scan(&creatorID, &content); err != nil {
+	if err := conn.QueryRowContext(ctx, `SELECT creator_id, content FROM memo WHERE id = ? AND deleted_ts IS NULL`, mutation.MemoID).Scan(&creatorID, &content); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return errors.Wrap(store.ErrMemoMutationConflict, "memo no longer exists")
 		}

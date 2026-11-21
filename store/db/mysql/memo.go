@@ -170,6 +170,20 @@ func (d *DB) ListMemos(ctx context.Context, find *store.FindMemo) ([]*store.Memo
 	if v := find.CreatorID; v != nil {
 		where, args = append(where, "`memo`.`creator_id` = ?"), append(args, *v)
 	}
+	switch find.Trash {
+	case store.MemoTrashOnly:
+		where = append(where, "memo.deleted_ts IS NOT NULL AND "+memoTrashRootPredicate)
+	case store.MemoTrashInclude:
+		// A deleted row still owns its UID until the recycle bin expires.
+	default:
+		where = append(where, "memo.deleted_ts IS NULL")
+	}
+	if v := find.DeletedAfterTs; v != nil {
+		where, args = append(where, "memo.deleted_ts > ?"), append(args, *v)
+	}
+	if v := find.DeletedThroughTs; v != nil {
+		where, args = append(where, "memo.deleted_ts <= ?"), append(args, *v)
+	}
 	if v := find.RowStatus; v != nil {
 		where, args = append(where, "`memo`.`row_status` = ?"), append(args, *v)
 	}
@@ -207,7 +221,9 @@ func (d *DB) ListMemos(ctx context.Context, find *store.FindMemo) ([]*store.Memo
 	if find.OrderByPinned {
 		orderBy = append(orderBy, "`pinned` DESC")
 	}
-	if find.OrderByUpdatedTs {
+	if find.Trash == store.MemoTrashOnly {
+		orderBy = append(orderBy, "memo.deleted_ts "+order)
+	} else if find.OrderByUpdatedTs {
 		orderBy = append(orderBy, "`updated_ts` "+order)
 	} else {
 		orderBy = append(orderBy, "`created_ts` "+order)
@@ -225,6 +241,7 @@ func (d *DB) ListMemos(ctx context.Context, find *store.FindMemo) ([]*store.Memo
 		"`memo`.`pinned` AS `pinned`",
 		"`memo`.`payload` AS `payload`",
 		"`memo`.`space_id` AS `space_id`",
+		"`memo`.`deleted_ts` AS `deleted_ts`",
 		`(SELECT parent_memo.uid
 			FROM memo_relation AS parent_relation
 			JOIN memo AS parent_memo ON parent_memo.id = parent_relation.related_memo_id
@@ -269,6 +286,7 @@ func (d *DB) ListMemos(ctx context.Context, find *store.FindMemo) ([]*store.Memo
 			&memo.Pinned,
 			&payloadBytes,
 			&memo.SpaceID,
+			&memo.DeletedTs,
 			&memo.ParentUID,
 		}
 		if !find.ExcludeContent {

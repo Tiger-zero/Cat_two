@@ -1,11 +1,8 @@
 package markdown
 
 import (
-	"bytes"
-	"cmp"
 	"net/url"
 	"regexp"
-	"slices"
 	"strings"
 	"unicode/utf8"
 
@@ -61,6 +58,12 @@ type Service interface {
 
 	// RenameTag renames all occurrences of oldTag to newTag in content
 	RenameTag(content []byte, oldTag, newTag string) (string, error)
+
+	// RenameTagBranch renames oldTag and its slash-delimited descendants in content.
+	RenameTagBranch(content []byte, oldTag, newTag string) (string, error)
+
+	// NormalizeTagWhitespace removes horizontal whitespace around tag hierarchy separators.
+	NormalizeTagWhitespace(content []byte) (string, error)
 
 	// RewriteImageDestinations edits destinations reached by Markdown images.
 	RewriteImageDestinations(content []byte, rewrite func(string) (string, error)) (string, error)
@@ -130,18 +133,23 @@ func NewService(opts ...Option) Service {
 
 // parse is an internal helper to parse content into AST.
 func (s *service) parse(content []byte) (gast.Node, error) {
-	doc, _ := s.parseSource(content, nil)
+	doc, _ := s.parseSource(content, nil, nil)
 	return doc, nil
 }
 
-func (s *service) parseSource(content []byte, ranges imageReferenceRanges) (gast.Node, []byte) {
+func (s *service) parseSource(content []byte, ranges imageReferenceRanges, configureContext func(parser.Context)) (gast.Node, []byte) {
 	parse := func(source []byte) gast.Node {
 		reader := text.NewReader(source)
-		if ranges == nil {
+		if ranges == nil && configureContext == nil {
 			return s.md.Parser().Parse(reader)
 		}
 		context := parser.NewContext()
-		context.Set(imageReferenceRangesKey, ranges)
+		if ranges != nil {
+			context.Set(imageReferenceRangesKey, ranges)
+		}
+		if configureContext != nil {
+			configureContext(context)
+		}
 		return s.md.Parser().Parse(reader, parser.WithContext(context))
 	}
 	doc := parse(content)
@@ -600,50 +608,6 @@ func uniqueManagedAttachmentReferences(references []ManagedAttachmentReference) 
 		result = append(result, reference)
 	}
 	return result
-}
-
-// RenameTag renames all occurrences of oldTag to newTag in content.
-func (s *service) RenameTag(content []byte, oldTag, newTag string) (string, error) {
-	root, err := s.parse(content)
-	if err != nil {
-		return "", err
-	}
-
-	type sourceRange struct {
-		start int
-		end   int
-	}
-	var ranges []sourceRange
-	err = gast.Walk(root, func(n gast.Node, entering bool) (gast.WalkStatus, error) {
-		if !entering {
-			return gast.WalkContinue, nil
-		}
-
-		if tagNode, ok := asMemoTagNode(n); ok {
-			if string(tagNode.Tag) == oldTag && len(tagNode.Source) > 0 {
-				ranges = append(ranges, sourceRange{start: tagNode.Pos(), end: tagNode.Pos() + len(tagNode.Source)})
-			}
-		}
-
-		return gast.WalkContinue, nil
-	})
-
-	if err != nil {
-		return "", err
-	}
-
-	slices.SortFunc(ranges, func(left, right sourceRange) int { return cmp.Compare(left.start, right.start) })
-	var output bytes.Buffer
-	output.Grow(len(content))
-	cursor := 0
-	for _, sourceRange := range ranges {
-		output.Write(content[cursor:sourceRange.start])
-		output.WriteByte('#')
-		output.WriteString(newTag)
-		cursor = sourceRange.end
-	}
-	output.Write(content[cursor:])
-	return output.String(), nil
 }
 
 // uniquePreserveCase returns unique strings from input while preserving case.

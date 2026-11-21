@@ -36,8 +36,6 @@ const (
 	ScopeLinkMetadata Scope = "link_metadata"
 	// ScopeUploadUser counts upload starts per user.
 	ScopeUploadUser Scope = "upload_user"
-	// ScopeTranscribeUser counts transcription calls per user.
-	ScopeTranscribeUser Scope = "transcribe_user"
 	// ScopeWriteUser counts content creation per user.
 	ScopeWriteUser Scope = "write_user"
 	// ScopeArchiveUser counts memo exports and imports per user.
@@ -74,7 +72,6 @@ func DefaultPolicy() Policy {
 		ScopePasswordResetEmail: {Limit: 3, Window: time.Hour},
 		ScopeLinkMetadata:       {Limit: 60, Window: time.Minute},
 		ScopeUploadUser:         {Limit: 120, Window: time.Minute},
-		ScopeTranscribeUser:     {Limit: 20, Window: time.Hour},
 		ScopeWriteUser:          {Limit: 120, Window: time.Minute},
 		ScopeArchiveUser:        {Limit: 10, Window: time.Hour},
 	}

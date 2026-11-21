@@ -25,6 +25,7 @@ const Setting = lazyWithReload(() => import("@/pages/Setting"));
 const MemoViews = lazyWithReload(() => import("@/pages/MemoViews"));
 const SignIn = lazyWithReload(() => import("@/pages/SignIn"));
 const SignUp = lazyWithReload(() => import("@/pages/SignUp"));
+const Trash = lazyWithReload(() => import("@/pages/Trash"));
 
 const LEGACY_CALENDAR_PATH = "calendar/:year?/:month?/:day?";
 
@@ -87,6 +88,7 @@ export const routeConfig: RouteObject[] = [
                   { index: true, element: <Home /> },
                   { path: Routes.EXPLORE, element: <ExploreRoute /> },
                   { path: Routes.ARCHIVED, element: <Archived /> },
+                  { path: Routes.TRASH, element: <Trash /> },
                   {
                     element: <RequireFullInitializationRoute />,
                     children: [{ path: Routes.VIEWS, element: <MemoViews /> }],

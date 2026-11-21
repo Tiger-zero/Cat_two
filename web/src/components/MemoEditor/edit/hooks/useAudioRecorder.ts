@@ -5,12 +5,11 @@ import type { LocalFile } from "../types/attachment";
 import { useBlobUrls } from "./useBlobUrls";
 
 const FALLBACK_AUDIO_MIME_TYPE = "audio/webm";
-export type AudioRecordingCompleteMode = "attach" | "transcribe";
 export type AudioRecorderStatus = "idle" | "requesting_permission" | "recording" | "error" | "unsupported";
 
 interface UseAudioRecorderOptions {
-  onRecordingComplete: (localFile: LocalFile, mode: AudioRecordingCompleteMode) => void;
-  onRecordingEmpty?: (mode: AudioRecordingCompleteMode) => void;
+  onRecordingComplete: (localFile: LocalFile) => void;
+  onRecordingEmpty?: () => void;
 }
 
 const AUDIO_MIME_TYPE_CANDIDATES = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4", "audio/ogg;codecs=opus"] as const;
@@ -62,7 +61,6 @@ export const useAudioRecorder = (options: UseAudioRecorderOptions) => {
   const startedAtRef = useRef<number | null>(null);
   const elapsedTimerRef = useRef<number | null>(null);
   const recorderMimeTypeRef = useRef<string>(FALLBACK_AUDIO_MIME_TYPE);
-  const completionModeRef = useRef<AudioRecordingCompleteMode>("attach");
   const startRequestIdRef = useRef(0);
   const { createBlobUrl } = useBlobUrls();
 
@@ -167,13 +165,11 @@ export const useAudioRecorder = (options: UseAudioRecorderOptions) => {
 
         const durationSeconds = startedAtRef.current ? Math.max(0, Math.round((Date.now() - startedAtRef.current) / 1000)) : 0;
         const blob = new Blob(chunksRef.current, { type: recorderMimeTypeRef.current });
-        const completionMode = completionModeRef.current;
-        completionModeRef.current = "attach";
         if (blob.size === 0) {
           setElapsedSeconds(0);
           setError(undefined);
           setStatus("idle");
-          optionsRef.current.onRecordingEmpty?.(completionMode);
+          optionsRef.current.onRecordingEmpty?.();
           resetRecorderRefs();
           return;
         }
@@ -181,17 +177,12 @@ export const useAudioRecorder = (options: UseAudioRecorderOptions) => {
         const file = createRecordedFile(blob, recorderMimeTypeRef.current);
         const previewUrl = createBlobUrl(file);
 
-        optionsRef.current.onRecordingComplete(
-          {
-            file,
-            previewUrl,
-            origin: "audio_recording",
-            audioMeta: {
-              durationSeconds,
-            },
-          },
-          completionMode,
-        );
+        optionsRef.current.onRecordingComplete({
+          file,
+          previewUrl,
+          origin: "audio_recording",
+          audioMeta: { durationSeconds },
+        });
         setElapsedSeconds(0);
         setError(undefined);
         setStatus("idle");
@@ -221,20 +212,17 @@ export const useAudioRecorder = (options: UseAudioRecorderOptions) => {
     }
   };
 
-  const stopRecording = (mode: AudioRecordingCompleteMode = "attach") => {
+  const stopRecording = () => {
     if (!mediaRecorderRef.current || mediaRecorderRef.current.state === "inactive") {
-      return false;
+      return;
     }
 
-    completionModeRef.current = mode;
     cleanupTimer();
     mediaRecorderRef.current.stop();
-    return true;
   };
 
   const resetRecording = () => {
     startRequestIdRef.current += 1;
-    completionModeRef.current = "attach";
     resetRecorderRefs();
     setElapsedSeconds(0);
     setError(undefined);

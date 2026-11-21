@@ -80,7 +80,7 @@ func authorizeSQLiteAttachmentMutation(
 		var currentSpace sql.NullInt64
 		var content string
 		if err := tx.QueryRowContext(ctx, `SELECT creator_id, row_status, space_id, visibility, content
-			FROM memo WHERE id = ?`, memoID).Scan(
+			FROM memo WHERE id = ? AND deleted_ts IS NULL`, memoID).Scan(
 			&snapshot.CreatorID, &snapshot.RowStatus, &currentSpace, &snapshot.Visibility, &content,
 		); err != nil {
 			if errors.Is(err, sql.ErrNoRows) {

@@ -60,7 +60,7 @@ type imageDestinationEdit struct {
 // If a reference definition also serves a regular link, only the image changes.
 func (s *service) RewriteImageDestinations(content []byte, rewrite func(string) (string, error)) (string, error) {
 	ranges := make(imageReferenceRanges)
-	root, source := s.parseSource(content, ranges)
+	root, source := s.parseSource(content, ranges, nil)
 	links := make(map[*byte]bool)
 	var images []*ast.Image
 	_ = ast.Walk(root, func(node ast.Node, entering bool) (ast.WalkStatus, error) {

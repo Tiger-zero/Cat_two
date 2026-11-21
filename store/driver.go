@@ -35,6 +35,7 @@ type Driver interface {
 	RefreshMemoDerivedPayload(ctx context.Context, refresh *RefreshMemoDerivedPayload) error
 	DeleteMemo(ctx context.Context, delete *DeleteMemo) error
 	DeleteMemoWithPolicy(ctx context.Context, delete *DeleteMemoWithPolicy) (*DeleteMemoWithPolicyResult, error)
+	ApplyMemoTrash(ctx context.Context, mutation *MemoTrashMutation) ([]*Attachment, error)
 	// CountUserMemos counts the memos a user created, comments included, in every row status and Space.
 	CountUserMemos(ctx context.Context, creatorID int32) (int64, error)
 

@@ -1,12 +1,10 @@
-import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { DrawingSheet } from "@/components/DrawingSheet";
 import { useAuth } from "@/contexts/AuthContext";
-import { useInstance } from "@/contexts/InstanceContext";
 import useCurrentUser from "@/hooks/useCurrentUser";
 import { useSourceMode } from "@/hooks/useSourceMode";
-import { showErrorToast, toast } from "@/lib/toast";
+import { showErrorToast } from "@/lib/toast";
 import { cn } from "@/lib/utils";
-import { InstanceSetting_Key } from "@/types/proto/api/instance_service_pb";
 import { useTranslate } from "@/utils/i18n";
 
 import { AudioRecorderPanel, EditorContent, EditorMetadata, FocusModeExitButton, FocusModeOverlay, TimestampPopover } from "./components";
@@ -16,7 +14,6 @@ import type { EditorFileOrigin } from "./extensions";
 import {
   splitInlineLocalFiles,
   toLocalFiles,
-  useAttachmentTranscription,
   useAudioRecorder,
   useAutoSave,
   useBlobUrls,
@@ -27,11 +24,10 @@ import {
   useMemoSave,
 } from "./hooks";
 import { canChooseSpaceFor } from "./initialState";
-import { cacheService, errorService, transcriptionService } from "./services";
+import { cacheService } from "./services";
 import { useEditorContext, useEditorSelector } from "./state";
 import { EditorToolbar } from "./Toolbar";
 import type { EditorViewToggles, EditSessionProps } from "./types";
-import type { LocalFile } from "./types/attachment";
 import type { EditorController, EditorPosition } from "./types/editorController";
 
 /**
@@ -75,9 +71,7 @@ export const EditSession: React.FC<EditSessionProps> = ({
   }, [isFocusMode, onFocusModeChange]);
   const isSaving = useEditorSelector((s) => s.ui.isLoading.saving);
   const hasTimestamp = useEditorSelector((s) => Boolean(s.timestamps.createTime));
-  const { aiSetting, fetchSetting } = useInstance();
   const [isAudioRecorderOpen, setIsAudioRecorderOpen] = useState(false);
-  const [isTranscribingAudio, setIsTranscribingAudio] = useState(false);
   const { createBlobUrl } = useBlobUrls();
   const saveMediaMetadata = userGeneralSetting?.saveMediaMetadata ?? false;
   const inlineImageUpload = useInlineImageUpload(editorRef);
@@ -95,12 +89,6 @@ export const EditSession: React.FC<EditSessionProps> = ({
   const draftSpace = useEditorSelector((s) => s.metadata.space);
   const canChooseSpace = canChooseSpaceFor({ memo, currentUser, parentMemoName, defaultSpace });
   const editorSpace = memo ? draftSpace : parentMemoName ? undefined : (defaultSpace ?? draftSpace);
-  const canTranscribe = useMemo(() => {
-    const providerId = aiSetting.transcription?.providerId ?? "";
-    if (!providerId) return false;
-    const provider = aiSetting.providers.find((p) => p.id === providerId);
-    return Boolean(provider?.apiKeySet);
-  }, [aiSetting.providers, aiSetting.transcription?.providerId]);
 
   // Source mode only changes how the text is edited, so every composer offers it.
   const [editorMode, setEditorMode] = useSourceMode();
@@ -136,66 +124,12 @@ export const EditSession: React.FC<EditSessionProps> = ({
     );
   }, [defaultCreateTime, memo, isInitialized, actions, dispatch]);
 
-  useEffect(() => {
-    if (!currentUser) {
-      return;
-    }
-
-    void fetchSetting(InstanceSetting_Key.AI).catch(() => undefined);
-  }, [currentUser, fetchSetting]);
-
-  const insertTranscribedText = useCallback((text: string) => editorRef.current?.insertMarkdown(text), []);
-
-  const { transcribeAttachment, transcribingAttachment } = useAttachmentTranscription(insertTranscribedText);
-
-  const handleTranscribeRecordedAudio = useCallback(
-    async (localFile: LocalFile) => {
-      if (!canTranscribe) {
-        dispatch(actions.addLocalFile(localFile));
-        setIsTranscribingAudio(false);
-        setIsAudioRecorderOpen(false);
-        return;
-      }
-
-      try {
-        const text = (await transcriptionService.transcribeFile(localFile.file)).trim();
-        if (!text) {
-          dispatch(actions.addLocalFile(localFile));
-          showErrorToast(t("editor.audio-recorder.transcribe-empty"));
-          return;
-        }
-
-        insertTranscribedText(text);
-        toast.add({ title: t("editor.audio-recorder.transcribe-success"), type: "success" });
-      } catch (error) {
-        console.error(error);
-        showErrorToast(errorService.getErrorMessage(error) || t("editor.audio-recorder.transcribe-error"));
-        dispatch(actions.addLocalFile(localFile));
-      } finally {
-        setIsTranscribingAudio(false);
-        setIsAudioRecorderOpen(false);
-      }
-    },
-    [actions, canTranscribe, dispatch, insertTranscribedText, t],
-  );
-
   const audioRecorder = useAudioRecorder({
-    onRecordingComplete: (localFile, mode) => {
-      if (mode === "transcribe") {
-        void handleTranscribeRecordedAudio(localFile);
-        return;
-      }
-
+    onRecordingComplete: (localFile) => {
       dispatch(actions.addLocalFile(localFile));
       setIsAudioRecorderOpen(false);
     },
-    onRecordingEmpty: (mode) => {
-      if (mode === "transcribe") {
-        setIsTranscribingAudio(false);
-        showErrorToast(t("editor.audio-recorder.transcribe-empty"));
-      }
-      setIsAudioRecorderOpen(false);
-    },
+    onRecordingEmpty: () => setIsAudioRecorderOpen(false),
   });
 
   // Mirror the recorder's busy state into the store so validationService.canSave
@@ -204,12 +138,6 @@ export const EditSession: React.FC<EditSessionProps> = ({
   useEffect(() => {
     dispatch(actions.setRecorderBusy(audioRecorder.isBusy));
   }, [audioRecorder.isBusy, actions, dispatch]);
-
-  // Both transcription paths insert into the draft when they land, so saving
-  // waits for either one; the recorder itself is idle by then.
-  useEffect(() => {
-    dispatch(actions.setLoading("transcribing", isTranscribingAudio || Boolean(transcribingAttachment)));
-  }, [isTranscribingAudio, transcribingAttachment, actions, dispatch]);
 
   useEffect(() => {
     if (!isAudioRecorderOpen) {
@@ -289,21 +217,8 @@ export const EditSession: React.FC<EditSessionProps> = ({
   );
 
   const handleCancelAudioRecording = () => {
-    setIsTranscribingAudio(false);
     audioRecorder.resetRecording();
     setIsAudioRecorderOpen(false);
-  };
-
-  const handleTranscribeAudioRecording = () => {
-    if (!canTranscribe || isTranscribingAudio) {
-      return;
-    }
-
-    setIsTranscribingAudio(true);
-    const didStop = audioRecorder.stopRecording("transcribe");
-    if (!didStop) {
-      setIsTranscribingAudio(false);
-    }
   };
 
   // The ＋ menu's view toggle only describes how an inline editor presents
@@ -375,15 +290,12 @@ export const EditSession: React.FC<EditSessionProps> = ({
           onFiles={handleEditorFiles}
         />
 
-        {isAudioRecorderOpen && (audioRecorder.isBusy || isTranscribingAudio) && (
+        {isAudioRecorderOpen && audioRecorder.isBusy && (
           <AudioRecorderPanel
             audioRecorder={{ status: audioRecorder.status, elapsedSeconds: audioRecorder.elapsedSeconds }}
             mediaStream={audioRecorder.recordingStream}
             onStop={audioRecorder.stopRecording}
             onCancel={handleCancelAudioRecording}
-            onTranscribe={handleTranscribeAudioRecording}
-            canTranscribe={canTranscribe}
-            isTranscribing={isTranscribingAudio}
           />
         )}
 
@@ -394,9 +306,6 @@ export const EditSession: React.FC<EditSessionProps> = ({
             uploadingLocalFileURLs={inlineImageUpload.uploadingLocalFileURLs}
             onInsertAttachments={inlineImageUpload.insertRemoteImages}
             onInsertLocalFiles={inlineImageUpload.insertLocalImages}
-            onTranscribeAttachment={canTranscribe ? transcribeAttachment : undefined}
-            transcribingAttachment={transcribingAttachment}
-            transcriptionDisabled={isSaving || audioRecorder.isBusy || isTranscribingAudio}
             onEditDrawing={drawing.openExisting}
             openingDrawing={drawing.opening}
           />

@@ -177,7 +177,7 @@ const MemoActionMenu = (props: MemoActionMenuProps) => {
         open={deleteDialogOpen}
         onOpenChange={setDeleteDialogOpen}
         title={t("memo.delete-confirm")}
-        confirmLabel={t("common.delete")}
+        confirmLabel={t("trash.move")}
         description={t("memo.delete-confirm-description")}
         cancelLabel={t("common.cancel")}
         onConfirm={confirmDeleteMemo}

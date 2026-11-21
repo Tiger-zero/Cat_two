@@ -10,9 +10,6 @@ export const EditorMetadata: FC<EditorMetadataProps> = ({
   uploadingLocalFileURLs,
   onInsertAttachments,
   onInsertLocalFiles,
-  onTranscribeAttachment,
-  transcribingAttachment,
-  transcriptionDisabled,
   onEditDrawing,
   openingDrawing,
 }) => {
@@ -52,9 +49,6 @@ export const EditorMetadata: FC<EditorMetadataProps> = ({
         onInsertLocalFiles={onInsertLocalFiles}
         placementActionsDisabled={placementActionsDisabled}
         uploadingLocalFileURLs={uploadingLocalFileURLs}
-        onTranscribeAttachment={onTranscribeAttachment}
-        transcribingAttachment={transcribingAttachment}
-        transcriptionDisabled={transcriptionDisabled}
         onEditDrawing={onEditDrawing}
         openingDrawing={openingDrawing}
       >

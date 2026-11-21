@@ -49,7 +49,7 @@ func validatePostgresMemoWritePolicy(ctx context.Context, tx *sql.Tx, memoID int
 
 	snapshot := &store.MemoWriteSnapshot{ActorIsAdmin: actor.Admin}
 	var sourceSpace sql.NullInt64
-	if err := tx.QueryRowContext(ctx, `SELECT creator_id, row_status, space_id, visibility FROM memo WHERE id = $1`, memoID).Scan(
+	if err := tx.QueryRowContext(ctx, `SELECT creator_id, row_status, space_id, visibility FROM memo WHERE id = $1 AND deleted_ts IS NULL FOR UPDATE`, memoID).Scan(
 		&snapshot.CreatorID, &snapshot.RowStatus, &sourceSpace, &snapshot.Visibility,
 	); err != nil {
 		if stderrors.Is(err, sql.ErrNoRows) {

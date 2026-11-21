@@ -418,6 +418,13 @@ func TestPlanMemoImport(t *testing.T) {
 	// Delete one memo so its UID is free, and let another account take one.
 	_, err := ts.Service.DeleteMemo(fixture.userCtx, &apipb.DeleteMemoRequest{Name: fixture.archived.Name})
 	require.NoError(t, err)
+	archivedUID, err := api.ExtractMemoUIDFromName(fixture.archived.Name)
+	require.NoError(t, err)
+	trashed, err := ts.Store.GetMemo(ctx, &store.FindMemo{UID: &archivedUID, Trash: store.MemoTrashOnly})
+	require.NoError(t, err)
+	require.NotNil(t, trashed)
+	_, err = ts.Store.ApplyMemoTrash(ctx, &store.MemoTrashMutation{MemoID: trashed.ID, ActorUserID: fixture.user.ID, Action: store.MemoTrashPurge, NowTs: time.Now().Unix()})
+	require.NoError(t, err)
 	other, err := ts.CreateRegularUser(ctx, "other")
 	require.NoError(t, err)
 	otherCtx := ts.CreateUserContext(ctx, other.ID)

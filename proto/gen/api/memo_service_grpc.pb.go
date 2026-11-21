@@ -61,9 +61,10 @@ type MemoServiceClient interface {
 	// UpdateMemo updates the memo fields listed in update_mask. Requires the memo
 	// creator or an instance administrator.
 	UpdateMemo(ctx context.Context, in *UpdateMemoRequest, opts ...grpc.CallOption) (*Memo, error)
-	// DeleteMemo deletes the named memo and its comment subtree, including nested
-	// replies and their owned resources. It removes incident relations for all
-	// deleted memos. Requires the memo creator or an instance administrator.
+	// DeleteMemo moves the named memo and its comment subtree to the recycle bin.
+	// Only the memo creator can move it. The owner can restore it within 30 days
+	// with POST /api/trash/{uid}/restore or permanently delete it sooner with
+	// DELETE /api/trash/{uid}. The server purges expired entries.
 	DeleteMemo(ctx context.Context, in *DeleteMemoRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	// ListMemoAttachments lists the attachments of a memo. Requires read access
 	// to the memo.
@@ -344,9 +345,10 @@ type MemoServiceServer interface {
 	// UpdateMemo updates the memo fields listed in update_mask. Requires the memo
 	// creator or an instance administrator.
 	UpdateMemo(context.Context, *UpdateMemoRequest) (*Memo, error)
-	// DeleteMemo deletes the named memo and its comment subtree, including nested
-	// replies and their owned resources. It removes incident relations for all
-	// deleted memos. Requires the memo creator or an instance administrator.
+	// DeleteMemo moves the named memo and its comment subtree to the recycle bin.
+	// Only the memo creator can move it. The owner can restore it within 30 days
+	// with POST /api/trash/{uid}/restore or permanently delete it sooner with
+	// DELETE /api/trash/{uid}. The server purges expired entries.
 	DeleteMemo(context.Context, *DeleteMemoRequest) (*emptypb.Empty, error)
 	// ListMemoAttachments lists the attachments of a memo. Requires read access
 	// to the memo.

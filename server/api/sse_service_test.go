@@ -551,7 +551,7 @@ func TestDeleteMemoReactionPublishesMemoChanged(t *testing.T) {
 	mustNotReceive(t, client.events, 100*time.Millisecond)
 }
 
-func TestDeleteMemo_DeletesCommentSubtreeOnly(t *testing.T) {
+func TestDeleteMemo_HidesCommentSubtreeOnly(t *testing.T) {
 	ctx := context.Background()
 	svc := newIntegrationService(t)
 	rootAuthor, err := svc.Store.CreateUser(ctx, &store.User{
@@ -590,7 +590,7 @@ func TestDeleteMemo_DeletesCommentSubtreeOnly(t *testing.T) {
 	require.NoError(t, err)
 	storedReply, err := svc.Store.GetMemo(ctx, &store.FindMemo{UID: &replyUID})
 	require.NoError(t, err)
-	require.Nil(t, storedReply, "deleting a comment must also delete its replies")
+	require.Nil(t, storedReply, "deleting a comment must also hide its replies")
 	rootUID, err := ExtractMemoUIDFromName(root.Name)
 	require.NoError(t, err)
 	storedRoot, err := svc.Store.GetMemo(ctx, &store.FindMemo{UID: &rootUID})
@@ -598,7 +598,7 @@ func TestDeleteMemo_DeletesCommentSubtreeOnly(t *testing.T) {
 	require.NotNil(t, storedRoot)
 }
 
-func TestDeleteMemoCleansAttachmentStorage(t *testing.T) {
+func TestPurgeMemoTrashCleansAttachmentStorage(t *testing.T) {
 	ctx := context.Background()
 	svc := newIntegrationService(t)
 	owner, err := svc.Store.CreateUser(ctx, &store.User{
@@ -640,6 +640,12 @@ func TestDeleteMemoCleansAttachmentStorage(t *testing.T) {
 	require.NoError(t, err)
 	require.Nil(t, deletedMemo)
 	deletedAttachment, err := svc.Store.GetAttachment(ctx, &store.FindAttachment{ID: &attachment.ID})
+	require.NoError(t, err)
+	require.NotNil(t, deletedAttachment, "recoverable memo keeps its attachment data")
+	require.FileExists(t, attachmentPath)
+	purge := runMemoTrashRequest(t, svc, owner, "DELETE", "/api/trash/"+memoUID)
+	require.Equal(t, 204, purge.Code, purge.Body.String())
+	deletedAttachment, err = svc.Store.GetAttachment(ctx, &store.FindAttachment{ID: &attachment.ID})
 	require.NoError(t, err)
 	require.Nil(t, deletedAttachment)
 	_, err = os.Stat(attachmentPath)

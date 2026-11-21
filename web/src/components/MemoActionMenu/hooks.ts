@@ -144,7 +144,7 @@ export const useMemoActionHandlers = ({ memo, parentPage, onEdit, setDeleteDialo
       handleError(error, showErrorToast, { context: "Delete memo", fallbackMessage: t("common.error-occurred") });
       return;
     }
-    toast.add({ title: t("message.deleted-successfully"), type: "success" });
+    toast.add({ title: t("trash.moved"), type: "success" });
     if (memo.parent) {
       queryClient.invalidateQueries({ queryKey: memoKeys.comments(memo.parent) });
       queryClient.invalidateQueries({ queryKey: memoKeys.detail(memo.parent) });

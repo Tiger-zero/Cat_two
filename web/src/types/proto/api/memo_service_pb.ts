@@ -437,7 +437,7 @@ export const UpdateMemoRequestSchema: GenMessage<UpdateMemoRequest> = /*@__PURE_
  */
 export type DeleteMemoRequest = Message<"memos.api.DeleteMemoRequest"> & {
   /**
-   * Required. The resource name of the memo to delete.
+   * Required. The resource name of the memo to move to the recycle bin.
    * Format: memos/{memo}
    *
    * @generated from field: string name = 1;
@@ -445,8 +445,8 @@ export type DeleteMemoRequest = Message<"memos.api.DeleteMemoRequest"> & {
   name: string;
 
   /**
-   * Optional. Currently ignored by the server; deletion always includes the
-   * comment subtree.
+   * Optional. Ignored by the server. The memo and its comment subtree always
+   * move to the recycle bin.
    *
    * @generated from field: bool force = 2;
    */
@@ -1413,9 +1413,10 @@ export const MemoService: GenService<{
     output: typeof MemoSchema;
   },
   /**
-   * DeleteMemo deletes the named memo and its comment subtree, including nested
-   * replies and their owned resources. It removes incident relations for all
-   * deleted memos. Requires the memo creator or an instance administrator.
+   * DeleteMemo moves the named memo and its comment subtree to the recycle bin.
+   * Only the memo creator can move it. The owner can restore it within 30 days
+   * with POST /api/trash/{uid}/restore or permanently delete it sooner with
+   * DELETE /api/trash/{uid}. The server purges expired entries.
    *
    * @generated from rpc memos.api.MemoService.DeleteMemo
    */

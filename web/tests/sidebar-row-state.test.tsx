@@ -55,10 +55,12 @@ describe("sidebar selected grammar", () => {
     );
 
     const row = screen.getByRole("button", { name: "#work, setting.tags.used-count" });
-    expect(row).not.toHaveAttribute("data-checked");
+    const treeItem = screen.getByRole("treeitem");
+    expect(treeItem).not.toHaveAttribute("data-checked");
     fireEvent.click(row);
-    expect(row).toHaveAttribute("data-checked");
-    expect(row).not.toHaveClass("bg-mu-hover");
+    expect(treeItem).toHaveAttribute("data-checked");
+    expect(treeItem).not.toHaveClass("bg-mu-hover");
+    expect(row).toHaveAttribute("aria-pressed", "true");
   });
 });
 

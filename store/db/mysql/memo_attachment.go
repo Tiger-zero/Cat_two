@@ -24,7 +24,7 @@ func (d *DB) ApplyMemoMutation(ctx context.Context, mutation *store.MemoMutation
 		// Deletion locks this row before scanning its replies. Lock it before
 		// any serializable snapshot reads in this transaction.
 		var contextMemoID int32
-		if err := tx.QueryRowContext(ctx, "SELECT id FROM memo WHERE id = ? FOR UPDATE", *mutation.CommentContextMemoID).Scan(&contextMemoID); errors.Is(err, sql.ErrNoRows) {
+		if err := tx.QueryRowContext(ctx, "SELECT id FROM memo WHERE id = ? AND deleted_ts IS NULL FOR UPDATE", *mutation.CommentContextMemoID).Scan(&contextMemoID); errors.Is(err, sql.ErrNoRows) {
 			return store.ErrMemoMutationConflict
 		} else if err != nil {
 			return errors.Wrap(err, "failed to lock comment context memo")
@@ -74,7 +74,7 @@ func (d *DB) ApplyMemoMutation(ctx context.Context, mutation *store.MemoMutation
 
 	var creatorID int32
 	var content string
-	if err := tx.QueryRowContext(ctx, "SELECT `creator_id`, `content` FROM `memo` WHERE `id` = ? FOR UPDATE", mutation.MemoID).Scan(&creatorID, &content); err != nil {
+	if err := tx.QueryRowContext(ctx, "SELECT `creator_id`, `content` FROM `memo` WHERE `id` = ? AND `deleted_ts` IS NULL FOR UPDATE", mutation.MemoID).Scan(&creatorID, &content); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return errors.Wrap(store.ErrMemoMutationConflict, "memo no longer exists")
 		}

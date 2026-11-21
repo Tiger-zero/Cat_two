@@ -42,7 +42,6 @@ const maxGeneralRequestBytes = 16 << 20
 // against the user's upload limits.
 var inlineContentProcedures = map[string]struct{}{
 	"/memos.api.AttachmentService/CreateAttachment": {},
-	"/memos.api.AIService/Transcribe":               {},
 }
 
 // requestBodyLimit returns the request body cap for a procedure. Chunked
@@ -64,7 +63,6 @@ type APIService struct {
 	apipb.UnimplementedMemoServiceServer
 	apipb.UnimplementedSpaceServiceServer
 	apipb.UnimplementedAttachmentServiceServer
-	apipb.UnimplementedAIServiceServer
 	apipb.UnimplementedIdentityProviderServiceServer
 
 	Secret                  string
@@ -205,13 +203,13 @@ func (s *APIService) NewHandler(ctx context.Context) (http.Handler, error) {
 	if err := apipb.RegisterMemoServiceHandlerServer(ctx, gwMux, s); err != nil {
 		return nil, err
 	}
+	if err := s.registerMemoTagRoutes(gwMux); err != nil {
+		return nil, err
+	}
 	if err := apipb.RegisterSpaceServiceHandlerServer(ctx, gwMux, s); err != nil {
 		return nil, err
 	}
 	if err := apipb.RegisterAttachmentServiceHandlerServer(ctx, gwMux, s); err != nil {
-		return nil, err
-	}
-	if err := apipb.RegisterAIServiceHandlerServer(ctx, gwMux, s); err != nil {
 		return nil, err
 	}
 	if err := apipb.RegisterIdentityProviderServiceHandlerServer(ctx, gwMux, s); err != nil {
@@ -238,6 +236,7 @@ func (s *APIService) NewHandler(ctx context.Context) (http.Handler, error) {
 	// ServeMux wildcards match complete segments only.
 	sseMux := http.NewServeMux()
 	RegisterSSERoutes(sseMux, s.SSEHub, s.Store, s.Secret)
+	trashHandler := s.newMemoTrashHandler(authorizer)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		requestPath := r.URL.Path
 		if r.URL.RawPath != "" {
@@ -246,6 +245,8 @@ func (s *APIService) NewHandler(ctx context.Context) (http.Handler, error) {
 		switch {
 		case requestPath == "/api/sse" && r.Method == http.MethodGet:
 			sseMux.ServeHTTP(w, r)
+		case requestPath == "/api/trash" || strings.HasPrefix(requestPath, "/api/trash/"):
+			trashHandler.ServeHTTP(w, r)
 		case strings.HasPrefix(requestPath, "/api/v1/"):
 			removedAPIVersionHandler(false).ServeHTTP(w, r)
 		case strings.HasPrefix(requestPath, "/memos.api.v1."):

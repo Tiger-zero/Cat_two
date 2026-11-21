@@ -69,7 +69,7 @@ func getSQLiteRelationMemoState(ctx context.Context, executor dbExecutor, memoID
 	state := &sqliteRelationMemoState{}
 	var spaceID sql.NullInt64
 	if err := executor.QueryRowContext(ctx, `SELECT id, creator_id, row_status, visibility, space_id
-		FROM memo WHERE id = ?`, memoID).Scan(
+		FROM memo WHERE id = ? AND deleted_ts IS NULL`, memoID).Scan(
 		&state.id, &state.creatorID, &state.rowStatus, &state.visibility, &spaceID,
 	); err != nil {
 		return nil, err

@@ -51,9 +51,10 @@ service MemoService {
     option (google.api.method_signature) = "memo,update_mask";
   }
 
-  // DeleteMemo deletes the named memo and its comment subtree, including nested
-  // replies and their owned resources. It removes incident relations for all
-  // deleted memos. Requires the memo creator or an instance administrator.
+  // DeleteMemo moves the named memo and its comment subtree to the recycle bin.
+  // Only the memo creator can move it. The owner can restore it within 30 days
+  // with POST /api/trash/{uid}/restore or permanently delete it sooner with
+  // DELETE /api/trash/{uid}. The server purges expired entries.
   rpc DeleteMemo(DeleteMemoRequest) returns (google.protobuf.Empty) {
     option (google.api.http) = {delete: "/api/{name=memos/*}"};
     option (google.api.method_signature) = "name";
@@ -406,15 +407,15 @@ message UpdateMemoRequest {
 
 // Request message for MemoService.DeleteMemo.
 message DeleteMemoRequest {
-  // Required. The resource name of the memo to delete.
+  // Required. The resource name of the memo to move to the recycle bin.
   // Format: memos/{memo}
   string name = 1 [
     (google.api.field_behavior) = REQUIRED,
     (google.api.resource_reference) = {type: "memos.api/Memo"}
   ];
 
-  // Optional. Currently ignored by the server; deletion always includes the
-  // comment subtree.
+  // Optional. Ignored by the server. The memo and its comment subtree always
+  // move to the recycle bin.
   bool force = 2 [(google.api.field_behavior) = OPTIONAL];
 }
 

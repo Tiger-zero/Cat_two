@@ -138,6 +138,7 @@ vi.mock("@/hooks/useUserQueries", () => ({
   },
   useMemoViews: () => ({ data: authState.memoViews }),
   useNotifications: () => ({ data: authState.notifications }),
+  useUpdateUserGeneralSetting: () => ({ mutate: vi.fn() }),
   useUser: () => ({ data: authState.guestCreator }),
 }));
 

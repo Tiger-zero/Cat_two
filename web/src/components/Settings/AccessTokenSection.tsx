@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import RelativeTime from "@/components/RelativeTime";
 import { userServiceClient } from "@/connect";
+import { useInstance } from "@/contexts/InstanceContext";
 import useCurrentUser from "@/hooks/useCurrentUser";
 import { useDialog } from "@/hooks/useDialog";
 import { WEB_CLIPPER_URL } from "@/lib/constants";
@@ -18,34 +19,88 @@ import SettingSection from "./SettingSection";
 
 const EXPIRING_SOON_MS = 30 * 24 * 60 * 60 * 1000;
 
-const ApiUsageExample = () => {
+const CopyableValue = ({ label, value }: { label: string; value: string }) => {
   const t = useTranslate();
-  const example = `curl ${window.location.origin}/api/memos \\\n  -H "Authorization: Bearer memos_pat_..."`;
-
-  const handleCopy = () => {
-    copy(example);
-    toast.add({ title: t("message.copied"), type: "success" });
-  };
+  const copyLabel = t("setting.access-token.copy-value", { label });
 
   return (
-    <div className="relative w-full min-w-0 rounded-mu-lg border border-mu-line/60 bg-mu-well/30">
-      <pre className="overflow-x-auto p-3 pe-12 font-mono mu-caption text-mu-text/85">
-        <code>{example}</code>
-      </pre>
-      <Tooltip.Root>
-        <Tooltip.Trigger
-          render={
-            <Button
-              variant="ghost"
-              className="absolute top-1.5 end-1.5"
-              aria-label={t("common.copy")}
-              onClick={handleCopy}
-              icon={<CopyIcon />}
-            />
-          }
-        />
-        <Tooltip.Popup>{t("common.copy")}</Tooltip.Popup>
-      </Tooltip.Root>
+    <div className="min-w-0">
+      <div className="mu-label-sm text-mu-text-secondary">{label}</div>
+      <div className="relative mt-1 rounded-mu-lg border border-mu-line/60 bg-mu-well/30">
+        <pre className="overflow-x-auto p-3 pe-12 font-mono mu-caption text-mu-text/85" dir="ltr">
+          <code>{value}</code>
+        </pre>
+        <Tooltip.Root>
+          <Tooltip.Trigger
+            render={
+              <Button
+                variant="ghost"
+                className="absolute top-1.5 end-1.5"
+                aria-label={copyLabel}
+                onClick={async () => {
+                  if (await copy(value)) {
+                    toast.add({ title: t("message.copied"), type: "success" });
+                  } else {
+                    showErrorToast(t("setting.access-token.copy-failed"));
+                  }
+                }}
+                icon={<CopyIcon />}
+              />
+            }
+          />
+          <Tooltip.Popup>{copyLabel}</Tooltip.Popup>
+        </Tooltip.Root>
+      </div>
+    </div>
+  );
+};
+
+const shellQuote = (value: string) => `'${value.replaceAll("'", "'\\''")}'`;
+
+const ConnectorExamples = () => {
+  const t = useTranslate();
+  const { profile } = useInstance();
+  const baseUrl = profile.instanceUrl || window.location.origin;
+  const mcpUrl = `${baseUrl}/mcp`;
+  const apiUrl = `${baseUrl}/api`;
+  const memosUrl = shellQuote(`${apiUrl}/memos`);
+  const authHeader = shellQuote("Authorization: Bearer <YOUR_PAT>");
+  const mcpConfig = JSON.stringify(
+    {
+      mcpServers: {
+        "cat-two": {
+          type: "http",
+          url: mcpUrl,
+          headers: { Authorization: "Bearer <YOUR_PAT>" },
+        },
+      },
+    },
+    null,
+    2,
+  );
+  const readExample = [`curl -fsS ${memosUrl}`, `  -H ${authHeader}`].join(" \\\n");
+  const writeExample = [
+    `curl -fsS -X POST ${memosUrl}`,
+    `  -H ${authHeader}`,
+    "  -H 'Content-Type: application/json'",
+    `  --data '{"content":"Hello from Cat_two","visibility":"PRIVATE"}'`,
+  ].join(" \\\n");
+
+  return (
+    <div className="grid gap-5 lg:grid-cols-2">
+      <section className="flex min-w-0 flex-col gap-3">
+        <h2 className="mu-label text-mu-text">MCP</h2>
+        <p className="mu-body text-mu-text-secondary">{t("setting.access-token.mcp-description")}</p>
+        <CopyableValue label={t("setting.access-token.mcp-url")} value={mcpUrl} />
+        <CopyableValue label={t("setting.access-token.mcp-config")} value={mcpConfig} />
+      </section>
+      <section className="flex min-w-0 flex-col gap-3">
+        <h2 className="mu-label text-mu-text">REST API</h2>
+        <p className="mu-body text-mu-text-secondary">{t("setting.access-token.api-description")}</p>
+        <CopyableValue label={t("setting.access-token.api-url")} value={apiUrl} />
+        <CopyableValue label={t("setting.access-token.api-list-notes")} value={readExample} />
+        <CopyableValue label={t("setting.access-token.api-create-note")} value={writeExample} />
+      </section>
     </div>
   );
 };
@@ -87,7 +142,6 @@ const HowToUseDisclosure = () => {
         <div className="grid gap-4 pt-2 lg:grid-cols-2">
           <div className="flex min-w-0 flex-col gap-2.5">
             <p className="mu-caption text-mu-text-secondary">{t("setting.access-token.about-description")}</p>
-            <ApiUsageExample />
             <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5">
               <a
                 className="inline-flex items-center gap-1 mu-caption text-mu-text-secondary underline-offset-4 hover:text-mu-accent hover:underline"
@@ -138,9 +192,6 @@ const EmptyState = ({ onCreate }: { onCreate: () => void }) => {
       </span>
       <h4 className="mt-3 mu-label text-mu-text">{t("setting.access-token.empty-title")}</h4>
       <p className="mx-auto mt-1 max-w-sm mu-caption text-mu-text-secondary">{t("setting.access-token.empty-description")}</p>
-      <div className="mx-auto mt-4 max-w-md text-left">
-        <ApiUsageExample />
-      </div>
       <div className="mt-4 flex flex-wrap items-center justify-center gap-3">
         <Button variant="neutral" onClick={onCreate} icon={<PlusIcon />}>
           {t("setting.access-token.create-first")}
@@ -258,27 +309,31 @@ const AccessTokenSection = () => {
   };
 
   return (
-    <SettingSection
-      title={t("setting.access-token.title")}
-      description={t("setting.access-token.description")}
-      actions={
-        <Button variant="primary" onClick={createTokenDialog.open} icon={<PlusIcon />}>
-          {t("common.create")}
-        </Button>
-      }
-    >
-      {personalAccessTokens.length === 0 ? (
-        <EmptyState onCreate={createTokenDialog.open} />
-      ) : (
-        <>
-          <HowToUseDisclosure />
+    <SettingSection title={t("setting.access-token.label")} description={t("setting.access-token.integration-description")}>
+      <ConnectorExamples />
+      <div className="flex min-w-0 flex-col gap-3">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 className="mu-label text-mu-text">{t("setting.access-token.title")}</h2>
+            <p className="mu-body text-mu-text-secondary">{t("setting.access-token.description")}</p>
+          </div>
+          {personalAccessTokens.length > 0 && (
+            <Button variant="primary" onClick={createTokenDialog.open} icon={<PlusIcon />}>
+              {t("setting.access-token.create-dialog.create-access-token")}
+            </Button>
+          )}
+        </div>
+        <HowToUseDisclosure />
+        {personalAccessTokens.length === 0 ? (
+          <EmptyState onCreate={createTokenDialog.open} />
+        ) : (
           <List.Root aria-label={t("setting.access-token.title")}>
             {personalAccessTokens.map((token) => (
               <TokenRow key={token.name} token={token} onDelete={setDeleteTarget} />
             ))}
           </List.Root>
-        </>
-      )}
+        )}
+      </div>
 
       {/* Create Access Token Dialog */}
       <CreateAccessTokenDialog

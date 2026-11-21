@@ -3,11 +3,15 @@ import { Badge, Button, Checkbox, Field, Input, List, Tooltip } from "@usememos/
 import { isEqual } from "lodash-es";
 import { EyeOffIcon, PaletteIcon, PlusIcon, TagIcon, TrashIcon } from "lucide-react";
 import { useEffect, useId, useMemo, useState } from "react";
+import ConfirmDialog from "@/components/ConfirmDialog";
 import { useAuth } from "@/contexts/AuthContext";
+import { useEditTags } from "@/hooks/useEditTags";
 import { useTagCounts, useUpdateUserSetting, useUserStats } from "@/hooks/useUserQueries";
 import { colorToHex } from "@/lib/color";
+import { getErrorMessage } from "@/lib/error";
 import { buildUserSettingName } from "@/lib/resource-names";
 import { getTagRuleUsage, isValidTagPattern } from "@/lib/tag";
+import { showErrorToast, toast } from "@/lib/toast";
 import { cn } from "@/lib/utils";
 import {
   UserSetting_Key,
@@ -18,7 +22,7 @@ import {
 import { ColorSchema } from "@/types/proto/google/type/color_pb";
 import { useTranslate } from "@/utils/i18n";
 import SettingGroup from "./SettingGroup";
-import { SettingList, SettingPanel } from "./SettingList";
+import { SettingList, SettingListItem, SettingPanel } from "./SettingList";
 import SettingSection from "./SettingSection";
 
 const DEFAULT_TAG_COLOR = "#ffffff";
@@ -63,6 +67,8 @@ const TagsSection = () => {
   const t = useTranslate();
   const configuredRulesId = useId();
   const { currentUser, userTagsSetting, refetchSettings } = useAuth();
+  const editTags = useEditTags();
+  const [normalizeOpen, setNormalizeOpen] = useState(false);
   const { mutateAsync: updateUserSetting } = useUpdateUserSetting();
   const { data: tagCounts } = useTagCounts(true);
   const originalSetting = useMemo(() => userTagsSetting ?? create(UserSetting_TagsSettingSchema, {}), [userTagsSetting]);
@@ -162,8 +168,39 @@ const TagsSection = () => {
     await refetchSettings();
   };
 
+  const handleNormalize = async () => {
+    try {
+      const count = await editTags.mutateAsync({ kind: "normalize" });
+      toast.add({ title: t("setting.tags.updated-notes", { count }), type: "success" });
+    } catch (error) {
+      const fallback = t("setting.tags.normalize-failed");
+      showErrorToast(getErrorMessage(error, fallback) || fallback);
+      throw error;
+    }
+  };
+
   return (
     <SettingSection title={t("setting.tags.label")}>
+      {currentUser && (
+        <SettingGroup title={t("setting.tags.organize-title")}>
+          <SettingList>
+            <SettingListItem label={t("setting.tags.normalize")} description={t("setting.tags.normalize-description")}>
+              <Button variant="neutral" onClick={() => setNormalizeOpen(true)}>
+                {t("setting.tags.normalize")}
+              </Button>
+            </SettingListItem>
+          </SettingList>
+          <ConfirmDialog
+            open={normalizeOpen}
+            onOpenChange={setNormalizeOpen}
+            title={t("setting.tags.normalize-title")}
+            description={t("setting.tags.normalize-description")}
+            confirmLabel={t("setting.tags.normalize")}
+            cancelLabel={t("common.cancel")}
+            onConfirm={handleNormalize}
+          />
+        </SettingGroup>
+      )}
       <SettingGroup title={t("setting.tags.title")} description={t("setting.tags.description")}>
         <SettingPanel footer={<span className="mu-caption text-mu-text-secondary">{t("setting.tags.tag-pattern-hint")}</span>}>
           <div className="flex flex-col gap-3">

@@ -165,7 +165,7 @@ func (s *Server) Start() error {
 	return nil
 }
 
-// startBackgroundJobs runs one-off data jobs that must not delay serving.
+// startBackgroundJobs runs data maintenance without delaying serving.
 func (s *Server) startBackgroundJobs() {
 	ctx, cancel := context.WithCancel(context.Background())
 	s.backgroundCancel = cancel
@@ -173,6 +173,20 @@ func (s *Server) startBackgroundJobs() {
 	s.backgroundJobs.Go(func() {
 		if err := runner.Backfill(ctx); err != nil && ctx.Err() == nil {
 			slog.Error("failed to rebuild memo payloads; retrying on next start", slog.String("error", err.Error()))
+		}
+	})
+	s.backgroundJobs.Go(func() {
+		ticker := time.NewTicker(time.Hour)
+		defer ticker.Stop()
+		for {
+			if err := s.apiService.PurgeExpiredMemoTrash(ctx, time.Now()); err != nil && ctx.Err() == nil {
+				slog.Error("failed to purge expired memos; retrying on next sweep", "error", err)
+			}
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+			}
 		}
 	})
 }

@@ -49,7 +49,7 @@ func validateSQLiteMemoWritePolicy(ctx context.Context, executor dbExecutor, mem
 
 	snapshot := &store.MemoWriteSnapshot{ActorIsAdmin: actor.Admin}
 	var spaceID sql.NullInt64
-	if err := executor.QueryRowContext(ctx, `SELECT creator_id, row_status, space_id, visibility FROM memo WHERE id = ?`, memoID).Scan(
+	if err := executor.QueryRowContext(ctx, `SELECT creator_id, row_status, space_id, visibility FROM memo WHERE id = ? AND deleted_ts IS NULL`, memoID).Scan(
 		&snapshot.CreatorID, &snapshot.RowStatus, &spaceID, &snapshot.Visibility,
 	); err != nil {
 		if stderrors.Is(err, sql.ErrNoRows) {

@@ -13,7 +13,6 @@ func TestRequestBodyLimitPerProcedure(t *testing.T) {
 	require.EqualValues(t, uploadRequestLimit, requestBodyLimit(attachmentUploadProcedure))
 	require.EqualValues(t, uploadRequestLimit, requestBodyLimit(importMemosProcedure))
 	require.EqualValues(t, MaxAPIRequestBytes, requestBodyLimit("/memos.api.AttachmentService/CreateAttachment"))
-	require.EqualValues(t, MaxAPIRequestBytes, requestBodyLimit("/memos.api.AIService/Transcribe"))
 	for _, procedure := range []string{
 		"/memos.api.AuthService/SignIn",
 		"/memos.api.UserService/CreateUser",
