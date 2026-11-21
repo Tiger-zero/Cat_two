@@ -53,6 +53,8 @@ describe("MCP and REST setup in access token settings", () => {
     profile.instanceUrl = "https://notes.example.com/notes";
     renderSettings();
     await screen.findByRole("heading", { name: "MCP & API" });
+    expect(screen.getByRole("button", { name: "Create MCP connection" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Create your first REST API token" })).toBeVisible();
     expect(screen.getByText(/leave the bearer token environment variable blank/i)).toBeVisible();
 
     fireEvent.click(screen.getByRole("button", { name: "Copy MCP client configuration" }));
@@ -117,8 +119,8 @@ describe("MCP and REST setup in access token settings", () => {
     fireEvent.click(createDialog.getByRole("button", { name: "Create" }));
 
     expect(await createDialog.findByText(`Bearer ${token}`)).toBeVisible();
-    expect(dialog).toHaveAccessibleDescription(/appears only once.*authorization header/i);
-    fireEvent.click(createDialog.getByRole("button", { name: "Copy Bearer header value" }));
+    expect(dialog).toHaveAccessibleDescription(/appears only once.*Authorization as the key.*including Bearer/i);
+    fireEvent.click(createDialog.getByRole("button", { name: "Copy Authorization value" }));
     expect(copy).toHaveBeenLastCalledWith(`Bearer ${token}`);
     fireEvent.click(createDialog.getByText("Close").closest("button")!);
 
@@ -131,7 +133,7 @@ describe("MCP and REST setup in access token settings", () => {
     const freshDialog = within(await screen.findByRole("dialog"));
     expect(freshDialog.getByRole("textbox", { name: "Connection name" })).toHaveValue("");
     expect(freshDialog.getByRole("radio", { name: "24 hours" })).toBeChecked();
-    expect(freshDialog.queryByRole("button", { name: "Copy Bearer header value" })).not.toBeInTheDocument();
+    expect(freshDialog.queryByRole("button", { name: "Copy Authorization value" })).not.toBeInTheDocument();
   });
 
   it("polls for first use and stops when a permanent token has been used", async () => {

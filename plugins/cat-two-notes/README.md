@@ -4,8 +4,8 @@
 
 ## 连接 NAS
 
-1. 在运行 Codex 的电脑上登录 Cat_two，打开「设置 → MCP 和 API」，创建 MCP 连接令牌。有效期默认是从创建起 24 小时，也可选永久。令牌创建后立即生效。
-2. 复制 MCP 服务地址和完整的 **Bearer 请求头值**。地址以 `/mcp` 结尾，使用 NAS 映射的端口，有 HTTPS 地址时优先使用 HTTPS。令牌只在创建时显示。
+1. 在运行 Codex 的电脑上登录 Cat_two，打开「设置 → MCP 和 API」，点击「创建 MCP 连接」。专用令牌以 `cat_two_mcp_` 开头。有效期默认是从创建起 24 小时，也可选永久。令牌创建后立即生效。
+2. 复制 MCP 服务地址和弹窗中的 **Authorization 值**，其中包含 `Bearer ` 前缀。地址以 `/mcp` 结尾，使用 NAS 映射的端口，有 HTTPS 地址时优先使用 HTTPS。令牌只在创建时显示。
 3. 在本地 Codex 桌面端打开「设置 → MCP servers」，添加自定义服务并选择 **Streamable HTTP**。名称可填 `cat_two`，URL 粘贴复制的 MCP 地址。将 **Bearer token env var** 留空，在 HTTP 请求头中添加 `Authorization`，值粘贴完整的 `Bearer <MCP 连接令牌>`，保留开头的 `Bearer` 和空格。
 4. 保存设置，按客户端提示重启或开启新对话。NAS 仅在局域网可达时，使用能访问该地址的电脑开启 Codex 本地会话。 [Codex MCP 设置](https://developers.openai.com/codex/extend/mcp)
 
@@ -18,7 +18,7 @@ http_headers = { Authorization = "Bearer <MCP 连接令牌>" }
 default_tools_approval_mode = "writes"
 ```
 
-Cat_two 每次收到 MCP 请求都会检查令牌。专用令牌仅适用于 MCP，可调用账户、视图和笔记的六个工具，笔记读写受所属账号权限约束。已有 REST 集成继续使用个人访问令牌（PAT）。用笔记插件写入时，工作流会在保存前预览并等待确认。
+Cat_two 每次收到 MCP 请求都会检查令牌。专用令牌仅适用于 MCP，可调用账户、视图和笔记的六个工具，笔记读写受所属账号权限约束。「REST API 访问令牌」区签发的个人访问令牌（PAT）以 `memos_pat_` 开头，用于 REST API。用笔记插件写入时，工作流会在保存前预览并等待确认。
 
 ### 升级与撤销
 
