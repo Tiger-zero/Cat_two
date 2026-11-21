@@ -4,7 +4,6 @@ import { useRef } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { MemoDetailSidebar } from "@/components/MemoDetailSidebar";
 import MemoDisplaySettingMenu from "@/components/MemoDisplaySettingMenu";
-import { DEFAULT_SETTING_SECTION, SETTINGS_SECTIONS } from "@/components/Settings/settingSections";
 import StatisticsView from "@/components/StatisticsView";
 import { useAppSidebar } from "@/contexts/AppSidebarContext";
 import { useAuth } from "@/contexts/AuthContext";
@@ -15,7 +14,6 @@ import useMediaQuery from "@/hooks/useMediaQuery";
 import { buildMemoCreatorFilter } from "@/lib/resource-names";
 import { cn } from "@/lib/utils";
 import { ROUTES } from "@/router/routes";
-import { User_Role } from "@/types/proto/api/user_service_pb";
 import { useTranslate } from "@/utils/i18n";
 import AccountMenu from "./AccountMenu";
 import CollectionStats from "./CollectionStats";
@@ -59,38 +57,6 @@ const CollectionSidebarContent = ({ context, desktop }: { context: "home" | "arc
   );
 };
 
-const SettingsSidebarContent = () => {
-  const t = useTranslate();
-  const location = useLocation();
-  const user = useCurrentUser();
-  const { setMobileOpen } = useAppSidebar();
-  const isHost = user?.role === User_Role.ADMIN;
-  const basic = SETTINGS_SECTIONS.filter((section) => section.scope === "basic");
-  const admin = SETTINGS_SECTIONS.filter((section) => section.scope === "admin");
-  const requestedSection = location.hash.slice(1);
-  const currentSection = [...basic, ...(isHost ? admin : [])].some((section) => section.key === requestedSection)
-    ? requestedSection
-    : DEFAULT_SETTING_SECTION;
-  const renderSections = (sections: typeof SETTINGS_SECTIONS) =>
-    sections.map((section) => (
-      <Link
-        key={section.key}
-        to={`${ROUTES.SETTING}#${section.key}`}
-        onClick={() => setMobileOpen(false)}
-        className={cn(SIDEBAR_ROW_CLASSES, sidebarRowStateClasses(currentSection === section.key ? "current" : "idle"))}
-      >
-        <SidebarRowIconSlot icon={section.icon} />
-        <span className="truncate">{t(section.labelKey)}</span>
-      </Link>
-    ));
-  return (
-    <div className={SIDEBAR_SECTION_STACK_CLASSES}>
-      <SidebarSection label={t("common.basic")}>{renderSections(basic)}</SidebarSection>
-      {isHost && <SidebarSection label={t("common.admin")}>{renderSections(admin)}</SidebarSection>}
-    </div>
-  );
-};
-
 const MemoDetailSidebarContent = () => {
   const { memoDetail, closeMobileThen } = useAppSidebar();
   if (!memoDetail) return null;
@@ -118,7 +84,6 @@ const RouteSidebarContent = ({ kind, desktopCollection }: { kind: SidebarRouteKi
     return <CollectionSidebarContent context={kind} desktop={desktopCollection} />;
   }
   if (kind === "views") return <ViewsSection manageActive />;
-  if (kind === "settings") return <SettingsSidebarContent />;
   if (kind === "memo") return <MemoDetailSidebarContent />;
   return null;
 };

@@ -373,22 +373,17 @@ describe("App sidebar", () => {
     expect(deleteItem).toHaveClass("mu-menu-item-danger");
   });
 
-  it("lists only the available Settings sections for an administrator", () => {
+  it("keeps Settings navigation out of the main sidebar on a legacy Settings URL", () => {
     authState.currentUser = { name: "users/test", username: "test", role: User_Role.ADMIN };
     render(
-      <MemoryRouter initialEntries={["/setting"]}>
+      <MemoryRouter initialEntries={["/setting#system"]}>
         <AppSidebar />
       </MemoryRouter>,
     );
 
-    expect(screen.getByRole("heading", { name: "common.basic", level: 2 })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "common.admin", level: 2 })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "setting.my-account.label" })).toHaveAttribute("href", "/setting#my-account");
-    expect(screen.getByRole("link", { name: "setting.system.label" })).toHaveAttribute("href", "/setting#system");
-    const destinations = screen.getAllByRole("link").map((link) => link.getAttribute("href"));
-    for (const retired of ["configuration", "notification", "webhook", "spaces", "sso"]) {
-      expect(destinations).not.toContain(`/setting#${retired}`);
-    }
+    expect(screen.getByRole("link", { name: "common.calendar" })).toHaveAttribute("href", "/");
+    expect(screen.queryByRole("heading", { name: "common.admin" })).not.toBeInTheDocument();
+    expect(screen.getAllByRole("link").map((link) => link.getAttribute("href"))).not.toContain("/setting#system");
   });
 
   it.each(["/trash", "/archived"])("links directly to the personal feed from %s", (path) => {

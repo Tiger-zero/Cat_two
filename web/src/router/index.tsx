@@ -7,7 +7,7 @@ import RootLayout from "@/layouts/RootLayout";
 import { lazyWithReload } from "@/utils/lazy";
 import { RequireAuthRoute, RequireFullInitializationRoute, RequireGuestRoute, RequireInstanceInitializationRoute } from "./guards";
 import { LegacyCalendarRedirect } from "./LegacyCalendarRedirect";
-import { personalFeedSearch, ROUTES } from "./routes";
+import { personalFeedSearch, ROUTES, SETTINGS_SECTION_PARAM } from "./routes";
 
 const AdminSignIn = lazyWithReload(() => import("@/pages/AdminSignIn"));
 const Archived = lazyWithReload(() => import("@/pages/Archived"));
@@ -17,7 +17,6 @@ const Home = lazyWithReload(() => Promise.all([import("@/pages/Home"), preloadMe
 const MemoDetail = lazyWithReload(() => import("@/pages/MemoDetail"));
 const NotFound = lazyWithReload(() => import("@/pages/NotFound"));
 const PermissionDenied = lazyWithReload(() => import("@/pages/PermissionDenied"));
-const Setting = lazyWithReload(() => import("@/pages/Setting"));
 const MemoViews = lazyWithReload(() => import("@/pages/MemoViews"));
 const SignIn = lazyWithReload(() => import("@/pages/SignIn"));
 const SignUp = lazyWithReload(() => import("@/pages/SignUp"));
@@ -32,6 +31,13 @@ const HomeRoute = () => {
     return <Navigate to={{ pathname: ROUTES.HOME, search: normalizedSearch, hash }} replace />;
   }
   return <Home />;
+};
+
+const LegacySettingsRedirect = () => {
+  const { hash, search } = useLocation();
+  const params = new URLSearchParams(personalFeedSearch(search));
+  params.set(SETTINGS_SECTION_PARAM, hash.slice(1));
+  return <Navigate to={{ pathname: ROUTES.HOME, search: params.toString() }} replace />;
 };
 
 // Backward compatibility alias.
@@ -101,7 +107,7 @@ export const routeConfig: RouteObject[] = [
               { path: "memos/:uid", element: <MemoDetail /> },
               {
                 element: <RequireFullInitializationRoute />,
-                children: [{ path: Routes.SETTING, element: <Setting /> }],
+                children: [{ path: Routes.SETTING, element: <LegacySettingsRedirect /> }],
               },
             ],
           },

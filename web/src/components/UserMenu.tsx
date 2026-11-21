@@ -128,7 +128,7 @@ const NavRow = ({
 );
 
 /** Account settings and personal destinations at the top of the username menu. */
-const UserMenu = ({ onClose }: { onClose: () => void }) => {
+const UserMenu = ({ onClose, onOpenSettings }: { onClose: () => void; onOpenSettings: () => void }) => {
   const t = useTranslate();
   const location = useLocation();
   const { setMobileOpen } = useAppSidebar();
@@ -137,7 +137,6 @@ const UserMenu = ({ onClose }: { onClose: () => void }) => {
   const { logout } = useAuth();
   const accountLabel = currentUser?.displayName || currentUser?.username || t("common.profile");
   const archivedActive = Boolean(matchPath(Routes.ARCHIVED, location.pathname));
-  const settingsActive = Boolean(matchPath(Routes.SETTING, location.pathname));
 
   const closePanel = () => {
     onClose();
@@ -163,9 +162,10 @@ const UserMenu = ({ onClose }: { onClose: () => void }) => {
   return (
     <>
       {currentUser && (
-        <NavRow to={Routes.SETTING} current={settingsActive} icon={SettingsIcon} onNavigate={closePanel}>
-          {t("common.settings")}
-        </NavRow>
+        <button type="button" className={SCOPE_PANEL_ROW_CLASSES} onClick={onOpenSettings} aria-haspopup="dialog">
+          <ScopePanelRowIcon icon={SettingsIcon} />
+          <span className="min-w-0 flex-1 truncate">{t("common.settings")}</span>
+        </button>
       )}
       <UserPreferenceMenu />
       {currentUser && (

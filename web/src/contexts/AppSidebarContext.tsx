@@ -27,6 +27,10 @@ interface AppSidebarContextValue {
   completeMobileClose: (open: boolean) => void;
   quickFindOpen: boolean;
   setQuickFindOpen: (open: boolean) => void;
+  settingsOpen: boolean;
+  settingsReturnFocus: React.RefObject<HTMLElement | null>;
+  openSettings: (opener: HTMLElement | null) => void;
+  closeSettings: () => void;
 }
 
 const AppSidebarContext = createContext<AppSidebarContextValue | null>(null);
@@ -38,6 +42,8 @@ export const AppSidebarProvider = ({ children }: { children: ReactNode }) => {
   const pendingMobileCloseActionRef = useRef<(() => void) | undefined>(undefined);
   const scheduledMobileCloseActionFrameRef = useRef<number | undefined>(undefined);
   const [quickFindOpen, setQuickFindOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const settingsReturnFocus = useRef<HTMLElement>(null);
 
   useEffect(() => {
     pendingMobileCloseActionRef.current = undefined;
@@ -46,6 +52,7 @@ export const AppSidebarProvider = ({ children }: { children: ReactNode }) => {
       scheduledMobileCloseActionFrameRef.current = undefined;
     }
     setMobileOpen(false);
+    setSettingsOpen(false);
 
     return () => {
       pendingMobileCloseActionRef.current = undefined;
@@ -87,6 +94,13 @@ export const AppSidebarProvider = ({ children }: { children: ReactNode }) => {
     });
   }, []);
 
+  const openSettings = useCallback((opener: HTMLElement | null) => {
+    settingsReturnFocus.current = opener;
+    setSettingsOpen(true);
+  }, []);
+
+  const closeSettings = useCallback(() => setSettingsOpen(false), []);
+
   const value = useMemo(
     () => ({
       memoDetail,
@@ -97,8 +111,12 @@ export const AppSidebarProvider = ({ children }: { children: ReactNode }) => {
       completeMobileClose,
       quickFindOpen,
       setQuickFindOpen,
+      settingsOpen,
+      settingsReturnFocus,
+      openSettings,
+      closeSettings,
     }),
-    [memoDetail, setMemoDetail, mobileOpen, closeMobileThen, completeMobileClose, quickFindOpen],
+    [memoDetail, setMemoDetail, mobileOpen, closeMobileThen, completeMobileClose, quickFindOpen, settingsOpen, openSettings, closeSettings],
   );
 
   return <AppSidebarContext.Provider value={value}>{children}</AppSidebarContext.Provider>;

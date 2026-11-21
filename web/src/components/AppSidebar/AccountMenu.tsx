@@ -1,10 +1,11 @@
 import { Popover } from "@usememos/ui";
 import { ChevronsUpDownIcon } from "lucide-react";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import IdentityLabel from "@/components/IdentityLabel";
 import MemosLogo from "@/components/MemosLogo";
 import UserAvatar from "@/components/UserAvatar";
 import UserMenu from "@/components/UserMenu";
+import { useAppSidebar } from "@/contexts/AppSidebarContext";
 import useCurrentUser from "@/hooks/useCurrentUser";
 import { cn } from "@/lib/utils";
 import { useTranslate } from "@/utils/i18n";
@@ -15,9 +16,22 @@ export default function AccountMenu({ className, size = "md" }: { className?: st
   const user = useCurrentUser();
   const accountLabel = user?.displayName || user?.username;
   const [open, setOpen] = useState(false);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const pendingSettings = useRef(false);
+  const { openSettings, closeMobileThen } = useAppSidebar();
   return (
-    <Popover.Root open={open} onOpenChange={setOpen}>
+    <Popover.Root
+      open={open}
+      onOpenChange={setOpen}
+      onOpenChangeComplete={(nextOpen) => {
+        // Let the account popover finish closing before Settings takes focus.
+        if (nextOpen || !pendingSettings.current) return;
+        pendingSettings.current = false;
+        closeMobileThen(() => openSettings(triggerRef.current));
+      }}
+    >
       <Popover.Trigger
+        ref={triggerRef}
         aria-label={`${t("common.account-menu")}: ${accountLabel ?? t("common.memos")}`}
         title={accountLabel}
         className={cn(
@@ -50,7 +64,13 @@ export default function AccountMenu({ className, size = "md" }: { className?: st
         side="bottom"
         className="mu-compact w-[min(15rem,calc(100vw-1rem))] max-h-[min(27rem,calc(100dvh-5rem))] overflow-y-auto"
       >
-        <UserMenu onClose={() => setOpen(false)} />
+        <UserMenu
+          onClose={() => setOpen(false)}
+          onOpenSettings={() => {
+            pendingSettings.current = true;
+            setOpen(false);
+          }}
+        />
       </Popover.Popup>
     </Popover.Root>
   );

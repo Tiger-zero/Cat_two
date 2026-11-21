@@ -137,6 +137,19 @@ describe("router configuration", () => {
     }
   });
 
+  it("preserves the Settings section in links from before the modal", async () => {
+    const router = createMemoryRouter(
+      [
+        { path: ROUTES.SETTING, element: findByPath(routeConfig, ROUTES.SETTING)?.element },
+        { path: ROUTES.HOME, element: <p>Memo list</p> },
+      ],
+      { initialEntries: ["/setting#access-token"] },
+    );
+    render(<RouterProvider router={router} />);
+    await waitFor(() => expect(router.state.location).toMatchObject({ pathname: "/", search: "?settings=access-token", hash: "" }));
+    expect(router.state.historyAction).toBe("REPLACE");
+  });
+
   it("does not register a dedicated new memo route", () => {
     expect(findByPath(routeConfig, "/new")).toBeUndefined();
   });

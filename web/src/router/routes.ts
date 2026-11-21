@@ -12,6 +12,8 @@ export const ROUTES = {
 export type RouteKey = keyof typeof ROUTES;
 export type RoutePath = (typeof ROUTES)[RouteKey];
 
+export const SETTINGS_SECTION_PARAM = "settings";
+
 /** Keep filters from old collection links while retiring URL-owned creator scopes. */
 export const personalFeedSearch = (search: string): string => {
   const params = new URLSearchParams(search);

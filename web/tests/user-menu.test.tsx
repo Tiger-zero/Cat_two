@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, useLocation } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { SCOPE_PANEL_ROW_CLASSES } from "@/components/AppSidebar/sidebar-layout";
 import UserMenu from "@/components/UserMenu";
@@ -9,6 +9,7 @@ import { loadTheme } from "@/utils/theme";
 const mocks = vi.hoisted(() => ({
   setMobileOpen: vi.fn(),
   onClose: vi.fn(),
+  onOpenSettings: vi.fn(),
   logout: vi.fn(),
   updateGeneralSetting: vi.fn(),
   refetchSettings: vi.fn(),
@@ -38,10 +39,16 @@ vi.mock("@/utils/theme", async (importOriginal) => ({
   loadTheme: vi.fn((await importOriginal<typeof import("@/utils/theme")>()).loadTheme),
 }));
 
+const MenuLocation = () => {
+  const { pathname, search } = useLocation();
+  return <output data-testid="menu-location">{`${pathname}${search}`}</output>;
+};
+
 const renderMenu = (path = "/") =>
   render(
     <MemoryRouter initialEntries={[path]}>
-      <UserMenu onClose={mocks.onClose} />
+      <UserMenu onClose={mocks.onClose} onOpenSettings={mocks.onOpenSettings} />
+      <MenuLocation />
     </MemoryRouter>,
   );
 
@@ -55,6 +62,7 @@ describe("User menu panel", () => {
     vi.mocked(loadLocale).mockClear();
     mocks.setMobileOpen.mockReset();
     mocks.onClose.mockReset();
+    mocks.onOpenSettings.mockReset();
     mocks.logout.mockReset();
     mocks.updateGeneralSetting.mockReset();
     mocks.refetchSettings.mockReset();
@@ -79,14 +87,14 @@ describe("User menu panel", () => {
     }
   });
 
-  it("puts Settings before the account and links to Archive", () => {
+  it("puts the Settings action before the account and links to Archive", () => {
     renderMenu("/archived");
     const account = screen.getByRole("region", { name: "setting.account.title" });
     const archived = within(account).getByRole("link", { name: "common.archived" });
-    const settings = screen.getByRole("link", { name: "common.settings" });
+    const settings = screen.getByRole("button", { name: "common.settings" });
     expect(within(account).getByText("Steven")).toBeInTheDocument();
     expect(settings.compareDocumentPosition(account) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(screen.getAllByRole("link").map((link) => link.getAttribute("href"))).toEqual(["/setting", "/archived"]);
+    expect(screen.getAllByRole("link").map((link) => link.getAttribute("href"))).toEqual(["/archived"]);
     expect(archived).toHaveAttribute("aria-current", "page");
     expect(archived).toHaveAttribute("href", "/archived");
     fireEvent.click(archived);
@@ -100,7 +108,7 @@ describe("User menu panel", () => {
       screen.getByRole("button", { name: /setting.preference.theme/ }),
       screen.getByRole("button", { name: /common.language/ }),
       screen.getByRole("link", { name: "common.archived" }),
-      screen.getByRole("link", { name: "common.settings" }),
+      screen.getByRole("button", { name: "common.settings" }),
       screen.getByRole("button", { name: "common.sign-out" }),
     ];
     for (const row of rows) {
@@ -110,10 +118,14 @@ describe("User menu panel", () => {
     }
   });
 
-  it("marks Settings current while viewing one of its sections", () => {
-    renderMenu("/setting#tags");
-    expect(screen.getByRole("link", { name: "common.settings" })).toHaveAttribute("aria-current", "page");
-    expect(screen.getByRole("link", { name: "common.archived" })).not.toHaveAttribute("aria-current");
+  it("opens Settings while preserving the current collection and its filters", () => {
+    const collection = "/archived?filter=tagSearch%3Awork";
+    renderMenu(collection);
+    const settings = screen.getByRole("button", { name: "common.settings" });
+    expect(settings).toHaveAttribute("aria-haspopup", "dialog");
+    fireEvent.click(settings);
+    expect(mocks.onOpenSettings).toHaveBeenCalledOnce();
+    expect(screen.getByTestId("menu-location")).toHaveTextContent(collection);
   });
 
   it("offers guests preferences without account pages or a second sign-in", () => {
