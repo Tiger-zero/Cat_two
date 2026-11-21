@@ -1,6 +1,6 @@
 # Cat_two 功能与实现
 
-Cat_two 是面向单账户使用的自托管笔记应用，交付为 Docker 服务和网页，默认用 SQLite。旧版本遗留的笔记、附件和关联数据按原所有者保留。此页记录仓库 `main` 的产品和实现。核对在用镜像时，读取实例 `/api/instance/profile` 的 `version` 和 `commit`，再查看镜像标签对应的源码。[部署与镜像说明](../../../../README.md)
+Cat_two 是面向单账户使用的自托管笔记应用，通过 Docker 部署，在桌面浏览器中使用，默认用 SQLite。旧版本遗留的笔记、附件和关联数据按原所有者保留。此页记录仓库 `main` 的产品和实现。核对在用镜像时，读取实例 `/api/instance/profile` 的 `version` 和 `commit`，再查看镜像标签对应的源码。[部署与镜像说明](../../../../README.md)
 
 ## 网页里的功能
 
