@@ -265,6 +265,24 @@ func TestPersonalMCPConnectionImmediateAccess(t *testing.T) {
 	require.EqualValues(t, http.StatusUnauthorized, lastHTTPStatus.Load())
 	status, _ = sendMCPInitialize(t, inst, token)
 	require.Equal(t, http.StatusUnauthorized, status)
+
+	_, legacyConnectionToken := createMCPConnection(t, inst, legacyToken, "Legacy account client", "permanent")
+	legacyMCP, legacyHTTPStatus := connectMCP(ctx, t, inst, legacyConnectionToken)
+	legacyRead := &sdkmcp.CallToolParams{Name: "memo_get_memo", Arguments: map[string]any{"memo": legacyMemoID}}
+	result, err := legacyMCP.CallTool(ctx, legacyRead)
+	require.NoError(t, err)
+	require.False(t, result.IsError, "%v", result.Content)
+	require.EqualValues(t, http.StatusOK, legacyHTTPStatus.Load())
+
+	// Archive through the driver so a warm Store cache can still hold the
+	// account as active. The next MCP request must read its database state.
+	archived := store.Archived
+	archivedOwner, err := inst.server.Store.GetDriver().UpdateUser(ctx, &store.UpdateUser{ID: legacy.ID, RowStatus: &archived})
+	require.NoError(t, err)
+	require.Equal(t, store.Archived, archivedOwner.RowStatus)
+	_, err = legacyMCP.CallTool(ctx, legacyRead)
+	require.Error(t, err, "archiving the owner must cut off an initialized client")
+	require.EqualValues(t, http.StatusUnauthorized, legacyHTTPStatus.Load())
 }
 
 func TestPersonalMCPConnectionsSurviveRestartAndKeepLegacyAccess(t *testing.T) {

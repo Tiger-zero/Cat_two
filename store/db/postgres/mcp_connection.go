@@ -40,13 +40,25 @@ FROM mcp_connection WHERE user_id = $1 ORDER BY created_ts DESC, id DESC`, userI
 	return connections, nil
 }
 
-func (d *DB) GetMCPConnectionByHash(ctx context.Context, tokenHash string) (*store.MCPConnection, error) {
-	connection, err := scanMCPConnection(d.db.QueryRowContext(ctx,
-		`SELECT `+mcpConnectionColumns+` FROM mcp_connection WHERE token_hash = $1`, tokenHash))
+func (d *DB) GetMCPConnectionByHash(ctx context.Context, tokenHash string) (*store.MCPConnection, store.RowStatus, error) {
+	var connection store.MCPConnection
+	var ownerStatus store.RowStatus
+	err := d.db.QueryRowContext(ctx, `
+		SELECT c.id, c.user_id, c.label, c.token_hash, c.status,
+		       c.created_ts, c.requested_ts, c.expires_ts, c.remote_ip, u.row_status
+		FROM mcp_connection c
+		JOIN "user" u ON u.id = c.user_id
+		WHERE c.token_hash = $1`, tokenHash).Scan(
+		&connection.ID, &connection.UserID, &connection.Label, &connection.TokenHash, &connection.Status,
+		&connection.CreatedAt, &connection.RequestedAt, &connection.ExpiresAt, &connection.RemoteIP, &ownerStatus,
+	)
 	if errors.Is(err, sql.ErrNoRows) {
-		return nil, nil
+		return nil, "", nil
 	}
-	return connection, err
+	if err != nil {
+		return nil, "", err
+	}
+	return &connection, ownerStatus, nil
 }
 
 func (d *DB) RecordMCPConnectionFirstUse(ctx context.Context, tokenHash string, requestedAt int64, remoteIP string) error {

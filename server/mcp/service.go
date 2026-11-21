@@ -41,7 +41,7 @@ type MCPService struct {
 	handler          http.Handler
 }
 
-type connectionUserContextKey struct{}
+type connectionUserIDContextKey struct{}
 
 // NewMCPService creates an MCP service backed by the in-process API routes.
 func NewMCPService(profile *profile.Profile, handler http.Handler, db *store.Store) (*MCPService, error) {
@@ -171,9 +171,9 @@ func newMCPToolHandler(adapter *apiAdapter, operation *registeredOperation) sdkm
 		if request.Extra != nil {
 			authorization = request.Extra.Header.Get("Authorization")
 		}
-		if user, ok := ctx.Value(connectionUserContextKey{}).(*store.User); ok {
+		if userID, ok := ctx.Value(connectionUserIDContextKey{}).(int32); ok {
 			procedure := "/memos.api." + strings.Replace(operation.OperationID, "_", "/", 1)
-			ctx = api.WithMCPRequest(ctx, user, procedure)
+			ctx = api.WithMCPRequest(ctx, userID, procedure)
 		}
 		return adapter.execute(ctx, operation.Operation, arguments, authorization)
 	}
@@ -203,7 +203,7 @@ func (s *MCPService) servePersonal(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
 	ctx := r.Context()
 	token := auth.ExtractBearerToken(r.Header.Get("Authorization"))
-	user, err := mcpconnection.Authenticate(ctx, s.store, token, clientip.FromContext(ctx), r.Method == http.MethodPost, time.Now())
+	userID, err := mcpconnection.Authenticate(ctx, s.store, token, clientip.FromContext(ctx), r.Method == http.MethodPost, time.Now())
 	if err != nil {
 		var response *httphandler.Error
 		switch {
@@ -218,7 +218,7 @@ func (s *MCPService) servePersonal(w http.ResponseWriter, r *http.Request) {
 		httphandler.WriteError(w, r, response)
 		return
 	}
-	r = r.Clone(context.WithValue(ctx, connectionUserContextKey{}, user))
+	r = r.Clone(context.WithValue(ctx, connectionUserIDContextKey{}, userID))
 	r.Header.Del("Authorization")
 	s.handler.ServeHTTP(w, r)
 }

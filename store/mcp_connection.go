@@ -37,8 +37,9 @@ func (s *Store) ListMCPConnections(ctx context.Context, userID int32) ([]*MCPCon
 	return s.driver.ListMCPConnections(ctx, userID)
 }
 
-// GetMCPConnectionByHash returns the connection for a token hash, or nil if absent.
-func (s *Store) GetMCPConnectionByHash(ctx context.Context, tokenHash string) (*MCPConnection, error) {
+// GetMCPConnectionByHash reads the connection and its owner's current status
+// in one query. If there is no match, it returns a nil connection and empty status.
+func (s *Store) GetMCPConnectionByHash(ctx context.Context, tokenHash string) (*MCPConnection, RowStatus, error) {
 	return s.driver.GetMCPConnectionByHash(ctx, tokenHash)
 }
 

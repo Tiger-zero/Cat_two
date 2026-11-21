@@ -9,8 +9,6 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-
-	"github.com/usememos/memos/store"
 )
 
 func TestRemovedAPIVersionRoutesReturnGone(t *testing.T) {
@@ -56,8 +54,7 @@ func TestMCPIdentityRequiresMatchingAPIProcedure(t *testing.T) {
 	handler, err := svc.NewHandler(context.Background())
 	require.NoError(t, err)
 
-	user := &store.User{ID: 1}
-	ctx := WithMCPRequest(context.Background(), user, "/memos.api.MemoService/ListMemos")
+	ctx := WithMCPRequest(context.Background(), 1, "/memos.api.MemoService/ListMemos")
 	request := httptest.NewRequestWithContext(ctx, http.MethodGet, "/api/users", nil)
 	recorder := httptest.NewRecorder()
 	handler.ServeHTTP(recorder, request)

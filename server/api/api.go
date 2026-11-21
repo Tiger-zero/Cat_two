@@ -170,7 +170,7 @@ func (s *APIService) NewHandler(ctx context.Context) (http.Handler, error) {
 					writeGatewayStatusError(w, status.Error(codes.PermissionDenied, "MCP connection cannot access this API procedure"))
 					return
 				}
-				result = &auth.AuthResult{User: request.user}
+				result = &auth.AuthResult{User: &store.User{ID: request.userID}}
 			} else {
 				result = authorizer.Authenticate(ctx, r.Header.Get("Authorization"))
 			}

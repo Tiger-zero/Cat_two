@@ -54,11 +54,12 @@ fast on any inconsistency:
 
 1. `isAllowedMCPOrigin` (`origin.go`) rejects disallowed cross-origin browser requests with `403`.
 2. The request body is capped at 256 MiB before the SDK reads it.
-3. In personal mode, the transport checks the connection token's status and
-   expiry before SDK dispatch. It records the time and client address on the
-   first authenticated POST when that information has yet to be recorded.
-   The transport passes the account identity through the in-process context
-   and strips the external token.
+3. In personal mode, the transport looks up the connection by its indexed
+   token hash and reads the owner's current account status in the same
+   query. It checks the connection status, expiration, and account status
+   before SDK dispatch. The first authenticated POST records the time and
+   client address. The transport passes the owner ID through the in-process
+   context and strips the external token.
 4. The SDK streamable handler dispatches the MCP message.
 5. On a `tools/call` request, `newMCPToolHandler` (`service.go`) decodes the JSON
    arguments into a map.

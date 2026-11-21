@@ -42,18 +42,51 @@ func TestMCPConnectionStore(t *testing.T) {
 	require.NoError(t, err)
 	require.NotContains(t, string(encoded), connection.TokenHash)
 	require.NotContains(t, string(encoded), "userId")
-	stored, err := ts.GetMCPConnectionByHash(ctx, strings.ToUpper(connection.TokenHash))
+	for _, absentHash := range []string{strings.ToUpper(connection.TokenHash), strings.Repeat("01", 32)} {
+		stored, ownerStatus, err := ts.GetMCPConnectionByHash(ctx, absentHash)
+		require.NoError(t, err)
+		require.Nil(t, stored)
+		require.Empty(t, ownerStatus)
+	}
+	stored, ownerStatus, err := ts.GetMCPConnectionByHash(ctx, connection.TokenHash)
 	require.NoError(t, err)
-	require.Nil(t, stored)
+	require.Equal(t, connection, stored)
+	require.Equal(t, owner.ID, stored.UserID)
+	require.Equal(t, store.Normal, ownerStatus)
+	stored, ownerStatus, err = ts.GetMCPConnectionByHash(ctx, foreign.TokenHash)
+	require.NoError(t, err)
+	require.Equal(t, foreign, stored)
+	require.Equal(t, other.ID, stored.UserID)
+	require.Equal(t, store.Normal, ownerStatus)
 
 	require.NoError(t, ts.RecordMCPConnectionFirstUse(ctx, connection.TokenHash, 110, "192.0.2.1"))
 	require.NoError(t, ts.RecordMCPConnectionFirstUse(ctx, connection.TokenHash, 120, "192.0.2.2"))
-	stored, err = ts.GetMCPConnectionByHash(ctx, connection.TokenHash)
+	stored, ownerStatus, err = ts.GetMCPConnectionByHash(ctx, connection.TokenHash)
 	require.NoError(t, err)
+	require.Equal(t, store.Normal, ownerStatus)
 	require.Equal(t, store.MCPConnectionApproved, stored.Status)
 	require.EqualValues(t, 110, stored.RequestedAt)
 	require.Equal(t, "192.0.2.1", stored.RemoteIP)
 	require.EqualValues(t, 200, stored.ExpiresAt)
+	beforeArchive := *stored
+
+	// Change the row through the driver so the lookup cannot rely on the
+	// cached user snapshot in this Store.
+	archived := store.Archived
+	_, err = ts.GetDriver().UpdateUser(ctx, &store.UpdateUser{ID: owner.ID, RowStatus: &archived})
+	require.NoError(t, err)
+	cachedOwner, err := ts.GetUser(ctx, &store.FindUser{ID: &owner.ID})
+	require.NoError(t, err)
+	require.Equal(t, store.Normal, cachedOwner.RowStatus)
+	stored, ownerStatus, err = ts.GetMCPConnectionByHash(ctx, connection.TokenHash)
+	require.NoError(t, err)
+	require.Equal(t, store.Archived, ownerStatus)
+	require.Equal(t, &beforeArchive, stored)
+	stored, ownerStatus, err = ts.GetMCPConnectionByHash(ctx, foreign.TokenHash)
+	require.NoError(t, err)
+	require.Equal(t, foreign, stored)
+	require.Equal(t, store.Normal, ownerStatus)
+
 	updated, err := ts.UpdateMCPConnection(ctx, other.ID, connection.ID, store.MCPConnectionApproved, store.MCPConnectionRevoked, 0)
 	require.NoError(t, err)
 	require.False(t, updated)
@@ -82,8 +115,9 @@ func TestMCPConnectionStore(t *testing.T) {
 		winner = second
 	}
 	require.NoError(t, ts.RecordMCPConnectionFirstUse(ctx, connection.TokenHash, 130, "2001:db8::1"))
-	stored, err = ts.GetMCPConnectionByHash(ctx, connection.TokenHash)
+	stored, ownerStatus, err = ts.GetMCPConnectionByHash(ctx, connection.TokenHash)
 	require.NoError(t, err)
+	require.Equal(t, store.Archived, ownerStatus)
 	require.Equal(t, winner.status, stored.Status)
 	require.Zero(t, stored.ExpiresAt)
 	require.EqualValues(t, 110, stored.RequestedAt)
@@ -91,13 +125,15 @@ func TestMCPConnectionStore(t *testing.T) {
 
 	_, err = ts.DeleteUser(ctx, &store.DeleteUser{ID: owner.ID})
 	require.NoError(t, err)
-	stored, err = ts.GetMCPConnectionByHash(ctx, connection.TokenHash)
+	stored, ownerStatus, err = ts.GetMCPConnectionByHash(ctx, connection.TokenHash)
 	require.NoError(t, err)
 	require.Nil(t, stored)
+	require.Empty(t, ownerStatus)
 	require.Error(t, ts.CreateMCPConnection(ctx, connection), "a deleted account cannot own another connection")
-	stored, err = ts.GetMCPConnectionByHash(ctx, foreign.TokenHash)
+	stored, ownerStatus, err = ts.GetMCPConnectionByHash(ctx, foreign.TokenHash)
 	require.NoError(t, err)
 	require.Equal(t, foreign, stored)
+	require.Equal(t, store.Normal, ownerStatus)
 }
 
 func TestMCPConnectionFirstUseSkipsInactiveStates(t *testing.T) {
@@ -118,9 +154,10 @@ func TestMCPConnectionFirstUseSkipsInactiveStates(t *testing.T) {
 			}
 			require.NoError(t, ts.CreateMCPConnection(ctx, connection))
 			require.NoError(t, ts.RecordMCPConnectionFirstUse(ctx, tokenHash, 110, "192.0.2.1"))
-			stored, err := ts.GetMCPConnectionByHash(ctx, tokenHash)
+			stored, ownerStatus, err := ts.GetMCPConnectionByHash(ctx, tokenHash)
 			require.NoError(t, err)
 			require.Equal(t, connection, stored)
+			require.Equal(t, store.Normal, ownerStatus)
 		})
 	}
 }
@@ -143,16 +180,18 @@ func TestDeleteMCPConnectionOwnerScope(t *testing.T) {
 	removed, err := ts.DeleteMCPConnection(ctx, other.ID, connection.ID)
 	require.NoError(t, err)
 	require.False(t, removed)
-	stored, err := ts.GetMCPConnectionByHash(ctx, connection.TokenHash)
+	stored, ownerStatus, err := ts.GetMCPConnectionByHash(ctx, connection.TokenHash)
 	require.NoError(t, err)
 	require.Equal(t, connection, stored)
+	require.Equal(t, store.Normal, ownerStatus)
 
 	removed, err = ts.DeleteMCPConnection(ctx, owner.ID, connection.ID)
 	require.NoError(t, err)
 	require.True(t, removed)
-	stored, err = ts.GetMCPConnectionByHash(ctx, connection.TokenHash)
+	stored, ownerStatus, err = ts.GetMCPConnectionByHash(ctx, connection.TokenHash)
 	require.NoError(t, err)
 	require.Nil(t, stored)
+	require.Empty(t, ownerStatus)
 	list, err := ts.ListMCPConnections(ctx, owner.ID)
 	require.NoError(t, err)
 	require.Empty(t, list)
@@ -181,7 +220,8 @@ func TestMigrationMCPConnection(t *testing.T) {
 		Status: store.MCPConnectionApproved, CreatedAt: 100, ExpiresAt: 200,
 	}
 	require.NoError(t, ts.CreateMCPConnection(ctx, connection))
-	stored, err := ts.GetMCPConnectionByHash(ctx, connection.TokenHash)
+	stored, ownerStatus, err := ts.GetMCPConnectionByHash(ctx, connection.TokenHash)
 	require.NoError(t, err)
 	require.Equal(t, connection, stored)
+	require.Equal(t, store.Normal, ownerStatus)
 }

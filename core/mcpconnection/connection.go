@@ -85,37 +85,33 @@ func Revoke(ctx context.Context, db *store.Store, userID int32, id string) error
 	return ErrRevocationConflict
 }
 
-// Authenticate resolves an active connection and records its first authenticated POST.
-func Authenticate(ctx context.Context, db *store.Store, token, remoteIP string, recordUse bool, now time.Time) (*store.User, error) {
+// Authenticate returns the connection owner's ID and records its first authenticated POST.
+func Authenticate(ctx context.Context, db *store.Store, token, remoteIP string, recordUse bool, now time.Time) (int32, error) {
 	if !strings.HasPrefix(token, tokenPrefix) {
-		return nil, ErrInvalidToken
+		return 0, ErrInvalidToken
 	}
 	digest := hashToken(token)
-	connection, err := db.GetMCPConnectionByHash(ctx, digest)
+	connection, ownerStatus, err := db.GetMCPConnectionByHash(ctx, digest)
 	if err != nil {
-		return nil, err
+		return 0, err
 	}
 	if connection == nil {
-		return nil, ErrInvalidToken
+		return 0, ErrInvalidToken
 	}
 	// Earlier versions may have stored credentials that never received the
 	// owner's approval. Only tokens already active can authenticate.
 	if StatusAt(connection, now) != store.MCPConnectionApproved {
-		return nil, ErrInactive
+		return 0, ErrInactive
 	}
-	user, err := db.GetUser(ctx, &store.FindUser{ID: &connection.UserID})
-	if err != nil {
-		return nil, err
-	}
-	if user == nil || user.RowStatus != store.Normal {
-		return nil, ErrInvalidToken
+	if ownerStatus != store.Normal {
+		return 0, ErrInvalidToken
 	}
 	if recordUse && connection.RequestedAt == 0 {
 		if err := db.RecordMCPConnectionFirstUse(ctx, digest, now.Unix(), remoteIP); err != nil {
-			return nil, err
+			return 0, err
 		}
 	}
-	return user, nil
+	return connection.UserID, nil
 }
 
 func hashToken(token string) string {

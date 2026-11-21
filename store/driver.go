@@ -101,7 +101,7 @@ type Driver interface {
 	// MCP connection requests and authorization states.
 	CreateMCPConnection(ctx context.Context, connection *MCPConnection) error
 	ListMCPConnections(ctx context.Context, userID int32) ([]*MCPConnection, error)
-	GetMCPConnectionByHash(ctx context.Context, tokenHash string) (*MCPConnection, error)
+	GetMCPConnectionByHash(ctx context.Context, tokenHash string) (*MCPConnection, RowStatus, error)
 	RecordMCPConnectionFirstUse(ctx context.Context, tokenHash string, requestedAt int64, remoteIP string) error
 	UpdateMCPConnection(ctx context.Context, userID int32, id string, from MCPConnectionStatus, to MCPConnectionStatus, expiresAt int64) (bool, error)
 	DeleteMCPConnection(ctx context.Context, userID int32, id string) (bool, error)

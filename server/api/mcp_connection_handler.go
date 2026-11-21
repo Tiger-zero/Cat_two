@@ -19,13 +19,13 @@ import (
 type mcpUserContextKey struct{}
 
 type mcpAPIRequest struct {
-	user      *store.User
+	userID    int32
 	procedure string
 }
 
 // WithMCPRequest grants the in-process request the connection owner's identity for one API procedure.
-func WithMCPRequest(ctx context.Context, user *store.User, procedure string) context.Context {
-	return context.WithValue(ctx, mcpUserContextKey{}, mcpAPIRequest{user: user, procedure: procedure})
+func WithMCPRequest(ctx context.Context, userID int32, procedure string) context.Context {
+	return context.WithValue(ctx, mcpUserContextKey{}, mcpAPIRequest{userID: userID, procedure: procedure})
 }
 
 func (s *APIService) newMCPConnectionHandler(authorizer *Authorizer) http.Handler {
