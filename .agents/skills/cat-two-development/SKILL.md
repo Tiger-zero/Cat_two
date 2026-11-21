@@ -71,6 +71,12 @@ Cat_two 从 Fumos 和 Memos 衍生而来，以 `Tiger-zero/Cat_two` 的 `main` �
 - **发布前修复存储 CI**　升级数据库结构后，「未来版本」夹具仍写死为现在的 `26.11.4`，四种数据库均报断言错误。测试从当前嵌入版本计算下一修订，随以后的迁移更新。MySQL 同次出现账号清理语句的 `1615`，回滚失败事务后仅对此错误重试整个删除事务，保留其他错误的处理。 [失败日志](https://github.com/Tiger-zero/Cat_two/actions/runs/44895305239/job/136819563071) · [暂停的发布](https://github.com/Tiger-zero/Cat_two/actions/runs/44895938286)
 - **MySQL 发布复测**　全量测试并行迁移时，MySQL 删除账号主记录所用的预处理语句持续返回 `1615`，事务重试仍可耗尽。定位到最后一条带级联的删除后，只将这条固定 SQL 改为直接执行。唯一写入 SQL 的参数是已解码的整数账号 ID。完整 MySQL 套件以 8 个测试并发通过。 [第二次失败日志](https://github.com/Tiger-zero/Cat_two/actions/runs/44896373212/job/136822797176) · [暂停的发布](https://github.com/Tiger-zero/Cat_two/actions/runs/44896373037)
 
+### 11 月 21 日 19:08
+
+- **Docker Hub 0.06**　用提交 `53968a153da7eb193f691c35ccfd52f7f0d457ef` 发布 MCP 连接审批和存储修复。`0.06`、`latest` 与源码 SHA 标签均指向 `sha256:8d42b6cf8ee1cefd817597aba6d5787947560372769194e528111e748ccee552`，包含 AMD64 和 ARM64。 [发布记录](https://github.com/Tiger-zero/Cat_two/actions/runs/44897126449) · [镜像标签](https://hub.docker.com/r/tiger2896/cat_two/tags)
+- **正式镜像升级验证**　独立测试卷从 `0.05` 升级到 `0.06`，SQLite 从 `26.11.3` 迁移至 `26.11.4`。旧私有笔记与 REST PAT 可用。使用新令牌实测等待审批、24 小时批准、六个工具调用、中文标签查询和撤销。重启后新笔记与撤销状态都保留。真实 NAS 部署待验证。
+- **最终 CI**　发布提交的前端和后端检查均通过，存储 CI 覆盖 SQLite、MySQL、MariaDB 和 PostgreSQL。`compose.nas.yaml` 的实际部署使用 SQLite。 [后端检查](https://github.com/Tiger-zero/Cat_two/actions/runs/44897126401) · [前端检查](https://github.com/Tiger-zero/Cat_two/actions/runs/44897126388)
+
 ## 开发和验证
 
 1. 检查工作区和目标提交，保留已有修改。按用户要完成的操作，从网页或 API 入口追到权限和数据层。先用相关的小范围测试验证，再运行与改动面相符的检查。
