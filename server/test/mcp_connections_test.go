@@ -2,6 +2,9 @@ package test
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"net/http"
 	"testing"
@@ -26,9 +29,13 @@ type observedMCPConnection struct {
 
 const mcpConnectionsPath = "/api/mcpConnections"
 
-func createMCPConnection(t *testing.T, inst *instance, browserToken, label string) (observedMCPConnection, string) {
+func createMCPConnection(t *testing.T, inst *instance, browserToken, label, duration string) (observedMCPConnection, string) {
 	t.Helper()
-	status, body := inst.do(t, http.MethodPost, mcpConnectionsPath, browserToken, map[string]string{"label": label})
+	request := map[string]string{"label": label}
+	if duration != "" {
+		request["duration"] = duration
+	}
+	status, body := inst.do(t, http.MethodPost, mcpConnectionsPath, browserToken, request)
 	require.Equal(t, http.StatusCreated, status, "%s", body)
 	var created struct {
 		Connection observedMCPConnection `json:"connection"`
@@ -38,10 +45,15 @@ func createMCPConnection(t *testing.T, inst *instance, browserToken, label strin
 	require.NotEmpty(t, created.Token)
 	require.NotEmpty(t, created.Connection.ID)
 	require.Equal(t, label, created.Connection.Label)
-	require.Equal(t, "awaiting", created.Connection.Status)
+	require.Equal(t, "approved", created.Connection.Status)
 	require.Positive(t, created.Connection.CreatedAt)
 	require.Zero(t, created.Connection.RequestedAt)
-	require.Zero(t, created.Connection.ExpiresAt)
+	require.Empty(t, created.Connection.RemoteIP)
+	if duration == "permanent" {
+		require.Zero(t, created.Connection.ExpiresAt)
+	} else {
+		require.Equal(t, created.Connection.CreatedAt+int64(24*time.Hour/time.Second), created.Connection.ExpiresAt)
+	}
 	return created.Connection, created.Token
 }
 
@@ -69,7 +81,7 @@ func mcpDecision(t *testing.T, inst *instance, browserToken, id, action string) 
 	return inst.do(t, http.MethodPost, mcpConnectionsPath+"/"+id+"/decision", browserToken, map[string]string{"action": action})
 }
 
-func requestMCPApproval(t *testing.T, inst *instance, token string) (int, []byte) {
+func sendMCPInitialize(t *testing.T, inst *instance, token string) (int, []byte) {
 	t.Helper()
 	return inst.do(t, http.MethodPost, "/mcp", token, map[string]any{
 		"jsonrpc": "2.0",
@@ -78,14 +90,14 @@ func requestMCPApproval(t *testing.T, inst *instance, token string) (int, []byte
 		"params": map[string]any{
 			"protocolVersion": "2025-11-25",
 			"capabilities":    map[string]any{},
-			"clientInfo":      map[string]string{"name": "approval-test", "version": "1"},
+			"clientInfo":      map[string]string{"name": "connection-test", "version": "1"},
 		},
 	})
 }
 
-func connectApprovedMCP(ctx context.Context, t *testing.T, inst *instance, token string) *sdkmcp.ClientSession {
+func connectMCP(ctx context.Context, t *testing.T, inst *instance, token string) *sdkmcp.ClientSession {
 	t.Helper()
-	client := sdkmcp.NewClient(&sdkmcp.Implementation{Name: "approved-integration-test", Version: "1"}, nil)
+	client := sdkmcp.NewClient(&sdkmcp.Implementation{Name: "connection-integration-test", Version: "1"}, nil)
 	session, err := client.Connect(ctx, &sdkmcp.StreamableClientTransport{
 		Endpoint:             inst.baseURL + "/mcp",
 		DisableStandaloneSSE: true,
@@ -103,7 +115,7 @@ func connectApprovedMCP(ctx context.Context, t *testing.T, inst *instance, token
 	return session
 }
 
-func TestPersonalMCPConnectionManualApproval(t *testing.T) {
+func TestPersonalMCPConnectionImmediateAccess(t *testing.T) {
 	ctx := context.Background()
 	inst := bootInstance(ctx, t, instanceOptions{personal: true})
 	inst.createAdmin(t)
@@ -124,37 +136,29 @@ func TestPersonalMCPConnectionManualApproval(t *testing.T) {
 	require.Equal(t, http.StatusForbidden, status)
 	status, _ = inst.do(t, http.MethodPost, mcpConnectionsPath, pat.Token, map[string]string{"label": "untrusted"})
 	require.Equal(t, http.StatusForbidden, status)
+	status, body = inst.do(t, http.MethodPost, mcpConnectionsPath, browserToken, map[string]string{
+		"label": "Invalid duration", "duration": "week",
+	})
+	require.Equal(t, http.StatusBadRequest, status, "%s", body)
 
-	connection, token := createMCPConnection(t, inst, browserToken, "Desktop assistant")
-	status, _ = mcpDecision(t, inst, browserToken, connection.ID, "approve_day")
-	require.Contains(t, []int{http.StatusConflict, http.StatusNotFound}, status)
+	// Omitting duration gives a 24-hour grant from creation.
+	connection, token := createMCPConnection(t, inst, browserToken, "Desktop assistant", "")
+	for _, action := range []string{"approve_day", "approve_permanent", "deny"} {
+		status, body = mcpDecision(t, inst, browserToken, connection.ID, action)
+		require.Equal(t, http.StatusBadRequest, status, "%s", body)
+	}
 
-	status, _ = requestMCPApproval(t, inst, "")
-	require.Contains(t, []int{http.StatusUnauthorized, http.StatusForbidden}, status)
-	status, _ = requestMCPApproval(t, inst, pat.Token)
-	require.Contains(t, []int{http.StatusUnauthorized, http.StatusForbidden}, status)
-	status, _ = requestMCPApproval(t, inst, browserToken)
-	require.Contains(t, []int{http.StatusUnauthorized, http.StatusForbidden}, status)
-	status, _ = inst.do(t, http.MethodGet, "/mcp", token, nil)
-	require.Contains(t, []int{http.StatusUnauthorized, http.StatusForbidden}, status)
+	for _, ineligible := range []string{"", pat.Token, browserToken} {
+		status, _ = sendMCPInitialize(t, inst, ineligible)
+		require.Contains(t, []int{http.StatusUnauthorized, http.StatusForbidden}, status)
+	}
+	inst.do(t, http.MethodGet, "/mcp", token, nil)
 	require.Equal(t, connection, getMCPConnection(t, inst, browserToken, connection.ID, token))
-
-	status, body = requestMCPApproval(t, inst, token)
-	require.Equal(t, http.StatusForbidden, status, "%s", body)
-	pending := getMCPConnection(t, inst, browserToken, connection.ID, token)
-	require.Equal(t, "pending", pending.Status)
-	require.GreaterOrEqual(t, pending.RequestedAt, connection.CreatedAt)
-	require.Equal(t, "127.0.0.1", pending.RemoteIP)
-	require.Zero(t, pending.ExpiresAt)
-	require.Eventually(t, func() bool { return time.Now().Unix() > pending.RequestedAt }, 2*time.Second, 25*time.Millisecond)
-	status, body = requestMCPApproval(t, inst, token)
-	require.Equal(t, http.StatusForbidden, status, "%s", body)
-	require.Equal(t, pending, getMCPConnection(t, inst, browserToken, connection.ID, token))
-	status, _ = mcpDecision(t, inst, pat.Token, connection.ID, "approve_permanent")
+	status, _ = mcpDecision(t, inst, pat.Token, connection.ID, "revoke")
 	require.Equal(t, http.StatusForbidden, status)
 
 	// Existing accounts can still sign in after an upgrade. Their sessions
-	// must neither enumerate nor approve another account's connections.
+	// must neither enumerate nor revoke another account's connections.
 	hash, err := bcrypt.GenerateFromPassword([]byte(testAdminPassword), bcrypt.MinCost)
 	require.NoError(t, err)
 	legacy, err := inst.server.Store.CreateUser(ctx, &store.User{
@@ -167,20 +171,16 @@ func TestPersonalMCPConnectionManualApproval(t *testing.T) {
 	status, body = inst.do(t, http.MethodGet, mcpConnectionsPath, legacyToken, nil)
 	require.Equal(t, http.StatusOK, status, "%s", body)
 	require.JSONEq(t, `{"connections":[]}`, string(body))
-	status, _ = mcpDecision(t, inst, legacyToken, connection.ID, "approve_permanent")
+	status, _ = mcpDecision(t, inst, legacyToken, connection.ID, "revoke")
 	require.Contains(t, []int{http.StatusConflict, http.StatusNotFound}, status)
-	require.Equal(t, pending, getMCPConnection(t, inst, browserToken, connection.ID, token))
 
-	beforeApproval := time.Now()
-	status, body = mcpDecision(t, inst, browserToken, connection.ID, "approve_day")
-	require.Equal(t, http.StatusNoContent, status, "%s", body)
-	afterApproval := time.Now()
-	approved := getMCPConnection(t, inst, browserToken, connection.ID, token)
-	require.Equal(t, "approved", approved.Status)
-	require.GreaterOrEqual(t, approved.ExpiresAt, beforeApproval.Add(24*time.Hour).Unix())
-	require.LessOrEqual(t, approved.ExpiresAt, afterApproval.Add(24*time.Hour).Unix())
-
-	mcp := connectApprovedMCP(ctx, t, inst, token)
+	mcp := connectMCP(ctx, t, inst, token)
+	firstUse := getMCPConnection(t, inst, browserToken, connection.ID, token)
+	require.Equal(t, "approved", firstUse.Status)
+	require.Equal(t, connection.ExpiresAt, firstUse.ExpiresAt)
+	require.GreaterOrEqual(t, firstUse.RequestedAt, connection.CreatedAt)
+	require.Equal(t, "127.0.0.1", firstUse.RemoteIP)
+	require.Eventually(t, func() bool { return time.Now().Unix() > firstUse.RequestedAt }, 2*time.Second, 25*time.Millisecond)
 	tools, err := mcp.ListTools(ctx, nil)
 	require.NoError(t, err)
 	names := make([]string, 0, len(tools.Tools))
@@ -198,7 +198,7 @@ func TestPersonalMCPConnectionManualApproval(t *testing.T) {
 		require.False(t, result.IsError, "%v", result.Content)
 		return result
 	}
-	const memoID = "manually-approved-note"
+	const memoID = "integration-note"
 	call("memo_create_memo", map[string]any{
 		"memoId": memoID,
 		"body":   map[string]any{"content": "Written by an approved integration"},
@@ -216,6 +216,7 @@ func TestPersonalMCPConnectionManualApproval(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.True(t, inaccessible.IsError, "approved clients inherit note ownership")
+	require.Equal(t, firstUse, getMCPConnection(t, inst, browserToken, connection.ID, token))
 
 	status, _ = inst.do(t, http.MethodGet, "/api/memos/"+memoID, token, nil)
 	require.Contains(t, []int{http.StatusUnauthorized, http.StatusForbidden}, status)
@@ -232,42 +233,49 @@ func TestPersonalMCPConnectionManualApproval(t *testing.T) {
 	// always crosses the transport and must observe the revoked token.
 	_, err = mcp.CallTool(ctx, &sdkmcp.CallToolParams{Name: "memo_get_memo", Arguments: map[string]any{"memo": memoID}})
 	require.Error(t, err, "revocation must also cut off an initialized client")
-	status, _ = requestMCPApproval(t, inst, token)
+	status, _ = sendMCPInitialize(t, inst, token)
 	require.Contains(t, []int{http.StatusUnauthorized, http.StatusForbidden}, status)
 }
 
-func TestPersonalMCPConnectionDecisionsSurviveRestart(t *testing.T) {
+func TestPersonalMCPConnectionsSurviveRestartAndKeepLegacyAccess(t *testing.T) {
 	ctx := context.Background()
 	dataDir := t.TempDir()
 	inst := bootInstance(ctx, t, instanceOptions{personal: true, dataDir: dataDir})
 	inst.createAdmin(t)
 	browserToken := inst.signIn(t)
-	permanentConnection, permanentToken := createMCPConnection(t, inst, browserToken, "Always allowed")
-	deniedConnection, deniedToken := createMCPConnection(t, inst, browserToken, "Denied client")
-	expiredConnection, expiredToken := createMCPConnection(t, inst, browserToken, "Expired client")
-	for _, token := range []string{permanentToken, deniedToken, expiredToken} {
-		status, body := requestMCPApproval(t, inst, token)
-		require.Equal(t, http.StatusForbidden, status, "%s", body)
-	}
+	permanentConnection, permanentToken := createMCPConnection(t, inst, browserToken, "Always allowed", "permanent")
+	expiredConnection, expiredToken := createMCPConnection(t, inst, browserToken, "Expired client", "day")
 
-	status, body := mcpDecision(t, inst, browserToken, permanentConnection.ID, "approve_permanent")
-	require.Equal(t, http.StatusNoContent, status, "%s", body)
-	status, body = mcpDecision(t, inst, browserToken, deniedConnection.ID, "deny")
-	require.Equal(t, http.StatusNoContent, status, "%s", body)
-	status, _ = mcpDecision(t, inst, browserToken, deniedConnection.ID, "approve_permanent")
-	require.Contains(t, []int{http.StatusConflict, http.StatusNotFound}, status)
-
-	// Move the temporary grant's expiration into the past without sleeping
-	// for a day or depending on the SQLite table layout.
 	username := testAdminUsername
 	owner, err := inst.server.Store.GetUser(ctx, &store.FindUser{Username: &username})
 	require.NoError(t, err)
 	require.NotNil(t, owner)
+	// Exercise expiration without sleeping for a day or depending on SQLite's table layout.
 	updated, err := inst.server.Store.UpdateMCPConnection(
-		ctx, owner.ID, expiredConnection.ID, store.MCPConnectionPending, store.MCPConnectionApproved, time.Now().Add(-time.Minute).Unix(),
+		ctx, owner.ID, expiredConnection.ID, store.MCPConnectionApproved, store.MCPConnectionApproved, time.Now().Add(-time.Minute).Unix(),
 	)
 	require.NoError(t, err)
 	require.True(t, updated)
+
+	// Use the same token and persisted fields as the pre-upgrade issuance flow.
+	legacyCreated := time.Now().Add(-time.Hour).Unix()
+	legacy := map[store.MCPConnectionStatus]string{}
+	for _, state := range []store.MCPConnectionStatus{
+		store.MCPConnectionApproved, store.MCPConnectionAwaiting, store.MCPConnectionPending, store.MCPConnectionDenied,
+	} {
+		token := "cat_two_mcp_" + rand.Text()
+		digest := sha256.Sum256([]byte(token))
+		connection := &store.MCPConnection{
+			ID: "legacy-" + string(state), UserID: owner.ID, Label: "Legacy " + string(state),
+			TokenHash: hex.EncodeToString(digest[:]), Status: state, CreatedAt: legacyCreated,
+		}
+		if state != store.MCPConnectionAwaiting {
+			connection.RequestedAt = legacyCreated + 60
+			connection.RemoteIP = "192.0.2.55"
+		}
+		require.NoError(t, inst.server.Store.CreateMCPConnection(ctx, connection))
+		legacy[state] = token
+	}
 
 	inst.shutdown(ctx)
 	inst = bootInstance(ctx, t, instanceOptions{personal: true, dataDir: dataDir})
@@ -275,14 +283,33 @@ func TestPersonalMCPConnectionDecisionsSurviveRestart(t *testing.T) {
 	permanent := getMCPConnection(t, inst, browserToken, permanentConnection.ID, permanentToken)
 	require.Equal(t, "approved", permanent.Status)
 	require.Zero(t, permanent.ExpiresAt)
-	permanentSession := connectApprovedMCP(ctx, t, inst, permanentToken)
+	permanentSession := connectMCP(ctx, t, inst, permanentToken)
 	_, err = permanentSession.ListTools(ctx, nil)
 	require.NoError(t, err)
 
-	status, _ = requestMCPApproval(t, inst, deniedToken)
-	require.Contains(t, []int{http.StatusUnauthorized, http.StatusForbidden}, status)
-	require.Equal(t, "denied", getMCPConnection(t, inst, browserToken, deniedConnection.ID, deniedToken).Status)
-	status, _ = requestMCPApproval(t, inst, expiredToken)
+	legacyApproved := connectMCP(ctx, t, inst, legacy[store.MCPConnectionApproved])
+	_, err = legacyApproved.ListTools(ctx, nil)
+	require.NoError(t, err)
+	approved := getMCPConnection(t, inst, browserToken, "legacy-approved", legacy[store.MCPConnectionApproved])
+	require.Equal(t, "approved", approved.Status)
+	require.Equal(t, legacyCreated+60, approved.RequestedAt)
+	require.Equal(t, "192.0.2.55", approved.RemoteIP)
+
+	for _, state := range []store.MCPConnectionStatus{store.MCPConnectionAwaiting, store.MCPConnectionPending, store.MCPConnectionDenied} {
+		token := legacy[state]
+		id := "legacy-" + string(state)
+		status, _ := sendMCPInitialize(t, inst, token)
+		require.Contains(t, []int{http.StatusUnauthorized, http.StatusForbidden}, status)
+		require.Equal(t, string(state), getMCPConnection(t, inst, browserToken, id, token).Status)
+		if state != store.MCPConnectionDenied {
+			status, body := mcpDecision(t, inst, browserToken, id, "revoke")
+			require.Equal(t, http.StatusNoContent, status, "%s", body)
+			require.Equal(t, "revoked", getMCPConnection(t, inst, browserToken, id, token).Status)
+			status, _ = sendMCPInitialize(t, inst, token)
+			require.Contains(t, []int{http.StatusUnauthorized, http.StatusForbidden}, status)
+		}
+	}
+	status, _ := sendMCPInitialize(t, inst, expiredToken)
 	require.Contains(t, []int{http.StatusUnauthorized, http.StatusForbidden}, status)
 	require.Equal(t, "expired", getMCPConnection(t, inst, browserToken, expiredConnection.ID, expiredToken).Status)
 }

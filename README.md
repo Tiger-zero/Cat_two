@@ -44,9 +44,9 @@ CAT_TWO_PORT=5230
 
 ## 连接 Codex
 
-在 Cat_two 的「设置 → MCP 和 API」生成专用 MCP 连接令牌。在本地 Codex 添加 Streamable HTTP 服务，填写实例的 `/mcp` 地址和令牌。首次携带令牌连接后，回到 Cat_two 批准 24 小时或永久访问，再用同一个令牌重连。也可以拒绝申请或撤销授权。安装 Cat_two 笔记插件后，可以直接调用整理待办和归档任务的工作流。[接入步骤](plugins/cat-two-notes/README.md#连接-nas) · [可选插件安装](plugins/cat-two-notes/README.md#安装笔记插件)
+在 Cat_two 的「设置 → MCP 和 API」创建专用 MCP 连接令牌，有效期默认 24 小时，也可选永久。令牌创建后立即生效，可在同一页撤销。在本地 Codex 添加 Streamable HTTP 服务，粘贴 `/mcp` 地址和完整的 `Authorization` 请求头值，Bearer 令牌环境变量留空。可选的 Cat_two 笔记插件提供整理待办和归档任务的工作流。[接入步骤](plugins/cat-two-notes/README.md#连接-nas) · [可选插件安装](plugins/cat-two-notes/README.md#安装笔记插件)
 
-已有 REST 集成继续使用个人访问令牌（PAT）。从旧版升级后，原先用 PAT 连接 `/mcp` 的客户端需要改用专用连接令牌并完成审批。
+REST 集成继续使用个人访问令牌（PAT）。升级后，以前已批准的 MCP 令牌继续按原有效期使用，旧版等待连接或待审批的令牌需要重新创建。
 
 ## 两步验证
 

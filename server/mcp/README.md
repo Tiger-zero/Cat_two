@@ -9,8 +9,8 @@ Tool calls execute in-process against the existing REST API. Each tool comes
 from an operation in the generated OpenAPI document (`proto/gen/openapi.yaml`,
 embedded via `proto.OpenAPIYAML()`). The tool handler translates each call into
 the matching `/api/...` request so API authorization applies. In Cat_two
-personal mode, the transport first authenticates a dedicated MCP connection
-token and passes the approved account to the API internally.
+personal mode, the transport authenticates a dedicated MCP connection token
+and passes the connection owner's identity to the API internally.
 
 ## Integration
 
@@ -54,16 +54,16 @@ fast on any inconsistency:
 
 1. `isAllowedMCPOrigin` (`origin.go`) rejects disallowed cross-origin browser requests with `403`.
 2. The request body is capped at 256 MiB before the SDK reads it.
-3. In personal mode, the transport validates the connection token and checks
-   approval and expiry before SDK dispatch. The first POST with a valid
-   connection token records the request for approval. For an approved request,
-   the transport passes only the account identity through the in-process
-   context and strips the external token.
+3. In personal mode, the transport checks the connection token's status and
+   expiry before SDK dispatch. The first authenticated POST records its time
+   and client address. The transport passes the account identity through the
+   in-process context and strips the external token.
 4. The SDK streamable handler dispatches the MCP message.
 5. On a `tools/call` request, `newMCPToolHandler` (`service.go`) decodes the JSON
    arguments into a map.
 6. `validateToolArguments` (`validation.go`) checks them against the tool's
-   input schema.
+   input schema. The tool handler then binds the personal-mode identity to
+   the specific API procedure in the request context.
 7. `apiAdapter.execute` (`adapter.go`) builds the API request
    (`buildAPIRequest`: path-parameter substitution, query encoding, JSON body),
    presents the caller's resolved client address as the request peer, and runs
@@ -125,10 +125,11 @@ response has no JSON body, the fallback is:
   startup, so `tools/list` and `server/discover` advertise a 24-hour `ttlMs`
   instead of change notifications.
 - **Request size:** request bodies are limited to 256 MiB before SDK dispatch.
-- **Cat_two personal mode:** every `/mcp` request requires a valid, approved
-  MCP connection token. Missing or invalid credentials return `401`. Pending,
-  denied, expired and revoked connections return `403`. A cached client tool
-  catalog has no effect on the permission check.
+- **Cat_two personal mode** requires an active MCP connection token on every
+  `/mcp` request, including requests from clients with a cached tool catalog.
+  Missing or invalid credentials return `401`. Inactive connections, including
+  old awaiting or pending connections and denied, revoked or expired tokens,
+  return `403`.
 - **Memos non-personal mode:** the caller's Bearer header is forwarded to the
   API. Mutating tools require a valid personal access token or access token.
   Anonymous reads follow the instance's REST API permissions.
@@ -149,9 +150,11 @@ response has no JSON body, the fallback is:
 
 Point a Streamable HTTP client at `https://<your-instance>/mcp`. In Cat_two
 personal mode, sign in to Cat_two, open **Settings → MCP and API**, and create
-an MCP connection. Its token is shown at creation. Configure the client with
-that token in the `Authorization` header, or use a local environment variable
-if the client supports it. Example client config:
+an MCP connection. Choose the default 24-hour lifetime from issuance or a
+permanent token. The token works immediately and is shown once at creation.
+In Codex, leave the Bearer token environment-variable field blank and set the
+`Authorization` request header to the full copied value. The following JSON
+illustrates the equivalent configuration for clients that use this format.
 
 ```json
 {
@@ -167,19 +170,25 @@ if the client supports it. Example client config:
 }
 ```
 
-1. Start the client. The first POST with the token enters the pending state and
-   returns `403`. This applies to initialization or discovery requests as well
-   as tool calls.
-2. In Cat_two, approve the pending connection for 24 hours from approval or
-   without expiry. You can also deny it.
-3. Reconnect using the same token. To stop access, revoke the connection.
-   Expired connections require a new token and approval.
-
-Existing personal access tokens still work for REST. After upgrading Cat_two,
-replace any REST token previously used for `/mcp` with an approved dedicated
-token. Managing connections requires a signed-in session. In non-personal
-Memos mode, use a personal access token as before.
+Restart the client if it prompts after saving the connection. To stop access,
+revoke the connection in Cat_two. Replace expired tokens by creating a new
+connection. After upgrading, previously approved tokens retain their original
+expiration. Replace old awaiting or pending tokens with new ones. REST
+integrations continue to use personal access tokens, as do MCP clients in
+non-personal Memos mode.
 [Codex setup and troubleshooting](../../plugins/cat-two-notes/README.md#连接-nas)
+
+### Managing Cat_two connections
+
+Management requires a signed-in session. `GET /api/mcpConnections` lists the
+account's connections and their current state. `POST /api/mcpConnections`
+creates a connection from `{"label":"My Codex","duration":"day"}`.
+Use `day` for 24 hours from issuance or `permanent` for a token without
+an expiration date. Omitting `duration` defaults to `day`. The response
+includes the token once.
+
+`POST /api/mcpConnections/{id}/decision` accepts `{"action":"revoke"}`.
+Legacy approval and denial actions return `400`.
 
 ## Tool surface
 

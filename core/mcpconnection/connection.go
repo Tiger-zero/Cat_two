@@ -20,23 +20,30 @@ const tokenPrefix = "cat_two_mcp_"
 var (
 	// ErrInvalidLabel indicates that a connection label is empty or too long.
 	ErrInvalidLabel = errors.New("enter a connection name of 1 to 80 characters")
-	// ErrInvalidDecision indicates that an approval or revocation action is unknown.
-	ErrInvalidDecision = errors.New("invalid connection decision")
-	// ErrDecisionConflict indicates that the connection is no longer in a state that accepts the action.
-	ErrDecisionConflict = errors.New("connection cannot accept this decision")
+	// ErrInvalidDuration indicates that a token lifetime is unknown.
+	ErrInvalidDuration = errors.New("connection duration must be day or permanent")
+	// ErrRevocationConflict indicates that no revocable connection matches the request.
+	ErrRevocationConflict = errors.New("connection cannot be revoked")
 	// ErrInvalidToken indicates that the credential or its account is unavailable.
 	ErrInvalidToken = errors.New("a Cat_two MCP connection token is required")
-	// ErrPending indicates that the owner must approve the connection.
-	ErrPending = errors.New("approve this connection in Cat_two Settings → MCP and API, then reconnect")
-	// ErrInactive indicates that an approval was denied or is no longer valid.
-	ErrInactive = errors.New("this Cat_two MCP connection is denied, revoked, or expired")
+	// ErrInactive indicates that the connection is inactive or has expired.
+	ErrInactive = errors.New("this Cat_two MCP connection is inactive or expired; create a new connection token")
 )
 
-// Issue creates an MCP-only connection token and returns its plaintext once.
-func Issue(ctx context.Context, db *store.Store, userID int32, label string, now time.Time) (*store.MCPConnection, string, error) {
+// Issue creates an active MCP-only connection token and returns its plaintext once.
+func Issue(ctx context.Context, db *store.Store, userID int32, label, duration string, now time.Time) (*store.MCPConnection, string, error) {
 	label = strings.TrimSpace(label)
 	if label == "" || utf8.RuneCountInString(label) > 80 {
 		return nil, "", ErrInvalidLabel
+	}
+	var expiresAt int64
+	switch duration {
+	case "", "day":
+		expiresAt = now.Add(24 * time.Hour).Unix()
+	case "permanent":
+		// A zero expiration represents a permanent connection.
+	default:
+		return nil, "", ErrInvalidDuration
 	}
 	token := tokenPrefix + rand.Text()
 	connection := &store.MCPConnection{
@@ -44,8 +51,9 @@ func Issue(ctx context.Context, db *store.Store, userID int32, label string, now
 		UserID:    userID,
 		Label:     label,
 		TokenHash: hashToken(token),
-		Status:    store.MCPConnectionAwaiting,
+		Status:    store.MCPConnectionApproved,
 		CreatedAt: now.Unix(),
+		ExpiresAt: expiresAt,
 	}
 	if err := db.CreateMCPConnection(ctx, connection); err != nil {
 		return nil, "", err
@@ -53,7 +61,7 @@ func Issue(ctx context.Context, db *store.Store, userID int32, label string, now
 	return connection, token, nil
 }
 
-// StatusAt reports expiration without changing the stored approval.
+// StatusAt reports expiration without changing the stored connection.
 func StatusAt(connection *store.MCPConnection, now time.Time) store.MCPConnectionStatus {
 	if connection.Status == store.MCPConnectionApproved && connection.ExpiresAt != 0 && connection.ExpiresAt <= now.Unix() {
 		return "expired"
@@ -61,34 +69,19 @@ func StatusAt(connection *store.MCPConnection, now time.Time) store.MCPConnectio
 	return connection.Status
 }
 
-// Decide applies the owner's approval, denial, or revocation to the current connection state.
-func Decide(ctx context.Context, db *store.Store, userID int32, id, action string, now time.Time) error {
-	from := []store.MCPConnectionStatus{store.MCPConnectionPending}
-	to := store.MCPConnectionApproved
-	var expiresAt int64
-	switch action {
-	case "approve_day":
-		expiresAt = now.Add(24 * time.Hour).Unix()
-	case "approve_permanent":
-	case "deny":
-		to = store.MCPConnectionDenied
-	case "revoke":
-		from = []store.MCPConnectionStatus{store.MCPConnectionAwaiting, store.MCPConnectionApproved}
-		to = store.MCPConnectionRevoked
-	default:
-		return ErrInvalidDecision
-	}
-	for _, state := range from {
-		updated, err := db.UpdateMCPConnection(ctx, userID, id, state, to, expiresAt)
+// Revoke disables the owner's active token or retires an old, unapproved connection.
+func Revoke(ctx context.Context, db *store.Store, userID int32, id string) error {
+	for _, state := range []store.MCPConnectionStatus{store.MCPConnectionApproved, store.MCPConnectionAwaiting, store.MCPConnectionPending} {
+		updated, err := db.UpdateMCPConnection(ctx, userID, id, state, store.MCPConnectionRevoked, 0)
 		if err != nil || updated {
 			return err
 		}
 	}
-	return ErrDecisionConflict
+	return ErrRevocationConflict
 }
 
-// Authenticate records the first connection attempt and resolves a live approval for any subsequent request.
-func Authenticate(ctx context.Context, db *store.Store, token, remoteIP string, recordAttempt bool, now time.Time) (*store.User, error) {
+// Authenticate resolves an active connection and records its first authenticated POST.
+func Authenticate(ctx context.Context, db *store.Store, token, remoteIP string, recordUse bool, now time.Time) (*store.User, error) {
 	if !strings.HasPrefix(token, tokenPrefix) {
 		return nil, ErrInvalidToken
 	}
@@ -100,28 +93,24 @@ func Authenticate(ctx context.Context, db *store.Store, token, remoteIP string, 
 	if connection == nil {
 		return nil, ErrInvalidToken
 	}
-	switch StatusAt(connection, now) {
-	case store.MCPConnectionAwaiting:
-		if recordAttempt {
-			if err := db.MarkMCPConnectionRequested(ctx, digest, now.Unix(), remoteIP); err != nil {
-				return nil, err
-			}
-		}
-		return nil, ErrPending
-	case store.MCPConnectionPending:
-		return nil, ErrPending
-	case store.MCPConnectionApproved:
-		user, err := db.GetUser(ctx, &store.FindUser{ID: &connection.UserID})
-		if err != nil {
-			return nil, err
-		}
-		if user == nil || user.RowStatus != store.Normal {
-			return nil, ErrInvalidToken
-		}
-		return user, nil
-	default:
+	// Earlier versions may have stored credentials that never received the
+	// owner's approval. Only tokens already active can authenticate.
+	if StatusAt(connection, now) != store.MCPConnectionApproved {
 		return nil, ErrInactive
 	}
+	user, err := db.GetUser(ctx, &store.FindUser{ID: &connection.UserID})
+	if err != nil {
+		return nil, err
+	}
+	if user == nil || user.RowStatus != store.Normal {
+		return nil, ErrInvalidToken
+	}
+	if recordUse && connection.RequestedAt == 0 {
+		if err := db.RecordMCPConnectionFirstUse(ctx, digest, now.Unix(), remoteIP); err != nil {
+			return nil, err
+		}
+	}
+	return user, nil
 }
 
 func hashToken(token string) string {

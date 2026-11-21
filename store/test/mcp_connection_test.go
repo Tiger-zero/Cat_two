@@ -23,7 +23,7 @@ func TestMCPConnectionStore(t *testing.T) {
 
 	connection := &store.MCPConnection{
 		ID: "first", UserID: owner.ID, Label: strings.Repeat("📝", 80), TokenHash: strings.Repeat("ab", 32),
-		Status: store.MCPConnectionAwaiting, CreatedAt: 100, ExpiresAt: 200,
+		Status: store.MCPConnectionApproved, CreatedAt: 100, ExpiresAt: 200,
 	}
 	require.NoError(t, ts.CreateMCPConnection(ctx, connection))
 	duplicate := *connection
@@ -31,7 +31,7 @@ func TestMCPConnectionStore(t *testing.T) {
 	require.Error(t, ts.CreateMCPConnection(ctx, &duplicate))
 	foreign := &store.MCPConnection{
 		ID: "foreign", UserID: other.ID, Label: "Other", TokenHash: strings.Repeat("bc", 32),
-		Status: store.MCPConnectionAwaiting, CreatedAt: 101, ExpiresAt: 200,
+		Status: store.MCPConnectionApproved, CreatedAt: 101,
 	}
 	require.NoError(t, ts.CreateMCPConnection(ctx, foreign))
 
@@ -46,35 +46,30 @@ func TestMCPConnectionStore(t *testing.T) {
 	require.NoError(t, err)
 	require.Nil(t, stored)
 
-	require.NoError(t, ts.MarkMCPConnectionRequested(ctx, connection.TokenHash, 110, "192.0.2.1"))
-	require.NoError(t, ts.MarkMCPConnectionRequested(ctx, connection.TokenHash, 120, "192.0.2.2"))
+	require.NoError(t, ts.RecordMCPConnectionFirstUse(ctx, connection.TokenHash, 110, "192.0.2.1"))
+	require.NoError(t, ts.RecordMCPConnectionFirstUse(ctx, connection.TokenHash, 120, "192.0.2.2"))
 	stored, err = ts.GetMCPConnectionByHash(ctx, connection.TokenHash)
 	require.NoError(t, err)
-	require.Equal(t, store.MCPConnectionPending, stored.Status)
+	require.Equal(t, store.MCPConnectionApproved, stored.Status)
 	require.EqualValues(t, 110, stored.RequestedAt)
 	require.Equal(t, "192.0.2.1", stored.RemoteIP)
 	require.EqualValues(t, 200, stored.ExpiresAt)
-	updated, err := ts.UpdateMCPConnection(ctx, other.ID, connection.ID, store.MCPConnectionPending, store.MCPConnectionApproved, 300)
+	updated, err := ts.UpdateMCPConnection(ctx, other.ID, connection.ID, store.MCPConnectionApproved, store.MCPConnectionRevoked, 0)
 	require.NoError(t, err)
 	require.False(t, updated)
 
 	start := make(chan struct{})
 	type change struct {
 		status  store.MCPConnectionStatus
-		expires int64
 		updated bool
 		err     error
 	}
 	results := make(chan change, 2)
-	for _, status := range []store.MCPConnectionStatus{store.MCPConnectionApproved, store.MCPConnectionDenied} {
+	for _, status := range []store.MCPConnectionStatus{store.MCPConnectionRevoked, store.MCPConnectionDenied} {
 		go func() {
 			<-start
-			expires := int64(0)
-			if status == store.MCPConnectionApproved {
-				expires = 300
-			}
-			updated, err := ts.UpdateMCPConnection(ctx, owner.ID, connection.ID, store.MCPConnectionPending, status, expires)
-			results <- change{status: status, expires: expires, updated: updated, err: err}
+			updated, err := ts.UpdateMCPConnection(ctx, owner.ID, connection.ID, store.MCPConnectionApproved, status, 0)
+			results <- change{status: status, updated: updated, err: err}
 		}()
 	}
 	close(start)
@@ -86,11 +81,11 @@ func TestMCPConnectionStore(t *testing.T) {
 	if second.updated {
 		winner = second
 	}
-	require.NoError(t, ts.MarkMCPConnectionRequested(ctx, connection.TokenHash, 130, "2001:db8::1"))
+	require.NoError(t, ts.RecordMCPConnectionFirstUse(ctx, connection.TokenHash, 130, "2001:db8::1"))
 	stored, err = ts.GetMCPConnectionByHash(ctx, connection.TokenHash)
 	require.NoError(t, err)
 	require.Equal(t, winner.status, stored.Status)
-	require.Equal(t, winner.expires, stored.ExpiresAt)
+	require.Zero(t, stored.ExpiresAt)
 	require.EqualValues(t, 110, stored.RequestedAt)
 	require.Equal(t, "192.0.2.1", stored.RemoteIP)
 
@@ -103,6 +98,31 @@ func TestMCPConnectionStore(t *testing.T) {
 	stored, err = ts.GetMCPConnectionByHash(ctx, foreign.TokenHash)
 	require.NoError(t, err)
 	require.Equal(t, foreign, stored)
+}
+
+func TestMCPConnectionFirstUseSkipsInactiveStates(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	ts := NewTestingStore(ctx, t)
+	t.Cleanup(func() { require.NoError(t, ts.Close()) })
+	owner, err := createTestingHostUser(ctx, ts)
+	require.NoError(t, err)
+	for _, state := range []store.MCPConnectionStatus{
+		store.MCPConnectionAwaiting, store.MCPConnectionPending, store.MCPConnectionDenied, store.MCPConnectionRevoked,
+	} {
+		t.Run(string(state), func(t *testing.T) {
+			tokenHash := "inactive-" + string(state)
+			connection := &store.MCPConnection{
+				ID: string(state), UserID: owner.ID, TokenHash: tokenHash, Label: "Historical connection",
+				Status: state, CreatedAt: 100,
+			}
+			require.NoError(t, ts.CreateMCPConnection(ctx, connection))
+			require.NoError(t, ts.RecordMCPConnectionFirstUse(ctx, tokenHash, 110, "192.0.2.1"))
+			stored, err := ts.GetMCPConnectionByHash(ctx, tokenHash)
+			require.NoError(t, err)
+			require.Equal(t, connection, stored)
+		})
+	}
 }
 
 func TestMigrationMCPConnection(t *testing.T) {
@@ -122,7 +142,7 @@ func TestMigrationMCPConnection(t *testing.T) {
 	require.Equal(t, "26.11.4", setting.GetBasicSetting().SchemaVersion)
 	connection := &store.MCPConnection{
 		ID: "after-upgrade", UserID: owner.ID, Label: "After upgrade", TokenHash: strings.Repeat("cd", 32),
-		Status: store.MCPConnectionAwaiting, CreatedAt: 100,
+		Status: store.MCPConnectionApproved, CreatedAt: 100, ExpiresAt: 200,
 	}
 	require.NoError(t, ts.CreateMCPConnection(ctx, connection))
 	stored, err := ts.GetMCPConnectionByHash(ctx, connection.TokenHash)

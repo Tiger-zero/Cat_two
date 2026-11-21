@@ -47,7 +47,7 @@ type connectionUserContextKey struct{}
 func NewMCPService(profile *profile.Profile, handler http.Handler, db *store.Store) (*MCPService, error) {
 	personal := profile != nil && profile.Personal
 	if personal && db == nil {
-		return nil, errors.New("MCP connection approval requires a store")
+		return nil, errors.New("MCP connection authentication requires a store")
 	}
 	spec, err := loadMCPServiceOpenAPISpec()
 	if err != nil {
@@ -210,7 +210,7 @@ func (s *MCPService) servePersonal(w http.ResponseWriter, r *http.Request) {
 		case errors.Is(err, mcpconnection.ErrInvalidToken):
 			w.Header().Set("WWW-Authenticate", "Bearer")
 			response = &httphandler.Error{Code: http.StatusUnauthorized, Message: err.Error()}
-		case errors.Is(err, mcpconnection.ErrPending), errors.Is(err, mcpconnection.ErrInactive):
+		case errors.Is(err, mcpconnection.ErrInactive):
 			response = &httphandler.Error{Code: http.StatusForbidden, Message: err.Error()}
 		default:
 			response = &httphandler.Error{Code: http.StatusServiceUnavailable, Message: "MCP connection check unavailable", Cause: err}

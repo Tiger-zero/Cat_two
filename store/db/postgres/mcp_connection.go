@@ -49,10 +49,10 @@ func (d *DB) GetMCPConnectionByHash(ctx context.Context, tokenHash string) (*sto
 	return connection, err
 }
 
-func (d *DB) MarkMCPConnectionRequested(ctx context.Context, tokenHash string, requestedAt int64, remoteIP string) error {
-	_, err := d.db.ExecContext(ctx, `UPDATE mcp_connection SET status = $1, requested_ts = $2, remote_ip = $3
-WHERE token_hash = $4 AND status = $5 AND requested_ts = 0`,
-		store.MCPConnectionPending, requestedAt, remoteIP, tokenHash, store.MCPConnectionAwaiting)
+func (d *DB) RecordMCPConnectionFirstUse(ctx context.Context, tokenHash string, requestedAt int64, remoteIP string) error {
+	_, err := d.db.ExecContext(ctx, `UPDATE mcp_connection SET requested_ts = $1, remote_ip = $2
+WHERE token_hash = $3 AND status = $4 AND requested_ts = 0`,
+		requestedAt, remoteIP, tokenHash, store.MCPConnectionApproved)
 	return err
 }
 

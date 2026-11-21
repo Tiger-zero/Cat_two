@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Button, Dialog, Field, Input, List } from "@usememos/ui";
+import { Button, Dialog, Field, Fieldset, Input, List, Radio, RadioGroup } from "@usememos/ui";
 import { PlusIcon } from "lucide-react";
 import { type FormEvent, useId, useState } from "react";
 import ConfirmDialog from "@/components/ConfirmDialog";
@@ -10,11 +10,11 @@ import { useTranslate } from "@/utils/i18n";
 import CopyableSettingValue from "./CopyableSettingValue";
 
 type MCPConnectionStatus = "awaiting" | "pending" | "approved" | "denied" | "revoked" | "expired";
-type MCPConnectionAction = "approve_day" | "approve_permanent" | "deny" | "revoke";
+type MCPConnectionDuration = "day" | "permanent";
 
 const statusLabels = {
-  awaiting: "setting.mcp-connection.status.awaiting",
-  pending: "setting.mcp-connection.status.pending",
+  awaiting: "setting.mcp-connection.status.legacy",
+  pending: "setting.mcp-connection.status.legacy",
   approved: "setting.mcp-connection.status.approved",
   denied: "setting.mcp-connection.status.denied",
   revoked: "setting.mcp-connection.status.revoked",
@@ -39,7 +39,11 @@ class MCPConnectionRequestError extends Error {
   }
 }
 
-async function requestConnection(path: string, body?: { label: string } | { action: MCPConnectionAction }, signal?: AbortSignal) {
+async function requestConnection(
+  path: string,
+  body?: { label: string; duration: MCPConnectionDuration } | { action: "revoke" },
+  signal?: AbortSignal,
+) {
   const response = await authenticatedFetch(path, {
     cache: "no-store",
     signal,
@@ -52,6 +56,7 @@ async function requestConnection(path: string, body?: { label: string } | { acti
 function CreateMCPConnectionDialog({ serverURL, onClose, onCreated }: { serverURL: string; onClose: () => void; onCreated: () => void }) {
   const t = useTranslate();
   const [label, setLabel] = useState("");
+  const [duration, setDuration] = useState<MCPConnectionDuration>("day");
   // Keep the one-time token in this dialog only. The list and its query cache never store it.
   const [token, setToken] = useState("");
   const [pending, setPending] = useState(false);
@@ -65,7 +70,7 @@ function CreateMCPConnectionDialog({ serverURL, onClose, onCreated }: { serverUR
     setPending(true);
     setFailed(false);
     try {
-      const response = await requestConnection(connectionsPath, { label: trimmed });
+      const response = await requestConnection(connectionsPath, { label: trimmed, duration });
       const created = (await response.json()) as { token?: string };
       if (!created.token) throw new Error("Missing one-time MCP connection token");
       setToken(created.token);
@@ -110,6 +115,33 @@ function CreateMCPConnectionDialog({ serverURL, onClose, onCreated }: { serverUR
               {tooLong && <Field.Error match>{t("setting.mcp-connection.name-too-long")}</Field.Error>}
               {failed && <Field.Error match>{t("setting.mcp-connection.create-error")}</Field.Error>}
             </Field.Root>
+            <Field.Root>
+              <Fieldset.Root
+                render={
+                  <RadioGroup
+                    value={duration}
+                    disabled={pending}
+                    onValueChange={(value) => {
+                      if (value === "day" || value === "permanent") setDuration(value);
+                    }}
+                  />
+                }
+              >
+                <Fieldset.Legend>{t("setting.mcp-connection.duration")}</Fieldset.Legend>
+                <Field.Item>
+                  <Field.Label>
+                    <Radio value="day" />
+                    {t("setting.mcp-connection.duration-day")}
+                  </Field.Label>
+                </Field.Item>
+                <Field.Item>
+                  <Field.Label>
+                    <Radio value="permanent" />
+                    {t("setting.mcp-connection.duration-permanent")}
+                  </Field.Label>
+                </Field.Item>
+              </Fieldset.Root>
+            </Field.Root>
             <Dialog.Footer>
               <Button type="button" variant="ghost" disabled={pending} onClick={onClose}>
                 {t("common.cancel")}
@@ -130,24 +162,22 @@ const dateTime = (seconds: number) => inAppTimeZone(new Date(seconds * 1000)).fo
 function MCPConnectionRow({
   connection,
   disabled,
-  onDecision,
   onRevoke,
 }: {
   connection: MCPConnection;
   disabled: boolean;
-  onDecision: (id: string, action: MCPConnectionAction) => void;
   onRevoke: (connection: MCPConnection) => void;
 }) {
   const t = useTranslate();
-  const { id, label, status, createdAt, requestedAt, expiresAt, remoteIp } = connection;
+  const { label, status, createdAt, requestedAt, expiresAt, remoteIp } = connection;
+  const legacy = status === "awaiting" || status === "pending";
+  const active = status === "approved";
   return (
     <List.Item className="flex flex-col items-start gap-2 sm:flex-row sm:items-center sm:justify-between">
       <div className="min-w-0 flex-1">
         <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5">
           <span className="mu-label-sm break-words text-mu-text">{label}</span>
-          <span className={status === "pending" ? "mu-caption text-mu-warning" : "mu-caption text-mu-text-secondary"}>
-            {t(statusLabels[status])}
-          </span>
+          <span className={legacy ? "mu-caption text-mu-warning" : "mu-caption text-mu-text-secondary"}>{t(statusLabels[status])}</span>
         </div>
         <div className="mt-0.5 flex flex-wrap gap-x-3 mu-caption text-mu-text-secondary">
           {requestedAt > 0 ? (
@@ -155,25 +185,13 @@ function MCPConnectionRow({
           ) : (
             createdAt > 0 && <span>{t("setting.mcp-connection.created-at", { time: dateTime(createdAt) })}</span>
           )}
+          {active && !requestedAt && <span>{t("setting.mcp-connection.not-used")}</span>}
           {remoteIp && <span className="break-all">{t("setting.mcp-connection.remote-ip", { ip: remoteIp })}</span>}
           {expiresAt > 0 && <span>{t("setting.mcp-connection.expires-at", { time: dateTime(expiresAt) })}</span>}
-          {status === "approved" && !expiresAt && <span>{t("setting.mcp-connection.no-expiration")}</span>}
+          {active && !expiresAt && <span>{t("setting.mcp-connection.no-expiration")}</span>}
         </div>
       </div>
-      {status === "pending" && (
-        <div className="flex max-w-full flex-wrap items-center gap-2">
-          <Button size="sm" variant="primary" disabled={disabled} onClick={() => onDecision(id, "approve_day")}>
-            {t("setting.mcp-connection.approve-day")}
-          </Button>
-          <Button size="sm" variant="neutral" disabled={disabled} onClick={() => onDecision(id, "approve_permanent")}>
-            {t("setting.mcp-connection.approve-permanent")}
-          </Button>
-          <Button size="sm" variant="ghost" disabled={disabled} onClick={() => onDecision(id, "deny")}>
-            {t("setting.mcp-connection.deny")}
-          </Button>
-        </div>
-      )}
-      {(status === "awaiting" || status === "approved") && (
+      {(legacy || active) && (
         <Button size="sm" variant="ghost" disabled={disabled} onClick={() => onRevoke(connection)}>
           {t("setting.mcp-connection.revoke")}
         </Button>
@@ -197,13 +215,16 @@ export default function MCPConnectionSection({ account, serverURL }: { account: 
     },
     staleTime: 0,
     retry: false,
-    refetchInterval: (query) =>
-      query.state.error instanceof MCPConnectionRequestError && query.state.error.status === 404 ? false : 3_000,
+    refetchInterval: ({ state }) =>
+      !state.error &&
+      state.data?.connections.some(({ status, expiresAt, requestedAt }) => status === "approved" && (expiresAt > 0 || !requestedAt))
+        ? 15_000
+        : false,
   });
   const refresh = () => queryClient.invalidateQueries({ queryKey });
-  const decision = useMutation({
-    mutationFn: async ({ id, action }: { id: string; action: MCPConnectionAction }) => {
-      await requestConnection(`${connectionsPath}/${encodeURIComponent(id)}/decision`, { action });
+  const revoke = useMutation({
+    mutationFn: async (id: string) => {
+      await requestConnection(`${connectionsPath}/${encodeURIComponent(id)}/decision`, { action: "revoke" });
     },
     retry: false,
     onSettled: refresh,
@@ -212,16 +233,13 @@ export default function MCPConnectionSection({ account, serverURL }: { account: 
         t(
           error instanceof MCPConnectionRequestError && error.status === 409
             ? "setting.mcp-connection.conflict"
-            : "setting.mcp-connection.decision-error",
+            : "setting.mcp-connection.revoke-error",
         ),
       );
     },
   });
   const unsupported = error instanceof MCPConnectionRequestError && error.status === 404;
   const connections = data?.connections ?? [];
-  const sorted = [...connections].sort(
-    (a, b) => Number(b.status === "pending") - Number(a.status === "pending") || b.createdAt - a.createdAt,
-  );
   const title = t("setting.mcp-connection.title");
   const config = JSON.stringify(
     { mcpServers: { "cat-two": { type: "http", url: serverURL, headers: { Authorization: "Bearer <YOUR_MCP_TOKEN>" } } } },
@@ -255,20 +273,14 @@ export default function MCPConnectionSection({ account, serverURL }: { account: 
             </Button>
           )}
         </div>
-      ) : !data || sorted.length === 0 ? (
+      ) : !data || connections.length === 0 ? (
         <p className="mu-caption text-mu-text-secondary" role="status">
           {t(data ? "setting.mcp-connection.empty" : "setting.mcp-connection.loading")}
         </p>
       ) : (
         <List.Root aria-label={title}>
-          {sorted.map((connection) => (
-            <MCPConnectionRow
-              key={connection.id}
-              connection={connection}
-              disabled={decision.isPending}
-              onDecision={(id, action) => decision.mutate({ id, action })}
-              onRevoke={setRevokeTarget}
-            />
+          {connections.map((connection) => (
+            <MCPConnectionRow key={connection.id} connection={connection} disabled={revoke.isPending} onRevoke={setRevokeTarget} />
           ))}
         </List.Root>
       )}
@@ -291,7 +303,7 @@ export default function MCPConnectionSection({ account, serverURL }: { account: 
         confirmLabel={t("setting.mcp-connection.revoke")}
         confirmVariant="danger"
         onConfirm={async () => {
-          if (revokeTarget) await decision.mutateAsync({ id: revokeTarget.id, action: "revoke" });
+          if (revokeTarget) await revoke.mutateAsync(revokeTarget.id);
         }}
       />
     </section>

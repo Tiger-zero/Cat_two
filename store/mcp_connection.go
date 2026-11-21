@@ -42,10 +42,10 @@ func (s *Store) GetMCPConnectionByHash(ctx context.Context, tokenHash string) (*
 	return s.driver.GetMCPConnectionByHash(ctx, tokenHash)
 }
 
-// MarkMCPConnectionRequested makes an awaiting connection pending and preserves
-// the first request's time and IP when clients retry.
-func (s *Store) MarkMCPConnectionRequested(ctx context.Context, tokenHash string, requestedAt int64, remoteIP string) error {
-	return s.driver.MarkMCPConnectionRequested(ctx, tokenHash, requestedAt, remoteIP)
+// RecordMCPConnectionFirstUse records the first request's time and IP for an
+// approved connection. Later requests preserve those values.
+func (s *Store) RecordMCPConnectionFirstUse(ctx context.Context, tokenHash string, requestedAt int64, remoteIP string) error {
+	return s.driver.RecordMCPConnectionFirstUse(ctx, tokenHash, requestedAt, remoteIP)
 }
 
 // UpdateMCPConnection changes the status and expiry only when the specified

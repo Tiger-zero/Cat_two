@@ -256,7 +256,7 @@ func (s *APIService) NewHandler(ctx context.Context) (http.Handler, error) {
 	trashHandler := s.newMemoTrashHandler(authorizer)
 	mcpConnectionHandler := s.newMCPConnectionHandler(authorizer)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if _, approvedMCP := r.Context().Value(mcpUserContextKey{}).(mcpAPIRequest); approvedMCP {
+		if _, authenticatedMCP := r.Context().Value(mcpUserContextKey{}).(mcpAPIRequest); authenticatedMCP {
 			gwMux.ServeHTTP(w, r)
 			return
 		}
