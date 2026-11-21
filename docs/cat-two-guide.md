@@ -87,7 +87,7 @@ flowchart LR
 | --- | --- |
 | REST / Connect | Web 客户端使用 Connect，第三方可以通过 `/api/…` 的 REST 接口或 `/memos.api.…` 的 Connect 接口调用服务。在「设置 → MCP 和 API」可复制 REST 地址及调用示例，并创建个人访问令牌。持有令牌的程序按对应账户权限访问。 |
 | MCP | 支持 Streamable HTTP 和 Bearer 令牌的 MCP 客户端可连接 `/mcp`，再用工具读取笔记或把生成内容保存为笔记。工具调用走原有 API 权限。 |
-| Codex 笔记插件 | 从此仓库安装后，通过已配置的 Cat_two MCP 查询笔记、按标签或视图分组、汇总待办和知识。归档任务前可预览并确认完整内容。 [安装与接入](../plugins/cat-two-notes/README.md) |
+| Codex 笔记插件 | 从此仓库安装后，通过已配置的 Cat_two MCP 查询笔记、按标签或视图分组、汇总待办和知识。接入示例默认提供读取、创建和更新工具，写入前预览并确认完整内容。 [安装与接入](../plugins/cat-two-notes/README.md) |
 | 手机访问 | 当前仓库交付的是 Web 服务和容器镜像。支持的浏览器可以添加到主屏幕。原生 Android 客户端可作为独立项目，调用同一个服务端。 |
 
 [API 说明](../proto/api/README.md) · [MCP](../server/mcp/README.md)
