@@ -145,7 +145,8 @@ function MemoDisplaySettingMenu({ anchor }: Props) {
         <Tooltip.Popup side="bottom">{label}</Tooltip.Popup>
       </Tooltip.Root>
       {/* Grows to fit long translations such as "Automatisch" instead of truncating them; the full-width group then shares the room from its labels' natural widths. */}
-      <Popover.Popup anchor={anchor} align="start" aria-label={label} className="w-max min-w-(--mu-popover-width)">
+      {/* Match the sticky sidebar's viewport coordinates while the notes scroll. */}
+      <Popover.Popup anchor={anchor} align="start" positionMethod="fixed" aria-label={label} className="w-max min-w-(--mu-popover-width)">
         <MemoDisplaySettingsContent />
       </Popover.Popup>
     </Popover.Root>

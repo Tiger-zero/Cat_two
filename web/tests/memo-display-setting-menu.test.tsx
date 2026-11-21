@@ -49,6 +49,8 @@ describe("MemoDisplaySettingMenu", () => {
 
     fireEvent.click(trigger);
 
+    const popup = screen.getByRole("dialog", { name: "Calendar · View options" });
+    expect(popup.parentElement).toHaveStyle({ position: "fixed" });
     expect(screen.getByRole("group", { name: "Layout" })).toHaveClass("mu-s-md");
     // Each option is a horizontal Field: its label names the Select or Switch at the end of the row.
     expect(screen.getByRole("combobox", { name: "Order by" })).toHaveTextContent("Created");
