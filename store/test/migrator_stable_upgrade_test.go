@@ -15,10 +15,7 @@ import (
 // TestUpgradeThroughBaselineRelease verifies the required intermediate upgrade
 // using released binaries, including data transformations owned by v0.31.0.
 func TestUpgradeThroughBaselineRelease(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping container-based upgrade test in short mode")
-	}
-	skipIfContainerProviderUnavailable(t)
+	requireLegacyMemosUpgradeTest(t)
 
 	ctx := context.Background()
 	driver := getDriverFromEnv()

@@ -1,9 +1,6 @@
 name: Manage Stale Issues and Pull Requests
 
 on:
-  schedule:
-    # Run daily away from the top of the hour to reduce scheduling delays.
-    - cron: "17 2 * * *"
   workflow_dispatch:
 
 permissions: {}

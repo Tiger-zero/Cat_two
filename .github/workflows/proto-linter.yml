@@ -3,10 +3,14 @@ name: Proto Linter
 on:
   push:
     branches: [main]
+    paths:
+      - "proto/**"
+      - ".github/workflows/proto-linter.yml"
   pull_request:
     branches: [main]
     paths:
       - "proto/**"
+      - ".github/workflows/proto-linter.yml"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}

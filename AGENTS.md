@@ -182,8 +182,10 @@ Black-box service tests live in `server/api/test/`, unit tests next to the code.
 - Workflows install toolchains through `.github/actions/setup-go` (Go version from `go.mod`) and `.github/actions/setup-web`
   (pnpm from `web/package.json`, Node 24, `pnpm install`); change versions there, not per workflow.
 - Backend CI: Go 1.27.4, `go mod tidy`, `go fix -diff ./...`, golangci-lint v2.14.0 (including goimports), test groups
-  `store`, `server`, `internal`, `other` (`cmd`, `core`, `markdown`, `filter`, `provider`, `proto`).
-- Backend Tests and Upgrade Smoke use SQLite for database integration and migration checks.
-- Frontend CI: Node 24, pnpm 11.0.1, `pnpm lint`, `pnpm test`, `pnpm build`.
+  `store`, `server`, `internal`, `other` (`cmd`, `core`, `markdown`, `filter`, `provider`, `proto` and Cat_two script tests).
+- Backend, frontend and Proto workflows use changed-path filters. The container workflow checks its input paths on ordinary
+  pushes and always builds for manual or explicit publish requests.
+- Backend store tests use SQLite. [Upgrade Smoke (legacy Memos)](.github/workflows/upgrade-smoke.yml) runs on demand.
+- Frontend CI: Node 24, pnpm 11.0.1, `pnpm lint` and `pnpm test`. The container workflow builds the production web assets.
 - Proto CI: `buf lint` and `buf format` check.
 - Docker: `scripts/Dockerfile`, Alpine 3.21 runtime, non-root app process, port 5230. Cat_two publishes amd64 and arm64.

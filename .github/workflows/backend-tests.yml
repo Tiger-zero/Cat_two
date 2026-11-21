@@ -3,13 +3,31 @@ name: Backend Tests
 on:
   push:
     branches: [main]
+    paths:
+      - "go.mod"
+      - "go.sum"
+      - "**.go"
+      - "proto/gen/openapi.yaml"
+      - "server/frontend/dist/**"
+      - "store/migration/**"
+      - "store/seed/**"
+      - "scripts/entrypoint.sh"
+      - "scripts/release_version.sh"
+      - ".golangci.yaml"
+      - ".github/actions/setup-go/**"
+      - ".github/workflows/backend-tests.yml"
   pull_request:
     branches: [main]
     paths:
       - "go.mod"
       - "go.sum"
       - "**.go"
+      - "proto/gen/openapi.yaml"
+      - "server/frontend/dist/**"
       - "store/migration/**"
+      - "store/seed/**"
+      - "scripts/entrypoint.sh"
+      - "scripts/release_version.sh"
       - ".golangci.yaml"
       - ".github/actions/setup-go/**"
       - ".github/workflows/backend-tests.yml"
@@ -61,28 +79,21 @@ jobs:
         run: |
           case "${{ matrix.test-group }}" in
             store)
-              go test -v -coverprofile=coverage.out -covermode=atomic ./store/...
+              go test -v ./store/...
               ;;
             server)
               # Includes ./server/test, which boots the real server via
               # server.NewServer and smokes every router it mounts.
-              go test -v -race -coverprofile=coverage.out -covermode=atomic ./server/...
+              go test -v -race ./server/...
               ;;
             internal)
-              go test -v -race -coverprofile=coverage.out -covermode=atomic ./internal/...
+              go test -v -race ./internal/...
               ;;
             other)
-              go test -v -race -coverprofile=coverage.out -covermode=atomic \
+              go test -v -race \
                 ./cmd/... ./core/... ./markdown/... ./filter/... ./provider/... ./proto/...
+              go test -v -run '^(TestDevelopmentVersion|TestEntrypointDoesNotLoopWhenTargetUIDIsRoot)$' ./scripts/...
               ;;
           esac
         env:
           DRIVER: sqlite
-
-      - name: Upload coverage
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        uses: codecov/codecov-action@v5
-        with:
-          files: ./coverage.out
-          flags: ${{ matrix.test-group }}
-          fail_ci_if_error: false

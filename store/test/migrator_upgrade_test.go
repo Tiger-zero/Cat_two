@@ -3,6 +3,7 @@ package test
 import (
 	"context"
 	"fmt"
+	"os"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -17,10 +18,7 @@ import (
 // TestUpgradeFromBaselineRelease tests a database initialized by v0.31.0
 // directly, independently of the pre-baseline intermediate upgrade test.
 func TestUpgradeFromBaselineRelease(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping container-based upgrade test in short mode")
-	}
-	skipIfContainerProviderUnavailable(t)
+	requireLegacyMemosUpgradeTest(t)
 
 	ctx := context.Background()
 	driver := getDriverFromEnv()
@@ -44,6 +42,17 @@ func TestUpgradeFromBaselineRelease(t *testing.T) {
 	requireUpgradePreservesData(ctx, t, previous, &profile.Profile{
 		Data: t.TempDir(), DSN: hostDSN, Driver: driver, Version: "26.10.0",
 	})
+}
+
+func requireLegacyMemosUpgradeTest(t *testing.T) {
+	t.Helper()
+	if os.Getenv("LEGACY_MEMOS_UPGRADE_TESTS") != "1" {
+		t.Skip("set LEGACY_MEMOS_UPGRADE_TESTS=1 to run legacy Memos upgrade tests")
+	}
+	if testing.Short() {
+		t.Skip("skipping container-based upgrade test in short mode")
+	}
+	skipIfContainerProviderUnavailable(t)
 }
 
 // TestUpgradeFromCalendarRelease uses local store fixtures until a published

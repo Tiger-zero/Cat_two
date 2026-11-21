@@ -7,16 +7,21 @@ on:
     branches: [main]
     paths:
       - '**/*.go'
+      - '!**/*_test.go'
       - 'go.mod'
       - 'go.sum'
       - 'web/**'
+      - 'proto/gen/openapi.yaml'
       - 'server/frontend/dist/**'
       - 'store/migration/**'
       - 'store/seed/**'
       - 'compose.yaml'
+      - 'compose.nas.yaml'
+      - 'LICENSE'
       - '.dockerignore'
       - 'scripts/Dockerfile'
       - 'scripts/entrypoint.sh'
+      - 'scripts/entrypoint_test.sh'
       - 'scripts/release_smoke_test.sh'
       - 'scripts/release_version.sh'
       - 'scripts/cat_two_docker_release.py'
@@ -33,7 +38,8 @@ on:
         default: dockerhub
 
 concurrency:
-  group: cat-two-container-${{ github.ref }}
+  # Serialize releases separately so an ordinary push cannot replace a pending publish.
+  group: cat-two-container-${{ (github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && contains(github.event.head_commit.message, '[publish dockerhub]'))) && github.ref || github.run_id }}
   cancel-in-progress: false
 
 permissions:
@@ -47,25 +53,65 @@ jobs:
     outputs:
       version: ${{ steps.version.outputs.version }}
     steps:
+      - name: Check changed container inputs
+        id: scope
+        if: github.event_name == 'push' && !github.event.created && !github.event.forced && !contains(github.event.head_commit.message, '[publish dockerhub]')
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PUSH_BEFORE: ${{ github.event.before }}
+          PUSH_AFTER: ${{ github.sha }}
+        run: |
+          # GitHub lists the entire file diff on page one, capped at 300 paths.
+          # Check both paths of a rename and verify whenever the diff is uncertain.
+          if gh api "repos/$GITHUB_REPOSITORY/compare/$PUSH_BEFORE...$PUSH_AFTER?page=1&per_page=1" |
+            jq -e '
+              # Match the pull_request path filters above.
+              def container_input:
+                (endswith(".go") and (endswith("_test.go") | not))
+                or test("^(web/|server/frontend/dist/|store/(migration|seed)/|[.]github/actions/setup-web/)")
+                or IN(
+                  "go.mod", "go.sum", "proto/gen/openapi.yaml", "compose.yaml", "compose.nas.yaml",
+                  "LICENSE", ".dockerignore", "scripts/Dockerfile", "scripts/entrypoint.sh",
+                  "scripts/entrypoint_test.sh", "scripts/release_smoke_test.sh", "scripts/release_version.sh",
+                  "scripts/cat_two_docker_release.py", ".github/workflows/cat-two-container.yml"
+                );
+
+              (.status == "ahead" or .status == "identical")
+              and (.files | type == "array" and length < 300)
+              and all(.files[]; (.filename | type == "string") and
+                (.status != "renamed" or (.previous_filename | type == "string")))
+              and (any(.files[] | (.filename, .previous_filename) | strings; container_input) | not)
+            ' >/dev/null; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "No container inputs changed."
+          fi
+
       - uses: actions/checkout@v6
+        if: steps.scope.outputs.skip != 'true'
         with:
           persist-credentials: false
 
       - uses: ./.github/actions/setup-web
+        if: steps.scope.outputs.skip != 'true'
 
       - name: Build the embedded web app
+        if: steps.scope.outputs.skip != 'true'
         working-directory: web
         run: pnpm release
 
       - name: Resolve version from the commit
         id: version
+        if: steps.scope.outputs.skip != 'true'
         run: |
           version="$(bash scripts/release_version.sh development-version)"
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
       - uses: docker/setup-buildx-action@v4
+        if: steps.scope.outputs.skip != 'true'
 
       - name: Build the smoke-test image
+        if: steps.scope.outputs.skip != 'true'
         uses: docker/build-push-action@v7
         with:
           context: .
@@ -80,8 +126,11 @@ jobs:
           cache-to: type=gha,mode=max,scope=cat-two-container
 
       - name: Verify the web app and persistent SQLite data
+        if: steps.scope.outputs.skip != 'true'
         run: |
+          bash scripts/entrypoint_test.sh
           docker compose config --quiet
+          docker compose -f compose.nas.yaml config --quiet
           bash scripts/release_smoke_test.sh --fresh-only --candidate-image cat-two:smoke
 
       - name: Save the tested web build for publishing
