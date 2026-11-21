@@ -87,7 +87,12 @@ vi.mock("@/hooks/useCurrentUser", () => ({
 vi.mock("@/hooks/useFilteredMemoStats", () => ({
   useFilteredMemoStats: (options: unknown) => {
     filteredStatsHook(options);
-    return { statistics: { activityStats: {}, timeBasis: "create_time" }, tags: {} };
+    return {
+      statistics: { activityStats: {}, timeBasis: "create_time" },
+      tags: {},
+      summary: { memoCount: 3, tagCount: 2, recordedDays: 1 },
+      loading: false,
+    };
   },
 }));
 
@@ -299,7 +304,7 @@ describe("App sidebar", () => {
     expect(screen.queryByRole("contentinfo")).not.toBeInTheDocument();
   });
 
-  it("places views below the calendar and gives display options their own action", () => {
+  it("places statistics above the calendar and views below it, with a separate action for display options", () => {
     render(
       <MemoryRouter initialEntries={["/"]}>
         <AppSidebar />
@@ -308,7 +313,10 @@ describe("App sidebar", () => {
 
     const calendar = screen.getByText("Calendar");
     const views = screen.getByText("common.views");
-    expect(screen.getByRole("region", { name: "common.statistics" })).toBeInTheDocument();
+    const statistics = screen.getByRole("region", { name: "common.statistics" });
+    const counts = within(statistics).getAllByRole("definition");
+    expect(counts.map((count) => count.textContent)).toEqual(["3", "2", "1"]);
+    expect(statistics.compareDocumentPosition(calendar) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(screen.getByRole("heading", { name: "common.views", level: 2 })).toBeInTheDocument();
     expect(calendar.compareDocumentPosition(views) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     const viewOptions = screen.getByRole("button", { name: "memo.view-options" });

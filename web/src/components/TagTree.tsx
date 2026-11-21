@@ -16,6 +16,8 @@ import { useTranslate } from "@/utils/i18n";
 
 /** Matches the memo outline's indent, the app's other nested rail list. */
 const INDENT_STEP = 12;
+// The branch line sits at the center of the 20px leading slot.
+const BRANCH_LINE_OFFSET = 10;
 
 interface TagTreeNode {
   key: string;
@@ -132,12 +134,12 @@ interface TagItemProps {
 const TagItem = ({ tag, depth, activeTag, expanded, onTagClick, onToggle, pinned, renderActions }: TagItemProps) => {
   const t = useTranslate();
   const isActive = activeTag === tag.text;
-  const isAncestorOfActiveTag = activeTag?.startsWith(`${tag.text}/`) ?? false;
   const hasSubTags = tag.subTags.length > 0;
   const open = hasSubTags && expanded.has(tag.text);
   const { ref: labelRef, title } = useOverflowTitle<HTMLSpanElement>(`#${tag.text}`);
   const Icon = pinned ? PinIcon : HashIcon;
   const state = isActive ? "checked" : "idle";
+  const paddingInlineStart = 8 + depth * INDENT_STEP;
 
   return (
     <div className="w-full min-w-0">
@@ -147,10 +149,9 @@ const TagItem = ({ tag, depth, activeTag, expanded, onTagClick, onToggle, pinned
         aria-selected={isActive || undefined}
         aria-expanded={hasSubTags ? open : undefined}
         {...sidebarRowStateAttributes(state)}
-        className={cn(SIDEBAR_ROW_BOX_CLASSES, sidebarRowStateClasses(state), isAncestorOfActiveTag && !isActive && "text-mu-text/75")}
+        className={cn(SIDEBAR_ROW_BOX_CLASSES, sidebarRowStateClasses(state), "text-mu-text")}
         // Overrides the start half of the box's `px-2`, leaving the trailing 8px intact.
-        // Same 12px step the memo outline indents by.
-        style={{ paddingInlineStart: 8 + depth * INDENT_STEP }}
+        style={{ paddingInlineStart }}
       >
         {hasSubTags && (
           // At rest the slot holds the row's # mark like any other tag; pointing at the row
@@ -185,7 +186,12 @@ const TagItem = ({ tag, depth, activeTag, expanded, onTagClick, onToggle, pinned
       </div>
 
       {open && (
-        <div className="mt-0.5 flex w-full min-w-0 flex-col gap-0.5" role="group">
+        <div className="relative mt-0.5 flex w-full min-w-0 flex-col gap-0.5" role="group">
+          <span
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-y-1 w-px bg-mu-line"
+            style={{ insetInlineStart: paddingInlineStart + BRANCH_LINE_OFFSET }}
+          />
           {tag.subTags.map((subTag) => (
             <TagItem
               key={subTag.text}
@@ -240,7 +246,14 @@ const TagTree = ({ tagAmounts, activeTag, scope, onTagClick, pinnedPaths = NO_PI
 
   const renderTree = (nodes: TagTreeNode[], isPinned: boolean, label: string) =>
     nodes.length > 0 && (
-      <div className="relative flex h-auto w-full flex-col items-stretch gap-0.5" role="tree" aria-label={label}>
+      <div
+        className={cn(
+          "relative flex h-auto w-full flex-col items-stretch gap-0.5",
+          isPinned && unpinned.length > 0 && "mb-1 border-b border-mu-line pb-1",
+        )}
+        role="tree"
+        aria-label={label}
+      >
         {nodes.map((tag) => (
           <TagItem
             key={tag.text}

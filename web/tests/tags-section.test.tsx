@@ -101,10 +101,10 @@ describe("TagsSection", () => {
 
     const alpha = screen.getByText("alpha");
     const alphaButton = alpha.closest("button") as HTMLButtonElement;
-    const path = alpha.parentElement?.parentElement as HTMLSpanElement;
+    const path = alpha.closest("span.truncate");
     const count = screen.getByText("2");
 
-    expect(alphaButton.parentElement).toHaveClass(...SIDEBAR_ROW_BOX_CLASSES.split(" "));
+    expect(alphaButton.parentElement).toHaveClass(...SIDEBAR_ROW_BOX_CLASSES.split(" "), "text-mu-text");
     // The # sits in the same fixed slot the tree uses, so switching modes keeps it in place.
     expect(alphaButton.firstElementChild).toHaveClass(...SIDEBAR_ROW_SLOT_CLASSES.split(" "));
     expect(path).toHaveClass("truncate", "text-start");

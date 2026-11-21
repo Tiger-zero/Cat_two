@@ -14,6 +14,13 @@ export interface FilteredMemoStats {
   statistics: StatisticsData;
   tags: Record<string, number>;
   loading: boolean;
+  summary?: CollectionSummary;
+}
+
+export interface CollectionSummary {
+  memoCount: number;
+  tagCount: number;
+  recordedDays: number;
 }
 
 export type MemoStatsContext = "home" | "collection" | "archived";
@@ -24,8 +31,6 @@ export interface UseFilteredMemoStatsOptions {
   enabled?: boolean;
   filter?: string;
 }
-
-const NO_USER_STATS: UserStats[] = [];
 
 const addDailyCounts = (counts: Record<string, number>, timestamps: readonly Timestamp[]) => {
   for (const timestamp of timestamps) {
@@ -59,7 +64,7 @@ export const useFilteredMemoStats = (options: UseFilteredMemoStatsOptions = {}):
   const allUserStatsRequest =
     context === "collection" ? { state: State.NORMAL, filter } : context === "archived" ? { state: State.ARCHIVED, filter } : {};
   const shouldFetchAllUserStats = context === "collection" || (context === "archived" && !!currentUser?.name);
-  const { data: allUserStats = NO_USER_STATS, isLoading: isLoadingAllUserStats } = useAllUserStats(allUserStatsRequest, {
+  const { data: allUserStats, isLoading: isLoadingAllUserStats } = useAllUserStats(allUserStatsRequest, {
     enabled: enabled && shouldFetchAllUserStats,
   });
 
@@ -67,11 +72,23 @@ export const useFilteredMemoStats = (options: UseFilteredMemoStatsOptions = {}):
     const loading = isLoadingUserStats || isLoadingAllUserStats;
     const activityStats: Record<string, number> = {};
     let tagCount: Record<string, number> = mergeTagCounts();
+    let summary: CollectionSummary | undefined;
 
     if (context === "collection" || context === "archived") {
-      tagCount = mergeTagCounts(...allUserStats.map((stats) => stats.tagCounts));
-      for (const stats of allUserStats) {
+      const groupedStats = allUserStats ?? [];
+      tagCount = mergeTagCounts(...groupedStats.map((stats) => stats.tagCounts));
+      const createdActivity: Record<string, number> = timeBasis === "create_time" ? activityStats : {};
+      let memoCount = 0;
+      for (const stats of groupedStats) {
         addDailyCounts(activityStats, timestampsForBasis(stats, timeBasis));
+        // The summary counts writing days even when the calendar is showing updates.
+        if (context === "collection" && timeBasis === "update_time") {
+          addDailyCounts(createdActivity, stats.memoCreatedTimestamps ?? []);
+        }
+        memoCount += stats.totalMemoCount;
+      }
+      if (context === "collection" && allUserStats !== undefined) {
+        summary = { memoCount, tagCount: Object.keys(tagCount).length, recordedDays: Object.keys(createdActivity).length };
       }
     } else if (userName && userStats) {
       // Legacy personal collections use backend per-user stats.
@@ -81,7 +98,7 @@ export const useFilteredMemoStats = (options: UseFilteredMemoStatsOptions = {}):
       }
     }
 
-    return { statistics: { activityStats, timeBasis }, tags: tagCount, loading };
+    return { statistics: { activityStats, timeBasis }, tags: tagCount, loading, summary };
   }, [context, userName, userStats, allUserStats, isLoadingUserStats, isLoadingAllUserStats, timeBasis]);
 
   return data;

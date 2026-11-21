@@ -32,8 +32,8 @@ const TagPath = forwardRef<HTMLSpanElement, { tag: string }>(({ tag }, ref) => {
     <span ref={ref} className="min-w-0 flex-1 truncate text-start">
       {segments.map((segment, index) => (
         <span key={`${segment}-${index}`}>
-          {index > 0 && <span className="px-0.5 text-mu-text-secondary/40">/</span>}
-          <span className={index === segments.length - 1 ? "text-current" : "text-mu-text-secondary/75"}>{segment}</span>
+          {index > 0 && <span className="px-0.5 text-mu-text-secondary">/</span>}
+          {segment}
         </span>
       ))}
     </span>
@@ -57,7 +57,7 @@ const FlatTagRow = ({ tag, amount, active, ariaLabel, onClick, pinned, actions }
   const state = active ? "checked" : "idle";
 
   return (
-    <div {...sidebarRowStateAttributes(state)} className={cn(SIDEBAR_ROW_BOX_CLASSES, sidebarRowStateClasses(state))}>
+    <div {...sidebarRowStateAttributes(state)} className={cn(SIDEBAR_ROW_BOX_CLASSES, sidebarRowStateClasses(state), "text-mu-text")}>
       <button
         type="button"
         aria-label={ariaLabel}
@@ -152,6 +152,7 @@ const TagsSectionForAccount = ({ tagCount, onSelect, scope, account }: Props & {
   const visiblePins = treeMode
     ? NO_PINS
     : pins.filter((tag) => Object.hasOwn(tagCount, tag) || tags.some(([name]) => name.startsWith(`${tag}/`)));
+  const flatTags = treeMode ? [] : tags.filter(([tag]) => !pinnedSet.has(tag));
 
   return (
     <SidebarSection
@@ -193,11 +194,15 @@ const TagsSectionForAccount = ({ tagCount, onSelect, scope, account }: Props & {
       ) : (
         <>
           {visiblePins.length > 0 && (
-            <div className="flex flex-col gap-0.5" role="group" aria-label={t("setting.tags.pinned")}>
+            <div
+              className={cn("flex flex-col gap-0.5", flatTags.length > 0 && "mb-1 border-b border-mu-line pb-1")}
+              role="group"
+              aria-label={t("setting.tags.pinned")}
+            >
               {visiblePins.map((tag) => flatRow(tag, Object.hasOwn(tagCount, tag) ? tagCount[tag] : undefined, true))}
             </div>
           )}
-          {tags.filter(([tag]) => !pinnedSet.has(tag)).map(([tag, amount]) => flatRow(tag, amount))}
+          {flatTags.map(([tag, amount]) => flatRow(tag, amount))}
         </>
       )}
       {renameTarget && account && (

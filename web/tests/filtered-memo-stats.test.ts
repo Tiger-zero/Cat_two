@@ -83,6 +83,32 @@ describe("useFilteredMemoStats", () => {
     expect(result.current.statistics.timeBasis).toBe("update_time");
   });
 
+  it("counts unique Shanghai creation days and tags in the collection regardless of calendar time basis", () => {
+    mockUseView.mockReturnValue({ timeBasis: "update_time" });
+    const midnight = ts(2026, 5, 2);
+    vi.mocked(useAllUserStats).mockReturnValue({
+      data: [
+        {
+          totalMemoCount: 3,
+          tagCounts: { work: 2, "work/project": 1 },
+          memoCreatedTimestamps: [{ ...midnight, seconds: midnight.seconds - 1n }, midnight, midnight],
+          memoUpdatedTimestamps: [ts(2026, 5, 3), ts(2026, 5, 3), ts(2026, 5, 3)],
+        },
+      ],
+      isLoading: false,
+    } as unknown as ReturnType<typeof useAllUserStats>);
+
+    const { result, rerender } = renderHook(() => useFilteredMemoStats({ context: "collection" }), { wrapper });
+
+    expect(result.current.statistics.activityStats).toEqual({ "2026-05-03": 3 });
+    expect(result.current.summary).toEqual({ memoCount: 3, tagCount: 2, recordedDays: 2 });
+
+    mockUseView.mockReturnValue({ timeBasis: "create_time" });
+    rerender();
+    expect(result.current.statistics.activityStats).toEqual({ "2026-05-01": 1, "2026-05-02": 2 });
+    expect(result.current.summary).toEqual({ memoCount: 3, tagCount: 2, recordedDays: 2 });
+  });
+
   it("aggregates large timestamp groups across users without overflowing the argument stack", () => {
     const count = 150_000;
     const firstDay = ts(2026, 5, 1);

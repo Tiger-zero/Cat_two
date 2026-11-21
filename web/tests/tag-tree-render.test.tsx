@@ -93,6 +93,7 @@ describe("TagTree rendering", () => {
     const branchLabelButton = screen.getByText("a").closest("button") as HTMLButtonElement;
     const disclosure = screen.getByLabelText("common.expand #a");
     const branchCount = within(branch).getByText("12");
+    expect(branch).toHaveClass("text-mu-text");
     expect(disclosure.compareDocumentPosition(branchLabelButton) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(branchLabelButton).toHaveClass("text-start");
     expect(branchLabelButton.querySelector("svg")).not.toBeInTheDocument();
@@ -110,6 +111,7 @@ describe("TagTree rendering", () => {
 
     const leaf = screen.getByText("getting-started").closest('[role="treeitem"]') as HTMLElement;
     const leafCount = within(leaf).getByText("3");
+    expect(leaf).toHaveClass("text-mu-text");
     expect(within(leaf).getAllByRole("button")).toHaveLength(1);
     expect(screen.getByText("getting-started").closest("button")?.querySelector("svg")).toBeInTheDocument();
 

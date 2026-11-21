@@ -28,6 +28,7 @@ import { ROUTES } from "@/router/routes";
 import { User_Role } from "@/types/proto/api/user_service_pb";
 import { useTranslate } from "@/utils/i18n";
 import AccountMenu from "./AccountMenu";
+import CollectionStats from "./CollectionStats";
 import { getSidebarRouteKind } from "./routes";
 import { SIDEBAR_ROW_CLASSES, SidebarRowIconSlot, sidebarRowStateClasses } from "./SidebarRow";
 import SidebarSection, { SIDEBAR_SECTION_STACK_CLASSES } from "./SidebarSection";
@@ -62,7 +63,7 @@ const CollectionSidebarContent = ({ context }: { context: "home" | "archived" })
   const { mobileOpen, setMobileOpen } = useAppSidebar();
   const { isInitialized: authInitialized } = useAuth();
   const { isInitialized: instanceInitialized } = useInstance();
-  const { statistics, tags } = useFilteredMemoStats({
+  const { statistics, tags, summary, loading } = useFilteredMemoStats({
     context: context === "archived" ? "archived" : "collection",
     filter: context === "home" && currentUser ? buildMemoCreatorFilter(currentUser.name) : undefined,
     enabled: authInitialized && instanceInitialized && (md || mobileOpen),
@@ -70,7 +71,8 @@ const CollectionSidebarContent = ({ context }: { context: "home" | "archived" })
 
   return (
     <div className={SIDEBAR_SECTION_STACK_CLASSES}>
-      <SidebarSection ariaLabel={t("common.statistics")}>
+      {context === "home" && currentUser && <CollectionStats summary={summary} loading={loading} />}
+      <SidebarSection ariaLabel={t("common.calendar")}>
         <StatisticsView statisticsData={statistics} onDateSelect={() => setMobileOpen(false)} />
       </SidebarSection>
       {/* Every collection route narrows the same way: views (yours, so signed-in only), days, tags. */}
@@ -252,7 +254,9 @@ const AppSidebar = ({ className, showThemeToggle = true }: { className?: string;
   const { setMobileOpen } = useAppSidebar();
   const { canOpen: canCompose, openEditor } = useGlobalMemoEditor();
   return (
-    <aside className={cn("mu-compact flex h-full w-full select-none flex-col bg-mu-canvas text-mu-text-secondary", className)}>
+    <aside
+      className={cn("memos-sidebar mu-compact flex h-full w-full select-none flex-col bg-mu-canvas text-mu-text-secondary", className)}
+    >
       <div data-sidebar-header className={cn("flex h-13 shrink-0 items-center justify-between gap-2", SIDEBAR_RAIL_CLASSES)}>
         <AccountMenu className="min-w-0" size="header" />
         <div className="flex shrink-0 items-center gap-1">
