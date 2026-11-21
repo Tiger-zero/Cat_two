@@ -56,12 +56,13 @@ func TestSSEHandler_Authentication(t *testing.T) {
 		// Wait for the flushed response before disconnecting so authentication
 		// can finish its database reads.
 		server := httptest.NewTestServer(t, e)
+		client := server.Client()
 		reqCtx, cancel := context.WithTimeout(ctx, time.Second)
 		defer cancel()
 		req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, server.URL+"/api/sse", nil)
 		require.NoError(t, err)
 		req.Header.Set("Authorization", "Bearer "+token)
-		resp, err := server.Client().Do(req)
+		resp, err := client.Do(req)
 		require.NoError(t, err)
 		defer resp.Body.Close()
 		require.Equal(t, http.StatusOK, resp.StatusCode)
