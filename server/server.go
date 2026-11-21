@@ -123,6 +123,7 @@ func NewServer(ctx context.Context, profile *profile.Profile, store *store.Store
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to create MCP service")
 	}
+	mcpService.RateLimiter = apiService.RateLimiter
 	mcpService.RegisterRoutes(mux)
 
 	return s, nil

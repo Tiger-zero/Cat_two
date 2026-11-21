@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"net/http"
+	"slices"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -208,13 +209,19 @@ func TestPersonalMCPConnectionImmediateAccess(t *testing.T) {
 	require.Eventually(t, func() bool { return time.Now().Unix() > firstUse.RequestedAt }, 2*time.Second, 25*time.Millisecond)
 	tools, err := mcp.ListTools(ctx, nil)
 	require.NoError(t, err)
+	newReadTools := []string{"memo_search", "memo_batch_get", "tag_tree", "tag_search"}
 	names := make([]string, 0, len(tools.Tools))
 	for _, tool := range tools.Tools {
 		names = append(names, tool.Name)
+		if slices.Contains(newReadTools, tool.Name) {
+			require.NotNil(t, tool.Annotations, "%s", tool.Name)
+			require.True(t, tool.Annotations.ReadOnlyHint, "%s", tool.Name)
+		}
 	}
-	require.ElementsMatch(t, []string{
+	existingTools := []string{
 		"auth_get_current_user", "user_list_memo_views", "memo_list_memos", "memo_get_memo", "memo_create_memo", "memo_update_memo",
-	}, names)
+	}
+	require.ElementsMatch(t, append(existingTools, newReadTools...), names)
 
 	call := func(name string, args map[string]any) *sdkmcp.CallToolResult {
 		t.Helper()
@@ -283,6 +290,159 @@ func TestPersonalMCPConnectionImmediateAccess(t *testing.T) {
 	_, err = legacyMCP.CallTool(ctx, legacyRead)
 	require.Error(t, err, "archiving the owner must cut off an initialized client")
 	require.EqualValues(t, http.StatusUnauthorized, legacyHTTPStatus.Load())
+}
+
+func TestPersonalMCPNoteDiscovery(t *testing.T) {
+	ctx := t.Context()
+	inst := bootInstance(ctx, t, instanceOptions{personal: true})
+	inst.createAdmin(t)
+	ownerToken := inst.signIn(t)
+	passwordHash, err := bcrypt.GenerateFromPassword([]byte(testAdminPassword), bcrypt.MinCost)
+	require.NoError(t, err)
+	foreignOwner, err := inst.server.Store.CreateUser(ctx, &store.User{
+		Username: "discovery-legacy-user", Role: store.RoleUser, PasswordHash: string(passwordHash),
+	})
+	require.NoError(t, err)
+	foreignToken := inst.signInUser(t, foreignOwner.Username, testAdminPassword)
+
+	// In Shanghai, November 21 begins at 16:00 UTC on November 20.
+	const query = "查询 A_%"
+	const undecidedTask = "\n\n- [ ] 排期"
+	for _, memo := range []struct {
+		id, timestamp, content string
+	}{
+		{"before-start", "2026-11-20T15:59:59Z", query + " #项目/开始" + undecidedTask},
+		{"at-start", "2026-11-20T16:00:00Z", query + " #项目/发布" + undecidedTask},
+		{"at-end", "2026-11-21T15:59:59Z", query + " #项目/发布 #项目/计划 #Team/Release `#项目/代码示例`\n\n- [x] 已处理"},
+		{"after-end", "2026-11-21T16:00:00Z", query + " #项目/结束" + undecidedTask},
+		{"wrong-tag", "2026-11-21T04:00:00Z", query + " #杂项" + undecidedTask},
+		{"wrong-query", "2026-11-21T04:00:00Z", "查询 AXx #项目/发布" + undecidedTask},
+		{"foreign", "2026-11-21T04:00:00Z", query + " #项目/外部 #Team/ReleaseExternal" + undecidedTask},
+		{"archived", "2026-11-21T04:00:00Z", query + " #项目/归档 #Team/ReleaseArchived" + undecidedTask},
+		{"trashed", "2026-11-21T04:00:00Z", query + " #项目/回收 #Team/ReleaseTrashed" + undecidedTask},
+	} {
+		token := ownerToken
+		if memo.id == "foreign" {
+			token = foreignToken
+		}
+		status, body := inst.do(t, http.MethodPost, "/api/memos?memoId="+memo.id, token, map[string]string{
+			"content": memo.content, "createTime": memo.timestamp, "visibility": "PRIVATE",
+		})
+		require.Equal(t, http.StatusOK, status, "%s: %s", memo.id, body)
+	}
+	status, body := inst.do(t, http.MethodPatch, "/api/memos/archived?updateMask=state", ownerToken, map[string]string{"state": "ARCHIVED"})
+	require.Equal(t, http.StatusOK, status, "%s", body)
+	status, body = inst.do(t, http.MethodDelete, "/api/memos/trashed", ownerToken, nil)
+	require.Equal(t, http.StatusOK, status, "%s", body)
+	status, body = inst.do(t, http.MethodPost, "/api/memos/at-start/comments", ownerToken, map[string]string{
+		"content": query + " #项目/评论" + undecidedTask, "createTime": "2026-11-21T04:00:00Z", "visibility": "PRIVATE",
+	})
+	require.Equal(t, http.StatusOK, status, "%s", body)
+
+	_, connectionToken := createMCPConnection(t, inst, ownerToken, "Read tools fixture", "permanent")
+	session, _ := connectMCP(ctx, t, inst, connectionToken)
+	call := func(t *testing.T, name string, args map[string]any, response any) {
+		t.Helper()
+		result, err := session.CallTool(ctx, &sdkmcp.CallToolParams{Name: name, Arguments: args})
+		require.NoError(t, err)
+		require.False(t, result.IsError, "%s: %v", name, result.Content)
+		encoded, err := json.Marshal(result.StructuredContent)
+		require.NoError(t, err)
+		require.NoError(t, json.Unmarshal(encoded, response))
+	}
+
+	t.Run("search", func(t *testing.T) {
+		args := map[string]any{
+			"query": query, "tag": "#项目", "startDate": "2026-11-21", "endDate": "2026-11-21", "orderBy": "create_time asc", "pageSize": 1,
+		}
+		type result struct {
+			Memos         []struct{ Name, CreateTime string }
+			NextPageToken string
+		}
+		var first result
+		call(t, "memo_search", args, &first)
+		require.Len(t, first.Memos, 1)
+		require.Equal(t, "memos/at-start", first.Memos[0].Name)
+		require.Equal(t, "2026-11-20T16:00:00Z", first.Memos[0].CreateTime)
+		require.NotEmpty(t, first.NextPageToken)
+		args["pageToken"] = first.NextPageToken
+		var second result
+		call(t, "memo_search", args, &second)
+		require.Len(t, second.Memos, 1)
+		require.Equal(t, "memos/at-end", second.Memos[0].Name)
+		require.Equal(t, "2026-11-21T15:59:59Z", second.Memos[0].CreateTime)
+		require.Empty(t, second.NextPageToken)
+
+		delete(args, "pageToken")
+		args["pageSize"] = 10
+		for _, tc := range []struct {
+			incomplete bool
+			name       string
+		}{{true, "memos/at-start"}, {false, "memos/at-end"}} {
+			args["hasIncompleteTasks"] = tc.incomplete
+			var filtered result
+			call(t, "memo_search", args, &filtered)
+			require.Len(t, filtered.Memos, 1, "hasIncompleteTasks=%v", tc.incomplete)
+			require.Equal(t, tc.name, filtered.Memos[0].Name)
+		}
+	})
+
+	t.Run("batch get", func(t *testing.T) {
+		var result struct {
+			Memos       []struct{ Name, State, Content string }
+			Unavailable []string
+		}
+		call(t, "memo_batch_get", map[string]any{
+			"names": []string{"memos/missing", "memos/at-end", "memos/foreign", "memos/archived", "memos/trashed", "memos/at-start", "memos/at-end"},
+		}, &result)
+		require.Equal(t, []string{"memos/missing", "memos/foreign", "memos/trashed"}, result.Unavailable)
+		require.Len(t, result.Memos, 3)
+		require.Equal(t, "memos/at-end", result.Memos[0].Name)
+		require.Equal(t, "NORMAL", result.Memos[0].State)
+		require.Contains(t, result.Memos[0].Content, "已处理")
+		require.Equal(t, "memos/archived", result.Memos[1].Name)
+		require.Equal(t, "ARCHIVED", result.Memos[1].State)
+		require.Equal(t, "memos/at-start", result.Memos[2].Name)
+	})
+
+	t.Run("tags", func(t *testing.T) {
+		type tag struct {
+			Path, Parent string
+			MemoCount    int
+		}
+		type result struct {
+			Tags       []tag
+			Total      int
+			NextOffset *int
+		}
+		want := []tag{
+			{Path: "Team", MemoCount: 1},
+			{Path: "Team/Release", Parent: "Team", MemoCount: 1},
+			{Path: "杂项", MemoCount: 1},
+			{Path: "项目", MemoCount: 5},
+			{Path: "项目/发布", Parent: "项目", MemoCount: 3},
+			{Path: "项目/开始", Parent: "项目", MemoCount: 1},
+			{Path: "项目/结束", Parent: "项目", MemoCount: 1},
+			{Path: "项目/计划", Parent: "项目", MemoCount: 1},
+		}
+		var tree result
+		call(t, "tag_tree", nil, &tree)
+		require.Equal(t, want, tree.Tags)
+		require.Equal(t, len(want), tree.Total)
+		require.Nil(t, tree.NextOffset)
+
+		var matches result
+		call(t, "tag_search", map[string]any{"query": "#release"}, &matches)
+		require.Equal(t, []tag{want[1]}, matches.Tags)
+		require.Equal(t, 1, matches.Total)
+
+		var page result
+		call(t, "tag_search", map[string]any{"query": "项目/", "pageSize": 2, "offset": 1}, &page)
+		require.Equal(t, want[5:7], page.Tags)
+		require.Equal(t, 4, page.Total)
+		require.NotNil(t, page.NextOffset)
+		require.Equal(t, 3, *page.NextOffset)
+	})
 }
 
 func TestPersonalMCPConnectionsSurviveRestartAndKeepLegacyAccess(t *testing.T) {

@@ -19,4 +19,6 @@ description: >-
 
 按 [Cat_two 笔记工作流](../../../plugins/cat-two-notes/skills/organize-notes/SKILL.md) 发现工具、核对当前账号、整理笔记和归档任务。该文件同样用于已安装的 Codex 插件。笔记写入前展示完整草稿并取得用户确认，工具名和参数以部署实例返回的列表为准。 [工具定义](../../../server/mcp/catalog.go) · [REST 字段](../../../proto/gen/openapi.yaml)
 
+工具列表支持时，用 `memo_search` 按关键词、标签或上海时区的创建日期筛选，用 `memo_batch_get` 读取多条已知笔记，用 `tag_tree` 和 `tag_search` 发现标签。较早的镜像可用 `memo_list_memos` 配合 `memo_get_memo`。 [MCP 工具说明](../../../server/mcp/README.md#tool-surface)
+
 同步总结时，将正文作为 Markdown 写入 `content`。标题、表格、任务列表、提示块等语法可查项目的格式清单。 [支持的内容格式](../cat-two-development/SKILL.md#支持的内容格式)

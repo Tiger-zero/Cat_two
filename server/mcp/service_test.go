@@ -10,6 +10,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
@@ -17,6 +18,7 @@ import (
 	"github.com/usememos/memos/internal/clientip"
 	"github.com/usememos/memos/internal/httphandler"
 	"github.com/usememos/memos/internal/profile"
+	"github.com/usememos/memos/internal/ratelimit"
 	memosproto "github.com/usememos/memos/proto"
 	"github.com/usememos/memos/store"
 )
@@ -68,6 +70,30 @@ func TestPersonalMCPCatalogOmitsSpaces(t *testing.T) {
 	for _, operation := range service.operationsByTool {
 		require.NotContains(t, operation.OperationID, "SpaceService_")
 	}
+}
+
+func TestPersonalNativeReadToolsShareAccountRateLimit(t *testing.T) {
+	limiter := ratelimit.NewMemoryLimiter(ratelimit.Policy{
+		ratelimit.ScopeAuthenticated: {Limit: 1, Window: time.Hour},
+	})
+	service := &MCPService{RateLimiter: limiter}
+	success := &sdkmcp.CallToolResult{}
+	handler := service.limitPersonalReads(func(context.Context, string, sdkmcp.Request) (sdkmcp.Result, error) {
+		return success, nil
+	})
+	ctx := context.WithValue(t.Context(), connectionUserIDContextKey{}, int32(7))
+	request := &sdkmcp.CallToolRequest{Params: &sdkmcp.CallToolParamsRaw{Name: "tag_tree"}}
+	require.True(t, limiter.Consume(ratelimit.ScopeAuthenticated, "7", 1).Allowed)
+	result, err := handler(ctx, "tools/call", request)
+	require.NoError(t, err)
+	require.IsType(t, &sdkmcp.CallToolResult{}, result)
+	require.Equal(t, newToolErrorResult("MCP request rate limit exceeded"), result)
+
+	// Only native reads are charged here. The REST-backed search has its own check.
+	request.Params.Name = "memo_search"
+	result, err = handler(ctx, "tools/call", request)
+	require.NoError(t, err)
+	require.Same(t, success, result)
 }
 
 func TestNewMCPServiceUsesEmbeddedOpenAPISpec(t *testing.T) {

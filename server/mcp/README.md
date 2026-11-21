@@ -5,12 +5,12 @@ This package serves an [OpenAPI](https://www.openapis.org/)-driven
 `/mcp`. It exposes a curated, memo-focused toolset over the **Streamable HTTP**
 transport using the official `github.com/modelcontextprotocol/go-sdk`.
 
-Tool calls execute in-process against the existing REST API. Each tool comes
-from an operation in the generated OpenAPI document (`proto/gen/openapi.yaml`,
-embedded via `proto.OpenAPIYAML()`). The tool handler translates each call into
-the matching `/api/...` request so API authorization applies. In Cat_two
-personal mode, the transport authenticates a dedicated MCP connection token
-and passes the connection owner's identity to the API internally.
+The curated tools come from the generated OpenAPI document
+(`proto/gen/openapi.yaml`, embedded via `proto.OpenAPIYAML()`) and execute
+in-process against the existing REST API. Cat_two personal mode adds typed
+read tools for note searches, batch reads and tag discovery. The transport
+authenticates a dedicated MCP connection token and supplies the connection
+owner's identity to the tool and any internal API call.
 
 ## Integration
 
@@ -39,8 +39,9 @@ fast on any inconsistency:
 3. `buildCuratedTools` (`catalog.go`) selects the allowlisted operation IDs and
    converts each into an `*sdkmcp.Tool` plus a `registeredOperation`. Missing
    IDs or duplicate tool names are construction errors.
-4. Each tool allowed in the active mode is registered with
-   `server.AddTool(tool, newMCPToolHandler(...))`.
+4. Register the allowed OpenAPI tools with
+   `server.AddTool(tool, newMCPToolHandler(...))`. Personal mode also registers
+   the Cat_two read tools and their argument and result schemas.
 5. `sdkmcp.NewStreamableHTTPHandler` wraps the server in stateless,
    JSON-response mode (no SSE, no session tracking). Stateless mode is also
    what lets the SDK serve protocol version `2026-07-28`; older clients still
@@ -61,7 +62,7 @@ fast on any inconsistency:
    client address. The transport passes the owner ID through the in-process
    context and strips the external token.
 4. The SDK streamable handler dispatches the MCP message.
-5. On a `tools/call` request, `newMCPToolHandler` (`service.go`) decodes the JSON
+5. For an OpenAPI tool, `newMCPToolHandler` (`service.go`) decodes the JSON
    arguments into a map.
 6. `validateToolArguments` (`validation.go`) checks them against the tool's
    input schema. The tool handler then binds the personal-mode identity to
@@ -74,6 +75,10 @@ fast on any inconsistency:
 8. The recorder body is decoded; a non-2xx status becomes a tool error
    (`newToolErrorResult`), otherwise the value is wrapped by
    `newStructuredToolResult`.
+
+Personal batch reads and tag tools use store queries scoped to the
+authenticated owner. They share the API's request budget when rate limiting
+is enabled. Personal search goes through the existing memo list API.
 
 ## Schema resolution
 
@@ -203,10 +208,30 @@ fails authentication. The legacy
 
 ## Tool surface
 
-Cat_two personal mode exposes six tools. These read the current account, list
-saved views, list or read notes, and create or update notes:
-`auth_get_current_user`, `user_list_memo_views`, `memo_list_memos`,
-`memo_get_memo`, `memo_create_memo` and `memo_update_memo`.
+Cat_two personal mode retains `auth_get_current_user`, `user_list_memo_views`,
+`memo_list_memos`, `memo_get_memo`, `memo_create_memo` and
+`memo_update_memo`.
+
+The following read-only tools use the connection owner's notes.
+
+| Tool | Parameters and scope | Result |
+| --- | --- | --- |
+| `memo_search` | Search active top-level notes. All supplied filters must match. `query` matches a literal substring of the Markdown body. `tag` accepts a path with an optional `#` and includes descendants. `startDate` and `endDate` are inclusive creation dates in `YYYY-MM-DD` and use Asia/Shanghai. Either bound can be omitted. `hasIncompleteTasks`, `hasAttachments`, and `pinned` accept booleans. `creationChannel` accepts `web`, `telegram`, `browser_extension`, `wechat`, or `unknown`. | `{memos, nextPageToken?}`. The memos include Markdown content. Use `pageSize` between 1 and 50 (default 20) and pass `nextPageToken` as `pageToken` with the same search parameters. `orderBy` accepts `create_time asc`, `create_time desc` (default), `update_time asc` or `update_time desc`. |
+| `memo_batch_get` | `names` contains 1–50 canonical `memos/<uid>` names. The first occurrence of each name determines the order. Reads owned active and archived notes. | `{memos, unavailable}`. Memos include `name`, Markdown `content`, `tags`, `createTime`, `updateTime`, `pinned`, `state`, and `creationChannel`. Timestamps are RFC 3339 in UTC. Missing, foreign and trashed notes all go into `unavailable` by name. Use `memo_get_memo` for details such as attachments. |
+| `tag_tree` | Browse tag paths in active top-level notes. Optional `offset` starts at 0 and `pageSize` defaults to 50 with a maximum of 200. | `{tags: [{path, parent?, memoCount}], total, nextOffset?}`. Results are sorted by full path. Counts include descendants and count each note once per path. |
+| `tag_search` | Search the same tag paths by a nonblank, case-insensitive substring `query` with an optional leading `#`. Uses the same pagination as `tag_tree`. | The same result shape as `tag_tree`. `total` counts matching paths before pagination. |
+
+For example, call `memo_search` with
+`{"tag":"project/cat_two","startDate":"2026-11-01","endDate":"2026-11-20","hasIncompleteTasks":true}`.
+For a saved view's CEL expression or archived search, use `memo_list_memos`.
+Clients connected to older images can also use `memo_list_memos` and
+`memo_get_memo` when the new tools are absent from discovery.
+
+Write Markdown tags such as `#project/cat_two` in `body.content` of
+`memo_create_memo` or `memo_update_memo`. Creation accepts an optional
+`body.createTime` in RFC 3339. For an update to the body, use
+`updateMask: "content"`. Read the target note before updating and preview
+the planned changes before writing.
 
 The full Memos non-personal allowlist (`curatedOperationIDs` in `catalog.go`)
 includes the following operations.
@@ -285,7 +310,7 @@ not replace API authorization.
 This is deliberate: it fixes [#6022](https://github.com/usememos/memos/issues/6022),
 where collection tools returned a bare array that strict MCP clients reject.
 
-Inside that envelope the API's JSON is passed through verbatim, so the gateway's
+For OpenAPI tools the API's JSON is passed through verbatim, so the gateway's
 own encoding is part of the tool contract: whatever it emits is validated against
 the output schema resolved from the same OpenAPI spec. grpc-gateway's stock
 marshaler emits `null` for unset message fields, which no schema declares as
@@ -321,8 +346,11 @@ for successful responses:
 | `validation.go` | Validates tool-call arguments against the tool's input schema. |
 | `origin.go` | `Origin`-header check for browser DNS-rebinding safety. |
 | `result.go` | Normalizes API responses into object-shaped `structuredContent` and builds error results. |
+| `personal_search.go` | Validates structured search filters and calls the existing memo list API as the connection owner. |
+| `personal_batch.go` | Reads the connection owner's full memo content by resource name. |
+| `personal_tags.go` | Counts and searches tag paths for the connection owner's active memos. |
 
-## Adding a tool
+## Adding an OpenAPI tool
 
 1. Add the OpenAPI `operationId` to `curatedOperationIDs` in `catalog.go`.
 2. If the operation is **not** in the generated OpenAPI, add or adjust the

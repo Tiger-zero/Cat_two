@@ -42,7 +42,7 @@ instead, and update `core/configuration/testdata/compat/` in the same change. Af
   The legacy `POST /api/mcpConnections/{id}/decision` endpoint still accepts `{"action":"revoke"}`.
   Replace tokens created under the old awaiting or pending flow. Denied, revoked, and expired tokens remain
   inactive. Personal access tokens remain valid for REST.
-  The personal-mode MCP catalog contains six tools for account, view and note access.
+  [Personal MCP tool catalog](../../server/mcp/README.md#tool-surface) ·
   [MCP setup and upgrade steps](../../plugins/cat-two-notes/README.md#连接-nas)
 - When an account enables two-step verification, password sign-in requires `password_credentials.otp_code`.
   `ErrorInfo.reason` is `TOTP_REQUIRED` for a missing code and `TOTP_INVALID` for an invalid or reused code.

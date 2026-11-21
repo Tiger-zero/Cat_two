@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -15,6 +16,7 @@ import (
 	"github.com/usememos/memos/internal/clientip"
 	"github.com/usememos/memos/internal/httphandler"
 	"github.com/usememos/memos/internal/profile"
+	"github.com/usememos/memos/internal/ratelimit"
 	memosproto "github.com/usememos/memos/proto"
 	"github.com/usememos/memos/server/api"
 	"github.com/usememos/memos/server/auth"
@@ -36,6 +38,8 @@ const toolCatalogTTL = 24 * time.Hour
 type MCPService struct {
 	profile *profile.Profile
 	store   *store.Store
+	// RateLimiter shares the API's request budget with reads served inside MCP.
+	RateLimiter ratelimit.Limiter
 
 	operationsByTool map[string]*registeredOperation
 	handler          http.Handler
@@ -89,6 +93,17 @@ func NewMCPService(profile *profile.Profile, handler http.Handler, db *store.Sto
 		}
 		server.AddTool(tool, newMCPToolHandler(adapter, operation))
 	}
+	service := &MCPService{
+		profile:          profile,
+		store:            db,
+		operationsByTool: operationsByTool,
+	}
+	if personal {
+		registerPersonalMemoSearch(server, adapter, operationsByTool["memo_list_memos"])
+		registerPersonalMemoBatchGet(server, db)
+		registerPersonalTagTools(server, db)
+		server.AddReceivingMiddleware(service.limitPersonalReads)
+	}
 
 	streamableHandler := sdkmcp.NewStreamableHTTPHandler(func(*http.Request) *sdkmcp.Server {
 		return server
@@ -106,12 +121,8 @@ func NewMCPService(profile *profile.Profile, handler http.Handler, db *store.Sto
 		// CSRF / DNS-rebinding protection instead.
 		DisableLocalhostProtection: true,
 	})
-	return &MCPService{
-		profile:          profile,
-		store:            db,
-		operationsByTool: operationsByTool,
-		handler:          streamableHandler,
-	}, nil
+	service.handler = streamableHandler
+	return service, nil
 }
 
 func isPersonalMCPOperation(id string) bool {
@@ -121,6 +132,29 @@ func isPersonalMCPOperation(id string) bool {
 		return true
 	default:
 		return false
+	}
+}
+
+func (s *MCPService) limitPersonalReads(next sdkmcp.MethodHandler) sdkmcp.MethodHandler {
+	return func(ctx context.Context, method string, request sdkmcp.Request) (sdkmcp.Result, error) {
+		call, ok := request.(*sdkmcp.CallToolRequest)
+		if s.RateLimiter == nil || !ok || call.Params == nil {
+			return next(ctx, method, request)
+		}
+		// Search and the existing tools use the API handler's own limiter.
+		switch call.Params.Name {
+		case "memo_batch_get", "tag_tree", "tag_search":
+		default:
+			return next(ctx, method, request)
+		}
+		userID, ok := ctx.Value(connectionUserIDContextKey{}).(int32)
+		if !ok || userID <= 0 {
+			return newToolErrorResult("MCP connection authentication required"), nil
+		}
+		if !s.RateLimiter.Consume(ratelimit.ScopeAuthenticated, strconv.FormatInt(int64(userID), 10), 1).Allowed {
+			return newToolErrorResult("MCP request rate limit exceeded"), nil
+		}
+		return next(ctx, method, request)
 	}
 }
 

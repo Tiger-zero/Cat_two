@@ -18,7 +18,7 @@ http_headers = { Authorization = "Bearer <MCP 连接令牌>" }
 default_tools_approval_mode = "writes"
 ```
 
-Cat_two 每次收到 MCP 请求都会检查令牌。专用令牌仅适用于 MCP，可调用账户、视图和笔记的六个工具，笔记读写受所属账号权限约束。「REST API 访问令牌」区签发的个人访问令牌（PAT）以 `memos_pat_` 开头，用于 REST API。用笔记插件写入时，工作流会在保存前预览并等待确认。
+Cat_two 每次收到 MCP 请求都会检查令牌。专用令牌适用于 MCP，账户、视图、笔记和标签的读取受所属账号权限约束。「REST API 访问令牌」区签发的个人访问令牌（PAT）以 `memos_pat_` 开头，用于 REST API。用笔记插件写入时，工作流会在保存前预览并等待确认。
 
 ### 查看和删除连接
 
@@ -48,5 +48,8 @@ codex plugin add cat-two-notes@cat-two
 在新对话中选择 **Cat_two 笔记** 或用 `$cat-two-notes:organize-notes` 调用工作流。
 
 - “用 Cat_two 笔记检查连接，并显示当前账号和最近三条笔记。”
+- “查找和 Cat_two 有关的标签，按层级列出标签与笔记数。”
 - “用 Cat_two 笔记按已有标签汇总过去七天的未完成待办，保留原笔记链接。”
 - “用 Cat_two 笔记把这次开发整理成项目归档，先给我看草稿。”
+
+工作流用 `memo_search` 按字面关键词、标签与创建日期查询，用 `memo_batch_get` 读取多条已知的笔记，并用 `tag_tree` 和 `tag_search` 查找标签。创建日期按上海时区计算。连接较早的镜像时，工作流可以用已有的列表和逐条读取工具完成查询。 [工具参数和范围](../../server/mcp/README.md#tool-surface)
