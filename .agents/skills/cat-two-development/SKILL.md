@@ -5,6 +5,12 @@ description: 在 Cat_two 仓库开发、排查缺陷、验证升级和交付修�
 
 # Cat_two 开发
 
+## 每次修改都更新本文件
+
+每次修改 Cat_two 的代码、配置、文档或 Skill，交付前都要在本文件的开发记录中补一条。发布镜像或收到 NAS 实测反馈后，补充对应记录。同一事项的多个提交可以合在一起写，保留各自有用的提交链接。
+
+每条用上海时间记录日期、改了什么和为什么、验证结果与可复用的经验。能确认时附上提交、构建记录和镜像标签。分别记录源码是否推送、检查是否通过、镜像是否已发布以及用户是否已在 NAS 验证。未验证的事项注明范围和原因。保留以后开发能用到的结论和排查步骤。
+
 ## 产品和代码入口
 
 Cat_two 从 Fumos 和 Memos 衍生而来，以 `Tiger-zero/Cat_two` 的 `main` 为日常开发分支。当前交付是 Docker 服务和网页，默认使用 SQLite，适合在 NAS 上管理个人笔记。产品现状和部署方式分别见 [功能与实现](../../../docs/cat-two-guide.md) 和 [README](../../../README.md)。
@@ -13,9 +19,11 @@ Cat_two 从 Fumos 和 Memos 衍生而来，以 `Tiger-zero/Cat_two` 的 `main` �
 - 默认简体中文，仅提供简体中文和英语。日历、笔记日期和日期筛选统一使用 `Asia/Shanghai`。调整局部颜色或字体时，先找实际渲染组件和主题变量，再核对相邻状态与主题。
 - 个人笔记的权限由服务端检查。移除入口时一起核对路由、设置、API 和数据依赖。升级时保留旧有笔记、附件及关联数据，使原作者仍能访问自己的内容。
 
-## 2026 年 11 月 20 日至 21 日的开发经验
+## 开发记录
 
 日期按上海时区记录，提交可用于回看变更动机。
+
+### 2026 年 11 月 20 日至 21 日的开发基线
 
 | 日期 | 当时的工作 | 后续开发应核对 |
 | --- | --- | --- |
@@ -23,7 +31,25 @@ Cat_two 从 Fumos 和 Memos 衍生而来，以 `Tiger-zero/Cat_two` 的 `main` �
 | 11 月 20 日至 21 日 | 改为中文和上海时间，调整界面、字形和猫图标。用「日历」承接原时间线及按日筛选，移除地图、独立附件库和独立日历页。 [日历与附件修正](https://github.com/Tiger-zero/Cat_two/commit/e822b27de) | 回放「点日期 → 新建笔记 → 清除筛选 → 返回该日期」，核对有笔记及无笔记日期、日期边界、旧链接和笔记内附件预览。 |
 | 11 月 21 日 | 加入回收站、标签置顶和目录重命名、来源筛选及外部接入，修复历史升级测试夹具。 [功能提交](https://github.com/Tiger-zero/Cat_two/commit/ca1b0c88f) · [夹具修正](https://github.com/Tiger-zero/Cat_two/commit/c472d1bf4) | 核对移入和恢复后的状态及附件。标签重命名到已有同级标签时应合并两边笔记，并迁移子路径。迁移用例要按旧版本当时的表和列准备数据，迁移后再检查新结构。 |
 | 11 月 21 日 | 首次创建管理员后关闭网页注册，停用空间等设置模块，加入可选的验证器两步验证和容器终端恢复。 [个人模式和两步验证](https://github.com/Tiger-zero/Cat_two/commit/51bfcff31) | 同时测试首次安装和旧数据升级。核对旧空间笔记的作者权限、启用后的动态码登录和防重放，以及终端重置后的旧会话失效和原密码登录。 |
-| 11 月 21 日 | 建立 Docker Hub 编号规则，保留许可，并将重置两步验证的命令写入 README。 [编号规则提交](https://github.com/Tiger-zero/Cat_two/commit/b33aa59d5) · [README 提交](https://github.com/Tiger-zero/Cat_two/commit/4232a6a58) | 分别核对源码提交、Docker Hub 镜像和 NAS 正在运行的版本。README 中的命令须匹配对应镜像和 Compose 文件。 |
+| 11 月 21 日 | 建立 Docker Hub 编号规则，将 Memos 许可文本打包到镜像。 [编号规则提交](https://github.com/Tiger-zero/Cat_two/commit/b33aa59d5) · [镜像许可提交](https://github.com/Tiger-zero/Cat_two/commit/0292d1a55) | 发布时在注册表核对版本标签，并在镜像里检查许可文件。 |
+
+### 11 月 21 日下午
+
+- **验证和恢复说明**　两步验证开始读取数据库里的会话版本后，SSE 测试要先启动客户端并等到响应头，再断开连接。README 重写了部署、备份、升级，以及从运行中的 NAS 容器或 Compose 宿主机重置两步验证的步骤。重置后以原密码重新登录。 [SSE 测试修正](https://github.com/Tiger-zero/Cat_two/commit/636a14e45) · [README 重写](https://github.com/Tiger-zero/Cat_two/commit/4232a6a58)
+- **两个仓库 Skill**　用 Cat_two 开发和 MCP 两个 Skill 取代继承的 Memos 发布 Skill。MCP 沿用容器的 `/mcp`，由可访问 NAS 的客户端配置地址与个人访问令牌。归档当前任务或按标签整理笔记时先预览，确认后再写入。容器发布继续走 Cat_two 的工作流。 [Skill 提交](https://github.com/Tiger-zero/Cat_two/commit/d70023930) · [MCP Skill](../cat-two-mcp/SKILL.md)
+- **附件和 Markdown 工具栏**　回形针复用现有文件选择和保存流程。PDF、Word 和 Excel 在缺少标准 MIME 信息时按扩展名识别，下载保留原文件名。格式按钮复用编辑器命令，在富文本和 Markdown 源码模式都可用。测试时使用只含附件的笔记、真实文件和中文文件名，核对下载字节，还要验证倒序选区、组合选区及 360px 窄屏。 [提交](https://github.com/Tiger-zero/Cat_two/commit/feb68bc8b) · [编辑器说明](../../../web/src/components/MemoEditor/README.md)
+- **站内文档下载修复**　`0.04` 的原生附件下载依赖刷新 Cookie，网页仍有有效访问令牌时可能出现「笔记能打开，附件无法下载」。在测试容器确认空格、括号及 `&` 的文件名可用，并复现 Cookie 缺失或失效时下载失败。修复后，站内文档用当前网页会话按附件 ID 取文件，保留原文件名，失败时在页面提示 HTTP 状态。后续排查可用状态码区分身份校验和文件存储问题。Chrome 的原生下载可能没有出现在网页的 Network 列表，当次 NAS 请求的错误码未能捕获。 [提交](https://github.com/Tiger-zero/Cat_two/commit/63e4e4c8f) · [下载实现](../../../web/src/lib/attachment-download.ts)
+- **开发记录维护**　将每次修改后更新本文件的要求写入 Skill，并补齐下午的实现经验和已发布版本。验证 Skill 格式、仓库链接和文档差异。
+
+当天的镜像发布都从 `main` 手动触发，核对了 AMD64、ARM64 以及编号、`latest` 和对应 SHA 标签。升级测试使用独立数据卷。
+
+| Docker Hub 标签 | 源码提交 | 验证 |
+| --- | --- | --- |
+| `0.03` | `d70023930` | 从 `0.02` 升级后可读取旧笔记和保存新笔记，已发布镜像提供两步验证重置命令。 [构建记录](https://github.com/Tiger-zero/Cat_two/actions/runs/44883753022) |
+| `0.04` | `feb68bc8b` | 从 `0.03` 升级通过，用已发布镜像实测图片、PDF、Word、Excel 以及格式按钮。 [构建记录](https://github.com/Tiger-zero/Cat_two/actions/runs/44886020145) |
+| `0.05` | `63e4e4c8f` | 从 `0.04` 沿用测试数据卷升级。旧 Excel 附件在 Cookie 缺失或失效时仍能下载，文件名和字节一致。用户随后在自己的 NAS 确认原附件下载成功。 [构建记录](https://github.com/Tiger-zero/Cat_two/actions/runs/44887464527) |
+
+`0.03` 的发布工作流通过。同提交的后端 CI 中，MySQL 的 `TestUserStore` 在删除账号时返回 `Error 1615`，提示预处理语句需要重新准备。本地 MySQL 套件及后续两版后端 CI 通过。再遇到类似问题时，先按驱动和用例单独复现，记录原始 SQL 错误。 [MySQL 测试日志](https://github.com/Tiger-zero/Cat_two/actions/runs/44883528899/job/136783787756)
 
 ## 开发和验证
 
