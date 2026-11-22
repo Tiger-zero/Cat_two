@@ -51,7 +51,7 @@ flowchart LR
 
 ## 外部集成
 
-- Telegram Bot 私聊和企业微信自建应用可接收指定发件人的文本。消息写成当前管理员的私有笔记并自动添加 `#Telegram` 或 `#微信`，笔记来源也标记为对应渠道。Telegram 使用主动轮询，企业微信使用签名和加密回调。 [配置说明](../../../../README.md#telegram-和企业微信收件) · [笔记写入](../../../../server/api/memo_capture.go)
+- Telegram Bot 私聊和企业微信自建应用可接收指定发件人的文本。消息写成当前管理员的私有笔记并自动添加 `#Telegram` 或 `#微信`，笔记来源也标记为对应渠道。保存成功后原会话收到 `Yes!`。Telegram 主动轮询并通过 Bot API 回复，企业微信通过签名和加密回调直接回复。 [配置说明](../../../../README.md#telegram-和企业微信收件) · [笔记写入](../../../../server/api/memo_capture.go)
 
 在「设置 → MCP 和 API」管理连接。普通 PAT 用于 REST。专用 MCP 令牌创建后可通过 Streamable HTTP 调用 `/mcp`，有效期为 7 天（默认）、14 天、1 个日历年或永久。到期或删除连接后，下一次请求被拒绝。设置会显示首次连接的客户端 IP 和令牌到期时间。[API](../../../../proto/api/README.md) · [接入 Codex](../../../../plugins/cat-two-notes/README.md#连接-nas)
 

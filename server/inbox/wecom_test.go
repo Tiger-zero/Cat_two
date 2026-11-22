@@ -9,6 +9,7 @@ import (
 	"encoding/base64"
 	"encoding/binary"
 	"encoding/hex"
+	"encoding/xml"
 	"errors"
 	"fmt"
 	"math"
@@ -128,6 +129,7 @@ func TestWeComIgnoresUnauthorizedAndNonTextMessages(t *testing.T) {
 			ciphertext := encryptWeComTestMessage(t, message, weComTestCorp)
 			response := serveWeComTestRequest(handler, http.MethodPost, signWeComTestMessage(ciphertext, time.Now()), wrapWeComTestMessage(ciphertext))
 			require.Equal(t, http.StatusOK, response.Code)
+			require.Equal(t, "text/plain; charset=utf-8", response.Header().Get("Content-Type"))
 			require.Equal(t, "success", response.Body.String())
 		})
 	}
@@ -193,15 +195,70 @@ func TestWeComRetriesWithStableMessageID(t *testing.T) {
 	body := wrapWeComTestMessage(ciphertext)
 	failed := serveWeComTestRequest(handler, http.MethodPost, query, body)
 	require.Equal(t, http.StatusServiceUnavailable, failed.Code)
+	require.Equal(t, "text/plain; charset=utf-8", failed.Header().Get("Content-Type"))
 	require.NotContains(t, failed.Body.String(), "internal storage details")
 	require.Empty(t, persisted)
+	var previousCiphertext string
 	for _, envelope := range []string{body, declaration + body} {
 		response := serveWeComTestRequest(handler, http.MethodPost, query, envelope)
-		require.Equal(t, http.StatusOK, response.Code)
-		require.Equal(t, "success", response.Body.String())
+		ciphertext := requireWeComTestConfirmation(t, response, query.Get("nonce"))
+		require.NotEqual(t, previousCiphertext, ciphertext)
+		previousCiphertext = ciphertext
 	}
 	require.Equal(t, 3, attempts)
 	require.Equal(t, map[string]string{expectedID: expectedText}, persisted)
+}
+
+func requireWeComTestConfirmation(t *testing.T, response *httptest.ResponseRecorder, nonce string) string {
+	t.Helper()
+	require.Equal(t, http.StatusOK, response.Code)
+	require.Equal(t, "application/xml; charset=utf-8", response.Header().Get("Content-Type"))
+	var envelope struct {
+		XMLName   xml.Name `xml:"xml"`
+		Encrypt   string   `xml:"Encrypt"`
+		Signature string   `xml:"MsgSignature"`
+		Timestamp int64    `xml:"TimeStamp"`
+		Nonce     string   `xml:"Nonce"`
+	}
+	require.NoError(t, xml.Unmarshal(response.Body.Bytes(), &envelope))
+	require.Equal(t, nonce, envelope.Nonce)
+	require.WithinDuration(t, time.Now(), time.Unix(envelope.Timestamp, 0), time.Minute)
+	require.Equal(t, signWeComTestMessage(envelope.Encrypt, time.Unix(envelope.Timestamp, 0)).Get("msg_signature"), envelope.Signature)
+
+	frame, err := base64.StdEncoding.DecodeString(envelope.Encrypt)
+	require.NoError(t, err)
+	require.NotEmpty(t, frame)
+	require.Zero(t, len(frame)%32)
+	block, err := aes.NewCipher([]byte(weComTestRawKey))
+	require.NoError(t, err)
+	cipher.NewCBCDecrypter(block, []byte(weComTestRawKey[:aes.BlockSize])).CryptBlocks(frame, frame)
+	padding := int(frame[len(frame)-1])
+	require.Positive(t, padding)
+	require.LessOrEqual(t, padding, 32)
+	require.Equal(t, bytes.Repeat([]byte{byte(padding)}, padding), frame[len(frame)-padding:])
+	data := frame[:len(frame)-padding]
+	require.GreaterOrEqual(t, len(data), 20+len(weComTestCorp))
+	size := int(binary.BigEndian.Uint32(data[16:20]))
+	require.Equal(t, len(data)-20-len(weComTestCorp), size)
+	require.Equal(t, weComTestCorp, string(data[20+size:]))
+
+	var reply struct {
+		XMLName    xml.Name `xml:"xml"`
+		Recipient  string   `xml:"ToUserName"`
+		Sender     string   `xml:"FromUserName"`
+		CreateTime int64    `xml:"CreateTime"`
+		Type       string   `xml:"MsgType"`
+		Content    string   `xml:"Content"`
+		AgentID    int64    `xml:"AgentID"`
+	}
+	require.NoError(t, xml.Unmarshal(data[20:20+size], &reply))
+	require.Equal(t, weComTestSender, reply.Recipient)
+	require.Equal(t, weComTestCorp, reply.Sender)
+	require.Equal(t, envelope.Timestamp, reply.CreateTime)
+	require.Equal(t, "text", reply.Type)
+	require.Equal(t, "Yes!", reply.Content)
+	require.Equal(t, int64(weComTestAgent), reply.AgentID)
+	return envelope.Encrypt
 }
 
 func newWeComTestHandler(t *testing.T, save func(context.Context, string, string) error) http.Handler {

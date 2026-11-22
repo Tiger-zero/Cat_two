@@ -8,6 +8,7 @@ import (
 	"encoding/base64"
 	"encoding/binary"
 	"encoding/hex"
+	"encoding/xml"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -67,10 +68,30 @@ func TestWeComMessageCapture(t *testing.T) {
 	require.Equal(t, "no-store", verification.Header().Get("Cache-Control"))
 
 	message := `<xml><ToUserName>ww-fixture</ToUserName><FromUserName>allowed</FromUserName><MsgType>text</MsgType><Content>收到笔记</Content><MsgId>760020001</MsgId><AgentID>1000002</AgentID></xml>`
-	for _, body := range []string{strings.Replace(message, ">allowed<", ">denied<", 1), message, message} {
-		response := request(http.MethodPost, body)
+	ignored := request(http.MethodPost, strings.Replace(message, ">allowed<", ">denied<", 1))
+	require.Equal(t, http.StatusOK, ignored.Code)
+	require.Equal(t, "success", ignored.Body.String())
+	for range 2 {
+		response := request(http.MethodPost, message)
 		require.Equal(t, http.StatusOK, response.Code)
-		require.Equal(t, "success", response.Body.String())
+		require.Equal(t, "application/xml; charset=utf-8", response.Header().Get("Content-Type"))
+		require.NotContains(t, response.Body.String(), "Yes!")
+		var envelope struct {
+			XMLName xml.Name `xml:"xml"`
+			Encrypt string
+		}
+		require.NoError(t, xml.Unmarshal(response.Body.Bytes(), &envelope))
+		var reply struct {
+			ToUserName   string
+			FromUserName string
+			MsgType      string
+			Content      string
+		}
+		require.NoError(t, xml.Unmarshal(decryptCaptureFixture(t, key, envelope.Encrypt), &reply))
+		require.Equal(t, "allowed", reply.ToUserName)
+		require.Equal(t, corp, reply.FromUserName)
+		require.Equal(t, "text", reply.MsgType)
+		require.Equal(t, "Yes!", reply.Content)
 	}
 	memos, err := db.ListMemos(ctx, &store.FindMemo{})
 	require.NoError(t, err)
@@ -94,4 +115,18 @@ func encryptCaptureFixture(t *testing.T, key []byte, corp, text string) string {
 	require.NoError(t, err)
 	cipher.NewCBCEncrypter(block, key[:aes.BlockSize]).CryptBlocks(data, data)
 	return base64.StdEncoding.EncodeToString(data)
+}
+
+func decryptCaptureFixture(t *testing.T, key []byte, ciphertext string) []byte {
+	t.Helper()
+	data, err := base64.StdEncoding.DecodeString(ciphertext)
+	require.NoError(t, err)
+	require.GreaterOrEqual(t, len(data), 32)
+	require.Zero(t, len(data)%aes.BlockSize)
+	block, err := aes.NewCipher(key)
+	require.NoError(t, err)
+	cipher.NewCBCDecrypter(block, key[:aes.BlockSize]).CryptBlocks(data, data)
+	length := int(binary.BigEndian.Uint32(data[16:20]))
+	require.LessOrEqual(t, length, len(data)-20)
+	return data[20 : 20+length]
 }

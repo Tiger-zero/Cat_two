@@ -26,6 +26,8 @@ const (
 	telegramMinRetry      = time.Second
 	telegramMaxRetry      = 30 * time.Second
 	telegramUpdateWindow  = 24 * time.Hour
+	telegramReplyTimeout  = 4 * time.Second
+	telegramReplyRetry    = 250 * time.Millisecond
 )
 
 var errTelegramPoll = errors.New("telegram polling failed")
@@ -54,6 +56,17 @@ type telegramMessage struct {
 	} `json:"chat"`
 }
 
+type telegramReplyRequest struct {
+	ChatID          int64                    `json:"chat_id"`
+	Text            string                   `json:"text"`
+	ReplyParameters *telegramReplyParameters `json:"reply_parameters,omitempty"`
+}
+
+type telegramReplyParameters struct {
+	MessageID                int64 `json:"message_id"`
+	AllowSendingWithoutReply bool  `json:"allow_sending_without_reply"`
+}
+
 // RunTelegram polls for private messages from senderID until ctx is canceled.
 // save receives a stable event ID followed by the original message text.
 func RunTelegram(ctx context.Context, token string, senderID int64, save func(context.Context, string, string) error) {
@@ -70,7 +83,12 @@ func pollTelegram(ctx context.Context, client *http.Client, baseURL, token strin
 	if token == "" || senderID <= 0 || save == nil {
 		return
 	}
-	endpoint := strings.TrimRight(baseURL, "/") + "/bot" + url.PathEscape(token) + "/getUpdates"
+	botEndpoint := strings.TrimRight(baseURL, "/") + "/bot" + url.PathEscape(token)
+	confirm := func(ctx context.Context, message *telegramMessage) {
+		if !sendTelegramConfirmation(ctx, client, botEndpoint+"/sendMessage", message) && ctx.Err() == nil {
+			slog.WarnContext(ctx, "Telegram note confirmation failed")
+		}
+	}
 	var offset int64
 	var lastUpdate time.Time
 	backoff := telegramMinRetry
@@ -80,13 +98,13 @@ func pollTelegram(ctx context.Context, client *http.Client, baseURL, token strin
 		if offset != 0 && time.Since(lastUpdate) >= telegramUpdateWindow {
 			offset = 0
 		}
-		updates, err := getTelegramUpdates(ctx, client, endpoint, offset)
+		updates, err := getTelegramUpdates(ctx, client, botEndpoint+"/getUpdates", offset)
 		failure := "Telegram polling failed"
 		if err == nil {
 			if len(updates) > 0 {
 				lastUpdate = time.Now()
 			}
-			offset, err = saveTelegramUpdates(ctx, updates, offset, senderID, save)
+			offset, err = saveTelegramUpdates(ctx, updates, offset, senderID, save, confirm)
 			failure = "Telegram inbox write failed"
 		}
 		if err == nil {
@@ -109,27 +127,10 @@ func pollTelegram(ctx context.Context, client *http.Client, baseURL, token strin
 }
 
 func getTelegramUpdates(ctx context.Context, client *http.Client, endpoint string, offset int64) ([]telegramUpdate, error) {
-	payload, err := json.Marshal(telegramPollRequest{
+	status, data := postTelegram(ctx, client, endpoint, telegramPollRequest{
 		Offset: offset, Timeout: telegramPollTimeout, Limit: telegramPollLimit, AllowedUpdates: []string{"message"},
 	})
-	if err != nil {
-		return nil, errTelegramPoll
-	}
-	request, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(payload))
-	if err != nil {
-		return nil, errTelegramPoll
-	}
-	request.Header.Set("Content-Type", "application/json")
-	response, err := client.Do(request)
-	if err != nil {
-		return nil, errTelegramPoll
-	}
-	defer response.Body.Close()
-	if response.StatusCode != http.StatusOK {
-		return nil, errTelegramPoll
-	}
-	data, err := io.ReadAll(io.LimitReader(response.Body, telegramResponseLimit+1))
-	if err != nil || len(data) > telegramResponseLimit {
+	if status != http.StatusOK {
 		return nil, errTelegramPoll
 	}
 	var body struct {
@@ -148,7 +149,80 @@ func getTelegramUpdates(ctx context.Context, client *http.Client, endpoint strin
 	return body.Result, nil
 }
 
-func saveTelegramUpdates(ctx context.Context, updates []telegramUpdate, offset, senderID int64, save func(context.Context, string, string) error) (int64, error) {
+func postTelegram(ctx context.Context, client *http.Client, endpoint string, payload any) (int, []byte) {
+	encoded, err := json.Marshal(payload)
+	if err != nil {
+		return 0, nil
+	}
+	request, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(encoded))
+	if err != nil {
+		return 0, nil
+	}
+	request.Header.Set("Content-Type", "application/json")
+	response, err := client.Do(request)
+	if err != nil {
+		return 0, nil
+	}
+	defer response.Body.Close()
+	data, err := io.ReadAll(io.LimitReader(response.Body, telegramResponseLimit+1))
+	if err != nil || len(data) > telegramResponseLimit {
+		return 0, nil
+	}
+	return response.StatusCode, data
+}
+
+func sendTelegramConfirmation(ctx context.Context, client *http.Client, endpoint string, message *telegramMessage) bool {
+	ctx, cancel := context.WithTimeout(ctx, telegramReplyTimeout)
+	defer cancel()
+	request := telegramReplyRequest{ChatID: message.Chat.ID, Text: "Yes!"}
+	if message.ID > 0 {
+		request.ReplyParameters = &telegramReplyParameters{MessageID: message.ID, AllowSendingWithoutReply: true}
+	}
+
+	sent, retry := postTelegramConfirmation(ctx, client, endpoint, request)
+	deadline, _ := ctx.Deadline()
+	if sent || retry <= 0 || time.Until(deadline) <= retry {
+		return sent
+	}
+	select {
+	case <-ctx.Done():
+		return false
+	case <-time.After(retry):
+		sent, _ := postTelegramConfirmation(ctx, client, endpoint, request)
+		return sent
+	}
+}
+
+func postTelegramConfirmation(ctx context.Context, client *http.Client, endpoint string, request telegramReplyRequest) (bool, time.Duration) {
+	status, data := postTelegram(ctx, client, endpoint, request)
+	var body struct {
+		OK         *bool `json:"ok"`
+		ErrorCode  int   `json:"error_code"`
+		Parameters struct {
+			RetryAfter int64 `json:"retry_after"`
+		} `json:"parameters"`
+	}
+	// Retry only an explicit rejection. A transport failure can mean Telegram
+	// sent the reply while the client lost the response.
+	if err := json.Unmarshal(data, &body); err != nil || body.OK == nil {
+		return false, 0
+	}
+	if *body.OK {
+		return status == http.StatusOK, 0
+	}
+	if body.ErrorCode == http.StatusTooManyRequests || status == http.StatusTooManyRequests {
+		if body.Parameters.RetryAfter >= int64(telegramReplyTimeout/time.Second) {
+			return false, 0
+		}
+		return false, max(telegramReplyRetry, time.Duration(max(0, body.Parameters.RetryAfter))*time.Second)
+	}
+	if status >= http.StatusInternalServerError && status < 600 {
+		return false, telegramReplyRetry
+	}
+	return false, 0
+}
+
+func saveTelegramUpdates(ctx context.Context, updates []telegramUpdate, offset, senderID int64, save func(context.Context, string, string) error, confirm func(context.Context, *telegramMessage)) (int64, error) {
 	for _, update := range updates {
 		if err := ctx.Err(); err != nil {
 			return offset, err
@@ -165,6 +239,7 @@ func saveTelegramUpdates(ctx context.Context, updates []telegramUpdate, offset, 
 			if err := save(ctx, eventID, message.Text); err != nil {
 				return offset, err
 			}
+			confirm(ctx, message)
 		}
 		// Sending the next offset confirms the updates that precede it. A failed
 		// save returns above, which leaves that update eligible for redelivery.

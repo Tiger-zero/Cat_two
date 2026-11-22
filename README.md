@@ -52,6 +52,8 @@ CAT_TWO_PORT=5230
 
 先完成 Cat_two 的管理员初始化。在 NAS 的 Compose 项目环境变量或部署目录下的 `.env` 中按需配置以下渠道，然后用原项目和数据挂载重建容器。收件目前支持文本消息，包括用文本发来的链接。消息成为管理员的私有笔记，分别带 `#Telegram` 或 `#微信` 标签，可在「全部笔记」和标签列表查看。每个渠道只收指定发件人的消息。令牌和加密密钥只填在部署配置里。
 
+笔记保存成功后，Telegram Bot 或企业微信应用会在原会话回复 `Yes!`。被忽略或保存失败的消息不会收到确认。若渠道暂时无法投递确认，已保存的笔记仍可在 Cat_two 查看。
+
 ### Telegram Bot
 
 1. 在 Telegram 向 [@BotFather](https://t.me/BotFather) 发送 `/newbot`，创建专用于 Cat_two 的 Bot。打开与这个 Bot 的私聊，发送一条文本消息。
@@ -96,7 +98,7 @@ PY
 ### 企业微信自建应用
 
 1. 在企业微信管理后台的「应用管理 → 自建」创建应用，把自己加入可见范围。记录企业 ID、应用的 AgentId 和通讯录中的成员账号 UserID。
-2. 在应用的「接收消息」里生成 Token 和 EncodingAESKey。将以下五项填入 Cat_two 的项目配置并重建容器。回调验签和解密使用这五项，入站接收无需应用 Secret。
+2. 在应用的「接收消息」里生成 Token 和 EncodingAESKey。将以下五项填入 Cat_two 的项目配置并重建容器。收件和加密回复使用现有回调配置，无需应用 Secret。
 3. 将公网 HTTPS 地址的 `/integrations/wecom` 路径通过反向代理转发到 Cat_two 的 `5230` 端口，并填入企业微信「接收消息」的 URL，例如 `https://notes.example.com/integrations/wecom`。保存时平台会发起验证请求。NAS 只有局域网地址时，需要有公网可达的反向代理入口。
 4. 在企业微信客户端打开应用并发送文本。若企业后台提供「我的企业 → 微信插件」，可用个人微信扫码关注，再从微信里打开该企业应用发消息。 [企业微信回调配置](https://developer.work.weixin.qq.com/document/path/90930) · [接收消息](https://developer.work.weixin.qq.com/document/path/90968) · [Media Saber 设置参考](https://wiki.msaber.fun/usage/system_settings/message/weixin.html)
 
