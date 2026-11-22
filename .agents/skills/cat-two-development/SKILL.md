@@ -61,3 +61,4 @@ Cat_two 是单账户、自托管的个人笔记应用。新实例首次设置时
 - **2026-11-22 17:58**　发布 Docker Hub `0.11`，核对编号、`latest` 和提交标签在 AMD64 与 ARM64 的一致性。正式 AMD64 镜像通过新装、重建与从 `0.10` 升级验证，Chromium 复测公网回调设置和企业微信模拟回调。 [发布复盘](references/development-log.md#镜像-011)
 - **2026-11-22 18:13**　编辑器增加插入标签入口，侧栏按名称排列，搜索增加「无标签」。标签分支可重命名、仅移除标签或将关联笔记移入回收站。Web、REST 和 MCP 统一分支匹配与计数口径，MCP 增加 `hasTags`。全量 SQLite 存储、API 和 MCP 相关竞态测试、1390 项前端测试及生产构建通过。以本地容器和 Chromium 验证插入、筛选、分支移动、删除和恢复。 [标签说明](../cat-two-product-development/SKILL.md#标签) · [接口](../cat-two-product-development/references/external-api.md#统计和标签)
 - **2026-11-22 18:34**　调研 flomo 和开源笔记项目，制定 Cat_two 浅色、深色主题。重排侧栏、笔记、编辑器、搜索和设置。桌面侧栏默认 320px，放宽统计、日历和标签的间距，既有自定义宽度可双击手柄复位。增加主题对比度验证，并用桌面 Chromium、生产构建及隔离 SQLite 容器验证。 [桌面设计与配色](../cat-two-ui-development/references/desktop-visual-design.md)
+- **2026-11-22 18:44**　发布 Docker Hub `0.12`，核对编号、`latest`、提交标签及 AMD64 和 ARM64 镜像配置。1431 项前端测试通过，正式 AMD64 镜像通过新装、重建、从 `0.11` 升级及桌面 Chromium 验收。 [发布复盘](references/development-log.md#镜像-012)

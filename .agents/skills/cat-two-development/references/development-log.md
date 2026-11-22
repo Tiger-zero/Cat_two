@@ -36,6 +36,12 @@
 
 正式 AMD64 镜像通过独立 SQLite 卷的新装、重建和从 `0.10` 升级验证。Chromium 核对镜像提交、局域网 IP 提示、带端口的 HTTPS 地址保存与重启保留，并用模拟企业微信请求验证签名 GET 挑战和 POST 收件。 [企业微信配置](../../../../README.md#企业微信自建应用)
 
+### 镜像 0.12
+
+18:44 核对 Docker Hub `0.12`、`latest` 和 `sha-7e7a961553981644edaa3ccb68c04b73346696dd`。三个标签使用同一镜像索引 `sha256:9825a6f0f6259bd954388b3c8dde403e6ac4058179b7d6bec230f5af72a4cdfb`，Linux AMD64 和 ARM64 的镜像配置均对应提交 `7e7a96155`。桌面主题覆盖浅色、深色、纸张和跟随系统，侧栏默认宽 320px，同版包含多级标签管理及无标签筛选。 [设计方案](../../cat-two-ui-development/references/desktop-visual-design.md) · [源码](https://github.com/Tiger-zero/Cat_two/commit/7e7a961553981644edaa3ccb68c04b73346696dd) · [发布](https://github.com/Tiger-zero/Cat_two/actions/runs/45013388369) · [Docker Hub](https://hub.docker.com/r/tiger2896/cat_two/tags?name=0.12)
+
+1431 项前端测试与 SQLite 后端 CI 通过。正式 AMD64 镜像通过独立 SQLite 卷新装、重建和从 `0.11` 升级。Chromium 在 1024px 和 1440px 桌面窗口核对主题、侧栏宽度及独立滚动、固定编辑器、双列日历弹层、搜索和设置交互，并保存笔记后读回。 [前端检查](https://github.com/Tiger-zero/Cat_two/actions/runs/45013388066) · [后端检查](https://github.com/Tiger-zero/Cat_two/actions/runs/45013230016)
+
 ## 2026-11-21（上海时间）
 
 本次复盘核对到 GitHub `main` 提交 `86dcec0ea`。Docker Hub 的 `latest` 指向 `0.06`，源码为 `53968a153`。
