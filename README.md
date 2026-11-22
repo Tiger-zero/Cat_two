@@ -2,7 +2,7 @@
 
 Cat_two 是面向个人使用的自托管笔记应用。通过网页记录 Markdown 笔记和附件，按日期、标签或关键词找回内容。笔记仅限创建者登录后访问。默认使用 Docker Compose 和 SQLite，可部署在 NAS 上。界面默认是简体中文，网页时间和日历按上海时区显示。
 
-[部署服务端](#部署服务端) · [在 NAS 上部署](#在-nas-上部署) · [备份和升级](#备份和升级) · [重置两步验证](#重置两步验证) · [连接 Codex](#连接-codex) · [功能与实现](.agents/skills/cat-two-development/references/product-guide.md)
+[部署服务端](#部署服务端) · [在 NAS 上部署](#在-nas-上部署) · [Telegram 和企业微信收件](#telegram-和企业微信收件) · [备份和升级](#备份和升级) · [重置两步验证](#重置两步验证) · [连接 Codex](#连接-codex) · [功能与实现](.agents/skills/cat-two-development/references/product-guide.md)
 
 ## 部署服务端
 
@@ -47,6 +47,68 @@ CAT_TWO_PORT=5230
 在 Cat_two 的「设置 → MCP 和 API」创建专用 MCP 连接令牌，可选 7 天（默认）、14 天、1 年或永久有效。在本地 Codex 添加 Streamable HTTP 服务，粘贴 `/mcp` 地址和完整的 `Authorization` 请求头值，Bearer 令牌环境变量留空。令牌创建后即可连接。可选的 Cat_two 笔记插件提供整理待办和归档任务的工作流。[接入步骤](plugins/cat-two-notes/README.md#连接-nas) · [可选插件安装](plugins/cat-two-notes/README.md#安装笔记插件)
 
 设置页显示首次连接的客户端 IP 和令牌到期时间。点击「删除令牌」并确认后，客户端的下一次 MCP 请求会被拒绝。升级前签发的有效令牌沿用原到期时间。REST 集成使用个人访问令牌（PAT）。
+
+## Telegram 和企业微信收件
+
+先完成 Cat_two 的管理员初始化。在 NAS 的 Compose 项目环境变量或部署目录下的 `.env` 中按需配置以下渠道，然后用原项目和数据挂载重建容器。收件目前支持文本消息，包括用文本发来的链接。消息成为管理员的私有笔记，分别带 `#Telegram` 或 `#微信` 标签，可在「全部笔记」和标签列表查看。每个渠道只收指定发件人的消息。令牌和加密密钥只填在部署配置里。
+
+### Telegram Bot
+
+1. 在 Telegram 向 [@BotFather](https://t.me/BotFather) 发送 `/newbot`，创建专用于 Cat_two 的 Bot。打开与这个 Bot 的私聊，发送一条文本消息。
+2. 取得本人 Telegram 数字 ID。可在启动 Cat_two 轮询前调用官方 Bot API 的 `getUpdates`，查看该私聊消息的 `message.from.id`。Bot Token 和 Telegram 用户名都与这个数字 ID 不同。 [Telegram Bot API](https://core.telegram.org/bots/api#getupdates)
+3. 设置下面两个变量并重建容器。NAS 需要能主动访问 `https://api.telegram.org`。为这个 Bot 保留一个轮询进程，已有 webhook 的 Bot 需要先解除 webhook 才能用轮询。 [Telegram 轮询规则](https://core.telegram.org/bots/api#getupdates)
+
+```dotenv
+CAT_TWO_TELEGRAM_BOT_TOKEN=填BotFather给你的令牌
+CAT_TWO_TELEGRAM_USER_ID=填你的数字ID
+```
+
+<details>
+<summary>用官方 Bot API 查询自己的 Telegram 数字 ID</summary>
+
+先给新 Bot 发一条私聊文本。然后在能访问 Telegram 的电脑上运行下面的命令，按提示输入 Bot Token，终端会列出私聊发件人的数字 ID 和名称。
+
+```sh
+python3 - <<'PY'
+import getpass
+import json
+import re
+import urllib.request
+
+token = getpass.getpass("BotFather token: ").strip()
+if not re.fullmatch(r"[0-9]+:[A-Za-z0-9_-]+", token):
+    raise SystemExit("Bot Token 格式错误")
+try:
+    with urllib.request.urlopen(f"https://api.telegram.org/bot{token}/getUpdates", timeout=10) as response:
+        updates = json.load(response)["result"]
+except (OSError, ValueError, KeyError):
+    raise SystemExit("无法获取更新。请检查令牌、网络以及该 Bot 是否配置了 webhook。") from None
+for update in updates:
+    message = update.get("message", {})
+    if message.get("chat", {}).get("type") == "private" and message.get("from"):
+        sender = message["from"]
+        print(sender["id"], sender.get("username") or sender.get("first_name", ""))
+PY
+```
+
+</details>
+
+### 企业微信自建应用
+
+1. 在企业微信管理后台的「应用管理 → 自建」创建应用，把自己加入可见范围。记录企业 ID、应用的 AgentId 和通讯录中的成员账号 UserID。
+2. 在应用的「接收消息」里生成 Token 和 EncodingAESKey。将以下五项填入 Cat_two 的项目配置并重建容器。回调验签和解密使用这五项，入站接收无需应用 Secret。
+3. 将公网 HTTPS 地址的 `/integrations/wecom` 路径通过反向代理转发到 Cat_two 的 `5230` 端口，并填入企业微信「接收消息」的 URL，例如 `https://notes.example.com/integrations/wecom`。保存时平台会发起验证请求。NAS 只有局域网地址时，需要有公网可达的反向代理入口。
+4. 在企业微信客户端打开应用并发送文本。若企业后台提供「我的企业 → 微信插件」，可用个人微信扫码关注，再从微信里打开该企业应用发消息。 [企业微信回调配置](https://developer.work.weixin.qq.com/document/path/90930) · [接收消息](https://developer.work.weixin.qq.com/document/path/90968) · [Media Saber 设置参考](https://wiki.msaber.fun/usage/system_settings/message/weixin.html)
+
+```dotenv
+CAT_TWO_WECOM_CORP_ID=填企业ID
+CAT_TWO_WECOM_AGENT_ID=填应用AgentId
+CAT_TWO_WECOM_CALLBACK_TOKEN=填接收消息页面的Token
+CAT_TWO_WECOM_ENCODING_AES_KEY=填43位EncodingAESKey
+CAT_TWO_WECOM_USER_ID=填你的企业微信成员账号
+```
+
+使用普通 Compose 时运行 `docker compose up -d`，使用 NAS 配置时运行 `docker compose -f compose.nas.yaml up -d`。查看对应项目的 `cat-two` 容器日志，可确认渠道是否启用。若企业微信回调验证失败，先核对 HTTPS 回调路径、Token、EncodingAESKey 和 NAS 系统时间。
 
 ## 两步验证
 

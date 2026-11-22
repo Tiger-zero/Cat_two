@@ -8,6 +8,13 @@ services:
       # Map NAS project variables to names supported by existing images.
       MEMOS_UID: "${MEMOS_UID:-${PUID:-}}"
       MEMOS_GID: "${MEMOS_GID:-${PGID:-}}"
+      CAT_TWO_TELEGRAM_BOT_TOKEN: "${CAT_TWO_TELEGRAM_BOT_TOKEN:-}"
+      CAT_TWO_TELEGRAM_USER_ID: "${CAT_TWO_TELEGRAM_USER_ID:-}"
+      CAT_TWO_WECOM_CORP_ID: "${CAT_TWO_WECOM_CORP_ID:-}"
+      CAT_TWO_WECOM_AGENT_ID: "${CAT_TWO_WECOM_AGENT_ID:-}"
+      CAT_TWO_WECOM_CALLBACK_TOKEN: "${CAT_TWO_WECOM_CALLBACK_TOKEN:-}"
+      CAT_TWO_WECOM_ENCODING_AES_KEY: "${CAT_TWO_WECOM_ENCODING_AES_KEY:-}"
+      CAT_TWO_WECOM_USER_ID: "${CAT_TWO_WECOM_USER_ID:-}"
     ports:
       - "${CAT_TWO_PORT:-5230}:5230"
     volumes:

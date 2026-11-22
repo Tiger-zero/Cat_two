@@ -46,9 +46,10 @@ type Server struct {
 	Profile *profile.Profile
 	Store   *store.Store
 
-	handler    http.Handler
-	httpServer *http.Server
-	apiService *api.APIService
+	handler         http.Handler
+	httpServer      *http.Server
+	apiService      *api.APIService
+	receiveTelegram func(context.Context)
 
 	// backgroundCancel stops the startup jobs, and backgroundJobs waits for
 	// them, before the store closes.
@@ -95,6 +96,7 @@ func NewServer(ctx context.Context, profile *profile.Profile, store *store.Store
 
 	apiService := api.NewAPIService(s.Secret, profile, store)
 	s.apiService = apiService
+	s.configureMessageCapture(mux)
 
 	apiHandler, err := apiService.NewHandler(ctx)
 	if err != nil {
@@ -170,6 +172,9 @@ func (s *Server) Start() error {
 func (s *Server) startBackgroundJobs() {
 	ctx, cancel := context.WithCancel(context.Background())
 	s.backgroundCancel = cancel
+	if s.receiveTelegram != nil {
+		s.backgroundJobs.Go(func() { s.receiveTelegram(ctx) })
+	}
 	runner := memopayload.NewRunner(s.Store, s.apiService.MarkdownService)
 	s.backgroundJobs.Go(func() {
 		if err := runner.Backfill(ctx); err != nil && ctx.Err() == nil {
