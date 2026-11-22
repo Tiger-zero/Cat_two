@@ -10,35 +10,28 @@ Cat_two 是面向个人使用的自托管笔记应用。通过网页记录 Markd
 
 ```sh
 docker compose up -d
-docker compose ps
 ```
 
-在浏览器打开 `http://服务器地址:5230`。首次启动时按提示设置管理员用户名和密码，创建后网页注册关闭。需要查看启动日志时，运行 `docker compose logs -f cat-two`。
+在浏览器打开 `http://服务器地址:5230`。首次启动时按提示设置管理员用户名和密码，创建后网页注册关闭。用 `docker compose ps` 查看运行状态，或用 `docker compose logs -f cat-two` 查看启动日志。
 
-SQLite 和默认的本地附件存储使用 Compose 的 `cat_two_data` 命名卷，容器内路径为 `/var/opt/memos`。需要调整主机端口或容器时区时，可在项目环境中设置 `CAT_TWO_PORT` 或 `TZ`。
+SQLite 和默认的本地附件存储使用 Compose 的 `cat_two_data` 命名卷，容器内路径为 `/var/opt/memos`。应用默认以 UID `1000` 和 GID `10` 运行。可在项目环境中设置 `PUID` 和 `PGID`，显式设置的 `MEMOS_UID` 和 `MEMOS_GID` 分别优先。主机端口及容器时区可通过 `CAT_TWO_PORT` 和 `TZ` 调整。
 
 ## 在 NAS 上部署
 
-在绿联 NAS 上创建数据目录 `/volume1/docker/cat2/data`，让运行应用的用户和组有读写权限。将 [compose.nas.yaml](compose.nas.yaml) 导入 Docker 应用以创建项目。也可以在文件所在目录运行以下命令。
-
-```sh
-docker compose -f compose.nas.yaml up -d
-```
-
-NAS 配置默认将上述目录挂载到容器的 `/var/opt/memos`，以 `1000:10` 运行并映射到 NAS 的 `5230` 端口。使用其他目录、身份或端口时，在项目环境变量或 Compose 的 `.env` 中设置对应值。
+NAS 使用同一份 `compose.yaml`。新部署可将文件导入绿联 NAS 的 Docker 应用，也可在文件所在目录运行 `docker compose up -d`。如果想把数据直接放到 NAS 文件夹，先创建目录并赋予应用的运行用户和组读写权限，再在 Docker 项目环境变量或部署目录的 `.env` 中设置绝对路径。以下为可按需调整的示例。
 
 ```dotenv
+CAT_TWO_DATA_DIR=/volume1/docker/cat2/data
 PUID=1000
 PGID=10
-CAT_TWO_DATA_DIR=/volume1/docker/cat2/data
 CAT_TWO_PORT=5230
 ```
 
-普通 Compose 默认使用 `10001:10001`，也可通过 `PUID` 和 `PGID` 指定。两份配置都优先采用显式设置的 `MEMOS_UID` 和 `MEMOS_GID`。
+设置 `CAT_TWO_DATA_DIR` 后，该目录会挂载到容器内的 `/var/opt/memos`。留空时使用命名卷。已有实例切换配置前，按备份和升级步骤保留原有数据挂载。 [备份和升级](#备份和升级)
 
 ## 在公网部署
 
-首次启动时先通过受限网络或 SSH 转发访问 `5230`，完成唯一管理员的创建，设置独立密码并在「设置 → 我的账户」启用两步验证。然后再打开公网入口。普通和 NAS 两份 Compose 都可读取下面的配置。
+首次启动时先通过受限网络或 SSH 转发访问 `5230`，完成唯一管理员的创建，设置独立密码并在「设置 → 我的账户」启用两步验证。打开公网入口前，在 Compose 项目环境中设置以下配置。
 
 ```dotenv
 CAT_TWO_BIND_IP=127.0.0.1
@@ -127,7 +120,7 @@ CAT_TWO_WECOM_ENCODING_AES_KEY=填43位EncodingAESKey
 CAT_TWO_WECOM_USER_ID=填你的企业微信成员账号
 ```
 
-使用普通 Compose 时运行 `docker compose up -d`，使用 NAS 配置时运行 `docker compose -f compose.nas.yaml up -d`。查看对应项目的 `cat-two` 容器日志，可确认渠道是否启用。若企业微信回调验证失败，先核对 HTTPS 回调路径、Token、EncodingAESKey 和 NAS 系统时间。
+在现有部署目录运行 `docker compose up -d`。查看对应项目的 `cat-two` 容器日志，可确认渠道是否启用。若企业微信回调验证失败，先核对 HTTPS 回调路径、Token、EncodingAESKey 和 NAS 系统时间。
 
 ## 登录防护和 IP 解封
 
@@ -139,7 +132,7 @@ CAT_TWO_WECOM_USER_ID=填你的企业微信成员账号
 docker compose exec cat-two /usr/local/memos/memos login-blocklist remove --ip 203.0.113.42
 ```
 
-在 NAS 上使用 `compose.nas.yaml` 的实例，执行同一条命令时在 `compose` 后加 `-f compose.nas.yaml`。
+执行时沿用正在运行的 Compose 项目名称和环境文件。
 
 ## 两步验证
 
@@ -159,32 +152,31 @@ docker compose exec cat-two /usr/local/memos/memos login-blocklist remove --ip 2
 
 **从 Docker 宿主机执行**
 
-在部署目录内执行对应命令。沿用启动时的 Compose 文件、项目名称和环境文件。
-
-使用普通 Compose 时运行以下命令。
+在部署目录内执行以下命令，沿用启动时的项目名称和环境文件。
 
 ```sh
 docker compose exec cat-two /usr/local/memos/memos two-factor reset --username admin
-```
-
-使用仓库 NAS 配置时运行以下命令。
-
-```sh
-docker compose -f compose.nas.yaml exec cat-two /usr/local/memos/memos two-factor reset --username admin
 ```
 
 看到 `Two-factor authentication reset. Sign in again.` 表示重置成功。命令会关闭该账号的两步验证并注销旧浏览器会话。用原密码登录后，可重新绑定验证器。若终端提示找不到 `two-factor` 子命令，请先更新到包含两步验证的镜像。 [恢复命令实现](cmd/memos/two_factor.go)
 
 ## 备份和升级
 
-升级前先停止容器并备份整个数据目录或命名卷，也可以使用存储的一致性快照。使用其他目录或对象存储存放附件时，一并备份。升级时沿用部署时的 Compose 配置和项目名称，继续挂载存有现有 SQLite 数据和附件的卷或目录。使用 NAS 配置时，给以下两条命令都加上 `-f compose.nas.yaml`。
+升级前先停止容器并备份整个数据目录或命名卷，也可以使用存储的一致性快照。使用其他目录或对象存储存放附件时，一并备份。
+
+替换 Compose 配置时，沿用原项目名称、环境配置和数据挂载。
+
+- 原实例绑定 NAS 目录时，先在项目环境中把 `CAT_TWO_DATA_DIR` 设为旧容器挂载到 `/var/opt/memos` 的实际宿主机路径。确认该目录含有现存的 SQLite 数据库，再用新的 `compose.yaml` 更新同一项目。Compose 可能会为写错的路径创建空目录，所以启动前要核对路径。
+- 原实例使用默认命名卷时，保留项目名称并让 `CAT_TWO_DATA_DIR` 留空。如需保持此前默认的 `10001:10001`，设置 `PUID=10001` 和 `PGID=10001`。
+
+在部署目录拉取镜像并重建。
 
 ```sh
 docker compose pull
 docker compose up -d
 ```
 
-若通过 `CAT_TWO_IMAGE` 固定了镜像标签，拉取前请把标签改为希望升级到的版本。想迁移笔记时，可在「设置 → 导出和导入」导出 ZIP。 [数据备份与恢复](.agents/skills/cat-two-development/references/product-guide.md#数据备份和升级)
+若通过 `CAT_TWO_IMAGE` 固定了镜像标签，拉取前请把标签改为希望升级到的版本。启动后用原账号登录，检查已有笔记和附件是否可读。想迁移笔记时，可在「设置 → 导出和导入」导出 ZIP。 [数据备份与恢复](.agents/skills/cat-two-development/references/product-guide.md#数据备份和升级)
 
 ## 构建和发布镜像
 

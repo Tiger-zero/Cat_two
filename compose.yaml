@@ -7,9 +7,11 @@ services:
       MEMOS_DRIVER: sqlite
       MEMOS_INSTANCE_URL: "${MEMOS_INSTANCE_URL:-}"
       MEMOS_TRUSTED_PROXIES: "${MEMOS_TRUSTED_PROXIES:-none}"
-      # Map NAS project variables to names supported by existing images.
-      MEMOS_UID: "${MEMOS_UID:-${PUID:-}}"
-      MEMOS_GID: "${MEMOS_GID:-${PGID:-}}"
+      PUID: "${PUID:-1000}"
+      PGID: "${PGID:-10}"
+      # The entrypoint gives these existing overrides priority when set.
+      MEMOS_UID: "${MEMOS_UID:-}"
+      MEMOS_GID: "${MEMOS_GID:-}"
       CAT_TWO_TELEGRAM_BOT_TOKEN: "${CAT_TWO_TELEGRAM_BOT_TOKEN:-}"
       CAT_TWO_TELEGRAM_USER_ID: "${CAT_TWO_TELEGRAM_USER_ID:-}"
       CAT_TWO_WECOM_CORP_ID: "${CAT_TWO_WECOM_CORP_ID:-}"
@@ -20,7 +22,8 @@ services:
     ports:
       - "${CAT_TWO_BIND_IP:+${CAT_TWO_BIND_IP:-}:}${CAT_TWO_PORT:-5230}:5230"
     volumes:
-      - cat_two_data:/var/opt/memos
+      # Set CAT_TWO_DATA_DIR to an absolute host path to bind a NAS directory.
+      - "${CAT_TWO_DATA_DIR:-cat_two_data}:/var/opt/memos"
     healthcheck:
       test: ["CMD", "wget", "-Y", "off", "-q", "-O", "/dev/null", "http://127.0.0.1:5230/healthz"]
       interval: 30s

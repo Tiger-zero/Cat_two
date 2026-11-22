@@ -16,7 +16,6 @@ on:
       - 'store/migration/**'
       - 'store/seed/**'
       - 'compose.yaml'
-      - 'compose.nas.yaml'
       - 'LICENSE'
       - '.dockerignore'
       - 'scripts/Dockerfile'
@@ -71,7 +70,7 @@ jobs:
                 (endswith(".go") and (endswith("_test.go") | not))
                 or test("^(web/|server/frontend/dist/|store/(migration|seed)/|[.]github/actions/setup-web/)")
                 or IN(
-                  "go.mod", "go.sum", "proto/gen/openapi.yaml", "compose.yaml", "compose.nas.yaml",
+                  "go.mod", "go.sum", "proto/gen/openapi.yaml", "compose.yaml",
                   "LICENSE", ".dockerignore", "scripts/Dockerfile", "scripts/entrypoint.sh",
                   "scripts/entrypoint_test.sh", "scripts/release_smoke_test.sh", "scripts/release_version.sh",
                   "scripts/cat_two_docker_release.py", ".github/workflows/cat-two-container.yml"
@@ -91,6 +90,23 @@ jobs:
         if: steps.scope.outputs.skip != 'true'
         with:
           persist-credentials: false
+
+      - name: Verify Compose storage and identity settings
+        if: steps.scope.outputs.skip != 'true'
+        shell: bash
+        run: |
+          docker compose config --format json |
+            jq -e '.services["cat-two"] |
+              any(.volumes[]; .type == "volume" and .source == "cat_two_data" and .target == "/var/opt/memos")
+              and .environment.PUID == "1000" and .environment.PGID == "10"
+              and .environment.MEMOS_UID == "" and .environment.MEMOS_GID == ""' >/dev/null
+
+          data_dir="$RUNNER_TEMP/cat-two-data"
+          CAT_TWO_DATA_DIR="$data_dir" PUID=2000 PGID=20 MEMOS_UID=3000 MEMOS_GID=30 docker compose config --format json |
+            jq -e --arg data_dir "$data_dir" '.services["cat-two"] |
+              any(.volumes[]; .type == "bind" and .source == $data_dir and .target == "/var/opt/memos")
+              and .environment.PUID == "2000" and .environment.PGID == "20"
+              and .environment.MEMOS_UID == "3000" and .environment.MEMOS_GID == "30"' >/dev/null
 
       - uses: ./.github/actions/setup-web
         if: steps.scope.outputs.skip != 'true'
@@ -129,8 +145,6 @@ jobs:
         if: steps.scope.outputs.skip != 'true'
         run: |
           bash scripts/entrypoint_test.sh
-          docker compose config --quiet
-          docker compose -f compose.nas.yaml config --quiet
           bash scripts/release_smoke_test.sh --fresh-only --candidate-image cat-two:smoke
 
       - name: Save the tested web build for publishing

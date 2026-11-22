@@ -41,7 +41,7 @@ Cat_two 面向单人自托管，当前网页版以桌面浏览器为目标。新
 
 - 用户提出发布镜像时，按 [Cat_two Container](../../../.github/workflows/cat-two-container.yml) 工作流执行。Docker Hub 版本号按 `0.01` 递增，核对版本号、`latest` 和 `sha-<完整提交 SHA>`，以及 AMD64、ARM64 两种平台。 [编号实现](../../../scripts/cat_two_docker_release.py)
 - 普通提交按改动路径触发后端、前端、Proto 和容器检查。前端生产构建随容器验证运行。在 `main` 手动发布或通过 `[publish dockerhub]` 发布时执行完整构建。 [工作流](../../../.github/workflows/)
-- 分别用 Git、Actions、注册表和 NAS 实例证据确认源码推送、构建验证、镜像发布与实际升级。部署改动核对两份 Compose、`/healthz`、重建前后数据和附件可读写。历史发布证据见 [开发复盘](references/development-log.md)。
+- 分别用 Git、Actions、注册表和 NAS 实例证据确认源码推送、构建验证、镜像发布与实际升级。部署改动用统一的 `compose.yaml` 核对默认命名卷、NAS 目录绑定、运行身份、`/healthz` 与重建后的笔记和附件。 [部署说明](../../../README.md#备份和升级) · [开发复盘](references/development-log.md)
 - 冒烟脚本默认验证 Cat_two 新装及重建后的数据。用 `--previous-image` 指定实际的旧版 Cat_two 镜像，可在隔离卷中验证升级。 [冒烟脚本](../../../scripts/release_smoke_test.sh)
 
 ## 支持的内容格式
@@ -96,3 +96,4 @@ Cat_two 面向单人自托管，当前网页版以桌面浏览器为目标。新
 - **2026-11-22 10:20**　整理 AI 共创所用的 REST、MCP、文件和事件接口及凭据范围。修复会话并发轮换、PAT 撤销记录、附件匿名探测和企业微信握手权限，收紧请求体、代理信任和浏览器来源。更新前端依赖与 Alpine 运行层。SQLite、服务端竞态、前端构建和两份 Compose 配置验证通过。 [外部接口](references/external-api.md) · [安全复盘](references/development-log.md#对外接口与公网加固)
 - **2026-11-22 10:40**　检查匿名登录页面和相关接口的账号及凭据可见性。统一账号不存在与密码错误的 bcrypt 开销，限制登录与续期的浏览器来源，修正 REST 刷新 Cookie。连续 6 次密码失败持久封禁 IP，在「设置 → 安全」或部署主机解封。SQLite 迁移、重启、接口授权和 Chromium 六次失败到解封的流程通过，前端 1,350 项测试及生产构建通过。 [登录防护](../../../README.md#登录防护和-ip-解封)
 - **2026-11-22 10:49**　核对 Docker Hub `0.09`、`latest` 和提交标签均对应 `1071616d`，包含 AMD64 与 ARM64。用正式 AMD64 镜像通过新装、容器重建及从 `0.08` 升级的 SQLite 笔记读写验证。 [发布记录](references/development-log.md#镜像-009)
+- **2026-11-22 10:54**　合并 Docker 和 NAS 的 Compose。默认命名卷和 `PUID=1000`、`PGID=10`，支持自定义运行身份、沿用 `MEMOS_UID/GID` 及通过 `CAT_TWO_DATA_DIR` 绑定 NAS 原目录。用正式 `0.09` 镜像验证新装、自定义身份及两类旧部署重建后的笔记和附件。 [Compose](../../../compose.yaml) · [切换说明](../../../README.md#备份和升级)

@@ -42,11 +42,11 @@ flowchart LR
 
 - 浏览器以 React、TypeScript 和 Vite 实现。路由及上下文携带筛选和显示偏好，React Query 管理读取和缓存。[路由](../../../../web/src/router/index.tsx) · [上下文](../../../../web/src/contexts/) · [请求 Hooks](../../../../web/src/hooks/)
 - Go 服务执行数据库迁移并提供嵌入网页、Connect、REST、文件服务、MCP 和 `/healthz`。网页先上传附件，再提交 Markdown、附件引用和时间。写入时后端记录作者、刷新标签和正文属性。编辑提交字段掩码，SSE 通知其他页面重新取数。 [启动入口](../../../../cmd/memos/main.go) · [保存逻辑](../../../../web/src/components/MemoEditor/edit/services/memoService.ts) · [笔记服务](../../../../server/api/memo_service.go) · [实时刷新](../../../../web/src/hooks/useLiveMemoRefresh.ts)
-- Store 负责和数据库驱动交互。普通及 NAS Compose 默认使用 SQLite，生产数据库名为 `memos_prod.db`，使用 WAL。服务端也有 MySQL 和 PostgreSQL 驱动。[数据层](../../../../store/doc.go) · [驱动](../../../../store/db/db.go) · [SQLite](../../../../store/db/sqlite/sqlite.go)
+- Store 负责和数据库驱动交互。Compose 默认使用 SQLite，生产数据库名为 `memos_prod.db`，使用 WAL。服务端也有 MySQL 和 PostgreSQL 驱动。[数据层](../../../../store/doc.go) · [驱动](../../../../store/db/db.go) · [SQLite](../../../../store/db/sqlite/sqlite.go)
 
 ## 数据、备份和升级
 
-- 普通 Compose 使用 `cat_two_data` 命名卷。NAS 配置将数据目录挂载到容器内的 `/var/opt/memos`。升级时沿用现有项目和挂载，确保容器运行身份可读写。部署配置和镜像标签的操作见 README。[普通配置](../../../../compose.yaml) · [NAS 配置](../../../../compose.nas.yaml) · [备份和升级](../../../../README.md#备份和升级)
+- Docker 和 NAS 共用一份 Compose，默认将 `cat_two_data` 命名卷挂载到 `/var/opt/memos`，设置 `CAT_TWO_DATA_DIR` 时挂载对应的宿主机目录。升级时备份实际数据源、保留项目和挂载，并确保运行身份可读写。 [Compose 配置](../../../../compose.yaml) · [备份和升级](../../../../README.md#备份和升级)
 - 完整实例备份使用一致性快照，或先停止服务再复制整个数据目录和部署配置，保留 SQLite 数据库及配套文件。附件可保存在数据库、本地文件或 S3 兼容存储。新的本地附件可随数据目录迁移，已有绝对路径记录仍按原位置读取，独立目录与对象存储要一并备份。验证恢复时，使用备份副本、独立 Compose 项目及独立附件存储。 [存储设置](../../../../web/src/components/Settings/settingSections.ts) · [恢复操作](../../../../README.md#备份和升级)
 - 多选可导出最多 100 条笔记，也可在「设置 → 导出和导入」导出整个账户的笔记。ZIP 含 Markdown、笔记元数据和可归档附件。导入时先预演，可保留现有、覆盖或创建副本。完成后根据逐项报告检查附件、引用、评论和归档状态。[导入导出](../../../../web/src/components/Settings/MemoExportSection.tsx) · [归档格式](../../../../core/memoexport/format.go)
 - ZIP 导入可恢复同一作者的归档笔记及评论层级。新导出的 ZIP 原样存储附件数据，易压缩文件较多时归档可能变大。导入仍会检查解压大小和压缩比，已经超出限制的旧 ZIP 仍需从原实例重新导出。覆盖导入时，归档未携带的笔记引用仍保留。 [评论规则](../../../../store/memo_comment.go) · [ZIP 读写](../../../../core/memoexport/) · [导入实现](../../../../server/api/user_service_memo_import.go)
