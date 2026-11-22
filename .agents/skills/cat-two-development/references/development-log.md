@@ -24,6 +24,12 @@
 
 10:49 核对 Docker Hub `0.09`、`latest` 和 `sha-1071616d72a604b35c95077dd3785f50d02fba6a`。三个标签共用镜像索引 `sha256:52f0239e11e64e13a310c653d6362f028714cd97641579daf3e8bfdd1fd12846`，Linux AMD64 和 ARM64 的镜像配置均对应提交 `1071616d`。发布工作流的构建和容器冒烟通过。本地用正式 AMD64 镜像和独立 SQLite 卷验证新装、重建以及从 `0.08` 升级后的笔记读写。 [发布](https://github.com/Tiger-zero/Cat_two/actions/runs/44977510259) · [Docker Hub](https://hub.docker.com/r/tiger2896/cat_two/tags?name=0.09)
 
+### 镜像 0.10
+
+17:28 发布 Docker Hub `0.10`。`0.10`、`latest` 和 `sha-0b9398d506e9b12d0895221fe7f203d7c57ab148` 共用镜像索引 `sha256:0edd2cbbe7fa6ed9da0211e528c49a1ddfb34aef87dc8f27da03bd16fe508e0b`。Linux AMD64 与 ARM64 均对应提交 `0b9398d50`。本版包含本地笔记和附件迁移、会话及 MCP 加固、可重试的笔记写入、通知与 Telegram 代理设置，以及开发 Skill 拆分。 [源码](https://github.com/Tiger-zero/Cat_two/commit/0b9398d506e9b12d0895221fe7f203d7c57ab148) · [发布](https://github.com/Tiger-zero/Cat_two/actions/runs/45007206189) · [Docker Hub](https://hub.docker.com/r/tiger2896/cat_two/tags?name=0.10)
+
+用正式 AMD64 镜像和独立 SQLite 卷验证新装、容器重建和从 `0.09` 升级。Chromium 核对实例提交、通知配置、代理认证及配置持久化，并用签名加密的企业微信模拟消息验证笔记写入和 `Yes!` 回复。 [升级与备份](../../../../README.md#备份和升级)
+
 ## 2026-11-21（上海时间）
 
 本次复盘核对到 GitHub `main` 提交 `86dcec0ea`。Docker Hub 的 `latest` 指向 `0.06`，源码为 `53968a153`。
