@@ -48,6 +48,12 @@
 
 正式 AMD64 镜像通过独立 SQLite 卷新装、重建及从 `0.13` 升级。Chromium 确认深色侧栏、编辑器、笔记、搜索按钮和设置面板的底色，并对照浅色和纸张主题。前端和 Proto CI 均通过。 [前端检查](https://github.com/Tiger-zero/Cat_two/actions/runs/45027528175) · [Proto 检查](https://github.com/Tiger-zero/Cat_two/actions/runs/45027528087)
 
+### 镜像 0.15
+
+22:07 发布 Docker Hub `0.15`。`0.15`、`latest` 和 `sha-b7ab7af94602bf36155db85cdd99c87ee02d748f` 指向同一镜像索引 `sha256:a33c472a9dacc10dd7d9ca7cd12f842c1bfd67f4028b17ddcc8f68a00fa2d22b`。Linux AMD64 和 ARM64 均对应提交 `b7ab7af94`。这版将浅色桌面首页的侧栏、账号面板、日历、输入框和笔记卡片设为纯白，设置导航复用标签的选中样式。 [发布](https://github.com/Tiger-zero/Cat_two/actions/runs/45030702784) · [Docker Hub](https://hub.docker.com/r/tiger2896/cat_two/tags?name=0.15)
+
+1444 项前端测试通过。正式 AMD64 镜像在隔离 SQLite 卷上通过新装、重建及从 `0.14` 升级。Chromium 截图与确认的浅色首页预览逐像素一致，并验证了三种主题下设置选择的颜色及鼠标、键盘交互。 [前端检查](https://github.com/Tiger-zero/Cat_two/actions/runs/45030702728)
+
 ## 2026-11-21（上海时间）
 
 本次复盘核对到 GitHub `main` 提交 `86dcec0ea`。Docker Hub 的 `latest` 指向 `0.06`，源码为 `53968a153`。
