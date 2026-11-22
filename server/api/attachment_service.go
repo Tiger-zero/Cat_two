@@ -383,6 +383,9 @@ func (s *APIService) GetAttachment(ctx context.Context, request *apipb.GetAttach
 }
 
 func (s *APIService) UpdateAttachment(ctx context.Context, request *apipb.UpdateAttachmentRequest) (*apipb.Attachment, error) {
+	if request.GetAttachment() == nil {
+		return nil, status.Error(codes.InvalidArgument, "attachment is required")
+	}
 	attachmentUID, err := ExtractAttachmentUIDFromName(request.Attachment.Name)
 	if err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, "invalid attachment id: %v", err)

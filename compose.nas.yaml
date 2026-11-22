@@ -5,6 +5,8 @@ services:
     environment:
       TZ: "${TZ:-Asia/Shanghai}"
       MEMOS_DRIVER: sqlite
+      MEMOS_INSTANCE_URL: "${MEMOS_INSTANCE_URL:-}"
+      MEMOS_TRUSTED_PROXIES: "${MEMOS_TRUSTED_PROXIES:-none}"
       MEMOS_UID: "${MEMOS_UID:-${PUID:-1000}}"
       MEMOS_GID: "${MEMOS_GID:-${PGID:-10}}"
       CAT_TWO_TELEGRAM_BOT_TOKEN: "${CAT_TWO_TELEGRAM_BOT_TOKEN:-}"
@@ -15,7 +17,7 @@ services:
       CAT_TWO_WECOM_ENCODING_AES_KEY: "${CAT_TWO_WECOM_ENCODING_AES_KEY:-}"
       CAT_TWO_WECOM_USER_ID: "${CAT_TWO_WECOM_USER_ID:-}"
     ports:
-      - "${CAT_TWO_PORT:-5230}:5230"
+      - "${CAT_TWO_BIND_IP:+${CAT_TWO_BIND_IP:-}:}${CAT_TWO_PORT:-5230}:5230"
     volumes:
       - type: bind
         source: ${CAT_TWO_DATA_DIR:-/volume1/docker/cat2/data}

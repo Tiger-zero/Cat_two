@@ -29,6 +29,10 @@ func (s *APIService) doSignIn(ctx context.Context, user *store.User, revision st
 	if err != nil {
 		return "", time.Time{}, status.Errorf(codes.Internal, "failed to generate refresh token: %v", err)
 	}
+	accessToken, accessExpiresAt, err := auth.GenerateSessionAccessToken(user, revision, []byte(s.Secret))
+	if err != nil {
+		return "", time.Time{}, status.Errorf(codes.Internal, "failed to generate access token: %v", err)
+	}
 
 	// Store refresh token metadata
 	clientInfo := s.extractClientInfo(ctx)
@@ -40,18 +44,13 @@ func (s *APIService) doSignIn(ctx context.Context, user *store.User, revision st
 	}
 	if err := s.Store.AddUserRefreshToken(ctx, user.ID, refreshTokenRecord); err != nil {
 		slog.Error("failed to store refresh token", "error", err)
+		return "", time.Time{}, status.Error(codes.Internal, "failed to store refresh token")
 	}
 
 	// Set refresh token cookie
 	refreshCookie := s.buildRefreshTokenCookie(ctx, refreshToken, refreshExpiresAt)
 	if err := SetResponseHeader(ctx, "Set-Cookie", refreshCookie); err != nil {
 		return "", time.Time{}, status.Errorf(codes.Internal, "failed to set refresh token cookie: %v", err)
-	}
-
-	// Generate access token
-	accessToken, accessExpiresAt, err := auth.GenerateSessionAccessToken(user, revision, []byte(s.Secret))
-	if err != nil {
-		return "", time.Time{}, status.Errorf(codes.Internal, "failed to generate access token: %v", err)
 	}
 
 	return accessToken, accessExpiresAt, nil
@@ -133,7 +132,13 @@ func (s *APIService) RefreshToken(ctx context.Context, _ *apipb.RefreshTokenRequ
 		return nil, status.Errorf(codes.Internal, "failed to generate refresh token: %v", err)
 	}
 
-	// Store new refresh token (add before remove to handle race conditions)
+	accessToken, expiresAt, err := auth.GenerateSessionAccessToken(user, oldSession.SessionRevision, []byte(s.Secret))
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to generate access token: %v", err)
+	}
+
+	// Replace the old token in one write. A concurrent refresh or revocation
+	// may already have removed it since AuthenticateRefreshSession read it.
 	clientInfo := s.extractClientInfo(ctx)
 	newRefreshTokenRecord := &storepb.RefreshTokensUserSetting_RefreshToken{
 		TokenId:    newTokenID,
@@ -141,14 +146,13 @@ func (s *APIService) RefreshToken(ctx context.Context, _ *apipb.RefreshTokenRequ
 		CreatedAt:  timestamppb.Now(),
 		ClientInfo: clientInfo,
 	}
-	if err := s.Store.AddUserRefreshToken(ctx, user.ID, newRefreshTokenRecord); err != nil {
-		return nil, status.Errorf(codes.Internal, "failed to store refresh token: %v", err)
+	rotated, err := s.Store.RotateUserRefreshToken(ctx, user.ID, oldSession.TokenID, newRefreshTokenRecord)
+	if err != nil {
+		slog.Error("failed to rotate refresh token", "error", err)
+		return nil, status.Error(codes.Internal, "failed to rotate refresh token")
 	}
-
-	// Remove old refresh token
-	if err := s.Store.RemoveUserRefreshToken(ctx, user.ID, oldSession.TokenID); err != nil {
-		// Log but don't fail - old token will expire naturally
-		slog.Warn("failed to remove old refresh token", "error", err, "userID", user.ID, "tokenID", oldSession.TokenID)
+	if !rotated {
+		return nil, status.Error(codes.Unauthenticated, "refresh token revoked")
 	}
 
 	// Set new refresh token cookie
@@ -157,12 +161,6 @@ func (s *APIService) RefreshToken(ctx context.Context, _ *apipb.RefreshTokenRequ
 		return nil, status.Errorf(codes.Internal, "failed to set refresh token cookie: %v", err)
 	}
 	// --- End Rotation ---
-
-	// Generate new access token
-	accessToken, expiresAt, err := auth.GenerateSessionAccessToken(user, oldSession.SessionRevision, []byte(s.Secret))
-	if err != nil {
-		return nil, status.Errorf(codes.Internal, "failed to generate access token: %v", err)
-	}
 
 	return &apipb.RefreshTokenResponse{
 		AccessToken:           accessToken,
@@ -232,7 +230,7 @@ func isSecureRequest(ctx context.Context) bool {
 	return false
 }
 
-func (*APIService) buildRefreshTokenCookie(ctx context.Context, refreshToken string, expireTime time.Time) string {
+func (s *APIService) buildRefreshTokenCookie(ctx context.Context, refreshToken string, expireTime time.Time) string {
 	attrs := []string{
 		fmt.Sprintf("%s=%s", auth.RefreshTokenCookieName, refreshToken),
 		"Path=/",
@@ -246,7 +244,9 @@ func (*APIService) buildRefreshTokenCookie(ctx context.Context, refreshToken str
 		attrs = append(attrs, "Expires="+expireTime.UTC().Format("Mon, 02 Jan 2006 15:04:05 GMT"))
 	}
 
-	if isSecureRequest(ctx) {
+	// The canonical HTTPS URL remains authoritative when TLS terminates at a
+	// reverse proxy that omits forwarding headers.
+	if (s.Profile != nil && strings.HasPrefix(s.Profile.InstanceURL, "https://")) || isSecureRequest(ctx) {
 		attrs = append(attrs, "SameSite=Lax", "Secure")
 	} else {
 		attrs = append(attrs, "SameSite=Lax")

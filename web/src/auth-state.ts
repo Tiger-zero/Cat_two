@@ -75,6 +75,26 @@ export const getAccessToken = (): string | null => {
   return accessToken;
 };
 
+// Refresh waiters need the shared token even when they have an older cached
+// token and the asynchronous BroadcastChannel notification has not arrived.
+export function adoptSharedAccessToken(previousToken: string | null): boolean {
+  try {
+    const storedToken = localStorage.getItem(TOKEN_KEY);
+    const storedExpires = localStorage.getItem(EXPIRES_KEY);
+    if (storedToken && storedToken !== previousToken && storedExpires) {
+      const expiresAt = new Date(storedExpires);
+      if (expiresAt.getTime() > Date.now()) {
+        accessToken = storedToken;
+        tokenExpiresAt = expiresAt;
+        return true;
+      }
+    }
+  } catch {
+    // In-memory tokens remain usable if storage is unavailable.
+  }
+  return accessToken !== null && accessToken !== previousToken && !isTokenExpired(0);
+}
+
 export const setAccessToken = (token: string | null, expiresAt?: Date): void => {
   accessToken = token;
   tokenExpiresAt = expiresAt || null;

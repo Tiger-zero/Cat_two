@@ -36,16 +36,36 @@ func TestIsAllowedMCPOrigin(t *testing.T) {
 		{name: "same http host", host: "localhost:5230", origin: "http://localhost:5230", want: true},
 		{name: "same https host", host: "memos.example.com", origin: "https://memos.example.com", want: true},
 		{name: "configured instance URL origin", host: "127.0.0.1:5230", origin: "https://memos.example.com", want: true},
-		{name: "configured instance URL ignores path", host: "127.0.0.1:5230", origin: "https://memos.example.com", want: true},
+		{name: "explicit default port", host: "127.0.0.1:5230", origin: "https://memos.example.com:443", want: true},
+		{name: "non-TLS origin on public host", host: "memos.example.com", origin: "http://memos.example.com", want: false},
+		{name: "wrong public port", host: "memos.example.com:8080", origin: "https://memos.example.com:8080", want: false},
+		{name: "origin with user info", host: "memos.example.com", origin: "https://user@memos.example.com", want: false},
 		{name: "different host", host: "localhost:5230", origin: "https://evil.example.com", want: false},
 		{name: "invalid origin", host: "localhost:5230", origin: "not a url", want: false},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			require.Equal(t, test.want, isAllowedMCPOrigin(test.host, test.origin, profile))
+			request := httptest.NewRequest(http.MethodPost, "http://"+test.host+"/mcp", nil)
+			request.Header.Set("Origin", test.origin)
+			require.Equal(t, test.want, isAllowedMCPOrigin(request, profile))
 		})
 	}
+	request := httptest.NewRequest(http.MethodPost, "https://another.example/mcp", nil)
+	request.Header.Set("Origin", "https://another.example")
+	require.True(t, isAllowedMCPOrigin(request, nil))
+}
+
+func TestPersonalMCPRequestBodyLimit(t *testing.T) {
+	mux := http.NewServeMux()
+	service, err := NewMCPService(&profile.Profile{Personal: true}, mux, &store.Store{})
+	require.NoError(t, err)
+	service.RegisterRoutes(mux)
+	request := httptest.NewRequest(http.MethodPost, "/mcp", strings.NewReader("{}"))
+	request.ContentLength = maxPersonalMCPRequestBytes + 1
+	recorder := httptest.NewRecorder()
+	mux.ServeHTTP(recorder, request)
+	require.Equal(t, http.StatusRequestEntityTooLarge, recorder.Code)
 }
 
 func TestNewMCPServiceRegistersCuratedTools(t *testing.T) {
@@ -190,7 +210,7 @@ func TestMCPToolCallForwardsClientAddress(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			mux := http.NewServeMux()
-			resolver, err := clientip.ParseTrustedProxies(nil)
+			resolver, err := clientip.ParseTrustedProxies([]string{"127.0.0.1", "::1"})
 			require.NoError(t, err)
 			handler := clientip.Middleware(resolver)(mux)
 

@@ -5,6 +5,8 @@ services:
     environment:
       TZ: "${TZ:-Asia/Shanghai}"
       MEMOS_DRIVER: sqlite
+      MEMOS_INSTANCE_URL: "${MEMOS_INSTANCE_URL:-}"
+      MEMOS_TRUSTED_PROXIES: "${MEMOS_TRUSTED_PROXIES:-none}"
       # Map NAS project variables to names supported by existing images.
       MEMOS_UID: "${MEMOS_UID:-${PUID:-}}"
       MEMOS_GID: "${MEMOS_GID:-${PGID:-}}"
@@ -16,7 +18,7 @@ services:
       CAT_TWO_WECOM_ENCODING_AES_KEY: "${CAT_TWO_WECOM_ENCODING_AES_KEY:-}"
       CAT_TWO_WECOM_USER_ID: "${CAT_TWO_WECOM_USER_ID:-}"
     ports:
-      - "${CAT_TWO_PORT:-5230}:5230"
+      - "${CAT_TWO_BIND_IP:+${CAT_TWO_BIND_IP:-}:}${CAT_TWO_PORT:-5230}:5230"
     volumes:
       - cat_two_data:/var/opt/memos
     healthcheck:

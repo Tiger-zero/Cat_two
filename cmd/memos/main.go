@@ -73,7 +73,7 @@ func init() {
 	rootCmd.Flags().Bool("rate-limit", true, "enable request rate limiting")
 	rootCmd.Flags().String("config-dir", configuration.DefaultDir, "directory of declarative configuration files")
 	rootCmd.Flags().String("config-apply", "startup", "when to apply the declarative configuration: startup, or off to leave it to memos config apply")
-	rootCmd.Flags().StringSlice("trusted-proxies", []string{"private"}, "proxies whose forwarding headers identify the client: CIDRs, IPs, \"private\" (default; the loopback and private ranges), or \"none\" when the instance is reached without a header-rewriting proxy")
+	rootCmd.Flags().StringSlice("trusted-proxies", []string{"none"}, "proxies whose forwarding headers identify the client: CIDRs, IPs, \"private\" (loopback and private ranges), or \"none\" (default)")
 
 	for _, flag := range []string{"allow-private-webhooks", "webhook-private-network-allowlist"} {
 		if err := rootCmd.Flags().MarkDeprecated(flag, "Cat_two no longer sends webhooks"); err != nil {

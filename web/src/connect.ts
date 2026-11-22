@@ -1,7 +1,14 @@
 import { timestampDate } from "@bufbuild/protobuf/wkt";
 import { Code, ConnectError, createClient, type Interceptor } from "@connectrpc/connect";
 import { createConnectTransport } from "@connectrpc/connect-web";
-import { getAccessToken, hasStoredToken, isTokenExpired, REQUEST_TOKEN_EXPIRY_BUFFER_MS, setAccessToken } from "./auth-state";
+import {
+  adoptSharedAccessToken,
+  getAccessToken,
+  hasStoredToken,
+  isTokenExpired,
+  REQUEST_TOKEN_EXPIRY_BUFFER_MS,
+  setAccessToken,
+} from "./auth-state";
 import { AttachmentService } from "./types/proto/api/attachment_service_pb";
 import { AuthService } from "./types/proto/api/auth_service_pb";
 import { InstanceService } from "./types/proto/api/instance_service_pb";
@@ -19,6 +26,7 @@ interface RequestWithHeader {
 
 const RETRY_HEADER = "X-Retry";
 const RETRY_HEADER_VALUE = "true";
+const TOKEN_REFRESH_LOCK = "memos-token-refresh";
 
 // ============================================================================
 // Token Refresh State Management
@@ -79,12 +87,28 @@ async function doRefreshAccessToken(): Promise<void> {
   setAccessToken(response.accessToken, expiresAt);
 }
 
-// All callers go through the manager to deduplicate concurrent refresh requests.
-// This prevents race conditions between useTokenRefreshOnFocus (proactive refresh
-// on tab focus) and the auth interceptor (reactive refresh on 401), which could
-// otherwise send duplicate requests that conflict with server-side token rotation.
-export async function refreshAccessToken(): Promise<void> {
-  return tokenRefreshManager.refresh(doRefreshAccessToken);
+// The manager deduplicates within this tab. Web Locks serialize rotation
+// of the shared refresh cookie across tabs on supported origins.
+export async function refreshAccessToken(previousToken = getAccessToken()): Promise<void> {
+  return tokenRefreshManager.refresh(async () => {
+    const refresh = async () => {
+      if (!adoptSharedAccessToken(previousToken)) {
+        await doRefreshAccessToken();
+      }
+    };
+    if (navigator.locks) {
+      return navigator.locks.request(TOKEN_REFRESH_LOCK, refresh);
+    }
+    // LAN HTTP can lack Web Locks. A 401 may race a successful refresh in
+    // another tab, so check again before treating the response as final.
+    try {
+      await refresh();
+    } catch (error) {
+      if (!(error instanceof ConnectError) || error.code !== Code.Unauthenticated || !adoptSharedAccessToken(previousToken)) {
+        throw error;
+      }
+    }
+  });
 }
 
 // ============================================================================
@@ -109,8 +133,8 @@ function shouldHandleUnauthenticatedRetry(error: unknown, isRetryAttempt: boolea
   return true;
 }
 
-async function refreshAndGetAccessToken(): Promise<string> {
-  await refreshAccessToken();
+async function refreshAndGetAccessToken(previousToken?: string | null): Promise<string> {
+  await refreshAccessToken(previousToken);
   const token = getAccessToken();
   if (!token) {
     throw new ConnectError("Token refresh succeeded but no token available", Code.Internal);
@@ -156,12 +180,13 @@ export async function authenticatedFetch(path: string, init: RequestInit = {}): 
     setAuthorizationHeader({ header }, token);
     return fetchWithCredentials(url, { ...init, headers: header, redirect: "error" });
   };
-  const response = await send(await getRequestToken());
+  const previousToken = await getRequestToken();
+  const response = await send(previousToken);
   if (response.status !== 401) return response;
 
   let token: string;
   try {
-    token = await refreshAndGetAccessToken();
+    token = await refreshAndGetAccessToken(previousToken);
   } catch (error) {
     redirectOnAuthFailure();
     throw error;
@@ -186,7 +211,7 @@ const authInterceptor: Interceptor = (next) => async (req) => {
     }
 
     try {
-      const newToken = await refreshAndGetAccessToken();
+      const newToken = await refreshAndGetAccessToken(token);
       setAuthorizationHeader(req, newToken);
       req.header.set(RETRY_HEADER, RETRY_HEADER_VALUE);
       return await next(req);

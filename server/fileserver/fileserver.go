@@ -24,6 +24,7 @@ import (
 
 	"github.com/usememos/memos/core/access"
 	"github.com/usememos/memos/internal/httphandler"
+	"github.com/usememos/memos/internal/identifier"
 	"github.com/usememos/memos/internal/imagelimit"
 	"github.com/usememos/memos/internal/motionphoto"
 	"github.com/usememos/memos/internal/profile"
@@ -153,7 +154,18 @@ func (s *FileServerService) RegisterRoutes(mux *http.ServeMux, fallback http.Han
 func (s *FileServerService) serveAttachmentFile(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	w.Header().Set("Cache-Control", privateAttachmentCacheControl)
+	user, err := s.getCurrentUser(ctx, r)
+	if err != nil {
+		return &httphandler.Error{Code: http.StatusInternalServerError, Message: "failed to get current user", Cause: err}
+	}
+	if !access.IsActiveUser(user) {
+		return &httphandler.Error{Code: http.StatusUnauthorized, Message: "unauthorized access"}
+	}
+
 	uid := r.PathValue("uid")
+	if !identifier.UIDMatcher.MatchString(uid) {
+		return &httphandler.Error{Code: http.StatusNotFound, Message: "attachment not found"}
+	}
 	wantThumbnail := r.URL.Query().Get("thumbnail") == "true"
 	wantMotion := r.URL.Query().Get("motion") == "true"
 
@@ -168,7 +180,7 @@ func (s *FileServerService) serveAttachmentFile(w http.ResponseWriter, r *http.R
 		return &httphandler.Error{Code: http.StatusNotFound, Message: "attachment not found"}
 	}
 
-	if err := s.checkAttachmentPermission(ctx, r, attachment); err != nil {
+	if err := s.checkAttachmentPermission(ctx, user, attachment); err != nil {
 		return err
 	}
 	// External attachments carry no blob; their reference is the upstream URL
@@ -177,7 +189,13 @@ func (s *FileServerService) serveAttachmentFile(w http.ResponseWriter, r *http.R
 		return serveExternalAttachment(w, r, attachment)
 	}
 	if attachment.StorageType != storepb.AttachmentStorageType_LOCAL && attachment.StorageType != storepb.AttachmentStorageType_S3 {
-		attachment, err = s.Store.GetAttachment(ctx, &store.FindAttachment{ID: &attachment.ID, GetBlob: true})
+		// Scope the second lookup too. The binding or account lifecycle may
+		// have changed since the first read.
+		attachment, err = s.Store.GetAttachment(ctx, &store.FindAttachment{
+			ID:      &attachment.ID,
+			GetBlob: true,
+			Access:  &store.MemoAccessScope{OwnerOnly: true, UserID: &user.ID},
+		})
 		if err != nil {
 			return &httphandler.Error{Code: http.StatusInternalServerError, Message: "failed to get attachment", Cause: err}
 		}
@@ -706,14 +724,7 @@ func (s *FileServerService) getMotionPath(attachment *store.Attachment) (string,
 
 // checkAttachmentPermission requires ownership of the linked memo or, for an
 // unlinked attachment, the file itself.
-func (s *FileServerService) checkAttachmentPermission(ctx context.Context, r *http.Request, attachment *store.Attachment) error {
-	user, err := s.getCurrentUser(ctx, r)
-	if err != nil {
-		return &httphandler.Error{Code: http.StatusInternalServerError, Message: "failed to get current user", Cause: err}
-	}
-	if !access.IsActiveUser(user) {
-		return &httphandler.Error{Code: http.StatusUnauthorized, Message: "unauthorized access"}
-	}
+func (s *FileServerService) checkAttachmentPermission(ctx context.Context, user *store.User, attachment *store.Attachment) error {
 	if attachment.MemoID == nil {
 		if !access.CanManageAttachment(user, attachment) {
 			return &httphandler.Error{Code: http.StatusForbidden, Message: "forbidden access"}

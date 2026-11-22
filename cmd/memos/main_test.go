@@ -2,12 +2,31 @@ package main
 
 import (
 	"bytes"
+	"net/netip"
 	"testing"
 
+	"github.com/spf13/viper"
 	"github.com/stretchr/testify/require"
 
+	"github.com/usememos/memos/internal/clientip"
 	"github.com/usememos/memos/internal/version"
 )
+
+func TestCatTwoTrustedProxyDefaultAndEnvironmentOverride(t *testing.T) {
+	const env = "MEMOS_TRUSTED_PROXIES"
+	t.Setenv(env, "")
+	defaultResolver, err := clientip.ParseTrustedProxies(viper.GetStringSlice("trusted-proxies"))
+	require.NoError(t, err)
+	proxy := netip.MustParseAddr("192.168.1.50")
+	require.False(t, defaultResolver.Trusts(proxy))
+
+	t.Setenv(env, "192.168.1.50,203.0.113.0/28")
+	resolver, err := clientip.ParseTrustedProxies(viper.GetStringSlice("trusted-proxies"))
+	require.NoError(t, err)
+	require.True(t, resolver.Trusts(proxy))
+	require.True(t, resolver.Trusts(netip.MustParseAddr("203.0.113.9")))
+	require.False(t, resolver.Trusts(netip.MustParseAddr("192.168.1.51")))
+}
 
 func TestServerFlagsAreNotInheritedBySubcommands(t *testing.T) {
 	require.Nil(t, versionCmd.InheritedFlags().Lookup("dsn"))

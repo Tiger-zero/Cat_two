@@ -189,13 +189,31 @@ func TestCreateUserRateLimits(t *testing.T) {
 		}
 	})
 
-	t.Run("first user setup is exempt", func(t *testing.T) {
+	t.Run("legacy first user setup is exempt", func(t *testing.T) {
 		ts := NewTestService(t)
 		defer ts.Cleanup()
 		limiter := ratelimit.NewMemoryLimiter(limitedPolicy(ratelimit.ScopeSignupIP, 1))
 		ts.Service.RateLimiter = limiter
 		require.NoError(t, signup(ts, ctx, "owner", false))
 		require.Equal(t, 1, limiter.Allowed(ratelimit.ScopeSignupIP, "203.0.113.20", 1).Remaining, "setup did not spend the signup budget")
+	})
+
+	t.Run("personal setup bounds validation and creation separately", func(t *testing.T) {
+		ts := NewTestService(t)
+		defer ts.Cleanup()
+		ts.Profile.Personal = true
+		policy := limitedPolicy(ratelimit.ScopeSignupIP, 1)
+		policy[ratelimit.ScopeValidateIP] = ratelimit.Rule{Limit: 1, Window: time.Hour}
+		limiter := ratelimit.NewMemoryLimiter(policy)
+		ts.Service.RateLimiter = limiter
+
+		require.NoError(t, signup(ts, ctx, "owner", true))
+		requireRateLimited(t, signup(ts, ctx, "owner", true), ratelimit.ScopeValidateIP)
+		const otherIP = "203.0.113.21"
+		limiter.Hit(ratelimit.ScopeSignupIP, otherIP, 1)
+		requireRateLimited(t, signup(ts, withClientIP(t.Context(), otherIP), "owner", false), ratelimit.ScopeSignupIP)
+		require.NoError(t, signup(ts, ctx, "owner", false))
+		require.Equal(t, codes.PermissionDenied, status.Code(signup(ts, ctx, "other", false)))
 	})
 }
 

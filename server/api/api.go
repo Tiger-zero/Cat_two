@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"log/slog"
+	"mime"
 	"net/http"
 	"strings"
 
@@ -22,6 +23,7 @@ import (
 	"github.com/usememos/memos/internal/ratelimit"
 	"github.com/usememos/memos/markdown"
 	apipb "github.com/usememos/memos/proto/gen/api"
+	"github.com/usememos/memos/proto/gen/api/apiconnect"
 	"github.com/usememos/memos/server/auth"
 	"github.com/usememos/memos/store"
 )
@@ -37,23 +39,46 @@ const MaxAPIRequestBytes = 256 << 20
 // largest memo content and settings an instance can be configured to accept.
 const maxGeneralRequestBytes = 16 << 20
 
-// inlineContentProcedures carry a whole file in one request body and keep
-// the large cap; the size of that content is checked again by the handler
-// against the user's upload limits.
-var inlineContentProcedures = map[string]struct{}{
-	"/memos.api.AttachmentService/CreateAttachment": {},
-}
+// maxAuthRequestBytes bounds small authentication and account setup messages
+// that may reach a decoder before the client is authenticated.
+const maxAuthRequestBytes = 64 << 10
 
 // requestBodyLimit returns the request body cap for a procedure. Chunked
 // uploads carry at most one chunk per call, so they get a much lower cap.
 func requestBodyLimit(procedure string) int64 {
-	if procedure == attachmentUploadProcedure || procedure == importMemosProcedure {
+	switch procedure {
+	case attachmentUploadProcedure, importMemosProcedure:
 		return uploadRequestLimit
-	}
-	if _, ok := inlineContentProcedures[procedure]; ok {
+	case apiconnect.AttachmentServiceCreateAttachmentProcedure:
 		return MaxAPIRequestBytes
+	case apiconnect.AuthServiceSignInProcedure, apiconnect.AuthServiceRefreshTokenProcedure,
+		apiconnect.AuthServiceSignOutProcedure, apiconnect.AuthServiceGetCurrentUserProcedure,
+		apiconnect.UserServiceCreateUserProcedure:
+		return maxAuthRequestBytes
+	default:
+		return maxGeneralRequestBytes
 	}
-	return maxGeneralRequestBytes
+}
+
+// isInlineAttachmentRPC identifies the accepted unary wire formats for legacy
+// attachment upload. Connect still handles unsupported methods, media types,
+// and protocol versions.
+func isInlineAttachmentRPC(r *http.Request, errorWriter *connect.ErrorWriter) bool {
+	if r.Method != http.MethodPost || r.URL.Path != apiconnect.AttachmentServiceCreateAttachmentProcedure || !errorWriter.IsSupported(r) {
+		return false
+	}
+	mediaType, params, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
+	if err != nil {
+		return false
+	}
+	switch mediaType {
+	case "application/json", "application/grpc+json", "application/grpc-web+json":
+		return len(params) == 0 || len(params) == 1 && strings.EqualFold(params["charset"], "utf-8")
+	case "application/proto", "application/grpc", "application/grpc+proto", "application/grpc-web", "application/grpc-web+proto":
+		return len(params) == 0
+	default:
+		return false
+	}
 }
 
 type APIService struct {
@@ -242,6 +267,7 @@ func (s *APIService) NewHandler(ctx context.Context) (http.Handler, error) {
 		NewAuthInterceptor(authorizer),
 	)
 	connectMux := http.NewServeMux()
+	connectErrors := connect.NewErrorWriter()
 	connectHandler := NewConnectServiceHandler(s)
 	connectHandler.RegisterConnectHandlers(connectMux, connectInterceptors,
 		// Bound the decompressed message as well as the wire bytes below.
@@ -276,6 +302,15 @@ func (s *APIService) NewHandler(ctx context.Context) (http.Handler, error) {
 		case strings.HasPrefix(requestPath, "/memos.api.v1."):
 			removedAPIVersionHandler(true).ServeHTTP(w, r)
 		case strings.HasPrefix(requestPath, "/memos.api."):
+			// Unary interceptors run after Connect buffers and decodes a
+			// message. Gate the largest request before that work and let the
+			// interceptor recheck the credentials before serving it.
+			if isInlineAttachmentRPC(r, connectErrors) &&
+				!authorizer.authenticator.VerifyBearer(r.Context(), r.Header.Get("Authorization")) {
+				setAPIResponseNoStoreHeaders(w.Header())
+				_ = connectErrors.Write(w, r, newAuthorizationConnectError(ErrUnauthenticated))
+				return
+			}
 			r.Body = http.MaxBytesReader(w, r.Body, requestBodyLimit(r.URL.Path))
 			connectMux.ServeHTTP(w, r)
 		case strings.HasPrefix(requestPath, "/api/") || strings.HasPrefix(requestPath, "/file/"):

@@ -18,13 +18,8 @@ import (
 
 // KeywordPrivate expands to the loopback, RFC 1918, link-local, and
 // unique-local ranges, which covers a reverse proxy on the same host or on a
-// container network. It is the default because that is how most instances
-// are deployed, and a default of "none" would put every user behind such a
-// proxy into one shared bucket. The trade is that any peer on the private
-// network is believed when it forwards an address; an operator whose
-// instance is reached directly through a NAT hop that presents a private
-// peer address without rewriting headers should set "none" or list the
-// real proxy explicitly.
+// container network. Use it only when every peer in those ranges rewrites
+// forwarding headers. List the actual proxy addresses or networks otherwise.
 const KeywordPrivate = "private"
 
 // KeywordNone trusts no proxy at all: the peer address is always the client.
@@ -47,8 +42,8 @@ type Resolver struct {
 }
 
 // ParseTrustedProxies turns the configured list into a resolver. Each entry
-// is a CIDR, a single address, or one of the keywords. An empty list means
-// "private". Entries may themselves be comma-separated.
+// is a CIDR, a single address, or one of the keywords. An omitted or blank
+// list trusts no proxies. Entries may themselves be comma-separated.
 func ParseTrustedProxies(values []string) (*Resolver, error) {
 	entries := []string{}
 	for _, value := range values {
@@ -58,10 +53,6 @@ func ParseTrustedProxies(values []string) (*Resolver, error) {
 			}
 		}
 	}
-	if len(entries) == 0 {
-		entries = []string{KeywordPrivate}
-	}
-
 	resolver := &Resolver{}
 	for _, entry := range entries {
 		switch strings.ToLower(entry) {

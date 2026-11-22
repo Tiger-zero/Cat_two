@@ -21,6 +21,19 @@ import (
 	"github.com/usememos/memos/store"
 )
 
+func TestUpdateAttachmentRequiresAttachment(t *testing.T) {
+	ts := NewTestService(t)
+	defer ts.Cleanup()
+	ctx := t.Context()
+	user, err := ts.CreateRegularUser(ctx, "attachment-update-owner")
+	require.NoError(t, err)
+
+	_, err = ts.Service.UpdateAttachment(ts.CreateUserContext(ctx, user.ID), &apipb.UpdateAttachmentRequest{
+		UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"filename"}},
+	})
+	require.Equal(t, codes.InvalidArgument, status.Code(err))
+}
+
 func TestCreateAttachment(t *testing.T) {
 	ts := NewTestService(t)
 	defer ts.Cleanup()

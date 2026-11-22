@@ -218,3 +218,11 @@ Every refusal logs one info line with the scope and the key. The client address 
 ## Deferred design
 
 Adaptive challenges shown only after failures, per-scope tuning in the admin UI, a shared limiter for more than one node, bans and IP reputation, disposable-domain lists in the open-source binary, content-quality spam detection, enumeration-safe signup, metrics export, byte-based quotas, and limits on file and avatar serving remain deferred. Later work must preserve the single client-address resolver, the two-layer enforcement of catch-all budgets in the authorizer and per-flow limits in handlers, check-before-work ordering, the AIP-193 error shape, and identical behavior for existing and non-existing account names.
+
+## Amendments
+
+### 2026-11-22
+
+Cat_two defaults `trusted-proxies` to `none`. An omitted or blank value uses the direct peer address. When deploying a
+reverse proxy, configure `MEMOS_TRUSTED_PROXIES` with the actual proxy IPs or its dedicated network and have the proxy
+rewrite incoming forwarding headers. The `private` keyword remains available as an explicit choice.

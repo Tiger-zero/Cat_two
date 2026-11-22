@@ -6,10 +6,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/usememos/memos/internal/clientip"
-
 	"google.golang.org/grpc/metadata"
 
+	"github.com/usememos/memos/internal/clientip"
+	"github.com/usememos/memos/internal/profile"
 	storepb "github.com/usememos/memos/proto/gen/store"
 )
 
@@ -185,6 +185,16 @@ func TestClientInfoExamples(t *testing.T) {
 
 func TestBuildRefreshTokenCookieSecureFlag(t *testing.T) {
 	service := &APIService{}
+
+	t.Run("sets Secure for configured HTTPS without forwarding headers", func(t *testing.T) {
+		secureService := &APIService{Profile: &profile.Profile{InstanceURL: "https://memos.example"}}
+		for _, expiry := range []time.Time{testCookieExpiry(), {}} {
+			cookie := secureService.buildRefreshTokenCookie(t.Context(), "token", expiry)
+			if !containsCookieAttribute(cookie, "Secure") {
+				t.Fatalf("expected Secure attribute in cookie: %s", cookie)
+			}
+		}
+	})
 
 	t.Run("sets Secure for https origin", func(t *testing.T) {
 		ctx := metadata.NewIncomingContext(context.Background(), metadata.Pairs(

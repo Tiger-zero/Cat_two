@@ -32,6 +32,26 @@ func TestAllowedCORSOrigin(t *testing.T) {
 			allowed:     true,
 		},
 		{
+			name:        "canonical hostname on wrong scheme",
+			requestHost: "memos.example",
+			origin:      "http://memos.example",
+		},
+		{
+			name:        "same host on wrong scheme",
+			requestHost: "localhost",
+			origin:      "https://localhost",
+		},
+		{
+			name:        "canonical hostname on wrong port",
+			requestHost: "memos.example:8443",
+			origin:      "https://memos.example:8443",
+		},
+		{
+			name:        "invalid origin with path",
+			requestHost: "memos.example",
+			origin:      "https://memos.example/app",
+		},
+		{
 			name:        "usememos apex",
 			requestHost: "localhost",
 			origin:      "https://usememos.com",
@@ -71,7 +91,12 @@ func TestAllowedCORSOrigin(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			if allowed := isAllowedCORSOrigin(p, test.requestHost, test.origin); allowed != test.allowed {
+			req := httptest.NewRequest(http.MethodGet, "http://"+test.requestHost, nil)
+			req.Header.Set("Origin", test.origin)
+			mux := http.NewServeMux()
+			recorder := httptest.NewRecorder()
+			newCORSMiddleware(p, mux)(mux).ServeHTTP(recorder, req)
+			if allowed := recorder.Header().Get("Access-Control-Allow-Credentials") == "true"; allowed != test.allowed {
 				t.Fatalf("expected allowed=%t, got %t", test.allowed, allowed)
 			}
 		})

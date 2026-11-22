@@ -595,6 +595,29 @@ func TestUserSettingUpdatePATLastUsed(t *testing.T) {
 	ts.Close()
 }
 
+func TestUserSettingUpdatePATLastUsedKeepsRevokedTokenRemoved(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	ts := NewTestingStore(ctx, t)
+	t.Cleanup(func() { require.NoError(t, ts.Close()) })
+	user, err := createTestingHostUser(ctx, ts)
+	require.NoError(t, err)
+	require.NoError(t, ts.AddUserPersonalAccessToken(ctx, user.ID, &storepb.PersonalAccessTokensUserSetting_PersonalAccessToken{
+		TokenId: "revoked-pat-id", TokenHash: "revoked-pat-hash",
+	}))
+	key := storepb.UserSetting_PERSONAL_ACCESS_TOKENS
+	_, err = ts.GetUserSetting(ctx, &store.FindUserSetting{UserID: &user.ID, Key: key})
+	require.NoError(t, err)
+
+	// Remove the row directly to exercise the credential read with an older
+	// snapshot still in the general settings cache.
+	require.NoError(t, ts.GetDriver().DeleteUserSettings(ctx, &store.DeleteUserSetting{UserID: &user.ID, Key: key}))
+	require.NoError(t, ts.UpdatePATLastUsed(ctx, user.ID, "revoked-pat-id", timestamppb.Now()))
+	result, err := ts.GetUserByPATHash(ctx, "revoked-pat-hash")
+	require.NoError(t, err)
+	require.Nil(t, result)
+}
+
 func TestUserSettingGetUserByPATHashWithExpiredToken(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()

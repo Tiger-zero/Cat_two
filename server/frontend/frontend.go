@@ -84,6 +84,12 @@ func (*FrontendService) Handler(fallback http.Handler) http.Handler {
 		if !ok {
 			return errors.New("frontend file does not support seeking")
 		}
+		if strings.HasSuffix(filename, ".html") {
+			w.Header().Set("Content-Security-Policy", "frame-ancestors 'none'; object-src 'none'; base-uri 'self'")
+			w.Header().Set("X-Frame-Options", "DENY")
+			w.Header().Set("X-Content-Type-Options", "nosniff")
+			w.Header().Set("Referrer-Policy", "no-referrer")
+		}
 		http.ServeContent(w, r, info.Name(), info.ModTime(), content)
 		return nil
 	})

@@ -16,12 +16,18 @@ Cat_two 面向单人自托管，当前网页版以桌面浏览器为目标。新
 | 查阅主题 | 入口 |
 | --- | --- |
 | 当前功能、保存链路、部署数据与集成边界 | [功能与实现](references/product-guide.md) |
+| AI 共创、REST、MCP、凭据、文件和变更通知 | [外部接口](references/external-api.md) |
 | 每日变更、测试证据和镜像发布记录 | [开发复盘](references/development-log.md) |
 | 优先级、代码证据和验收方式 | [优化方案](references/optimization-plan.md) |
 | 上游设计、历史约定及 ZIP JSON Schema | [设计参考](references/design/README.md) |
 | 编码约定、启动和静态检查 | [仓库开发规范](../../../AGENTS.md) |
 | NAS 配置、备份升级和两步验证恢复命令 | [项目 README](../../../README.md) |
 | Codex 接入及笔记归档工作流 | [MCP Skill](../cat-two-mcp/SKILL.md) |
+
+## API 共创与公网安全
+
+- AI 客户端用 `/mcp` 查找、读取并写回 Markdown。脚本、附件和回收站使用 `/api` 与 `/file`。要扩展能力时，先对照实际启用的工具、权限、资源名和分页约定，再复用现有笔记写入、附件绑定和作者校验。 [路由与工具清单](references/external-api.md)
+- Web 会话、REST PAT、专用 MCP 令牌和消息平台签名各走各自的校验。发布新入口时，用匿名、本人、过期或撤销凭据和旧数据分别核对。写入端还需覆盖失败重试、归档、回收站及限流。验收公网部署时核对 HTTPS 回源、真实 IP 的代理信任、注册初始化、两步验证和 SSE。 [公网部署](../../../README.md#在公网部署)
 
 ## 开发与验证
 
@@ -87,3 +93,4 @@ Cat_two 面向单人自托管，当前网页版以桌面浏览器为目标。新
 - **2026-11-22 01:21**　核对 Docker Hub `0.08`、`latest` 和提交标签及 AMD64、ARM64 两种平台。正式镜像通过从 `0.07` 升级的独立 SQLite 测试，旧笔记可读、新笔记可写，旧视图记录保留。Chromium 核对设置弹窗、回收站侧栏和标签颜色。 [发布记录](references/development-log.md#2026-11-22上海时间)
 - **2026-11-22 09:50**　接入 Telegram Bot 私聊长轮询和企业微信自建应用加密回调，限定部署配置的发件人。文本写成私有笔记，附 `#Telegram` 或 `#微信`、来源标记及实时列表刷新。按消息 ID 去重，覆盖重复投递、已有编辑和回收站。模拟 Bot API、加密回调到 SQLite、服务端回归、竞态测试、静态检查和两份 Compose 校验通过。 [收件配置](../../../README.md#telegram-和企业微信收件)
 - **2026-11-22 09:56**　Telegram 和企业微信成功保存笔记后回复 `Yes!`。Telegram 在原私聊回复，临时拒绝时限内重试一次，回复失败时继续收件。企业微信直接返回签名加密的确认。重复投递按消息 ID 去重。模拟 Bot API、企业微信回调到 SQLite、收件竞态测试和静态检查通过。 [收件说明](../../../README.md#telegram-和企业微信收件)
+- **2026-11-22 10:20**　整理 AI 共创所用的 REST、MCP、文件和事件接口及凭据范围。修复会话并发轮换、PAT 撤销记录、附件匿名探测和企业微信握手权限，收紧请求体、代理信任和浏览器来源。更新前端依赖与 Alpine 运行层。SQLite、服务端竞态、前端构建和两份 Compose 配置验证通过。 [外部接口](references/external-api.md) · [安全复盘](references/development-log.md#对外接口与公网加固)

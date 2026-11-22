@@ -189,4 +189,4 @@ Black-box service tests live in `server/api/test/`, unit tests next to the code.
   `--previous-image` to the [container smoke script](scripts/release_smoke_test.sh).
 - Frontend CI: Node 24, pnpm 11.0.1, `pnpm lint` and `pnpm test`. The container workflow builds the production web assets.
 - Proto CI: `buf lint` and `buf format` check.
-- Docker: `scripts/Dockerfile`, Alpine 3.21 runtime, non-root app process, port 5230. Cat_two publishes amd64 and arm64.
+- Docker runtime uses Alpine 3.24 and runs the application as a non-root user on port 5230. Cat_two publishes amd64 and arm64. See `scripts/Dockerfile`.

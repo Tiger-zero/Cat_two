@@ -30,10 +30,11 @@ const (
 	shutdownTimeout = 10 * time.Second
 
 	// readHeaderTimeout bounds how long a client may take to send request
-	// headers, so idle or slow connections cannot pin a worker forever. Bodies
-	// and responses are not bounded here: uploads and SSE streams are
-	// legitimately long, and the request context still ends on disconnect.
+	// headers, so idle or slow connections cannot pin a worker forever.
 	readHeaderTimeout = 15 * time.Second
+	// readRequestTimeout also bounds the body. Large files can be uploaded in
+	// chunks, and this deadline does not limit streaming responses.
+	readRequestTimeout = 5 * time.Minute
 	// idleTimeout closes keep-alive connections that send nothing.
 	idleTimeout = 2 * time.Minute
 )
@@ -156,6 +157,7 @@ func (s *Server) Start() error {
 	s.httpServer = &http.Server{
 		Handler:           s.handler,
 		ReadHeaderTimeout: readHeaderTimeout,
+		ReadTimeout:       readRequestTimeout,
 		IdleTimeout:       idleTimeout,
 	}
 	go func() {

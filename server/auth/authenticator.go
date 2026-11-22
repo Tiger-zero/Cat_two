@@ -202,9 +202,8 @@ type bearerAuth struct {
 //   - (nil, err)    on an unexpected store error;
 //   - (result, nil) on success.
 //
-// Successful PAT resolution records the token's last-used time, so every entry
-// point that authenticates through here gets usage tracking for free.
-func (a *Authenticator) resolveBearer(ctx context.Context, token string) (*bearerAuth, error) {
+// Successful PAT resolution can also record the token's last-used time.
+func (a *Authenticator) resolveBearer(ctx context.Context, token string, trackPAT bool) (*bearerAuth, error) {
 	if token == "" {
 		return nil, nil
 	}
@@ -222,8 +221,17 @@ func (a *Authenticator) resolveBearer(ctx context.Context, token string) (*beare
 		}
 		return nil, err
 	}
-	a.recordPATUsage(user.ID, pat.TokenId)
+	if trackPAT {
+		a.recordPATUsage(user.ID, pat.TokenId)
+	}
 	return &bearerAuth{user: user, pat: pat}, nil
+}
+
+// VerifyBearer verifies a Bearer credential before reading a request body.
+// The serving handler still authenticates the request and records token use.
+func (a *Authenticator) VerifyBearer(ctx context.Context, authHeader string) bool {
+	bearer, err := a.resolveBearer(ctx, ExtractBearerToken(authHeader), false)
+	return err == nil && bearer != nil
 }
 
 // recordPATUsage updates a personal access token's last-used timestamp
@@ -240,7 +248,7 @@ func (a *Authenticator) recordPATUsage(userID int32, tokenID string) {
 // Authorization header first (access token or PAT), then falling back to the
 // refresh token cookie. Returns (nil, nil) when no valid credentials are present.
 func (a *Authenticator) AuthenticateToUser(ctx context.Context, authHeader, cookieHeader string) (*store.User, error) {
-	bearer, err := a.resolveBearer(ctx, ExtractBearerToken(authHeader))
+	bearer, err := a.resolveBearer(ctx, ExtractBearerToken(authHeader), true)
 	if err != nil {
 		return nil, err
 	}
@@ -266,7 +274,7 @@ func (a *Authenticator) AuthenticateToUser(ctx context.Context, authHeader, cook
 // rejected token.
 func (a *Authenticator) Authenticate(ctx context.Context, authHeader string) *AuthResult {
 	token := ExtractBearerToken(authHeader)
-	bearer, err := a.resolveBearer(ctx, token)
+	bearer, err := a.resolveBearer(ctx, token, true)
 	if err != nil {
 		slog.Error("failed to resolve bearer token", "error", err)
 		return nil

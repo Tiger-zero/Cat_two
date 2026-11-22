@@ -1,41 +1,13 @@
-# Security Policy
+# Cat_two 安全说明
 
-## Supported Versions
+## 运行版本
 
-Memos is currently a `0.x` project. Security fixes are only provided for the latest release. Older releases are not supported for security updates, and fixes are not backported.
+部署前用 `/api/instance/profile` 核对应用版本和提交，确认镜像含所需修复。通过 HTTPS 代理访问，先在受限网络完成管理员初始化。保留应用限流，并用反向代理限制公网流量和保护后端端口。 [公网配置](README.md#在公网部署)
 
-If you run Memos in production, keep your instance updated to the latest release.
+## 外部访问
 
-## Reporting a Vulnerability
+Web 登录、REST 个人访问令牌和 MCP 连接令牌分别管理。笔记、ZIP 归档和附件读取核对作者权限。各集成使用可单独撤销的令牌。企业微信由回调签名、消息加密及配置的发件人共同验证，Telegram 限于指定用户与 Bot 的私聊。 [外部接口和凭据](.agents/skills/cat-two-development/references/external-api.md)
 
-Please report security issues privately by email: `dev@usememos.com`
+## 安全问题报告
 
-Do not open public GitHub issues, discussions, or pull requests for suspected vulnerabilities.
-
-Please include:
-
-- A clear description of the issue
-- Steps to reproduce
-- Affected version or commit
-- Deployment details that matter to reproduction
-- Your assessment of impact
-
-We will review reports as time permits and fix valid issues in regular releases.
-
-## Disclosure and CVEs
-
-Memos is self-hosted software and is still in the `0.x` stage. At this stage, we do not run a formal disclosure program, publish separate security advisories for every issue, or request CVE IDs.
-
-Security fixes may be shipped directly in normal releases or noted briefly in release notes and changelogs.
-
-## Self-Hosted Deployment Notes
-
-The security posture of a Memos instance depends heavily on how it is deployed and operated. In particular:
-
-- Keep Memos updated
-- Put it behind a properly configured reverse proxy when exposed to the internet
-- Require authentication for any non-public deployment
-- Use TLS in production
-- Limit access to trusted users and administrators
-
-Reports that depend entirely on intentionally unsafe deployment choices, unsupported local patches, or administrator actions may be treated as deployment issues rather than product vulnerabilities.
+通过私有渠道联系 Cat_two 仓库维护者。附上受影响镜像或提交、部署方式、影响范围和验证信息。发送前移除令牌、Cookie、回调密钥及笔记内容。

@@ -120,6 +120,21 @@ func TestFrontendService_StaticCacheHeaders(t *testing.T) {
 	}
 }
 
+func TestFrontendService_SecurityHeaders(t *testing.T) {
+	frontend := NewFrontendService(&profile.Profile{}, nil).Handler(http.HandlerFunc(httphandler.NotFound))
+	for _, path := range []string{"/", "/index.html", "/memos/private-note"} {
+		t.Run(path, func(t *testing.T) {
+			recorder := httptest.NewRecorder()
+			frontend.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, path, nil))
+			require.Equal(t, http.StatusOK, recorder.Code)
+			require.Contains(t, recorder.Header().Get("Content-Security-Policy"), "frame-ancestors 'none'")
+			require.Equal(t, "DENY", recorder.Header().Get("X-Frame-Options"))
+			require.Equal(t, "nosniff", recorder.Header().Get("X-Content-Type-Options"))
+			require.Equal(t, "no-referrer", recorder.Header().Get("Referrer-Policy"))
+		})
+	}
+}
+
 func TestFrontendService_MissingAssetsAreNotCached(t *testing.T) {
 	ctx := context.Background()
 	testStore := teststore.NewTestingStore(ctx, t)

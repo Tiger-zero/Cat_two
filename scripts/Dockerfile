@@ -27,10 +27,11 @@ RUN --mount=type=cache,target=/go/pkg/mod \
       ./cmd/memos
 
 # Use minimal Alpine with security updates
-FROM alpine:3.21 AS monolithic
+FROM alpine:3.24 AS monolithic
 
-# Install runtime dependencies and create non-root user in single layer
-RUN apk add --no-cache tzdata ca-certificates su-exec && \
+# Apply Alpine security updates before installing runtime dependencies.
+RUN apk upgrade --no-cache && \
+    apk add --no-cache tzdata ca-certificates su-exec && \
     addgroup -g 10001 -S nonroot && \
     adduser -u 10001 -S -G nonroot -h /var/opt/memos nonroot && \
     mkdir -p /var/opt/memos /usr/local/memos && \

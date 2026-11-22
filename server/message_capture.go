@@ -26,10 +26,9 @@ func (s *Server) configureMessageCapture(mux *http.ServeMux) {
 	mux.HandleFunc(weComCallbackPath, func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "no-store")
 		deadline := time.Now().Add(5 * time.Second)
-		controller := http.NewResponseController(w)
-		if controller.SetReadDeadline(deadline) == nil {
-			defer func() { _ = controller.SetReadDeadline(time.Time{}) }()
-		}
+		// Keep the deadline through net/http's response finalization, which
+		// can drain the unread body of an early rejection.
+		_ = http.NewResponseController(w).SetReadDeadline(deadline)
 		ctx, cancel := context.WithDeadline(r.Context(), deadline)
 		defer cancel()
 		callback.ServeHTTP(w, r.WithContext(ctx))

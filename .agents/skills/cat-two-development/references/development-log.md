@@ -6,6 +6,15 @@
 
 01:21 核对 Docker Hub `0.08`。`0.08`、`latest` 和 `sha-f3f74e235c0b6c8087a59281b58d4a84d22aca03` 共用 `sha256:d462b78e8bdf44fba17e1cef81ccceb7dc3c52839e774d73620a43a8af4de8d7`，AMD64 和 ARM64 均对应提交 `f3f74e235`。正式镜像在独立 SQLite 卷上从 `0.07` 升级，原账户登录、旧笔记读取和新笔记写入通过，旧视图记录原样保留，旧接口返回 `404`。本地 AMD64 Chromium 检查设置弹窗、回收站侧栏、选中颜色及旧 `/views` 链接。 [发布](https://github.com/Tiger-zero/Cat_two/actions/runs/44929146492) · [Docker Hub](https://hub.docker.com/r/tiger2896/cat_two/tags?name=0.08)
 
+### 对外接口与公网加固
+
+- 整理 REST、MCP、文件下载、回收站、ZIP、SSE 和消息回调的实际入口。记录 PAT、MCP 连接令牌和网页登录的权限边界、分页规则、Markdown 写回和重试。 [外部接口](external-api.md)
+- 会话刷新令牌按单实例 SQLite 部署原子轮换，凭据变更以数据库为准。HTTPS 公网配置强制使用安全 Cookie，安全上下文的多标签页串行刷新。附件读权限前置，Connect 大上传先验证身份，个人 MCP 上限调为 16 MiB。企业微信握手只返回经过验证的挑战。代理信任默认关闭，公网文档给出 HTTPS 回源和本机绑定。 [公网部署](../../../../README.md#在公网部署)
+- 用 `govulncheck` v1.10.0 扫描 Go 的 Linux AMD64 生产构建及原 `0.08` 发布产物，漏洞库快照为 2026-11-11。报告的 `GO-2026-5932` 涉及 `golang.org/x/crypto/openpgp`。用生产构建标签核对当前和 `0.08` 源码的依赖闭包，两者均未引入该包。发布二进制剥离符号，二进制扫描精度限于模块。 [Go 公告](https://pkg.go.dev/vuln/GO-2026-5932)
+- 更新前端依赖锁。`pnpm audit --prod` 从 21 条降至 0 条，完整 `pnpm audit` 从 57 条降至 0 条。冻结安装、类型和样式检查、前端构建通过。补齐测试临时目录遗漏的共享夹具后，涉及的测试复测通过，两轮覆盖 1,346 项。Chromium 本机安全上下文中的两个标签页共享会话时只发起一次刷新。 [前端依赖](../../../../web/package.json) · [刷新测试](../../../../web/tests/session-refresh.test.ts)
+- Docker 运行层更新至受支持的 Alpine 3.24，构建时升级系统包。AMD64 候选的 zlib 和 OpenSSL 已达到 Alpine 安全库列出的修复版本，ARM64 核对官方软件包索引。 [Dockerfile](../../../../scripts/Dockerfile) · [Alpine 安全数据库](https://secdb.alpinelinux.org/)
+- 后端、核心及 SQLite 存储的竞态测试通过。两份 Compose 验证了默认端口映射及本机绑定、HTTPS 基址、代理 IP 配置。用本轮源码、发布模式网页资源和升级后的运行层组装本地 AMD64 候选，在独立卷验证新装、重建及从 `0.08` 升级后的笔记读写。公网入口仍需按实际域名、防火墙和代理验收。 [冒烟测试](../../../../scripts/release_smoke_test.sh) · [部署说明](../../../../README.md#在公网部署)
+
 ## 2026-11-21（上海时间）
 
 本次复盘核对到 GitHub `main` 提交 `86dcec0ea`。Docker Hub 的 `latest` 指向 `0.06`，源码为 `53968a153`。

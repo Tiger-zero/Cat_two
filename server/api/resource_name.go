@@ -91,8 +91,10 @@ func ExtractMemoUIDFromName(name string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	id := tokens[0]
-	return id, nil
+	if !identifier.UIDMatcher.MatchString(tokens[0]) {
+		return "", errors.New("invalid memo UID")
+	}
+	return tokens[0], nil
 }
 
 func buildMemoName(uid string) string {
@@ -134,8 +136,10 @@ func ExtractAttachmentUIDFromName(name string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	id := tokens[0]
-	return id, nil
+	if !identifier.UIDMatcher.MatchString(tokens[0]) {
+		return "", errors.New("invalid attachment UID")
+	}
+	return tokens[0], nil
 }
 
 // ExtractMemoReactionIDFromName returns the memo UID and reaction ID from a resource name.

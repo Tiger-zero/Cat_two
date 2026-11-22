@@ -152,17 +152,14 @@ func (s *Store) GetUserByPATHash(ctx context.Context, tokenHash string) (*PATQue
 
 // GetUserRefreshTokens returns the refresh tokens of the user.
 func (s *Store) GetUserRefreshTokens(ctx context.Context, userID int32) ([]*storepb.RefreshTokensUserSetting_RefreshToken, error) {
-	userSetting, err := s.GetUserSetting(ctx, &FindUserSetting{
-		UserID: &userID,
-		Key:    storepb.UserSetting_REFRESH_TOKENS,
-	})
+	setting, err := s.getUserCredentialSetting(ctx, userID, storepb.UserSetting_REFRESH_TOKENS)
 	if err != nil {
 		return nil, err
 	}
-	if userSetting == nil {
+	if setting == nil {
 		return []*storepb.RefreshTokensUserSetting_RefreshToken{}, nil
 	}
-	return userSetting.GetRefreshTokens().RefreshTokens, nil
+	return setting.GetRefreshTokens().GetRefreshTokens(), nil
 }
 
 // AddUserRefreshToken adds a new refresh token for the user.
@@ -179,8 +176,34 @@ func (s *Store) AddUserRefreshToken(ctx context.Context, userID int32, token *st
 	// list is bounded by the tokens issued within one lifetime rather than
 	// by every sign-in the account ever made.
 	tokens = append(pruneExpiredRefreshTokens(tokens, time.Now()), token)
+	return s.setUserRefreshTokens(ctx, userID, tokens)
+}
 
-	_, err = s.UpsertUserSetting(ctx, &storepb.UserSetting{
+// RotateUserRefreshToken replaces a still-live token in one settings write.
+// It returns false when the old token has already been used or revoked.
+func (s *Store) RotateUserRefreshToken(ctx context.Context, userID int32, oldTokenID string, replacement *storepb.RefreshTokensUserSetting_RefreshToken) (bool, error) {
+	s.refreshTokenMu.Lock()
+	defer s.refreshTokenMu.Unlock()
+
+	tokens, err := s.GetUserRefreshTokens(ctx, userID)
+	if err != nil {
+		return false, err
+	}
+	live := pruneExpiredRefreshTokens(tokens, time.Now())
+	for i, token := range live {
+		if token.GetTokenId() == oldTokenID {
+			live[i] = replacement
+			if err := s.setUserRefreshTokens(ctx, userID, live); err != nil {
+				return false, err
+			}
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+func (s *Store) setUserRefreshTokens(ctx context.Context, userID int32, tokens []*storepb.RefreshTokensUserSetting_RefreshToken) error {
+	_, err := s.UpsertUserSetting(ctx, &storepb.UserSetting{
 		UserId: userID,
 		Key:    storepb.UserSetting_REFRESH_TOKENS,
 		Value: &storepb.UserSetting_RefreshTokens{
@@ -219,14 +242,7 @@ func (s *Store) RemoveUserRefreshTokensExcept(ctx context.Context, userID int32,
 			kept = append(kept, token)
 		}
 	}
-	_, err = s.UpsertUserSetting(ctx, &storepb.UserSetting{
-		UserId: userID,
-		Key:    storepb.UserSetting_REFRESH_TOKENS,
-		Value: &storepb.UserSetting_RefreshTokens{
-			RefreshTokens: &storepb.RefreshTokensUserSetting{RefreshTokens: kept},
-		},
-	})
-	return err
+	return s.setUserRefreshTokens(ctx, userID, kept)
 }
 
 // RemoveUserRefreshToken removes a refresh token from the user.
@@ -246,16 +262,7 @@ func (s *Store) RemoveUserRefreshToken(ctx context.Context, userID int32, tokenI
 		}
 	}
 
-	_, err = s.UpsertUserSetting(ctx, &storepb.UserSetting{
-		UserId: userID,
-		Key:    storepb.UserSetting_REFRESH_TOKENS,
-		Value: &storepb.UserSetting_RefreshTokens{
-			RefreshTokens: &storepb.RefreshTokensUserSetting{
-				RefreshTokens: newTokens,
-			},
-		},
-	})
-	return err
+	return s.setUserRefreshTokens(ctx, userID, newTokens)
 }
 
 // GetUserRefreshTokenByID returns a specific refresh token.
@@ -274,17 +281,27 @@ func (s *Store) GetUserRefreshTokenByID(ctx context.Context, userID int32, token
 
 // GetUserPersonalAccessTokens returns the PATs of the user.
 func (s *Store) GetUserPersonalAccessTokens(ctx context.Context, userID int32) ([]*storepb.PersonalAccessTokensUserSetting_PersonalAccessToken, error) {
-	userSetting, err := s.GetUserSetting(ctx, &FindUserSetting{
-		UserID: &userID,
-		Key:    storepb.UserSetting_PERSONAL_ACCESS_TOKENS,
-	})
+	userSetting, err := s.getUserCredentialSetting(ctx, userID, storepb.UserSetting_PERSONAL_ACCESS_TOKENS)
 	if err != nil {
 		return nil, err
 	}
 	if userSetting == nil {
 		return []*storepb.PersonalAccessTokensUserSetting_PersonalAccessToken{}, nil
 	}
-	return userSetting.GetPersonalAccessTokens().Tokens, nil
+	return userSetting.GetPersonalAccessTokens().GetTokens(), nil
+}
+
+// Credential reads and mutations use the database row so that a cached snapshot
+// cannot hide a revocation or restore a credential that has already been revoked.
+func (s *Store) getUserCredentialSetting(ctx context.Context, userID int32, key storepb.UserSetting_Key) (*storepb.UserSetting, error) {
+	settings, err := s.driver.ListUserSettings(ctx, &FindUserSetting{UserID: &userID, Key: key})
+	if err != nil || len(settings) == 0 {
+		return nil, err
+	}
+	if len(settings) > 1 {
+		return nil, errors.Errorf("expected 1 user setting, but got %d", len(settings))
+	}
+	return convertUserSettingFromRaw(settings[0])
 }
 
 // AddUserPersonalAccessToken adds a new PAT for the user.

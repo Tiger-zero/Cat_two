@@ -20,6 +20,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"testing/iotest"
 	"time"
 
 	"github.com/stretchr/testify/require"
@@ -105,6 +106,42 @@ func TestWeComCallbackVerification(t *testing.T) {
 			} else {
 				require.NotContains(t, response.Body.String(), echo)
 			}
+		})
+	}
+}
+
+func TestWeComVerificationChallengeFormat(t *testing.T) {
+	t.Parallel()
+	require.True(t, isWeComVerificationChallenge([]byte("回调验证 <&>\n")))
+	for _, data := range []string{"", " \t\n", "<sample/>", "\ufeff \n<sample/>", "\xff"} {
+		require.False(t, isWeComVerificationChallenge([]byte(data)), "%q", data)
+	}
+}
+
+func TestWeComRejectsInvalidAuthenticationMetadataBeforeReadingBody(t *testing.T) {
+	t.Parallel()
+	handler := newWeComTestHandler(t, func(context.Context, string, string) error {
+		t.Fatal("rejected callback must not save a note")
+		return nil
+	})
+	for _, tc := range []struct {
+		name, signature string
+		age             time.Duration
+	}{
+		{name: "bad signature format", signature: "invalid"},
+		{name: "expired timestamp", signature: strings.Repeat("0", 40), age: -10 * time.Minute},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			query := url.Values{
+				"timestamp":     {strconv.FormatInt(time.Now().Add(tc.age).Unix(), 10)},
+				"nonce":         {"fixture"},
+				"msg_signature": {tc.signature},
+			}
+			body := iotest.ErrReader(errors.New("body must not be read"))
+			request := httptest.NewRequest(http.MethodPost, "/integrations/wecom?"+query.Encode(), body)
+			response := httptest.NewRecorder()
+			handler.ServeHTTP(response, request)
+			require.Equal(t, http.StatusForbidden, response.Code)
 		})
 	}
 }

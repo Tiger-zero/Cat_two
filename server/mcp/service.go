@@ -23,11 +23,12 @@ import (
 	"github.com/usememos/memos/store"
 )
 
-// maxMCPRequestBytes caps the /mcp request body. It tracks the API limit because
-// every tool call is forwarded in-process through the API routes. The SDK
-// enforces its own 4 MiB default, so the value is passed to the transport as
-// well; otherwise attachment uploads over MCP fail with 413 before the API sees them.
-const maxMCPRequestBytes int64 = api.MaxAPIRequestBytes
+const (
+	// Non-personal tools can upload attachments inline. Personal mode uses
+	// REST for file uploads and needs only room for note and filter text.
+	maxMCPRequestBytes         int64 = api.MaxAPIRequestBytes
+	maxPersonalMCPRequestBytes int64 = 16 << 20
+)
 
 // toolCatalogTTL is the freshness hint advertised on tools/list and
 // server/discover results. The catalog is fixed at startup, so clients may cache
@@ -43,6 +44,7 @@ type MCPService struct {
 
 	operationsByTool map[string]*registeredOperation
 	handler          http.Handler
+	requestBodyLimit int64
 }
 
 type connectionUserIDContextKey struct{}
@@ -97,8 +99,10 @@ func NewMCPService(profile *profile.Profile, handler http.Handler, db *store.Sto
 		profile:          profile,
 		store:            db,
 		operationsByTool: operationsByTool,
+		requestBodyLimit: maxMCPRequestBytes,
 	}
 	if personal {
+		service.requestBodyLimit = maxPersonalMCPRequestBytes
 		registerPersonalMemoSearch(server, adapter, operationsByTool["memo_list_memos"])
 		registerPersonalMemoBatchGet(server, db)
 		registerPersonalTagTools(server, db)
@@ -112,7 +116,7 @@ func NewMCPService(profile *profile.Profile, handler http.Handler, db *store.Sto
 		// 2026-07-28; stateful handlers negotiate down to 2025-11-25.
 		Stateless:           true,
 		JSONResponse:        true,
-		MaxRequestBodyBytes: maxMCPRequestBytes,
+		MaxRequestBodyBytes: service.requestBodyLimit,
 		// memos is typically served behind a reverse proxy with the app bound to a
 		// loopback address while the public Host header is a real domain. The SDK's
 		// DNS-rebinding guard treats that shape as an attack and rejects every
@@ -216,15 +220,15 @@ func newMCPToolHandler(adapter *apiAdapter, operation *registeredOperation) sdkm
 // RegisterRoutes registers the streamable HTTP MCP endpoint.
 func (s *MCPService) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/mcp", func(w http.ResponseWriter, r *http.Request) {
-		if r.ContentLength > maxMCPRequestBytes {
+		if r.ContentLength > s.requestBodyLimit {
 			httphandler.WriteError(w, r, &httphandler.Error{Code: http.StatusRequestEntityTooLarge, Message: http.StatusText(http.StatusRequestEntityTooLarge)})
 			return
 		}
-		if !isAllowedMCPOrigin(r.Host, r.Header.Get("Origin"), s.profile) {
+		if !isAllowedMCPOrigin(r, s.profile) {
 			w.WriteHeader(http.StatusForbidden)
 			return
 		}
-		r.Body = http.MaxBytesReader(w, r.Body, maxMCPRequestBytes)
+		r.Body = http.MaxBytesReader(w, r.Body, s.requestBodyLimit)
 		if s.profile != nil && s.profile.Personal {
 			s.servePersonal(w, r)
 			return

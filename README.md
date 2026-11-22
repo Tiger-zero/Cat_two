@@ -2,7 +2,7 @@
 
 Cat_two 是面向个人使用的自托管笔记应用。通过网页记录 Markdown 笔记和附件，按日期、标签或关键词找回内容。笔记仅限创建者登录后访问。默认使用 Docker Compose 和 SQLite，可部署在 NAS 上。界面默认是简体中文，网页时间和日历按上海时区显示。
 
-[部署服务端](#部署服务端) · [在 NAS 上部署](#在-nas-上部署) · [Telegram 和企业微信收件](#telegram-和企业微信收件) · [备份和升级](#备份和升级) · [重置两步验证](#重置两步验证) · [连接 Codex](#连接-codex) · [功能与实现](.agents/skills/cat-two-development/references/product-guide.md)
+[部署服务端](#部署服务端) · [在 NAS 上部署](#在-nas-上部署) · [在公网部署](#在公网部署) · [Telegram 和企业微信收件](#telegram-和企业微信收件) · [备份和升级](#备份和升级) · [重置两步验证](#重置两步验证) · [连接 Codex](#连接-codex) · [外部接口](.agents/skills/cat-two-development/references/external-api.md) · [功能与实现](.agents/skills/cat-two-development/references/product-guide.md)
 
 ## 部署服务端
 
@@ -35,6 +35,23 @@ CAT_TWO_PORT=5230
 ```
 
 普通 Compose 默认使用 `10001:10001`，也可通过 `PUID` 和 `PGID` 指定。两份配置都优先采用显式设置的 `MEMOS_UID` 和 `MEMOS_GID`。
+
+## 在公网部署
+
+首次启动时先通过受限网络或 SSH 转发访问 `5230`，完成唯一管理员的创建，设置独立密码并在「设置 → 我的账户」启用两步验证。然后再打开公网入口。普通和 NAS 两份 Compose 都可读取下面的配置。
+
+```dotenv
+CAT_TWO_BIND_IP=127.0.0.1
+CAT_TWO_PORT=5230
+MEMOS_INSTANCE_URL=https://notes.example.com
+```
+
+在同一主机上用反向代理终止 HTTPS，转发到 `http://127.0.0.1:5230`，之后用配置的 HTTPS 域名登录。防火墙只开放代理的 HTTPS 端口及签发证书所需的 HTTP 端口，HTTP 入口重定向到 HTTPS。代理部署在 Docker 网络内时，可让代理在专用网络里访问容器，并移除 `cat-two` 的端口发布。
+
+- 代理校验公网域名、保留 `Host`、设置 `X-Forwarded-Proto`，并在公网入口覆盖客户端传入的 `X-Forwarded-For` 和 `X-Real-IP`。Cat_two 默认从直连地址识别客户端。反向代理部署中，将 `MEMOS_TRUSTED_PROXIES` 设为应用实际收到连接的代理 IP 或专用代理网段，以便按真实客户端区分限流和 MCP 连接来源。
+- 同一个 SQLite 实例由一个 Cat_two 进程提供服务，以共享会话更新和限流状态。保留应用限流，并在代理侧限制登录和首次设置请求频率、请求体大小及慢上传。大附件和 ZIP 用分块接口。`/api/sse` 须关闭代理响应缓冲，给流式连接留出读取时间。代理和 CDN 应跳过 `/api/`、`/memos.api.*`、`/mcp`、`/file/` 和 `/integrations/` 的缓存。
+- 仅需移动端收件时，企业微信只需公网代理 `/integrations/wecom`，Telegram 通过 NAS 或服务器主动连接 Bot API。其他入口可放在 VPN 或受限网络中。
+- 给每个集成单独创建短期令牌，撤销闲置或已经泄露的令牌。公网日志避免记录 `Authorization`、Cookie 和企业微信回调查询参数。备份 SQLite、附件和部署密钥时同样限制访问。 [凭据和权限](.agents/skills/cat-two-development/references/external-api.md#凭据和可见性) · [安全说明](SECURITY.md)
 
 ## 在网页里管理笔记
 

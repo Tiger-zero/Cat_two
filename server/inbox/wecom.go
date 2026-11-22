@@ -20,6 +20,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
 )
 
 const (
@@ -89,6 +91,12 @@ func (h *weComCallback) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid callback request", http.StatusBadRequest)
 		return
 	}
+	timestamp, nonce := query.Get("timestamp"), query.Get("nonce")
+	signature, err := hex.DecodeString(query.Get("msg_signature"))
+	if err != nil || len(signature) != sha1.Size || !freshWeComTimestamp(timestamp) {
+		http.Error(w, "invalid callback authentication", http.StatusForbidden)
+		return
+	}
 
 	var encrypted string
 	if r.Method == http.MethodGet {
@@ -109,12 +117,13 @@ func (h *weComCallback) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	if !h.validSignature(query, encrypted) {
+	digest := h.signature(timestamp, nonce, encrypted)
+	if subtle.ConstantTimeCompare(signature, digest[:]) != 1 {
 		http.Error(w, "invalid callback authentication", http.StatusForbidden)
 		return
 	}
 	message, valid := h.decrypt(encrypted)
-	if !valid {
+	if !valid || (r.Method == http.MethodGet && !isWeComVerificationChallenge(message)) {
 		http.Error(w, "invalid callback authentication", http.StatusForbidden)
 		return
 	}
@@ -123,7 +132,7 @@ func (h *weComCallback) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write(message)
 		return
 	}
-	h.receiveText(w, r, message, query.Get("nonce"))
+	h.receiveText(w, r, message, nonce)
 }
 
 func parseWeComQuery(raw string) (url.Values, error) {
@@ -160,20 +169,18 @@ func readWeComEnvelope(w http.ResponseWriter, r *http.Request) (string, error) {
 	return envelope.Encrypt[0], nil
 }
 
-func (h *weComCallback) validSignature(query url.Values, encrypted string) bool {
-	timestamp := query.Get("timestamp")
+func freshWeComTimestamp(timestamp string) bool {
 	seconds, err := strconv.ParseInt(timestamp, 10, 64)
 	now := time.Now().Unix()
 	skew := int64(weComClockSkew / time.Second)
-	if err != nil || seconds < now-skew || seconds > now+skew {
-		return false
-	}
-	signature, err := hex.DecodeString(query.Get("msg_signature"))
-	if err != nil || len(signature) != sha1.Size {
-		return false
-	}
-	digest := h.signature(timestamp, query.Get("nonce"), encrypted)
-	return subtle.ConstantTimeCompare(signature, digest[:]) == 1
+	return err == nil && seconds >= now-skew && seconds <= now+skew
+}
+
+// Verification returns only an opaque text challenge. Delivered application
+// messages are XML documents and are never valid verification challenges.
+func isWeComVerificationChallenge(plaintext []byte) bool {
+	text := bytes.TrimLeftFunc(plaintext, func(r rune) bool { return unicode.IsSpace(r) || r == '\ufeff' })
+	return len(text) != 0 && text[0] != '<' && utf8.Valid(plaintext)
 }
 
 func (h *weComCallback) signature(timestamp, nonce, encrypted string) [sha1.Size]byte {

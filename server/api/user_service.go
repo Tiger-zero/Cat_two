@@ -347,6 +347,13 @@ func (s *APIService) createPersonalAdministrator(ctx context.Context, request *a
 	if len(users) != 0 {
 		return nil, status.Error(codes.PermissionDenied, registrationClosed)
 	}
+	scope := ratelimit.ScopeSignupIP
+	if request.ValidateOnly {
+		scope = ratelimit.ScopeValidateIP
+	}
+	if err := s.throttleAndCharge(scope, clientip.FromContext(ctx), 1); err != nil {
+		return nil, err
+	}
 	if request.ValidateOnly {
 		return &apipb.User{Username: request.User.Username, Role: apipb.User_ADMIN, Email: email, DisplayName: request.User.DisplayName}, nil
 	}

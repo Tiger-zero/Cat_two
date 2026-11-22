@@ -30,6 +30,55 @@ func (r *uploadCountingReader) Read(p []byte) (int, error) {
 	return n, err
 }
 
+func TestCreateAttachmentConnectChecksCredentialsBeforeReadingBody(t *testing.T) {
+	svc, ctx := newUploadTestService(t)
+	handler, err := svc.NewHandler(t.Context())
+	require.NoError(t, err)
+	attachment := &apipb.CreateAttachmentRequest{Attachment: &apipb.Attachment{
+		Filename: "inline.txt",
+		Type:     "text/plain",
+		Content:  []byte("sample attachment"),
+	}}
+	data, err := protojson.Marshal(attachment)
+	require.NoError(t, err)
+	for _, tc := range []struct {
+		name, contentType, credential string
+		status                        int
+	}{
+		{name: "anonymous", contentType: "application/json", status: http.StatusUnauthorized},
+		{name: "invalid credential", contentType: "application/json; charset=UTF-8", credential: "Bearer invalid", status: http.StatusUnauthorized},
+		{name: "unsupported media type", contentType: "application/xml", status: http.StatusUnsupportedMediaType},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			reader := &uploadCountingReader{reader: bytes.NewReader(data)}
+			request := httptest.NewRequest(http.MethodPost, apiconnect.AttachmentServiceCreateAttachmentProcedure, reader)
+			request.Header.Set("Content-Type", tc.contentType)
+			request.Header.Set("Authorization", tc.credential)
+			response := httptest.NewRecorder()
+			handler.ServeHTTP(response, request)
+			require.Equal(t, tc.status, response.Code, response.Body.String())
+			require.Zero(t, reader.read, "refused requests must not reach the body decoder")
+			if tc.status == http.StatusUnauthorized {
+				require.Contains(t, response.Body.String(), `"code":"unauthenticated"`)
+				require.Contains(t, response.Header().Get("Cache-Control"), "no-store")
+			}
+		})
+	}
+
+	user, err := svc.fetchCurrentUser(ctx)
+	require.NoError(t, err)
+	token, _, err := auth.GenerateAccessTokenV2(user.ID, user.Username, string(user.Role), string(user.RowStatus), user.PasswordHash, []byte(svc.Secret))
+	require.NoError(t, err)
+	server := httptest.NewTestServer(t, handler)
+	client := apiconnect.NewAttachmentServiceClient(server.Client(), server.URL)
+	request := connect.NewRequest(attachment)
+	request.Header().Set("Authorization", "Bearer "+token)
+	response, err := client.CreateAttachment(t.Context(), request)
+	require.NoError(t, err)
+	require.Equal(t, attachment.Attachment.Filename, response.Msg.Filename)
+	require.EqualValues(t, len(attachment.Attachment.Content), response.Msg.Size)
+}
+
 func TestUploadAttachmentTransports(t *testing.T) {
 	svc, ctx := newUploadTestService(t)
 	user, err := svc.fetchCurrentUser(ctx)

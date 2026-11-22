@@ -46,15 +46,16 @@ fast on any inconsistency:
    JSON-response mode (no SSE, no session tracking). Stateless mode is also
    what lets the SDK serve protocol version `2026-07-28`; older clients still
    negotiate `2025-11-25` and earlier through the legacy `initialize` handshake.
-   The transport body limit is set to the API-wide limit so attachment uploads
-   are not cut off by the SDK's 4 MiB default.
+   The transport body limit is set explicitly both for personal text tools and
+   for non-personal mode, where legacy tools may upload attachments.
 
 ## Request flow
 
 `RegisterRoutes` binds `mux.HandleFunc("/mcp", ...)`. Each request:
 
-1. `isAllowedMCPOrigin` (`origin.go`) rejects disallowed cross-origin browser requests with `403`.
-2. The request body is capped at 256 MiB before the SDK reads it.
+1. Requests over the body limit receive `413`. The limit is 16 MiB in Cat_two
+   personal mode and 256 MiB in compatibility mode. Use REST for Cat_two file uploads.
+2. `isAllowedMCPOrigin` (`origin.go`) rejects disallowed cross-origin browser requests with `403`.
 3. In personal mode, the transport looks up the connection by its indexed
    token hash and reads the owner's current account status in the same
    query. It checks the connection status, expiration, and account status
@@ -147,11 +148,10 @@ response has no JSON body, the fallback is:
   second pass resolves to the same value. Without this every tool call would
   present `httptest`'s placeholder peer (`192.0.2.1`), and all anonymous MCP
   callers would share one rate-limit bucket.
-- **Origin safety:** `isAllowedMCPOrigin` allows a request when the `Origin`
-  header is absent (desktop clients commonly omit it), when its host matches
-  the request `Host` header (host comparison only — scheme is not checked), or
-  when it matches the configured `profile.InstanceURL`. Anything else gets
-  `403`. This guards against DNS-rebinding from browsers.
+- **Origin safety:** desktop clients may omit `Origin`. Browser origins must
+  match the configured instance's scheme, host and port or the origin of a
+  direct connection. Set `MEMOS_INSTANCE_URL` to the public HTTPS URL when
+  terminating TLS at a proxy. Disallowed origins receive `403`.
 
 ### Connecting a client
 

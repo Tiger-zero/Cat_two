@@ -816,19 +816,28 @@ func TestServeAttachmentFile_DeniesAnonymousRegardlessOfInstanceAccessMode(t *te
 	fs.RegisterRoutes(e, http.HandlerFunc(httphandler.NotFound))
 	url := fmt.Sprintf("/file/%s/%s", attachment.Name, attachment.Filename)
 
-	anonymousGet := func() int {
+	anonymousGet := func(path string) *httptest.ResponseRecorder {
 		rec := httptest.NewRecorder()
-		e.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, url, nil))
-		return rec.Code
+		e.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
+		return rec
 	}
 
-	// An open instance does not grant access to a legacy PUBLIC attachment.
-	setInstanceAccessMode(ctx, t, stores, storepb.InstanceAccessMode_INSTANCE_ACCESS_MODE_PUBLIC)
-	require.Equal(t, http.StatusUnauthorized, anonymousGet())
+	for _, mode := range []storepb.InstanceAccessMode{
+		storepb.InstanceAccessMode_INSTANCE_ACCESS_MODE_PUBLIC,
+		storepb.InstanceAccessMode_INSTANCE_ACCESS_MODE_PRIVATE,
+	} {
+		setInstanceAccessMode(ctx, t, stores, mode)
+		for _, path := range []string{url, "/file/attachments/absent-file", "/file/attachments/invalid_uid"} {
+			rec := anonymousGet(path)
+			require.Equal(t, http.StatusUnauthorized, rec.Code)
+			require.Equal(t, privateAttachmentCacheControl, rec.Header().Get("Cache-Control"))
+			require.JSONEq(t, `{"message":"unauthorized access"}`, rec.Body.String())
+		}
+	}
 
-	// Private instance: the same anonymous request is denied.
-	setInstanceAccessMode(ctx, t, stores, storepb.InstanceAccessMode_INSTANCE_ACCESS_MODE_PRIVATE)
-	require.Equal(t, http.StatusUnauthorized, anonymousGet())
+	rec := httptest.NewRecorder()
+	e.ServeHTTP(rec, newAuthenticatedFileRequest(ctx, t, svc, creator.ID, "/file/attachments/invalid_uid"))
+	require.Equal(t, http.StatusNotFound, rec.Code)
 }
 
 // TestServeUserAvatar_PrivateInstanceRequiresAuth verifies that avatars are exposed

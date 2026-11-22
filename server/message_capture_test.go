@@ -59,7 +59,9 @@ func TestWeComMessageCapture(t *testing.T) {
 			payload = "<xml><Encrypt>" + ciphertext + "</Encrypt></xml>"
 		}
 		response := httptest.NewRecorder()
-		s.handler.ServeHTTP(response, httptest.NewRequest(method, weComCallbackPath+"?"+query.Encode(), strings.NewReader(payload)))
+		writer := &captureDeadlineWriter{ResponseRecorder: response}
+		s.handler.ServeHTTP(writer, httptest.NewRequest(method, weComCallbackPath+"?"+query.Encode(), strings.NewReader(payload)))
+		require.False(t, writer.readDeadline.IsZero(), "read deadline must cover final response handling")
 		return response
 	}
 	verification := request(http.MethodGet, "fixture-challenge")
@@ -101,6 +103,16 @@ func TestWeComMessageCapture(t *testing.T) {
 	require.Equal(t, "#微信\n\n收到笔记", memos[0].Content)
 	require.Equal(t, "wechat", memos[0].Payload.GetCreationChannel())
 	require.Contains(t, memos[0].Payload.GetTags(), "微信")
+}
+
+type captureDeadlineWriter struct {
+	*httptest.ResponseRecorder
+	readDeadline time.Time
+}
+
+func (w *captureDeadlineWriter) SetReadDeadline(deadline time.Time) error {
+	w.readDeadline = deadline
+	return nil
 }
 
 func encryptCaptureFixture(t *testing.T, key []byte, corp, text string) string {
