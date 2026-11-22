@@ -84,10 +84,10 @@ describe("Quick Find navigation", () => {
     fireEvent.click(trigger);
 
     const dialog = within(await screen.findByRole("dialog", { name: "common.search" }));
-    expect(dialog.getByRole("textbox")).toHaveFocus();
+    await waitFor(() => expect(dialog.getByRole("textbox")).toHaveFocus());
     fireEvent.click(dialog.getByRole("button", { name: "common.close" }));
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
-    expect(trigger).toHaveFocus();
+    await waitFor(() => expect(trigger).toHaveFocus());
     expect(state.setFilters).not.toHaveBeenCalled();
   });
 

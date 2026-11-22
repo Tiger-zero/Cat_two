@@ -32,7 +32,7 @@ const CollectionStats = ({ summary, loading, desktop }: Props) => {
             <dd
               className={cn(
                 "text-mu-text tabular-nums wrap-anywhere",
-                desktop ? "-order-1 mu-heading font-semibold @min-[284px]/sidebar:text-2xl @min-[284px]/sidebar:leading-tight" : "mu-label",
+                desktop ? "-order-1 mu-heading font-semibold @min-[284px]/sidebar:sidebar-stat-value" : "mu-label",
               )}
             >
               {value === undefined ? "—" : value.toLocaleString()}

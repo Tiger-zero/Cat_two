@@ -35,6 +35,11 @@
   margin-bottom: var(--memos-list-gap, 0.5rem);
 }
 
+@utility sidebar-stat-value {
+  font-size: 1.5rem;
+  line-height: 1.25;
+}
+
 @utility memo-text {
   font-family: var(--memos-note-font);
   font-size: var(--memos-note-font-size);
