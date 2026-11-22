@@ -30,6 +30,12 @@
 
 用正式 AMD64 镜像和独立 SQLite 卷验证新装、容器重建和从 `0.09` 升级。Chromium 核对实例提交、通知配置、代理认证及配置持久化，并用签名加密的企业微信模拟消息验证笔记写入和 `Yes!` 回复。 [升级与备份](../../../../README.md#备份和升级)
 
+### 镜像 0.11
+
+17:56 发布 Docker Hub `0.11`。`0.11`、`latest` 和 `sha-6b4bfd7631d7041823c594f7eb9e5f70124aa014` 共用镜像索引 `sha256:44aa6dee8549aff23246f1e3457413c48261d229436724d6c8b6675b04ab05a8`。Linux AMD64 与 ARM64 均对应提交 `6b4bfd763`。本版支持在企业微信通知设置中保存和复制带端口的公网回调地址。 [源码](https://github.com/Tiger-zero/Cat_two/commit/6b4bfd7631d7041823c594f7eb9e5f70124aa014) · [发布](https://github.com/Tiger-zero/Cat_two/actions/runs/45009583745) · [Docker Hub](https://hub.docker.com/r/tiger2896/cat_two/tags?name=0.11)
+
+正式 AMD64 镜像通过独立 SQLite 卷的新装、重建和从 `0.10` 升级验证。Chromium 核对镜像提交、局域网 IP 提示、带端口的 HTTPS 地址保存与重启保留，并用模拟企业微信请求验证签名 GET 挑战和 POST 收件。 [企业微信配置](../../../../README.md#企业微信自建应用)
+
 ## 2026-11-21（上海时间）
 
 本次复盘核对到 GitHub `main` 提交 `86dcec0ea`。Docker Hub 的 `latest` 指向 `0.06`，源码为 `53968a153`。
