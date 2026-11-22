@@ -27,16 +27,18 @@ interface SettingListItemProps {
   label: ReactNode;
   description?: ReactNode;
   orientation?: "horizontal" | "vertical";
+  invalid?: boolean;
   /** The row's one control, placed at the end of the row. */
   children?: ReactNode;
 }
 
 /** A labeled settings control; wide controls stack when the row has little room. */
-export const SettingListItem = ({ label, description, children, orientation = "horizontal" }: SettingListItemProps) => {
+export const SettingListItem = ({ label, description, children, orientation = "horizontal", invalid }: SettingListItemProps) => {
   return (
     <List.Item className="@container">
       <Field.Root
         orientation={orientation}
+        invalid={invalid}
         className={cn(
           "@max-sm:has-[.mu-input-root,.mu-textarea,.mu-select-trigger,.mu-combobox-input]:flex",
           "@max-sm:has-[.mu-input-root,.mu-textarea,.mu-select-trigger,.mu-combobox-input]:flex-col",

@@ -21,8 +21,9 @@ const (
 )
 
 type savedConfiguration struct {
-	Update
-	Network *NetworkUpdate `json:"network,omitempty"`
+	Telegram *Telegram      `json:"telegram,omitempty"`
+	WeCom    *WeCom         `json:"wecom,omitempty"`
+	Network  *NetworkUpdate `json:"network,omitempty"`
 }
 
 func (s savedConfiguration) resolve(fallback Configuration) Configuration {

@@ -49,14 +49,16 @@ type weComSettingsView struct {
 	CorpID            string                `json:"corpId"`
 	AgentID           string                `json:"agentId"`
 	UserID            string                `json:"userId"`
+	CallbackURL       string                `json:"callbackUrl"`
 	HasCallbackToken  bool                  `json:"hasCallbackToken"`
 	HasEncodingAESKey bool                  `json:"hasEncodingAesKey"`
 }
 
 type notificationSettingsView struct {
-	Telegram          telegramSettingsView `json:"telegram"`
-	WeCom             weComSettingsView    `json:"wecom"`
-	WeComCallbackPath string               `json:"wecomCallbackPath"`
+	Telegram                telegramSettingsView `json:"telegram"`
+	WeCom                   weComSettingsView    `json:"wecom"`
+	WeComCallbackPath       string               `json:"wecomCallbackPath"`
+	WeComDefaultCallbackURL string               `json:"wecomDefaultCallbackUrl,omitempty"`
 }
 
 type networkSettingsView struct {
@@ -104,6 +106,9 @@ func (s *APIService) serveNotificationSettings(w http.ResponseWriter, r *http.Re
 	if err != nil {
 		return captureSettingsError(err, "could not load notification settings", r.Method)
 	}
+	// The instance URL can be an internal address. Only offer a default
+	// when it also passes the validation for a public callback address.
+	defaultCallbackURL, _ := messagecapture.NormalizeWeComCallbackURL(s.Profile.InstanceURL + messagecapture.WeComCallbackPath)
 	return httphandler.JSON(w, http.StatusOK, notificationSettingsView{
 		Telegram: telegramSettingsView{
 			Enabled: config.Telegram.Enabled, Configured: config.Telegram.Configured(), Source: config.TelegramSource,
@@ -112,9 +117,11 @@ func (s *APIService) serveNotificationSettings(w http.ResponseWriter, r *http.Re
 		WeCom: weComSettingsView{
 			Enabled: config.WeCom.Enabled, Configured: config.WeCom.Configured(), Source: config.WeComSource,
 			CorpID: config.WeCom.CorpID, AgentID: config.WeCom.AgentID, UserID: config.WeCom.UserID,
+			CallbackURL:      config.WeCom.CallbackURL,
 			HasCallbackToken: config.WeCom.CallbackToken != "", HasEncodingAESKey: config.WeCom.EncodingAESKey != "",
 		},
-		WeComCallbackPath: "/integrations/wecom",
+		WeComCallbackPath:       messagecapture.WeComCallbackPath,
+		WeComDefaultCallbackURL: defaultCallbackURL,
 	})
 }
 

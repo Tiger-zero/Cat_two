@@ -56,6 +56,7 @@ type WeCom struct {
 	UserID         string `json:"userId"`
 	CallbackToken  string `json:"callbackToken,omitempty"`
 	EncodingAESKey string `json:"encodingAesKey,omitempty"`
+	CallbackURL    string `json:"callbackUrl,omitempty"`
 }
 
 // Configured reports whether the channel has all the fields it needs to run.
@@ -93,8 +94,20 @@ func positiveID(value string) bool {
 
 // Update replaces the selected channel configuration. Empty secrets keep their current values.
 type Update struct {
-	Telegram *Telegram `json:"telegram,omitempty"`
-	WeCom    *WeCom    `json:"wecom,omitempty"`
+	Telegram *Telegram    `json:"telegram,omitempty"`
+	WeCom    *WeComUpdate `json:"wecom,omitempty"`
+}
+
+// WeComUpdate configures one WeCom application. An omitted CallbackURL keeps
+// the saved address, and an empty CallbackURL clears it.
+type WeComUpdate struct {
+	Enabled        bool    `json:"enabled"`
+	CorpID         string  `json:"corpId"`
+	AgentID        string  `json:"agentId"`
+	UserID         string  `json:"userId"`
+	CallbackToken  string  `json:"callbackToken,omitempty"`
+	EncodingAESKey string  `json:"encodingAesKey,omitempty"`
+	CallbackURL    *string `json:"callbackUrl,omitempty"`
 }
 
 // Configuration describes the effective configuration of both external inboxes.
@@ -148,12 +161,22 @@ func (u Update) apply(saved *savedConfiguration, current Configuration) error {
 		saved.Telegram = &telegram
 		return nil
 	}
-	wecom := *u.WeCom
-	wecom.CorpID = strings.TrimSpace(wecom.CorpID)
-	wecom.AgentID = strings.TrimSpace(wecom.AgentID)
-	wecom.UserID = strings.TrimSpace(wecom.UserID)
-	wecom.CallbackToken = secretOrCurrent(wecom.CallbackToken, current.WeCom.CallbackToken)
-	wecom.EncodingAESKey = secretOrCurrent(wecom.EncodingAESKey, current.WeCom.EncodingAESKey)
+	wecom := WeCom{
+		Enabled:        u.WeCom.Enabled,
+		CorpID:         strings.TrimSpace(u.WeCom.CorpID),
+		AgentID:        strings.TrimSpace(u.WeCom.AgentID),
+		UserID:         strings.TrimSpace(u.WeCom.UserID),
+		CallbackToken:  secretOrCurrent(u.WeCom.CallbackToken, current.WeCom.CallbackToken),
+		EncodingAESKey: secretOrCurrent(u.WeCom.EncodingAESKey, current.WeCom.EncodingAESKey),
+		CallbackURL:    current.WeCom.CallbackURL,
+	}
+	if u.WeCom.CallbackURL != nil {
+		callbackURL, err := NormalizeWeComCallbackURL(*u.WeCom.CallbackURL)
+		if err != nil {
+			return err
+		}
+		wecom.CallbackURL = callbackURL
+	}
 	if wecom.Enabled {
 		if err := wecom.validate(); err != nil {
 			return err

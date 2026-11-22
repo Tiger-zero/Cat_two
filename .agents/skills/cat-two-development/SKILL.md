@@ -57,3 +57,4 @@ Cat_two 是单账户、自托管的个人笔记应用。新实例首次设置时
 
 - **2026-11-22 17:17**　将开发文档拆为项目开发、产品功能开发和 UI 设计开发三份 Skill。功能与接口参考迁入产品 Skill，界面设计和前端约定迁入 UI Skill，旧开发简记归入复盘。合并 `docs` 索引并移除旧目录，更新仓库入口和 MCP 格式引用。核对本地链接、章节锚点及 Skill 元数据。 [产品开发](../cat-two-product-development/SKILL.md) · [UI 开发](../cat-two-ui-development/SKILL.md)
 - **2026-11-22 17:29**　发布 Docker Hub `0.10`，核对编号、`latest` 和提交标签及两种平台。正式 AMD64 镜像通过新装、重建、从 `0.09` 升级和浏览器集成验收。 [发布复盘](references/development-log.md#镜像-010)
+- **2026-11-22 17:50**　企业微信支持在通知设置保存带端口的公网回调地址。裸域名默认使用 HTTPS，保留已填写的 HTTP 或 HTTPS 协议与端口。服务端提供规范化地址，局域网地址不再用于复制。SQLite 竞态测试、23 项前端专项测试和生产构建通过，本地 Chromium 与容器验证重启保留、官方格式的签名 GET 验证和 POST 收件。 [配置说明](../../../README.md#企业微信自建应用) · [官方回调规范](https://developer.work.weixin.qq.com/document/path/90930)

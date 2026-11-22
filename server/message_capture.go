@@ -15,8 +15,6 @@ import (
 	"github.com/usememos/memos/server/inbox"
 )
 
-const weComCallbackPath = "/integrations/wecom"
-
 type messageCapture struct {
 	mu            sync.Mutex
 	repository    *messagecapture.Repository
@@ -63,7 +61,7 @@ func (s *Server) configureMessageCapture(ctx context.Context, mux *http.ServeMux
 	}
 
 	// WeCom authenticates with its own signature and encryption.
-	mux.HandleFunc(weComCallbackPath, capture.serveWeCom)
+	mux.HandleFunc(messagecapture.WeComCallbackPath, capture.serveWeCom)
 	return nil
 }
 
@@ -182,7 +180,7 @@ func (c *messageCapture) setWeCom(setting messagecapture.WeCom) {
 		return
 	}
 	c.weComCallback.Store(&handler)
-	slog.Info("WeCom capture enabled", slog.String("callbackPath", weComCallbackPath))
+	slog.Info("WeCom capture enabled", slog.String("callbackPath", messagecapture.WeComCallbackPath))
 }
 
 func (c *messageCapture) serveWeCom(w http.ResponseWriter, r *http.Request) {

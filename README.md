@@ -108,11 +108,11 @@ PY
 ### 企业微信自建应用
 
 1. 在企业微信管理后台的「应用管理 → 自建」创建应用，把自己加入可见范围。记录企业 ID、应用的 AgentId 和通讯录中的成员账号 UserID。
-2. 在应用的「接收消息」里生成 Token 和 EncodingAESKey。在 Cat_two「设置 → 通知 → 企业微信」填入企业 ID、AgentId、UserID、Token 和 EncodingAESKey，启用并保存。
-3. 将公网 HTTPS 地址的 `/integrations/wecom` 路径通过反向代理转发到 Cat_two 的 `5230` 端口，并填入企业微信「接收消息」的 URL，例如 `https://notes.example.com/integrations/wecom`。保存时平台会发起验证请求。NAS 只有局域网地址时，需要有公网可达的反向代理入口。
-4. 在企业微信客户端打开应用并发送文本。若企业后台提供「我的企业 → 微信插件」，可用个人微信扫码关注，再从微信里打开该企业应用发消息。 [企业微信回调配置](https://developer.work.weixin.qq.com/document/path/90930) · [接收消息](https://developer.work.weixin.qq.com/document/path/90968) · [Media Saber 设置参考](https://wiki.msaber.fun/usage/system_settings/message/weixin.html)
+2. 在企业微信后台打开应用的「接收消息 → 设置 API 接收」，生成 Token 和 EncodingAESKey。在 Cat_two「设置 → 通知 → 企业微信」填写对应凭据和公网回调地址，启用并保存。填 `notes.example.com:8443` 会生成 `https://notes.example.com:8443/integrations/wecom`。也可填写完整回调 URL。企业微信支持 HTTP 和 HTTPS，推荐 HTTPS。 [接收消息与事件](https://developer.work.weixin.qq.com/document/path/90238)
+3. 让公网入口将回调的 GET 和 POST（含查询参数）转发到 Cat_two 的 `/integrations/wecom`。NAS 在局域网时，可通过公网反向代理回源到容器的 `5230` 端口。复制 Cat_two 已保存的完整 URL 到企业微信后台，与相同的 Token 和 EncodingAESKey 一起保存。企业微信会发出签名加密的 GET 验证，服务须在 1 秒内返回解密后的原文。 [回调配置](https://developer.work.weixin.qq.com/document/path/90930) · [加解密方案](https://developer.work.weixin.qq.com/document/path/90968)
+4. 在企业微信客户端打开应用并发送文本。若企业后台提供「我的企业 → 微信插件」，可用个人微信扫码关注，再从微信里打开该企业应用发消息。 [Media Saber 设置参考](https://wiki.msaber.fun/usage/system_settings/message/weixin.html)
 
-若企业微信回调验证失败，先核对 HTTPS 回调路径、Token、EncodingAESKey 和 NAS 系统时间。
+手动地址优先于 `MEMOS_INSTANCE_URL` 提供的回调地址。清空后保存可恢复实例级默认值。实例只有内网 IP 时，先填写公网域名再复制。验证失败时检查公网端口、反向代理路由、Token、EncodingAESKey 和 NAS 系统时间。
 
 ### Telegram 网络代理
 

@@ -70,7 +70,7 @@ func TestNotificationSettingsPreserveChannelFallbackAndSecrets(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "another-member", updated.WeCom.UserID)
 	require.False(t, updated.Telegram.Enabled)
-	updated, err = r.Save(ctx, changed, Update{WeCom: &WeCom{Enabled: true, CorpID: "corp", AgentID: "42", UserID: "another-member"}})
+	updated, err = r.Save(ctx, changed, Update{WeCom: &WeComUpdate{Enabled: true, CorpID: "corp", AgentID: "42", UserID: "another-member"}})
 	require.NoError(t, err)
 	require.Equal(t, SourceSettings, updated.WeComSource)
 	require.Equal(t, aesKey, updated.WeCom.EncodingAESKey)
@@ -140,6 +140,49 @@ func TestConcurrentNotificationAndNetworkSavesKeepEachSetting(t *testing.T) {
 	require.NotContains(t, *sealed, "proxy-password")
 }
 
+func TestWeComCallbackOverridePersistsAndClears(t *testing.T) {
+	ctx := t.Context()
+	dataPath := t.TempDir()
+	r := NewRepository(newTestStore(t, dataPath), testSecret)
+	update := WeComUpdate{CorpID: "corp", CallbackToken: "old-token"}
+	// A row created without the new field resolves with no override.
+	initial, err := r.Save(ctx, Configuration{}, Update{WeCom: &update})
+	require.NoError(t, err)
+	require.Empty(t, initial.WeCom.CallbackURL)
+
+	update.CallbackURL = new("Notes.Example.com:8443")
+	setting, err := r.Save(ctx, Configuration{}, Update{WeCom: &update})
+	require.NoError(t, err)
+	const canonical = "https://notes.example.com:8443/integrations/wecom"
+	require.Equal(t, canonical, setting.WeCom.CallbackURL)
+
+	reopened := NewRepository(newTestStore(t, dataPath), testSecret)
+	persisted, err := reopened.Load(ctx, Configuration{})
+	require.NoError(t, err)
+	require.Equal(t, setting, persisted)
+
+	update.CorpID = "new-corp"
+	update.CallbackToken = ""
+	update.CallbackURL = nil
+	unchanged, err := reopened.Save(ctx, Configuration{}, Update{WeCom: &update})
+	require.NoError(t, err)
+	require.Equal(t, canonical, unchanged.WeCom.CallbackURL)
+	require.Equal(t, "old-token", unchanged.WeCom.CallbackToken)
+
+	update.CallbackURL = new("http://192.168.5.3:5230")
+	_, err = reopened.Save(ctx, Configuration{}, Update{WeCom: &update})
+	require.ErrorIs(t, err, ErrInvalidConfiguration)
+	stillSaved, err := reopened.Load(ctx, Configuration{})
+	require.NoError(t, err)
+	require.Equal(t, unchanged, stillSaved)
+
+	update.CallbackURL = new("")
+	cleared, err := reopened.Save(ctx, Configuration{}, Update{WeCom: &update})
+	require.NoError(t, err)
+	require.Empty(t, cleared.WeCom.CallbackURL)
+	require.Equal(t, "new-corp", cleared.WeCom.CorpID)
+}
+
 func TestInvalidConfigurationErrorsHideInput(t *testing.T) {
 	ctx := t.Context()
 	r := NewRepository(newTestStore(t, t.TempDir()), testSecret)
@@ -148,7 +191,7 @@ func TestInvalidConfigurationErrorsHideInput(t *testing.T) {
 	require.NotContains(t, err.Error(), "not-a-token")
 	_, err = r.Save(ctx, Configuration{}, Update{})
 	require.ErrorIs(t, err, ErrInvalidConfiguration)
-	_, err = r.Save(ctx, Configuration{}, Update{Telegram: &Telegram{}, WeCom: &WeCom{}})
+	_, err = r.Save(ctx, Configuration{}, Update{Telegram: &Telegram{}, WeCom: &WeComUpdate{}})
 	require.ErrorIs(t, err, ErrInvalidConfiguration)
 	for _, invalid := range []string{
 		"",

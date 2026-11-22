@@ -56,6 +56,7 @@ AI 客户端用 MCP 查找、整理和写回笔记。脚本、附件传输及回
 - 需要即时刷新时，使用 Bearer 认证连接 `GET /api/sse`。收到 `{"type":"memo.changed"}` 后通过列表或详情重新读取。通知只包含事件类型。SSE 只发送连接期间的事件，断线重连后重新查询。个人模式停用了通用出站 Webhook 管理和发送。 [SSE 路由](../../../../server/api/sse_handler.go) · [事件定义](../../../../server/api/sse_hub.go) · [Webhook 发送限制](../../../../server/api/memo_service_webhooks.go)
 - Telegram Bot 私聊使用长轮询，企业微信自建应用使用 `/integrations/wecom` 接收签名加密回调。启用前按部署说明配置发件人。接入只保存纯文本，由唯一活跃管理员持有，加入渠道标签，按消息 ID 去重，成功后回复 `Yes!`。日常 AI 或浏览器集成可直接用 MCP 或 REST 写入。 [收件配置](../../../../README.md#telegram-和企业微信收件) · [写入与去重](../../../../server/api/memo_capture.go)
 - 「通知」和「网络」使用 `/api/notificationSettings` 和 `/api/networkSettings` 的 `GET` 与 `PATCH`，要求活跃的管理员网页登录会话。读取返回启用状态、来源、渠道标识及凭据是否已设置。代理 URL 和渠道密钥为只写字段，更新时留空保留旧值。 [设置接口](../../../../server/api/capture_settings.go)
+- 企业微信配置中的 `wecom.callbackUrl` 是可读的手动公网地址。`PATCH` 省略该字段时保留原值，传空字符串时清除。`wecomDefaultCallbackUrl` 来自符合格式的实例公网域名。两者都支持 HTTP 或 HTTPS 和显式端口，填写裸域名时默认使用 HTTPS。保存只校验格式，公网连通性以企业微信后台的 GET 验证为准。 [地址格式](../../../../core/messagecapture/wecom_callback.go) · [接收消息与事件](https://developer.work.weixin.qq.com/document/path/90238)
 - 通知更新提交一条渠道，`telegram` 用 `enabled`、`userId` 和 `botToken`，`wecom` 用 `enabled`、`corpId`、`agentId`、`userId`、`callbackToken` 和 `encodingAesKey`。首次保存前各渠道读取容器环境，手动启停按保存值生效。企业微信回调路径由通知设置返回。 [通知配置](../../../../core/messagecapture/configuration.go)
 - 网络更新提交 `enabled` 和可选的 `proxyUrl`，接受 HTTP、HTTPS、SOCKS5 和 SOCKS5H。代理用于 Telegram 轮询和回复。未保存时遵循容器的环境代理与 `NO_PROXY`，保存为停用时直连。 [代理规则](../../../../core/messagecapture/network.go) · [部署配置](../../../../README.md#telegram-网络代理)
 

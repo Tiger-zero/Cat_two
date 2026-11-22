@@ -63,7 +63,7 @@ func TestWeComMessageCapture(t *testing.T) {
 		}
 		response := httptest.NewRecorder()
 		writer := &captureDeadlineWriter{ResponseRecorder: response}
-		s.handler.ServeHTTP(writer, httptest.NewRequest(method, weComCallbackPath+"?"+query.Encode(), strings.NewReader(payload)))
+		s.handler.ServeHTTP(writer, httptest.NewRequest(method, messagecapture.WeComCallbackPath+"?"+query.Encode(), strings.NewReader(payload)))
 		require.False(t, writer.readDeadline.IsZero(), "read deadline must cover final response handling")
 		return response
 	}
@@ -114,7 +114,7 @@ func TestWeComMessageCapture(t *testing.T) {
 	settings, err := capture.GetConfiguration(ctx)
 	require.NoError(t, err)
 	require.Equal(t, messagecapture.SourceEnvironment, settings.WeComSource)
-	rotated := messagecapture.WeCom{
+	rotated := messagecapture.WeComUpdate{
 		Enabled: true, CorpID: corp, AgentID: "1000002", UserID: "allowed",
 		CallbackToken: "rotated-callback-token",
 	}
@@ -185,7 +185,7 @@ func TestTelegramCaptureReloadsChangedSettings(t *testing.T) {
 	initial := waitForPoller()
 	require.Equal(t, initialToken, initial.token)
 	require.EqualValues(t, 1024, initial.sender)
-	_, err = capture.UpdateConfiguration(ctx, messagecapture.Update{WeCom: &messagecapture.WeCom{}})
+	_, err = capture.UpdateConfiguration(ctx, messagecapture.Update{WeCom: &messagecapture.WeComUpdate{}})
 	require.NoError(t, err)
 	expectRunning(initial)
 

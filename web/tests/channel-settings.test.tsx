@@ -8,7 +8,6 @@ import NotificationSection from "@/components/Settings/NotificationSection";
 const authenticatedFetch = vi.hoisted(() => vi.fn<(path: string, init?: RequestInit) => Promise<Response>>());
 vi.mock("@/connect", () => ({ authenticatedFetch }));
 vi.mock("@/hooks/useCurrentUser", () => ({ default: () => ({ name: "users/admin" }) }));
-vi.mock("@/contexts/InstanceContext", () => ({ useInstance: () => ({ profile: { instanceUrl: "https://notes.example.test/" } }) }));
 
 const notificationSettings = {
   telegram: { enabled: true, configured: true, source: "environment", userId: "9007199254740993", hasBotToken: true },
@@ -19,10 +18,12 @@ const notificationSettings = {
     userId: "",
     corpId: "",
     agentId: "",
+    callbackUrl: "",
     hasCallbackToken: false,
     hasEncodingAesKey: false,
   },
   wecomCallbackPath: "/integrations/wecom",
+  wecomDefaultCallbackUrl: "https://notes.example.com/integrations/wecom",
 };
 
 function renderSettings(section: ReactNode) {
@@ -42,7 +43,7 @@ describe("Notification and network settings", () => {
     authenticatedFetch.mockResolvedValueOnce(Response.json(notificationSettings)).mockResolvedValueOnce(Response.json(updated));
     renderSettings(<NotificationSection />);
 
-    expect(await screen.findByText("https://notes.example.test/integrations/wecom")).toBeVisible();
+    expect(await screen.findByText(notificationSettings.wecomDefaultCallbackUrl)).toBeVisible();
     const switchControl = screen.getByRole("switch", { name: "Enable Telegram" });
     const token = screen.getByLabelText("Bot token");
     expect(switchControl).toBeChecked();
@@ -67,6 +68,7 @@ describe("Notification and network settings", () => {
         userId: "alice",
         corpId: "corp-id",
         agentId: "1000002",
+        callbackUrl: "",
         hasCallbackToken: true,
         hasEncodingAesKey: true,
       },
@@ -97,6 +99,62 @@ describe("Notification and network settings", () => {
     await waitFor(() => expect(token).toHaveValue(""));
     expect(key).toHaveValue("");
     expect(key).toHaveAttribute("type", "password");
+  });
+
+  it.each([
+    ["notes.example.com:8443", "https://notes.example.com:8443/integrations/wecom"],
+    ["http://notes.example.com:8080/app/integrations/wecom", "http://notes.example.com:8080/app/integrations/wecom"],
+  ])("saves and clears %s while WeCom is disabled", async (address, callbackUrl) => {
+    authenticatedFetch
+      .mockResolvedValueOnce(Response.json(notificationSettings))
+      .mockResolvedValueOnce(Response.json({ ...notificationSettings, wecom: { ...notificationSettings.wecom, callbackUrl } }))
+      .mockResolvedValueOnce(Response.json(notificationSettings));
+    renderSettings(<NotificationSection />);
+
+    const input = await screen.findByLabelText("Public callback address");
+    const save = screen.getByRole("button", { name: "Save WeCom" });
+    expect(screen.getByRole("switch", { name: "Enable WeCom" })).not.toBeChecked();
+    expect(input).toHaveValue("");
+    expect(input).toHaveAttribute("placeholder", "https://notes.example.com:8443");
+    expect(screen.getByText(notificationSettings.wecomDefaultCallbackUrl)).toBeVisible();
+
+    fireEvent.change(input, { target: { value: address } });
+    fireEvent.click(save);
+    expect(lastRequestBody()).toEqual({
+      wecom: { enabled: false, userId: "", corpId: "", agentId: "", callbackUrl: address },
+    });
+    expect(await screen.findByText(callbackUrl)).toBeVisible();
+    expect(input).toHaveValue(callbackUrl);
+    expect(screen.queryByText(notificationSettings.wecomDefaultCallbackUrl)).not.toBeInTheDocument();
+
+    fireEvent.change(input, { target: { value: "" } });
+    fireEvent.click(save);
+    expect(lastRequestBody()).toEqual({ wecom: { enabled: false, userId: "", corpId: "", agentId: "", callbackUrl: "" } });
+    expect(await screen.findByText(notificationSettings.wecomDefaultCallbackUrl)).toBeVisible();
+    expect(input).toHaveValue("");
+  });
+
+  it("does not copy a local browser origin and gives a field error for invalid callbacks", async () => {
+    authenticatedFetch.mockResolvedValueOnce(Response.json({ ...notificationSettings, wecomDefaultCallbackUrl: "" }));
+    renderSettings(<NotificationSection />);
+
+    const input = await screen.findByLabelText("Public callback address");
+    expect(input).toHaveValue("");
+    expect(screen.queryByRole("button", { name: /copy.*wecom callback url/i })).not.toBeInTheDocument();
+    for (const address of [
+      "ftp://notes.example.com",
+      "192.168.1.10:8443",
+      "http://192.168.1.10:5230",
+      "https://notes.example.com/wrong-path",
+    ]) {
+      fireEvent.change(input, { target: { value: address } });
+      fireEvent.click(screen.getByRole("button", { name: "Save WeCom" }));
+      expect(
+        screen.getByText("Enter a public domain with an optional port or an HTTP or HTTPS URL ending in /integrations/wecom."),
+      ).toBeVisible();
+      expect(input).toHaveAttribute("aria-invalid", "true");
+      expect(authenticatedFetch).toHaveBeenCalledTimes(1);
+    }
   });
 
   it("can set a proxy, keeps its URL masked, and can disable it without replacing it", async () => {

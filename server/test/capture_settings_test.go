@@ -15,6 +15,8 @@ func TestPersonalCaptureSettings(t *testing.T) {
 		notificationPath = "/api/notificationSettings"
 		networkPath      = "/api/networkSettings"
 		callbackPath     = "/integrations/wecom"
+		publicCallback   = "https://notes.example.test:8443" + callbackPath
+		defaultCallback  = "https://fallback.example.test:9443/notes" + callbackPath
 		environmentToken = "test-environment-callback-token"
 		callbackToken    = "test-rotated-callback-token"
 		proxyURL         = "socks5h://fixture-user:fixture-password@127.0.0.1:1080"
@@ -28,7 +30,7 @@ func TestPersonalCaptureSettings(t *testing.T) {
 	t.Setenv("CAT_TWO_WECOM_CALLBACK_TOKEN", environmentToken)
 	t.Setenv("CAT_TWO_WECOM_ENCODING_AES_KEY", encodingAESKey)
 
-	opts := instanceOptions{personal: true, dataDir: t.TempDir()}
+	opts := instanceOptions{personal: true, dataDir: t.TempDir(), instanceURL: "http://192.168.5.3:5230"}
 	inst := bootInstance(t.Context(), t, opts)
 	inst.createAdmin(t)
 	admin := inst.signIn(t)
@@ -59,7 +61,7 @@ func TestPersonalCaptureSettings(t *testing.T) {
 	require.Equal(t, http.StatusOK, code)
 	require.JSONEq(t, `{"telegram":{"enabled":false,"configured":false,"source":"","userId":"","hasBotToken":false},
 		"wecom":{"enabled":true,"configured":true,"source":"environment","corpId":"wwfixture","agentId":"1000001",
-		"userId":"fixture","hasCallbackToken":true,"hasEncodingAesKey":true},"wecomCallbackPath":"/integrations/wecom"}`, string(body))
+		"userId":"fixture","hasCallbackToken":true,"hasEncodingAesKey":true,"callbackUrl":""},"wecomCallbackPath":"/integrations/wecom"}`, string(body))
 
 	code, _ = inst.do(t, http.MethodPatch, notificationPath, admin, map[string]any{"telegram": map[string]bool{}, "wecom": map[string]bool{}})
 	require.Equal(t, http.StatusBadRequest, code)
@@ -67,12 +69,18 @@ func TestPersonalCaptureSettings(t *testing.T) {
 	require.Equal(t, http.StatusBadRequest, code)
 	code, body = inst.do(t, http.MethodPatch, notificationPath, admin, map[string]any{"wecom": map[string]any{
 		"enabled": true, "corpId": "wwfixture", "agentId": "1000001", "userId": "fixture", "callbackToken": callbackToken,
+		"callbackUrl": "notes.example.test:8443",
 	}})
 	require.Equal(t, http.StatusOK, code, "%s", body)
 	require.Contains(t, string(body), `"source":"settings"`)
 	require.Contains(t, string(body), `"hasEncodingAesKey":true`)
+	require.Contains(t, string(body), `"callbackUrl":"`+publicCallback+`"`)
 	require.NotContains(t, string(body), callbackToken)
 	require.NotContains(t, string(body), encodingAESKey)
+	code, _ = inst.do(t, http.MethodPatch, notificationPath, admin, map[string]any{"wecom": map[string]any{
+		"enabled": false, "callbackUrl": "https://192.168.5.3:5230",
+	}})
+	require.Equal(t, http.StatusBadRequest, code, "an invalid address must not turn off an active callback")
 
 	// An unsigned probe reaches the callback only while the channel is active.
 	code, _ = inst.do(t, http.MethodGet, callbackPath, "", nil)
@@ -81,6 +89,7 @@ func TestPersonalCaptureSettings(t *testing.T) {
 		"enabled": false, "corpId": "wwfixture", "agentId": "1000001", "userId": "fixture",
 	}})
 	require.Equal(t, http.StatusOK, code, "%s", body)
+	require.Contains(t, string(body), `"callbackUrl":"`+publicCallback+`"`, "clients that omit the field must keep the saved address")
 	code, _ = inst.do(t, http.MethodGet, callbackPath, "", nil)
 	require.Equal(t, http.StatusNotFound, code)
 
@@ -97,8 +106,20 @@ func TestPersonalCaptureSettings(t *testing.T) {
 	require.JSONEq(t, `{"enabled":true,"hasProxyUrl":true,"source":"settings"}`, string(body))
 
 	inst.shutdown(t.Context())
+	opts.instanceURL = "https://fallback.example.test:9443/notes"
 	inst = bootInstance(t.Context(), t, opts)
 	admin = inst.signIn(t)
+	code, body = inst.do(t, http.MethodGet, notificationPath, admin, nil)
+	require.Equal(t, http.StatusOK, code)
+	require.Contains(t, string(body), `"callbackUrl":"`+publicCallback+`"`)
+	require.Contains(t, string(body), `"wecomDefaultCallbackUrl":"`+defaultCallback+`"`)
+	code, body = inst.do(t, http.MethodPatch, notificationPath, admin, map[string]any{"wecom": map[string]any{
+		"enabled": false, "corpId": "wwfixture", "agentId": "1000001", "userId": "fixture", "callbackUrl": "",
+	}})
+	require.Equal(t, http.StatusOK, code, "%s", body)
+	require.Contains(t, string(body), `"callbackUrl":""`)
+	require.Contains(t, string(body), `"wecomDefaultCallbackUrl":"`+defaultCallback+`"`)
+	require.Contains(t, string(body), `"hasCallbackToken":true`)
 	code, _ = inst.do(t, http.MethodGet, callbackPath, "", nil)
 	require.Equal(t, http.StatusNotFound, code, "a saved disable must override legacy environment settings on restart")
 	code, body = inst.do(t, http.MethodGet, networkPath, admin, nil)

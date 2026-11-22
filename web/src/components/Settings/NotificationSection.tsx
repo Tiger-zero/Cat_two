@@ -1,6 +1,6 @@
-import { Button, Input, Switch } from "@usememos/ui";
+import { Button, Field, Input, Switch } from "@usememos/ui";
 import { type FormEvent, useState } from "react";
-import { useInstance } from "@/contexts/InstanceContext";
+import { useFieldErrors } from "@/hooks/useFieldErrors";
 import { toast } from "@/lib/toast";
 import { type Translations, useTranslate } from "@/utils/i18n";
 import CopyableSettingValue from "./CopyableSettingValue";
@@ -18,34 +18,67 @@ interface ChannelStatus {
 
 interface NotificationSettings {
   telegram: ChannelStatus & { hasBotToken: boolean };
-  wecom: ChannelStatus & { corpId: string; agentId: string; hasCallbackToken: boolean; hasEncodingAesKey: boolean };
+  wecom: ChannelStatus & { corpId: string; agentId: string; callbackUrl: string; hasCallbackToken: boolean; hasEncodingAesKey: boolean };
   wecomCallbackPath: string;
+  wecomDefaultCallbackUrl?: string;
 }
 
 type SettingsUpdate =
   | { telegram: { enabled: boolean; userId: string; botToken?: string } }
-  | { wecom: { enabled: boolean; userId: string; corpId: string; agentId: string; callbackToken?: string; encodingAesKey?: string } };
+  | {
+      wecom: {
+        enabled: boolean;
+        userId: string;
+        corpId: string;
+        agentId: string;
+        callbackToken?: string;
+        encodingAesKey?: string;
+        callbackUrl?: string;
+      };
+    };
 
-type FieldName = "userId" | "botToken" | "corpId" | "agentId" | "callbackToken" | "encodingAesKey";
+type FieldName = "userId" | "botToken" | "corpId" | "agentId" | "callbackToken" | "encodingAesKey" | "callbackUrl";
 
 interface ChannelField {
   name: FieldName;
   label: Translations;
+  description?: Translations;
+  placeholder?: string;
   value?: string;
   numeric?: boolean;
   hasSecret?: boolean;
+}
+
+function isWeComCallbackAddress(value: string, callbackPath: string) {
+  if (/[\s?#\\]/.test(value)) return false;
+  try {
+    const url = new URL(value.includes("://") ? value : `https://${value}`);
+    const hostname = url.hostname.replace(/\.$/, "");
+    return (
+      (url.protocol === "https:" || url.protocol === "http:") &&
+      hostname.includes(".") &&
+      !/^[0-9.]+$/.test(hostname) &&
+      !url.username &&
+      !url.password &&
+      (url.pathname === "/" || url.pathname.endsWith(callbackPath))
+    );
+  } catch {
+    return false;
+  }
 }
 
 function ChannelForm({
   channel,
   status,
   fields,
+  callbackPath,
   saving,
   save,
 }: {
   channel: string;
   status: ChannelStatus;
   fields: ChannelField[];
+  callbackPath?: string;
   saving: boolean;
   save: (enabled: boolean, values: FormData) => Promise<void>;
 }) {
@@ -53,13 +86,24 @@ function ChannelForm({
   const [enabledEdit, setEnabledEdit] = useState<boolean>();
   const [edits, setEdits] = useState<Partial<Record<FieldName, string>>>({});
   const [failed, setFailed] = useState(false);
+  const fieldErrors = useFieldErrors<FieldName>();
   const enabled = enabledEdit ?? status.enabled;
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setFailed(false);
+    const values = new FormData(event.currentTarget);
+    if (edits.callbackUrl === undefined) {
+      values.delete("callbackUrl");
+    } else if (callbackPath) {
+      const address = readField(values, "callbackUrl");
+      if (address && !isWeComCallbackAddress(address, callbackPath)) {
+        fieldErrors.set("callbackUrl", t("setting.notification.wecom-callback-invalid"));
+        return;
+      }
+    }
     try {
-      await save(enabled, new FormData(event.currentTarget));
+      await save(enabled, values);
       setEnabledEdit(undefined);
       setEdits({});
       toast.add({ type: "success", title: t("setting.notification.saved", { channel }) });
@@ -83,8 +127,14 @@ function ChannelForm({
         >
           <Switch checked={enabled} disabled={saving} onCheckedChange={setEnabledEdit} />
         </SettingListItem>
-        {fields.map(({ name, label, value, numeric, hasSecret }) => (
-          <SettingListItem key={name} label={t(label)} orientation="vertical">
+        {fields.map(({ name, label, description, placeholder, value, numeric, hasSecret }) => (
+          <SettingListItem
+            key={name}
+            label={t(label)}
+            description={description && t(description)}
+            orientation="vertical"
+            invalid={Boolean(fieldErrors.errors[name])}
+          >
             <Input
               name={name}
               dir="ltr"
@@ -92,14 +142,16 @@ function ChannelForm({
               inputMode={numeric ? "numeric" : undefined}
               autoComplete={hasSecret === undefined ? "off" : "new-password"}
               spellCheck={false}
-              placeholder={hasSecret ? t("setting.notification.secret-stored") : undefined}
+              placeholder={hasSecret ? t("setting.notification.secret-stored") : placeholder}
               value={edits[name] ?? value ?? ""}
               readOnly={saving}
               onChange={(event) => {
                 setEdits({ ...edits, [name]: event.target.value });
                 setFailed(false);
+                fieldErrors.clear(name);
               }}
             />
+            {fieldErrors.errors[name] && <Field.Error match>{fieldErrors.errors[name]}</Field.Error>}
           </SettingListItem>
         ))}
       </SettingList>
@@ -121,9 +173,8 @@ const readField = (fields: FormData, name: FieldName) => String(fields.get(name)
 
 export default function NotificationSection() {
   const t = useTranslate();
-  const { profile } = useInstance();
   const { query, saving, save } = useAdminSettingsRequest<NotificationSettings, SettingsUpdate>("/api/notificationSettings");
-  const baseUrl = (profile.instanceUrl || window.location.origin).replace(/\/+$/, "");
+  const callbackUrl = query.data?.wecom.callbackUrl || query.data?.wecomDefaultCallbackUrl;
 
   return (
     <SettingSection title={t("setting.notification.label")} description={t("setting.notification.description")}>
@@ -165,11 +216,19 @@ export default function NotificationSection() {
             />
           </SettingGroup>
           <SettingGroup title={t("setting.notification.wecom")} description={t("setting.notification.wecom-description")} showSeparator>
-            <CopyableSettingValue label={t("setting.notification.wecom-callback")} value={baseUrl + query.data.wecomCallbackPath} />
+            {callbackUrl && <CopyableSettingValue label={t("setting.notification.wecom-callback")} value={callbackUrl} />}
             <ChannelForm
               channel={t("setting.notification.wecom")}
               status={query.data.wecom}
+              callbackPath={query.data.wecomCallbackPath}
               fields={[
+                {
+                  name: "callbackUrl",
+                  label: "setting.notification.wecom-callback-override",
+                  description: "setting.notification.wecom-callback-description",
+                  placeholder: "https://notes.example.com:8443",
+                  value: query.data.wecom.callbackUrl,
+                },
                 { name: "corpId", label: "setting.notification.corp-id", value: query.data.wecom.corpId },
                 { name: "agentId", label: "setting.notification.agent-id", value: query.data.wecom.agentId, numeric: true },
                 { name: "userId", label: "setting.notification.wecom-user-id", value: query.data.wecom.userId },
@@ -186,6 +245,7 @@ export default function NotificationSection() {
                     userId: readField(values, "userId"),
                     callbackToken: readField(values, "callbackToken") || undefined,
                     encodingAesKey: readField(values, "encodingAesKey") || undefined,
+                    callbackUrl: values.has("callbackUrl") ? readField(values, "callbackUrl") : undefined,
                   },
                 })
               }
