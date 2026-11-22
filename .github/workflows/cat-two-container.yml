@@ -91,22 +91,16 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Verify Compose storage and identity settings
+      - name: Verify the default Compose configuration
         if: steps.scope.outputs.skip != 'true'
         shell: bash
         run: |
           docker compose config --format json |
             jq -e '.services["cat-two"] |
-              any(.volumes[]; .type == "volume" and .source == "cat_two_data" and .target == "/var/opt/memos")
+              .image == "docker.io/tiger2896/cat_two:latest"
               and .environment.PUID == "1000" and .environment.PGID == "10"
-              and .environment.MEMOS_UID == "" and .environment.MEMOS_GID == ""' >/dev/null
-
-          data_dir="$RUNNER_TEMP/cat-two-data"
-          CAT_TWO_DATA_DIR="$data_dir" PUID=2000 PGID=20 MEMOS_UID=3000 MEMOS_GID=30 docker compose config --format json |
-            jq -e --arg data_dir "$data_dir" '.services["cat-two"] |
-              any(.volumes[]; .type == "bind" and .source == $data_dir and .target == "/var/opt/memos")
-              and .environment.PUID == "2000" and .environment.PGID == "20"
-              and .environment.MEMOS_UID == "3000" and .environment.MEMOS_GID == "30"' >/dev/null
+              and any(.ports[]; .published == "5230" and .target == 5230)
+              and any(.volumes[]; .type == "volume" and .source == "cat_two_data" and .target == "/var/opt/memos")' >/dev/null
 
       - uses: ./.github/actions/setup-web
         if: steps.scope.outputs.skip != 'true'

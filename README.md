@@ -14,34 +14,36 @@ docker compose up -d
 
 在浏览器打开 `http://服务器地址:5230`。首次启动时按提示设置管理员用户名和密码，创建后网页注册关闭。用 `docker compose ps` 查看运行状态，或用 `docker compose logs -f cat-two` 查看启动日志。
 
-SQLite 和默认的本地附件存储使用 Compose 的 `cat_two_data` 命名卷，容器内路径为 `/var/opt/memos`。应用默认以 UID `1000` 和 GID `10` 运行。可在项目环境中设置 `PUID` 和 `PGID`，显式设置的 `MEMOS_UID` 和 `MEMOS_GID` 分别优先。主机端口及容器时区可通过 `CAT_TWO_PORT` 和 `TZ` 调整。
+SQLite 和默认的本地附件存储使用 `cat_two_data` 命名卷，容器内路径为 `/var/opt/memos`。如需自定义，直接编辑 `compose.yaml` 中的 `image`、`ports` 或 `environment`。运行身份由 `PUID` 和 `PGID` 指定，默认是 `1000` 和 `10`，时区由 `TZ` 指定。
 
 ## 在 NAS 上部署
 
-NAS 使用同一份 `compose.yaml`。新部署可将文件导入绿联 NAS 的 Docker 应用，也可在文件所在目录运行 `docker compose up -d`。如果想把数据直接放到 NAS 文件夹，先创建目录并赋予应用的运行用户和组读写权限，再在 Docker 项目环境变量或部署目录的 `.env` 中设置绝对路径。以下为可按需调整的示例。
+NAS 使用同一份 `compose.yaml`。新部署可将文件导入绿联 NAS 的 Docker 应用，也可在文件所在目录运行 `docker compose up -d`。如果想把数据直接放到 NAS 文件夹，先创建目录并赋予应用的运行用户和组读写权限，再将 `cat-two` 服务下 `volumes` 的挂载替换为下面这一条。需要用其他目录时，修改冒号前的宿主机绝对路径。
 
-```dotenv
-CAT_TWO_DATA_DIR=/volume1/docker/cat2/data
-PUID=1000
-PGID=10
-CAT_TWO_PORT=5230
+```yaml
+volumes:
+  - /volume1/docker/cat2/data:/var/opt/memos
 ```
 
-设置 `CAT_TWO_DATA_DIR` 后，该目录会挂载到容器内的 `/var/opt/memos`。留空时使用命名卷。已有实例切换配置前，按备份和升级步骤保留原有数据挂载。 [备份和升级](#备份和升级)
+已有实例应先核对原项目的端口、数据挂载和运行身份，再替换配置。 [备份和升级](#备份和升级)
+
+## 可选的容器环境变量
+
+反向代理和消息收件的配置填在 Docker 或 NAS 管理界面中 `cat-two` 服务的容器环境变量里。命令行部署可把所需变量写入私有的 `.env.integrations` 文件，格式为 `变量名=值`，然后在 `cat-two` 服务下加入这一行，与 `environment` 同级。
+
+```yaml
+env_file: ./.env.integrations
+```
+
+含有令牌或密钥的文件仅保存在部署主机。保存配置后，用原项目执行 `docker compose up -d` 重建容器。
 
 ## 在公网部署
 
-首次启动时先通过受限网络或 SSH 转发访问 `5230`，完成唯一管理员的创建，设置独立密码并在「设置 → 我的账户」启用两步验证。打开公网入口前，在 Compose 项目环境中设置以下配置。
+首次启动时先通过受限网络或 SSH 转发访问 `5230`，完成唯一管理员的创建，设置独立密码并在「设置 → 我的账户」启用两步验证。代理与 Cat_two 在同一主机时，将 `ports` 的映射改为 `127.0.0.1:5230:5230`，并在 `cat-two` 容器环境中将 `MEMOS_INSTANCE_URL` 设为实际的公网 HTTPS 地址，例如 `https://notes.example.com`。 [容器环境变量](#可选的容器环境变量)
 
-```dotenv
-CAT_TWO_BIND_IP=127.0.0.1
-CAT_TWO_PORT=5230
-MEMOS_INSTANCE_URL=https://notes.example.com
-```
+在反向代理上终止 HTTPS，转发到 `http://127.0.0.1:5230`，之后用配置的 HTTPS 域名登录。防火墙只开放代理的 HTTPS 端口及签发证书所需的 HTTP 端口，HTTP 入口重定向到 HTTPS。代理部署在 Docker 网络内时，可让代理在专用网络里访问容器，并移除 `cat-two` 的端口发布。
 
-在同一主机上用反向代理终止 HTTPS，转发到 `http://127.0.0.1:5230`，之后用配置的 HTTPS 域名登录。防火墙只开放代理的 HTTPS 端口及签发证书所需的 HTTP 端口，HTTP 入口重定向到 HTTPS。代理部署在 Docker 网络内时，可让代理在专用网络里访问容器，并移除 `cat-two` 的端口发布。
-
-- 代理校验公网域名、保留 `Host`、设置 `X-Forwarded-Proto`，并在公网入口覆盖客户端传入的 `X-Forwarded-For` 和 `X-Real-IP`。Cat_two 默认从直连地址识别客户端。反向代理部署中，将 `MEMOS_TRUSTED_PROXIES` 设为应用实际收到连接的代理 IP 或专用代理网段，以便按真实客户端区分限流和 MCP 连接来源。
+- 代理校验公网域名、保留 `Host`、设置 `X-Forwarded-Proto`，并在公网入口覆盖客户端传入的 `X-Forwarded-For` 和 `X-Real-IP`。Cat_two 默认从直连地址识别客户端。在 `cat-two` 容器环境中将 `MEMOS_TRUSTED_PROXIES` 设为应用实际收到连接的代理 IP 或专用代理网段，以便按真实客户端区分限流和 MCP 连接来源。
 - 同一个 SQLite 实例由一个 Cat_two 进程提供服务，以共享会话更新和限流状态。保留应用限流，并在代理侧限制登录和首次设置请求频率、请求体大小及慢上传。大附件和 ZIP 用分块接口。`/api/sse` 须关闭代理响应缓冲，给流式连接留出读取时间。代理和 CDN 应跳过 `/api/`、`/memos.api.*`、`/mcp`、`/file/` 和 `/integrations/` 的缓存。
 - 仅需移动端收件时，企业微信只需公网代理 `/integrations/wecom`，Telegram 通过 NAS 或服务器主动连接 Bot API。其他入口可放在 VPN 或受限网络中。
 - 给每个集成单独创建短期令牌，撤销闲置或已经泄露的令牌。公网日志避免记录 `Authorization`、Cookie 和企业微信回调查询参数。备份 SQLite、附件和部署密钥时同样限制访问。 [凭据和权限](.agents/skills/cat-two-development/references/external-api.md#凭据和可见性) · [安全说明](SECURITY.md)
@@ -60,7 +62,7 @@ MEMOS_INSTANCE_URL=https://notes.example.com
 
 ## Telegram 和企业微信收件
 
-先完成 Cat_two 的管理员初始化。在 NAS 的 Compose 项目环境变量或部署目录下的 `.env` 中按需配置以下渠道，然后用原项目和数据挂载重建容器。收件目前支持文本消息，包括用文本发来的链接。消息成为管理员的私有笔记，分别带 `#Telegram` 或 `#微信` 标签，可在「全部笔记」和标签列表查看。每个渠道只收指定发件人的消息。令牌和加密密钥只填在部署配置里。
+先完成 Cat_two 的管理员初始化。选择收件渠道，将下列设置加入 `cat-two` 容器环境，然后用原项目和数据挂载重建容器。收件支持文本消息，包括用文本发来的链接。每个渠道只收指定发件人的消息，保存为管理员的私有笔记，并添加 `#Telegram` 或 `#微信` 标签。 [容器环境变量](#可选的容器环境变量)
 
 笔记保存成功后，Telegram Bot 或企业微信应用会在原会话回复 `Yes!`。被忽略或保存失败的消息不会收到确认。若渠道暂时无法投递确认，已保存的笔记仍可在 Cat_two 查看。
 
@@ -108,7 +110,7 @@ PY
 ### 企业微信自建应用
 
 1. 在企业微信管理后台的「应用管理 → 自建」创建应用，把自己加入可见范围。记录企业 ID、应用的 AgentId 和通讯录中的成员账号 UserID。
-2. 在应用的「接收消息」里生成 Token 和 EncodingAESKey。将以下五项填入 Cat_two 的项目配置并重建容器。收件和加密回复使用现有回调配置，无需应用 Secret。
+2. 在应用的「接收消息」里生成 Token 和 EncodingAESKey。将以下五项填入 `cat-two` 容器环境并重建。收件和加密回复使用现有回调配置，无需应用 Secret。
 3. 将公网 HTTPS 地址的 `/integrations/wecom` 路径通过反向代理转发到 Cat_two 的 `5230` 端口，并填入企业微信「接收消息」的 URL，例如 `https://notes.example.com/integrations/wecom`。保存时平台会发起验证请求。NAS 只有局域网地址时，需要有公网可达的反向代理入口。
 4. 在企业微信客户端打开应用并发送文本。若企业后台提供「我的企业 → 微信插件」，可用个人微信扫码关注，再从微信里打开该企业应用发消息。 [企业微信回调配置](https://developer.work.weixin.qq.com/document/path/90930) · [接收消息](https://developer.work.weixin.qq.com/document/path/90968) · [Media Saber 设置参考](https://wiki.msaber.fun/usage/system_settings/message/weixin.html)
 
@@ -164,10 +166,11 @@ docker compose exec cat-two /usr/local/memos/memos two-factor reset --username a
 
 升级前先停止容器并备份整个数据目录或命名卷，也可以使用存储的一致性快照。使用其他目录或对象存储存放附件时，一并备份。
 
-替换 Compose 配置时，沿用原项目名称、环境配置和数据挂载。
+替换 Compose 配置时，沿用原项目名称和数据挂载。简化后的示例直接使用文件中填写的值，旧 `.env` 中的应用部署参数需要在重建前手动迁移。
 
-- 原实例绑定 NAS 目录时，先在项目环境中把 `CAT_TWO_DATA_DIR` 设为旧容器挂载到 `/var/opt/memos` 的实际宿主机路径。确认该目录含有现存的 SQLite 数据库，再用新的 `compose.yaml` 更新同一项目。Compose 可能会为写错的路径创建空目录，所以启动前要核对路径。
-- 原实例使用默认命名卷时，保留项目名称并让 `CAT_TWO_DATA_DIR` 留空。如需保持此前默认的 `10001:10001`，设置 `PUID=10001` 和 `PGID=10001`。
+- 原实例绑定 NAS 目录时，先核对旧容器挂载到 `/var/opt/memos` 的实际宿主机路径，确认该目录含有现存的 SQLite 数据库，再把该路径填入服务的 `volumes`。Compose 可能会为写错的路径创建空目录。原实例使用命名卷时，沿用原挂载和项目名称。
+- 把原来的自定义镜像、主机端口及绑定地址直接填入 `image` 和 `ports`，把实际运行 UID、GID 和时区填入 `environment` 中的 `PUID`、`PGID` 和 `TZ`。旧配置使用 `MEMOS_UID` 或 `MEMOS_GID` 覆盖时，填写原部署实际生效的值。
+- 原有的反向代理和消息收件配置需传入新容器环境。 [容器环境变量](#可选的容器环境变量)
 
 在部署目录拉取镜像并重建。
 
@@ -176,13 +179,13 @@ docker compose pull
 docker compose up -d
 ```
 
-若通过 `CAT_TWO_IMAGE` 固定了镜像标签，拉取前请把标签改为希望升级到的版本。启动后用原账号登录，检查已有笔记和附件是否可读。想迁移笔记时，可在「设置 → 导出和导入」导出 ZIP。 [数据备份与恢复](.agents/skills/cat-two-development/references/product-guide.md#数据备份和升级)
+若固定了镜像标签，拉取前请在 `image` 中填入希望升级到的版本。启动后用原账号登录，检查已有笔记和附件是否可读。想迁移笔记时，可在「设置 → 导出和导入」导出 ZIP。 [数据备份与恢复](.agents/skills/cat-two-development/references/product-guide.md#数据备份和升级)
 
 ## 构建和发布镜像
 
 在 GitHub Actions 打开 **Cat_two Container**，选择 `main` 和 `dockerhub` 并运行工作流。它使用仓库 Secrets `DOCKERHUB_USERNAME` 和 `DOCKERHUB_TOKEN`，验证后发布 AMD64 和 ARM64 镜像。也可以在推送到 `main` 的最新提交消息加入 `[publish dockerhub]` 触发发布。手动选择 `ghcr` 时，镜像发布到 `ghcr.io/tiger-zero/cat_two`。 [容器工作流](.github/workflows/cat-two-container.yml)
 
-Docker Hub 版本从 `0.01` 起，每次发布递增 `0.01`，例如 `0.09` 的下一版是 `0.10`。每次发布同时提供编号、`latest` 和 `sha-<完整提交 SHA>` 三种标签。要固定版本，在 Compose 环境中把 `CAT_TWO_IMAGE` 设为 `docker.io/tiger2896/cat_two:<版本号>`。 [Docker Hub 镜像](https://hub.docker.com/r/tiger2896/cat_two)
+Docker Hub 版本从 `0.01` 起，每次发布递增 `0.01`，例如 `0.09` 的下一版是 `0.10`。每次发布同时提供编号、`latest` 和 `sha-<完整提交 SHA>` 三种标签。要固定版本，直接将 `compose.yaml` 中的 `image` 改为 `docker.io/tiger2896/cat_two:<版本号>`。 [Docker Hub 镜像](https://hub.docker.com/r/tiger2896/cat_two)
 
 也可以在独立检出目录构建本地镜像。先用 pnpm 构建前端，再让 Docker 将静态文件嵌入服务端。
 
@@ -192,8 +195,9 @@ docker build -f scripts/Dockerfile \
   --build-arg VERSION="$(bash scripts/release_version.sh development-version)" \
   --build-arg COMMIT="$(git rev-parse HEAD)" \
   -t cat-two:local .
-CAT_TWO_IMAGE=cat-two:local docker compose up -d
 ```
+
+把 `compose.yaml` 中的 `image` 改为 `cat-two:local`，再执行 `docker compose up -d`。
 
 ## 项目来源与许可
 

@@ -12,7 +12,7 @@ description: >-
 ## 连接实例
 
 - Codex 使用原生 Streamable HTTP 连接。Bearer 令牌环境变量留空，在 `Authorization` 请求头中粘贴 `Bearer <MCP 连接令牌>`。保存后按客户端提示重启。笔记插件可以另行安装。 [Codex 接入配置](../../../plugins/cat-two-notes/README.md#连接-nas)
-- 其他 AI 客户端用自己的 Streamable HTTP 配置连接同一服务。客户端与 Cat_two 在同一主机时可用 `http://127.0.0.1:5230/mcp`。NAS 部署使用客户端实际可访问的地址及主机端口，端口由 `CAT_TWO_PORT` 配置。令牌留在该客户端的受保护设置中。 [Compose 配置](../../../compose.yaml) · [NAS 部署说明](../../../README.md#在-nas-上部署)
+- 其他 AI 客户端用自己的 Streamable HTTP 配置连接同一服务。客户端与 Cat_two 在同一主机时可用 `http://127.0.0.1:5230/mcp`。NAS 部署使用客户端实际可访问的地址及主机端口，可直接编辑 `compose.yaml` 的 `ports`。令牌留在该客户端的受保护设置中。 [Compose 配置](../../../compose.yaml) · [NAS 部署说明](../../../README.md#在-nas-上部署)
 - 连接问题先核对网络、端口、实例的 `/healthz`、客户端的完整 Bearer 请求头和网页上的令牌状态。设置显示首次连接的客户端 IP 和令牌到期时间。令牌到期或连接删除后，后续请求需要使用新令牌。旧版等待连接或待审批的令牌也需重新创建。浏览器客户端若发送 `Origin`，需使用与代理 `Host` 匹配的来源或实例配置允许的来源。 [探活路由](../../../server/server.go) · [来源检查](../../../server/mcp/origin.go)
 
 ## 使用 MCP 整理笔记

@@ -46,7 +46,7 @@ flowchart LR
 
 ## 数据、备份和升级
 
-- Docker 和 NAS 共用一份 Compose，默认将 `cat_two_data` 命名卷挂载到 `/var/opt/memos`，设置 `CAT_TWO_DATA_DIR` 时挂载对应的宿主机目录。升级时备份实际数据源、保留项目和挂载，并确保运行身份可读写。 [Compose 配置](../../../../compose.yaml) · [备份和升级](../../../../README.md#备份和升级)
+- Docker 和 NAS 共用一份 Compose，默认将 `cat_two_data` 命名卷挂载到 `/var/opt/memos`。NAS 可以直接替换服务的挂载源，指向宿主机绝对路径。升级时备份实际数据源、保留项目和挂载，并确保运行身份可读写。 [Compose 配置](../../../../compose.yaml) · [备份和升级](../../../../README.md#备份和升级)
 - 完整实例备份使用一致性快照，或先停止服务再复制整个数据目录和部署配置，保留 SQLite 数据库及配套文件。附件可保存在数据库、本地文件或 S3 兼容存储。新的本地附件可随数据目录迁移，已有绝对路径记录仍按原位置读取，独立目录与对象存储要一并备份。验证恢复时，使用备份副本、独立 Compose 项目及独立附件存储。 [存储设置](../../../../web/src/components/Settings/settingSections.ts) · [恢复操作](../../../../README.md#备份和升级)
 - 多选可导出最多 100 条笔记，也可在「设置 → 导出和导入」导出整个账户的笔记。ZIP 含 Markdown、笔记元数据和可归档附件。导入时先预演，可保留现有、覆盖或创建副本。完成后根据逐项报告检查附件、引用、评论和归档状态。[导入导出](../../../../web/src/components/Settings/MemoExportSection.tsx) · [归档格式](../../../../core/memoexport/format.go)
 - ZIP 导入可恢复同一作者的归档笔记及评论层级。新导出的 ZIP 原样存储附件数据，易压缩文件较多时归档可能变大。导入仍会检查解压大小和压缩比，已经超出限制的旧 ZIP 仍需从原实例重新导出。覆盖导入时，归档未携带的笔记引用仍保留。 [评论规则](../../../../store/memo_comment.go) · [ZIP 读写](../../../../core/memoexport/) · [导入实现](../../../../server/api/user_service_memo_import.go)
@@ -54,7 +54,7 @@ flowchart LR
 ## 外部集成
 
 - 对外 REST 路由、MCP 工具参数、凭据的权限、分页和写回 Markdown 的约定集中维护在外部接口参考。 [外部接口](external-api.md) · [公网部署](../../../../README.md#在公网部署)
-- Telegram Bot 私聊和企业微信自建应用可接收指定发件人的文本。消息写成当前管理员的私有笔记并自动添加 `#Telegram` 或 `#微信`，笔记来源也标记为对应渠道。保存成功后原会话收到 `Yes!`。Telegram 主动轮询并通过 Bot API 回复，企业微信通过签名和加密回调直接回复。 [配置说明](../../../../README.md#telegram-和企业微信收件) · [笔记写入](../../../../server/api/memo_capture.go)
+- Telegram Bot 私聊和企业微信自建应用通过 `cat-two` 容器环境配置，可接收指定发件人的文本。消息写成当前管理员的私有笔记并自动添加 `#Telegram` 或 `#微信`，笔记来源也标记为对应渠道。保存成功后原会话收到 `Yes!`。Telegram 主动轮询并通过 Bot API 回复，企业微信通过签名和加密回调直接回复。 [配置说明](../../../../README.md#telegram-和企业微信收件) · [笔记写入](../../../../server/api/memo_capture.go)
 
 在「设置 → MCP 和 API」管理连接。普通 PAT 用于 REST。专用 MCP 令牌创建后可通过 Streamable HTTP 调用 `/mcp`，有效期为 7 天（默认）、14 天、1 个日历年或永久。到期或删除连接后，下一次请求被拒绝。设置会显示首次连接的客户端 IP 和令牌到期时间。[API](../../../../proto/api/README.md) · [接入 Codex](../../../../plugins/cat-two-notes/README.md#连接-nas)
 

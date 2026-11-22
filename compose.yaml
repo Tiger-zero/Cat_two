@@ -1,30 +1,25 @@
+# 保存为 compose.yaml，在文件所在目录运行 docker compose up -d。
 services:
   cat-two:
-    image: ${CAT_TWO_IMAGE:-docker.io/tiger2896/cat_two:latest}
+    # 可以把 latest 换成具体版本，例如 0.09。
+    image: docker.io/tiger2896/cat_two:latest
     restart: unless-stopped
     environment:
-      TZ: "${TZ:-Asia/Shanghai}"
+      TZ: Asia/Shanghai
       MEMOS_DRIVER: sqlite
-      MEMOS_INSTANCE_URL: "${MEMOS_INSTANCE_URL:-}"
-      MEMOS_TRUSTED_PROXIES: "${MEMOS_TRUSTED_PROXIES:-none}"
-      PUID: "${PUID:-1000}"
-      PGID: "${PGID:-10}"
-      # The entrypoint gives these existing overrides priority when set.
-      MEMOS_UID: "${MEMOS_UID:-}"
-      MEMOS_GID: "${MEMOS_GID:-}"
-      CAT_TWO_TELEGRAM_BOT_TOKEN: "${CAT_TWO_TELEGRAM_BOT_TOKEN:-}"
-      CAT_TWO_TELEGRAM_USER_ID: "${CAT_TWO_TELEGRAM_USER_ID:-}"
-      CAT_TWO_WECOM_CORP_ID: "${CAT_TWO_WECOM_CORP_ID:-}"
-      CAT_TWO_WECOM_AGENT_ID: "${CAT_TWO_WECOM_AGENT_ID:-}"
-      CAT_TWO_WECOM_CALLBACK_TOKEN: "${CAT_TWO_WECOM_CALLBACK_TOKEN:-}"
-      CAT_TWO_WECOM_ENCODING_AES_KEY: "${CAT_TWO_WECOM_ENCODING_AES_KEY:-}"
-      CAT_TWO_WECOM_USER_ID: "${CAT_TWO_WECOM_USER_ID:-}"
+      # 绿联 NAS 常用的用户和组编号。按实际数据目录权限修改。
+      PUID: "1000"
+      PGID: "10"
     ports:
-      - "${CAT_TWO_BIND_IP:+${CAT_TWO_BIND_IP:-}:}${CAT_TWO_PORT:-5230}:5230"
+      # 左边是访问端口。遇到端口冲突时可改成 "5231:5230"。
+      - "5230:5230"
     volumes:
-      # Set CAT_TWO_DATA_DIR to an absolute host path to bind a NAS directory.
-      - "${CAT_TWO_DATA_DIR:-cat_two_data}:/var/opt/memos"
+      # Docker 会自动创建命名卷，用于保存数据库和附件。
+      # 已有 NAS 目录时，把下面一行替换为原目录的挂载，例如：
+      # - /volume1/docker/cat2/data:/var/opt/memos
+      - cat_two_data:/var/opt/memos
     healthcheck:
+      # 从容器内检查应用和数据库是否就绪。
       test: ["CMD", "wget", "-Y", "off", "-q", "-O", "/dev/null", "http://127.0.0.1:5230/healthz"]
       interval: 30s
       timeout: 3s
