@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/lithammer/shortuuid/v4"
@@ -108,17 +109,6 @@ func TestCreateAttachment(t *testing.T) {
 	})
 
 	t.Run("LocalStorage_PathCollisionUsesUniqueReference", func(t *testing.T) {
-		_, err := ts.Store.UpsertInstanceSetting(ctx, &storepb.InstanceSetting{
-			Key: storepb.InstanceSettingKey_STORAGE,
-			Value: &storepb.InstanceSetting_StorageSetting{
-				StorageSetting: &storepb.InstanceStorageSetting{
-					StorageType:      storepb.InstanceStorageSetting_LOCAL,
-					FilepathTemplate: "assets/{filename}",
-				},
-			},
-		})
-		require.NoError(t, err)
-
 		first, err := ts.Service.CreateAttachment(userCtx, &apipb.CreateAttachmentRequest{
 			Attachment: &apipb.Attachment{
 				Filename: "screenshot.png",
@@ -142,14 +132,19 @@ func TestCreateAttachment(t *testing.T) {
 		secondUID, err := api.ExtractAttachmentUIDFromName(second.Name)
 		require.NoError(t, err)
 
-		firstStoreAttachment, err := ts.Store.GetAttachment(ctx, &store.FindAttachment{UID: &firstUID})
+		firstStoreAttachment, err := ts.Store.GetAttachment(ctx, &store.FindAttachment{UID: &firstUID, GetBlob: true})
 		require.NoError(t, err)
-		secondStoreAttachment, err := ts.Store.GetAttachment(ctx, &store.FindAttachment{UID: &secondUID})
+		secondStoreAttachment, err := ts.Store.GetAttachment(ctx, &store.FindAttachment{UID: &secondUID, GetBlob: true})
 		require.NoError(t, err)
 		require.NotNil(t, firstStoreAttachment)
 		require.NotNil(t, secondStoreAttachment)
 
 		require.NotEqual(t, firstStoreAttachment.Reference, secondStoreAttachment.Reference)
+		for _, row := range []*store.Attachment{firstStoreAttachment, secondStoreAttachment} {
+			require.Equal(t, storepb.AttachmentStorageType_LOCAL, row.StorageType)
+			require.Nil(t, row.Blob)
+			require.Regexp(t, `^assets/[0-9]+_[0-9a-f-]+_screenshot\.png$`, row.Reference)
+		}
 
 		firstBlob, err := ts.Service.GetAttachmentBlob(ctx, firstStoreAttachment)
 		require.NoError(t, err)
@@ -157,6 +152,27 @@ func TestCreateAttachment(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, []byte("first-image"), firstBlob)
 		require.Equal(t, []byte("second-image"), secondBlob)
+	})
+
+	t.Run("LocalStorage_LongUTF8Filename", func(t *testing.T) {
+		filename := strings.Repeat("笔记", 40) + ".txt"
+		content := []byte("notes with a long attachment name")
+		attachment, err := ts.Service.CreateAttachment(userCtx, &apipb.CreateAttachmentRequest{
+			Attachment: &apipb.Attachment{Filename: filename, Content: content},
+		})
+		require.NoError(t, err)
+		require.Equal(t, filename, attachment.Filename)
+
+		uid, err := api.ExtractAttachmentUIDFromName(attachment.Name)
+		require.NoError(t, err)
+		stored, err := ts.Store.GetAttachment(ctx, &store.FindAttachment{UID: &uid})
+		require.NoError(t, err)
+		require.NotNil(t, stored)
+		require.Equal(t, filename, stored.Filename)
+		require.Regexp(t, `^assets/[0-9a-f-]{36}$`, stored.Reference)
+		data, err := ts.Service.GetAttachmentBlob(ctx, stored)
+		require.NoError(t, err)
+		require.Equal(t, content, data)
 	})
 }
 
@@ -168,16 +184,12 @@ func TestCreateAttachmentCleansSavedBlobWhenStoreCreateFails(t *testing.T) {
 	user, err := ts.CreateRegularUser(ctx, "attachment-create-compensation")
 	require.NoError(t, err)
 	userCtx := ts.CreateUserContext(ctx, user.ID)
-	_, err = ts.Store.UpsertInstanceSetting(ctx, &storepb.InstanceSetting{
-		Key: storepb.InstanceSettingKey_STORAGE,
-		Value: &storepb.InstanceSetting_StorageSetting{
-			StorageSetting: &storepb.InstanceStorageSetting{
-				StorageType:      storepb.InstanceStorageSetting_LOCAL,
-				FilepathTemplate: "assets/{filename}",
-			},
-		},
-	})
-	require.NoError(t, err)
+	assetPaths := func(filename string) []string {
+		t.Helper()
+		matches, err := filepath.Glob(filepath.Join(ts.Profile.Data, store.AttachmentDirectory, "*_"+filename))
+		require.NoError(t, err)
+		return matches
+	}
 
 	const attachmentID = "attachment-create-failure"
 	_, err = ts.Service.CreateAttachment(userCtx, &apipb.CreateAttachmentRequest{
@@ -189,8 +201,8 @@ func TestCreateAttachmentCleansSavedBlobWhenStoreCreateFails(t *testing.T) {
 		},
 	})
 	require.NoError(t, err)
-	keptPath := filepath.Join(ts.Profile.Data, "assets", "kept.txt")
-	require.FileExists(t, keptPath)
+	keptPaths := assetPaths("kept.txt")
+	require.Len(t, keptPaths, 1)
 
 	_, err = ts.Service.CreateAttachment(userCtx, &apipb.CreateAttachmentRequest{
 		AttachmentId: attachmentID,
@@ -202,15 +214,13 @@ func TestCreateAttachmentCleansSavedBlobWhenStoreCreateFails(t *testing.T) {
 	})
 	require.Equal(t, codes.Internal, status.Code(err))
 	require.Contains(t, err.Error(), "failed to create attachment")
-	_, statErr := os.Stat(filepath.Join(ts.Profile.Data, "assets", "orphan.txt"))
-	require.ErrorIs(t, statErr, os.ErrNotExist)
-	kept, err := os.ReadFile(keptPath)
+	require.Empty(t, assetPaths("orphan.txt"))
+	kept, err := os.ReadFile(keptPaths[0])
 	require.NoError(t, err)
 	require.Equal(t, []byte("kept"), kept)
 
 	memo, err := ts.Service.CreateMemo(userCtx, &apipb.CreateMemoRequest{Memo: &apipb.Memo{Content: "attachment compensation policy"}})
 	require.NoError(t, err)
-	policyRejectionPath := filepath.Join(ts.Profile.Data, "assets", "policy-rejected.txt")
 	_, err = ts.Service.CreateAttachment(store.WithCreateAttachmentPolicyFailpoint(userCtx), &apipb.CreateAttachmentRequest{
 		AttachmentId: "attachment-policy-rejection",
 		Attachment: &apipb.Attachment{
@@ -221,14 +231,12 @@ func TestCreateAttachmentCleansSavedBlobWhenStoreCreateFails(t *testing.T) {
 		},
 	})
 	require.Equal(t, codes.PermissionDenied, status.Code(err))
-	_, statErr = os.Stat(policyRejectionPath)
-	require.ErrorIs(t, statErr, os.ErrNotExist)
+	require.Empty(t, assetPaths("policy-rejected.txt"))
 	policyRejectionUID := "attachment-policy-rejection"
 	persistedPolicyRejection, err := ts.Store.GetAttachment(ctx, &store.FindAttachment{UID: &policyRejectionUID})
 	require.NoError(t, err)
 	require.Nil(t, persistedPolicyRejection)
 
-	postCommitPath := filepath.Join(ts.Profile.Data, "assets", "post-commit.txt")
 	_, err = ts.Service.CreateAttachment(store.WithCreateAttachmentPostCommitFailpoint(userCtx), &apipb.CreateAttachmentRequest{
 		AttachmentId: "attachment-post-commit",
 		Attachment: &apipb.Attachment{
@@ -239,15 +247,13 @@ func TestCreateAttachmentCleansSavedBlobWhenStoreCreateFails(t *testing.T) {
 	})
 	require.Equal(t, codes.Internal, status.Code(err))
 	require.Contains(t, err.Error(), store.ErrCreateAttachmentPostCommitFailpoint.Error())
-	require.FileExists(t, postCommitPath, "a matching persisted row must suppress compensation")
 	postCommitUID := "attachment-post-commit"
 	persistedPostCommit, err := ts.Store.GetAttachment(ctx, &store.FindAttachment{UID: &postCommitUID})
 	require.NoError(t, err)
 	require.NotNil(t, persistedPostCommit)
-	require.Equal(t, "assets/post-commit.txt", persistedPostCommit.Reference)
+	require.Regexp(t, `^assets/[0-9]+_[0-9a-f-]+_post-commit\.txt$`, persistedPostCommit.Reference)
+	require.FileExists(t, filepath.Join(ts.Profile.Data, persistedPostCommit.Reference), "a matching persisted row must suppress compensation")
 
-	cleanupFailurePath := filepath.Join(ts.Profile.Data, "assets", "cleanup-failure.txt")
-	t.Cleanup(func() { _ = os.Remove(cleanupFailurePath) })
 	cleanupFailureCtx := store.WithDeleteAttachmentStorageFailpoint(store.WithCreateAttachmentPolicyFailpoint(userCtx))
 	_, err = ts.Service.CreateAttachment(cleanupFailureCtx, &apipb.CreateAttachmentRequest{
 		AttachmentId: "attachment-cleanup-failure",
@@ -260,7 +266,7 @@ func TestCreateAttachmentCleansSavedBlobWhenStoreCreateFails(t *testing.T) {
 	})
 	require.Equal(t, codes.PermissionDenied, status.Code(err))
 	require.NotContains(t, err.Error(), store.ErrDeleteAttachmentStorageFailpoint.Error())
-	require.FileExists(t, cleanupFailurePath, "the failpoint must prove compensation was attempted")
+	require.Len(t, assetPaths("cleanup-failure.txt"), 1, "the failpoint must prove compensation was attempted")
 }
 
 func TestAttachmentMetadataIsOnlyVisibleToTheMemoAuthor(t *testing.T) {

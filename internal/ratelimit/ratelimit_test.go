@@ -221,7 +221,7 @@ func TestCapacityEvictionIsBoundedPerCall(t *testing.T) {
 func TestDefaultPolicyCoversEveryScope(t *testing.T) {
 	p := DefaultPolicy()
 	for _, scope := range []Scope{
-		ScopeAnonymous, ScopeAuthenticated, ScopeSignInIP, ScopeSignInAccount, ScopeSignupIP, ScopeValidateIP,
+		ScopeAnonymous, ScopeAuthenticated, ScopeMCPIP, ScopeSignInIP, ScopeSignInAccount, ScopeSignupIP, ScopeValidateIP,
 		ScopePasswordResetIP, ScopePasswordResetEmail, ScopeLinkMetadata, ScopeUploadUser, ScopeWriteUser,
 		ScopeArchiveUser,
 	} {

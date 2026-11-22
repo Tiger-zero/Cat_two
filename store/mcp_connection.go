@@ -1,6 +1,9 @@
 package store
 
-import "context"
+import (
+	"context"
+	"errors"
+)
 
 // MCPConnectionStatus is the stored state of an MCP connection.
 type MCPConnectionStatus string
@@ -13,22 +16,37 @@ const (
 	MCPConnectionRevoked  MCPConnectionStatus = "revoked"
 )
 
+// MCPConnectionPermission bounds the methods available to a connection.
+type MCPConnectionPermission string
+
+const (
+	MCPConnectionReadOnly  MCPConnectionPermission = "read_only"
+	MCPConnectionReadWrite MCPConnectionPermission = "read_write"
+)
+
 // MCPConnection stores authorization state and the token hash for a client.
 // Timestamps are Unix seconds. A zero ExpiresAt means there is no expiration.
 type MCPConnection struct {
-	ID          string              `json:"id"`
-	UserID      int32               `json:"-"`
-	Label       string              `json:"label"`
-	TokenHash   string              `json:"-"`
-	Status      MCPConnectionStatus `json:"status"`
-	CreatedAt   int64               `json:"createdAt"`
-	RequestedAt int64               `json:"requestedAt"`
-	ExpiresAt   int64               `json:"expiresAt"`
-	RemoteIP    string              `json:"remoteIp"`
+	ID          string                  `json:"id"`
+	UserID      int32                   `json:"-"`
+	Label       string                  `json:"label"`
+	TokenHash   string                  `json:"-"`
+	Status      MCPConnectionStatus     `json:"status"`
+	CreatedAt   int64                   `json:"createdAt"`
+	RequestedAt int64                   `json:"requestedAt"`
+	ExpiresAt   int64                   `json:"expiresAt"`
+	RemoteIP    string                  `json:"remoteIp"`
+	Permission  MCPConnectionPermission `json:"permission"`
 }
 
 // CreateMCPConnection persists a connection without changing a previous record.
 func (s *Store) CreateMCPConnection(ctx context.Context, connection *MCPConnection) error {
+	if connection.Permission == "" {
+		connection.Permission = MCPConnectionReadWrite
+	}
+	if connection.Permission != MCPConnectionReadWrite && connection.Permission != MCPConnectionReadOnly {
+		return errors.New("invalid MCP connection permission")
+	}
 	return s.driver.CreateMCPConnection(ctx, connection)
 }
 

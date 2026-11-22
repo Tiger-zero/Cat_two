@@ -19,6 +19,12 @@ const durationOptions = [
 ] as const;
 type MCPConnectionDuration = (typeof durationOptions)[number]["value"];
 
+const permissionOptions = [
+  { value: "read_write", label: "setting.mcp-connection.permission-read-write" },
+  { value: "read_only", label: "setting.mcp-connection.permission-read-only" },
+] as const;
+type MCPConnectionPermission = (typeof permissionOptions)[number]["value"];
+
 const statusLabels = {
   awaiting: "setting.mcp-connection.status.legacy",
   pending: "setting.mcp-connection.status.legacy",
@@ -36,6 +42,7 @@ interface MCPConnection {
   requestedAt: number;
   expiresAt: number;
   remoteIp: string;
+  permission?: MCPConnectionPermission;
 }
 
 const connectionsPath = "/api/mcpConnections";
@@ -56,6 +63,7 @@ function CreateMCPConnectionDialog({ serverURL, onClose, onCreated }: { serverUR
   const t = useTranslate();
   const [label, setLabel] = useState("");
   const [duration, setDuration] = useState<MCPConnectionDuration>("7d");
+  const [permission, setPermission] = useState<MCPConnectionPermission>("read_write");
   // Keep the one-time token in this dialog only. The list and its query cache never store it.
   const [token, setToken] = useState("");
   const [pending, setPending] = useState(false);
@@ -72,10 +80,13 @@ function CreateMCPConnectionDialog({ serverURL, onClose, onCreated }: { serverUR
       const response = await requestConnection(connectionsPath, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ label: trimmed, duration }),
+        body: JSON.stringify({ label: trimmed, duration, permission }),
       });
-      const created = (await response.json()) as { token?: string };
+      const created = (await response.json()) as { connection?: MCPConnection; token?: string };
       if (!created.token) throw new Error("Missing one-time MCP connection token");
+      if (permission === "read_only" && created.connection?.permission !== permission) {
+        throw new Error("MCP connection does not support read-only access");
+      }
       setToken(created.token);
       onCreated();
     } catch {
@@ -142,6 +153,30 @@ function CreateMCPConnectionDialog({ serverURL, onClose, onCreated }: { serverUR
                 ))}
               </Fieldset.Root>
             </Field.Root>
+            <Field.Root>
+              <Fieldset.Root
+                render={
+                  <RadioGroup
+                    value={permission}
+                    disabled={pending}
+                    onValueChange={(value) => {
+                      const option = permissionOptions.find((option) => option.value === value);
+                      if (option) setPermission(option.value);
+                    }}
+                  />
+                }
+              >
+                <Fieldset.Legend>{t("setting.mcp-connection.permission")}</Fieldset.Legend>
+                {permissionOptions.map(({ value, label }) => (
+                  <Field.Item key={value}>
+                    <Field.Label>
+                      <Radio value={value} />
+                      {t(label)}
+                    </Field.Label>
+                  </Field.Item>
+                ))}
+              </Fieldset.Root>
+            </Field.Root>
             <Dialog.Footer>
               <Button type="button" variant="ghost" disabled={pending} onClick={onClose}>
                 {t("common.cancel")}
@@ -169,7 +204,7 @@ function MCPConnectionRow({
   onDelete: (connection: MCPConnection) => void;
 }) {
   const t = useTranslate();
-  const { label, status, createdAt, requestedAt, expiresAt, remoteIp } = connection;
+  const { label, status, createdAt, requestedAt, expiresAt, remoteIp, permission } = connection;
   const legacy = status === "awaiting" || status === "pending";
   const active = status === "approved";
   const hasConnected = requestedAt > 0 && (active || status === "expired");
@@ -182,6 +217,9 @@ function MCPConnectionRow({
           <span className={legacy ? "mu-caption text-mu-warning" : "mu-caption text-mu-text-secondary"}>{t(statusLabel)}</span>
         </div>
         <div className="mt-0.5 flex flex-wrap gap-x-3 mu-caption text-mu-text-secondary">
+          <span>
+            {t(permission === "read_only" ? "setting.mcp-connection.permission-read-only" : "setting.mcp-connection.permission-read-write")}
+          </span>
           {hasConnected ? (
             <span>{t("setting.mcp-connection.requested-at", { time: dateTime(requestedAt) })}</span>
           ) : (

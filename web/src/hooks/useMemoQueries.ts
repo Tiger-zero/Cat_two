@@ -309,11 +309,11 @@ export function useCreateMemo() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async ({ memo, parent }: { memo: Memo; parent?: string }) => {
+    mutationFn: async ({ memo, parent, id }: { memo: Memo; parent?: string; id?: string }) => {
       const webMemo = { ...memo, creationChannel: "web" };
       return parent
-        ? await memoServiceClient.createMemoComment({ parent, comment: webMemo })
-        : await memoServiceClient.createMemo({ memo: webMemo });
+        ? await memoServiceClient.createMemoComment({ parent, comment: webMemo, commentId: id, idempotent: id ? true : undefined })
+        : await memoServiceClient.createMemo({ memo: webMemo, memoId: id, idempotent: id ? true : undefined });
     },
     onSuccess: (newMemo, { parent }) => {
       queryClient.setQueryData(memoKeys.detail(newMemo.name), newMemo);
@@ -385,11 +385,12 @@ export function useUpdateMemo(name: string | undefined) {
 
   return useMutation({
     mutationKey,
-    mutationFn: async (variables: { update: Partial<Memo>; updateMask: string[] }) => {
+    mutationFn: async (variables: { update: Partial<Memo>; updateMask: string[]; expectedRevision?: string }) => {
       await memoUpdateTurn(queryClient, mutationKey, variables);
       const memo = await memoServiceClient.updateMemo({
         memo: create(MemoSchema, variables.update as Record<string, unknown>),
         updateMask: create(FieldMaskSchema, { paths: variables.updateMask }),
+        expectedRevision: variables.expectedRevision || undefined,
       });
       return memo;
     },

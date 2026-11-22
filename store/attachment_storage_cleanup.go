@@ -8,27 +8,14 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
-	"google.golang.org/protobuf/encoding/protojson"
-
-	storepb "github.com/usememos/memos/proto/gen/store"
 )
 
 // EnqueueMemoTrashAttachmentCleanup saves deleted attachment metadata within
-// the memo purge transaction. Blobs are already removed by that transaction.
+// the memo purge transaction so local files can be removed after commit.
 func EnqueueMemoTrashAttachmentCleanup(ctx context.Context, tx *sql.Tx, attachments []*Attachment, insert string) error {
 	for _, attachment := range attachments {
-		payload := "{}"
-		if object := attachment.Payload.GetS3Object(); object != nil {
-			data, err := protojson.Marshal(&storepb.AttachmentPayload{
-				Payload: &storepb.AttachmentPayload_S3Object_{S3Object: object},
-			})
-			if err != nil {
-				return errors.Wrap(err, "failed to encode cleanup payload")
-			}
-			payload = string(data)
-		}
 		if _, err := tx.ExecContext(ctx, insert, attachment.ID, attachment.UID, attachment.CreatorID, attachment.MemoID,
-			attachment.StorageType.String(), attachment.Reference, payload); err != nil {
+			attachment.StorageType.String(), attachment.Reference, "{}"); err != nil {
 			return err
 		}
 	}
@@ -54,64 +41,13 @@ func (s *Store) RunMemoTrashAttachmentCleanup(ctx context.Context, attachment *A
 	if err != nil || !claimed {
 		return err
 	}
-	storageSetting, err := s.getAttachmentStorageCleanupInstanceSetting(ctx, []*Attachment{attachment})
-	if err != nil {
-		return err
-	}
-	referenced, err := s.memoTrashAttachmentStorageReferenced(ctx, attachment, storageSetting)
-	if err != nil {
-		return err
-	}
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	if referenced {
-		// Old attachments can share a file. Only remove the purged UID's
-		// derived assets when another database record still needs that file.
-		s.DeleteAttachmentDerivedCaches(attachment)
-	} else if err := s.DeleteAttachmentStorageWithInstanceSetting(ctx, attachment, storageSetting); err != nil {
+	if err := s.DeleteAttachmentStorage(ctx, attachment); err != nil {
 		return err
 	}
 	return s.driver.CompleteMemoTrashAttachmentCleanup(ctx, attachment.ID, retryAt)
-}
-
-func (s *Store) memoTrashAttachmentStorageReferenced(ctx context.Context, attachment *Attachment, setting *storepb.InstanceStorageSetting) (bool, error) {
-	switch attachment.StorageType {
-	case storepb.AttachmentStorageType_LOCAL:
-		return s.localAttachmentStorageReferenced(ctx, attachment.Reference, 0, false)
-	case storepb.AttachmentStorageType_S3:
-		return s.s3AttachmentStorageReferenced(ctx, attachment.Payload.GetS3Object(), setting)
-	default:
-		return false, nil
-	}
-}
-
-func (s *Store) s3AttachmentStorageReferenced(ctx context.Context, object *storepb.AttachmentPayload_S3Object, setting *storepb.InstanceStorageSetting) (bool, error) {
-	if object == nil || object.Key == "" {
-		return false, errors.New("missing S3 object key")
-	}
-	matches, err := s.driver.ListS3AttachmentStorageMatches(ctx, object.Key)
-	if err != nil || len(matches) == 0 {
-		return false, err
-	}
-	removed, err := ResolveStorage(setting, object.StorageId, object.S3Config)
-	if err != nil {
-		return false, err
-	}
-	for _, match := range matches {
-		candidate := match.Payload.GetS3Object()
-		if candidate.GetKey() != object.Key {
-			continue
-		}
-		storage, err := ResolveStorage(setting, candidate.StorageId, candidate.S3Config)
-		if err != nil {
-			return false, err
-		}
-		if StorageNamespaceEqual(removed, storage) {
-			return true, nil
-		}
-	}
-	return false, nil
 }
 
 // LocalAttachmentStorageReserved checks whether a managed path belongs to an

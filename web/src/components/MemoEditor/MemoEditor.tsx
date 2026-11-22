@@ -1,8 +1,12 @@
-import { type ReactNode, Suspense, useEffect, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { type ReactNode, Suspense, useCallback, useEffect, useState } from "react";
 import useCurrentUser from "@/hooks/useCurrentUser";
-import { useMemoByName, useUpdateMemo } from "@/hooks/useMemoQueries";
+import { memoDetailQueryOptions, useMemoByName, useUpdateMemo } from "@/hooks/useMemoQueries";
 import type { MemoSuggestion } from "@/lib/memo-suggestions";
+import { showErrorToast, toast } from "@/lib/toast";
 import { cn } from "@/lib/utils";
+import type { Memo } from "@/types/proto/api/memo_service_pb";
+import { useTranslate } from "@/utils/i18n";
 import { lazyWithReload } from "@/utils/lazy";
 import { canManageMemo } from "@/utils/user";
 import { COMPOSER_PANEL_CLASSES } from "./edit/constants";
@@ -117,7 +121,8 @@ const MemoEditorView = ({ name, compact, parentPage, className, contentClassName
   const { mutate: updateMemo } = useUpdateMemo(name);
   if (!memo) return null;
 
-  const handleTaskToggle = (content: string) => updateMemo({ update: { name, content }, updateMask: ["content", "update_time"] });
+  const handleTaskToggle = (content: string) =>
+    updateMemo({ update: { name, content }, updateMask: ["content", "update_time"], expectedRevision: memo.revision });
 
   return (
     <MemoContentView
@@ -224,7 +229,9 @@ const DraftEditingSession = ({
   username,
   ...editing
 }: DraftEditingSessionProps) => {
-  const [{ initialState, initialDraftRaw }] = useState(() => {
+  const queryClient = useQueryClient();
+  const t = useTranslate();
+  const [seed, setSeed] = useState(() => {
     if (!isHomeDraft(identity)) migrateLegacyDraft(username, identity);
     const rawDraft = cacheService.readRaw(draftKey);
     const initialState = initialEditorState({
@@ -234,17 +241,48 @@ const DraftEditingSession = ({
       defaultCreateTime,
     });
     // Initialization can remove a legacy edit draft that cannot be restored.
-    return { initialState, initialDraftRaw: rawDraft && !cacheService.readRaw(draftKey) ? null : rawDraft };
+    return {
+      initialState,
+      initialDraftRaw: rawDraft && !cacheService.readRaw(draftKey) ? null : rawDraft,
+      key: 0,
+      reviewed: undefined as { memo: Memo; filesRevision: string } | undefined,
+    };
   });
+  const memoName = memo?.name;
+  const reviewDraft = useCallback(
+    async (filesRevision: string) => {
+      if (!memoName) return;
+      try {
+        const current = await queryClient.fetchQuery({ ...memoDetailQueryOptions(memoName), staleTime: 0 });
+        const rawDraft = cacheService.readRaw(draftKey);
+        if (!current) {
+          showErrorToast(t("editor.draft.review-failed"));
+          return;
+        }
+        setSeed((previous) => ({
+          initialState: initialEditorState({ memo: current, draftKey, rawDraft, reviewStaleDraft: true }),
+          initialDraftRaw: rawDraft,
+          key: previous.key + 1,
+          reviewed: { memo: current, filesRevision },
+        }));
+        toast.add({ title: t("editor.draft.review-loaded"), type: "warning" });
+      } catch {
+        showErrorToast(t("editor.draft.review-failed"));
+      }
+    },
+    [draftKey, memoName, queryClient, t],
+  );
   const EditSession = loadedEditSession ?? LazyEditSession;
   return (
-    <EditorProvider initialEditorState={initialState}>
+    <EditorProvider key={seed.key} initialEditorState={seed.initialState}>
       <EditSession
-        memo={memo}
+        memo={seed.reviewed?.memo ?? memo}
         parentMemoName={parentMemoName}
         defaultCreateTime={defaultCreateTime}
         draftKey={draftKey}
-        initialDraftRaw={initialDraftRaw}
+        initialDraftRaw={seed.initialDraftRaw}
+        reviewDraftRevision={seed.reviewed?.filesRevision}
+        onReviewDraft={memoName ? reviewDraft : undefined}
         {...editing}
       />
     </EditorProvider>

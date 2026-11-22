@@ -10,7 +10,6 @@ import (
 	"strings"
 
 	"github.com/pkg/errors"
-	"google.golang.org/protobuf/proto"
 
 	storepb "github.com/usememos/memos/proto/gen/store"
 	"github.com/usememos/memos/store"
@@ -31,13 +30,6 @@ const (
 
 // Validate reports the first rule the setting breaks, or nil.
 func Validate(setting *storepb.InstanceSetting) error {
-	return ValidateUpdate(setting, nil)
-}
-
-// ValidateUpdate is Validate for a setting that replaces existing. A storage
-// the update leaves unchanged is not checked again, so a storage stored before
-// a rule existed does not block editing the others.
-func ValidateUpdate(setting, existing *storepb.InstanceSetting) error {
 	if setting == nil {
 		return errors.New("instance setting is required")
 	}
@@ -54,7 +46,7 @@ func ValidateUpdate(setting, existing *storepb.InstanceSetting) error {
 		if setting.GetStorageSetting() == nil {
 			return errors.New("storage setting is required")
 		}
-		return validateStorageSetting(setting.GetStorageSetting(), existing.GetStorageSetting())
+		return validateStorageSetting(setting.GetStorageSetting())
 	case storepb.InstanceSettingKey_TAGS:
 		if setting.GetTagsSetting() == nil {
 			return errors.New("tags setting is required")
@@ -95,9 +87,9 @@ func ValidateUpdate(setting, existing *storepb.InstanceSetting) error {
 	return nil
 }
 
-// validateStorageSetting checks the storage registry. The legacy shape, with no
-// storages and only the top-level fields, is accepted for older clients.
-func validateStorageSetting(setting, existing *storepb.InstanceStorageSetting) error {
+// validateStorageSetting checks a declarative registry for legacy attachment
+// migration. The original top-level configuration remains accepted.
+func validateStorageSetting(setting *storepb.InstanceStorageSetting) error {
 	if len(setting.Storages) == 0 {
 		if setting.StorageType == storepb.InstanceStorageSetting_S3 {
 			if setting.S3Config == nil {
@@ -108,10 +100,6 @@ func validateStorageSetting(setting, existing *storepb.InstanceStorageSetting) e
 		return nil
 	}
 
-	existingByID := make(map[string]*storepb.Storage, len(existing.GetStorages()))
-	for _, storage := range existing.GetStorages() {
-		existingByID[storage.GetId()] = storage
-	}
 	seenIDs := make(map[string]bool, len(setting.Storages))
 	for i, storage := range setting.Storages {
 		if storage == nil || strings.TrimSpace(storage.Id) == "" {
@@ -121,9 +109,6 @@ func validateStorageSetting(setting, existing *storepb.InstanceStorageSetting) e
 			return errors.Errorf("storage ID %q is duplicated", storage.Id)
 		}
 		seenIDs[storage.Id] = true
-		if previous := existingByID[storage.Id]; previous != nil && proto.Equal(previous, storage) {
-			continue
-		}
 		switch storage.Type {
 		case storepb.StorageType_STORAGE_TYPE_DATABASE, storepb.StorageType_STORAGE_TYPE_LOCAL:
 		case storepb.StorageType_STORAGE_TYPE_S3:

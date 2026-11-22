@@ -44,9 +44,7 @@ func TestSaveLocalAttachmentConcurrentSameFilename(t *testing.T) {
 		cancel()
 		workers.Wait()
 	}()
-	service := newIntegrationService(t)
-	instanceProfile := service.Profile
-	setting := localAttachmentTestSetting("assets/{filename}")
+	dataDir := t.TempDir()
 	attachments := []store.Attachment{
 		{UID: "first", Filename: "image.jpg"},
 		{UID: "second", Filename: "image.jpg"},
@@ -71,7 +69,7 @@ func TestSaveLocalAttachmentConcurrentSameFilename(t *testing.T) {
 				}
 				return content.Read(buffer)
 			})
-			results <- saveAttachmentContent(ctx, instanceProfile, service.Store, &attachments[i], setting, reader, 0)
+			results <- saveAttachmentContent(ctx, dataDir, &attachments[i], reader)
 		})
 	}
 	for range attachments {
@@ -91,28 +89,26 @@ func TestSaveLocalAttachmentConcurrentSameFilename(t *testing.T) {
 		}
 	}
 	references := []string{attachments[0].Reference, attachments[1].Reference}
-	require.Contains(t, references, "assets/image.jpg")
 	require.NotEqual(t, references[0], references[1])
 	for i, attachment := range attachments {
-		require.False(t, filepath.IsAbs(attachment.Reference))
-		content, err := os.ReadFile(filepath.Join(instanceProfile.Data, filepath.FromSlash(attachment.Reference)))
+		require.Regexp(t, `^assets/[0-9]+_[0-9a-f-]+_image\.jpg$`, attachment.Reference)
+		require.Equal(t, storepb.AttachmentStorageType_LOCAL, attachment.StorageType)
+		require.Nil(t, attachment.Blob)
+		content, err := os.ReadFile(filepath.Join(dataDir, filepath.FromSlash(attachment.Reference)))
 		require.NoError(t, err)
 		require.Equal(t, contents[i], string(content))
 	}
-	files, err := os.ReadDir(filepath.Join(instanceProfile.Data, "assets"))
+	files, err := os.ReadDir(filepath.Join(dataDir, store.AttachmentDirectory))
 	require.NoError(t, err)
 	require.Len(t, files, len(attachments))
 }
 
 func TestSaveLocalAttachmentReferenceSurvivesDataDirectoryRelocation(t *testing.T) {
 	ctx := t.Context()
-	service := newIntegrationService(t)
-	dataDir, newDataDir := service.Profile.Data, t.TempDir()
+	dataDir, newDataDir := t.TempDir(), t.TempDir()
 	attachment := &store.Attachment{UID: "portable", Filename: "note.txt"}
-	setting := localAttachmentTestSetting("assets")
-	err := saveAttachmentContent(ctx, service.Profile, service.Store, attachment, setting, strings.NewReader("test content"), 0)
+	err := saveAttachmentContent(ctx, dataDir, attachment, strings.NewReader("test content"))
 	require.NoError(t, err)
-	require.Equal(t, "assets/note.txt", attachment.Reference)
 	require.NoError(t, os.Rename(filepath.Join(dataDir, "assets"), filepath.Join(newDataDir, "assets")))
 
 	svc := &APIService{Profile: &profile.Profile{Data: newDataDir}}
@@ -124,8 +120,7 @@ func TestSaveLocalAttachmentReferenceSurvivesDataDirectoryRelocation(t *testing.
 func TestSaveLocalAttachmentCancellationRemovesStagedFile(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
-	service := newIntegrationService(t)
-	dataDir := service.Profile.Data
+	dataDir := t.TempDir()
 	attachment := &store.Attachment{UID: "canceled", Filename: "note.txt"}
 	content := strings.NewReader("complete content")
 	reader := attachmentReadFunc(func(buffer []byte) (int, error) {
@@ -135,7 +130,7 @@ func TestSaveLocalAttachmentCancellationRemovesStagedFile(t *testing.T) {
 		}
 		return n, err
 	})
-	err := saveAttachmentContent(ctx, service.Profile, service.Store, attachment, localAttachmentTestSetting("assets"), reader, 0)
+	err := saveAttachmentContent(ctx, dataDir, attachment, reader)
 	require.ErrorIs(t, err, context.Canceled)
 	require.Empty(t, attachment.Reference)
 	files, err := os.ReadDir(filepath.Join(dataDir, "assets"))
@@ -143,26 +138,40 @@ func TestSaveLocalAttachmentCancellationRemovesStagedFile(t *testing.T) {
 	require.Empty(t, files)
 }
 
-func TestPublishLocalAttachmentFailureRemovesReservation(t *testing.T) {
-	dir := t.TempDir()
-	destination := filepath.Join(dir, "note.txt")
-	require.NoError(t, os.WriteFile(destination, []byte("original"), 0o600))
-	_, err := publishLocalAttachment(filepath.Join(dir, "missing-staged-file"), destination, "new-uid", nil)
-	require.Error(t, err)
-	files, err := os.ReadDir(dir)
+func TestSaveLocalAttachmentRejectsPathEscape(t *testing.T) {
+	dataDir, outside := t.TempDir(), t.TempDir()
+	content := strings.NewReader("do not write outside data")
+	attachment := &store.Attachment{Filename: "../escaped.txt"}
+	require.Error(t, saveAttachmentContent(t.Context(), dataDir, attachment, content))
+	require.Empty(t, attachment.Reference)
+	require.NoDirExists(t, filepath.Join(dataDir, store.AttachmentDirectory))
+
+	require.NoError(t, os.Symlink(outside, filepath.Join(dataDir, store.AttachmentDirectory)))
+	attachment.Filename = "valid.txt"
+	require.Error(t, saveAttachmentContent(t.Context(), dataDir, attachment, content))
+	require.Empty(t, attachment.Reference)
+	files, err := os.ReadDir(outside)
 	require.NoError(t, err)
-	require.Len(t, files, 1)
+	require.Empty(t, files)
+}
+
+func TestPublishLocalAttachmentPreservesExistingFile(t *testing.T) {
+	dir := t.TempDir()
+	assets, err := os.OpenRoot(dir)
+	require.NoError(t, err)
+	defer assets.Close()
+
+	const filename = "note.txt"
+	destination := filepath.Join(dir, filename)
+	require.NoError(t, os.WriteFile(destination, []byte("original"), 0o600))
+	const staged = "staged.txt"
+	require.NoError(t, assets.WriteFile(staged, []byte("new"), 0o600))
+	require.ErrorIs(t, publishLocalAttachment(assets, staged, filename), os.ErrExist)
+	require.ErrorIs(t, publishLocalAttachment(assets, "missing-staged-file", "new.txt"), os.ErrNotExist)
+	require.NoFileExists(t, filepath.Join(dir, "new.txt"))
 	content, err := os.ReadFile(destination)
 	require.NoError(t, err)
 	require.Equal(t, "original", string(content))
-}
-
-func localAttachmentTestSetting(template string) *storepb.InstanceStorageSetting {
-	return &storepb.InstanceStorageSetting{
-		FilepathTemplate: template,
-		Storages:         []*storepb.Storage{{Id: "local", Type: storepb.StorageType_STORAGE_TYPE_LOCAL}},
-		DefaultStorageId: "local",
-	}
 }
 
 type attachmentReadFunc func([]byte) (int, error)

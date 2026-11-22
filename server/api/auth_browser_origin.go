@@ -17,9 +17,13 @@ const authBrowserOriginError = "browser origin is not allowed for this authentic
 func rejectsAuthBrowserOrigin(r *http.Request, procedure, instanceURL string) bool {
 	switch procedure {
 	case apiconnect.AuthServiceSignInProcedure, apiconnect.AuthServiceRefreshTokenProcedure:
+		return rejectsBrowserOrigin(r, instanceURL)
 	default:
 		return false
 	}
+}
+
+func rejectsBrowserOrigin(r *http.Request, instanceURL string) bool {
 	origins := r.Header.Values("Origin")
 	if len(origins) == 0 {
 		return false

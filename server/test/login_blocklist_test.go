@@ -12,6 +12,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	storepb "github.com/usememos/memos/proto/gen/store"
 	"github.com/usememos/memos/server/auth"
 	"github.com/usememos/memos/store"
 )
@@ -111,7 +112,9 @@ func TestLoginBlocklistPaginationAndAdminAuthorization(t *testing.T) {
 	adminSession := inst.signIn(t)
 	legacyUser, err := inst.server.Store.CreateUser(ctx, &store.User{Username: "legacy-viewer", Role: store.RoleUser})
 	require.NoError(t, err)
-	legacyToken, _, err := auth.GenerateAccessTokenV2(legacyUser.ID, legacyUser.Username, string(legacyUser.Role), string(legacyUser.RowStatus), legacyUser.PasswordHash, []byte(inst.server.Secret))
+	const sessionID = "legacy-viewer-session"
+	require.NoError(t, inst.server.Store.AddUserRefreshToken(ctx, legacyUser.ID, &storepb.RefreshTokensUserSetting_RefreshToken{TokenId: "legacy-viewer-credential", SessionId: sessionID}))
+	legacyToken, _, err := auth.GenerateSessionAccessToken(legacyUser, sessionID, "", []byte(inst.server.Secret))
 	require.NoError(t, err)
 	code, _ := inst.do(t, http.MethodGet, loginBlocklistPath, legacyToken, nil)
 	require.Equal(t, http.StatusForbidden, code)

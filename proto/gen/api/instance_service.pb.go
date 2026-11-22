@@ -909,8 +909,14 @@ type InstanceStats struct {
 	LocalStorageBytes int64 `protobuf:"varint,2,opt,name=local_storage_bytes,json=localStorageBytes,proto3" json:"local_storage_bytes,omitempty"`
 	// The time the snapshot was generated on the server.
 	GeneratedTime *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=generated_time,json=generatedTime,proto3" json:"generated_time,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	// The absolute data directory in the running Cat_two process or container.
+	DataDirectory *string `protobuf:"bytes,4,opt,name=data_directory,json=dataDirectory,proto3,oneof" json:"data_directory,omitempty"`
+	// The managed directory containing Cat_two's Markdown note bodies.
+	NotesPath *string `protobuf:"bytes,5,opt,name=notes_path,json=notesPath,proto3,oneof" json:"notes_path,omitempty"`
+	// The managed directory used for new Cat_two attachment files.
+	AttachmentsDirectory *string `protobuf:"bytes,6,opt,name=attachments_directory,json=attachmentsDirectory,proto3,oneof" json:"attachments_directory,omitempty"`
+	unknownFields        protoimpl.UnknownFields
+	sizeCache            protoimpl.SizeCache
 }
 
 func (x *InstanceStats) Reset() {
@@ -962,6 +968,27 @@ func (x *InstanceStats) GetGeneratedTime() *timestamppb.Timestamp {
 		return x.GeneratedTime
 	}
 	return nil
+}
+
+func (x *InstanceStats) GetDataDirectory() string {
+	if x != nil && x.DataDirectory != nil {
+		return *x.DataDirectory
+	}
+	return ""
+}
+
+func (x *InstanceStats) GetNotesPath() string {
+	if x != nil && x.NotesPath != nil {
+		return *x.NotesPath
+	}
+	return ""
+}
+
+func (x *InstanceStats) GetAttachmentsDirectory() string {
+	if x != nil && x.AttachmentsDirectory != nil {
+		return *x.AttachmentsDirectory
+	}
+	return ""
 }
 
 // Request message for InstanceService.GetInstanceStats.
@@ -1203,7 +1230,7 @@ type InstanceSetting_GeneralSetting struct {
 	WeekStartDayOffset int32 `protobuf:"varint,6,opt,name=week_start_day_offset,json=weekStartDayOffset,proto3" json:"week_start_day_offset,omitempty"`
 	// Custom CSS injected into the web app.
 	AdditionalStyle string `protobuf:"bytes,7,opt,name=additional_style,json=additionalStyle,proto3" json:"additional_style,omitempty"`
-	// Custom JavaScript injected into the web app.
+	// Legacy compatibility field. Cat_two rejects nonempty updates and omits stored values from responses.
 	AdditionalScript string `protobuf:"bytes,8,opt,name=additional_script,json=additionalScript,proto3" json:"additional_script,omitempty"`
 	unknownFields    protoimpl.UnknownFields
 	sizeCache        protoimpl.SizeCache
@@ -2751,15 +2778,22 @@ const file_api_instance_service_proto_rawDesc = "" +
 	"updateMask\"\xa7\x01\n" +
 	"\x1fTestInstanceEmailSettingRequest\x12V\n" +
 	"\x05email\x18\x01 \x01(\v2;.memos.api.InstanceSetting.NotificationSetting.EmailSettingB\x03\xe0A\x01R\x05email\x12,\n" +
-	"\x0frecipient_email\x18\x02 \x01(\tB\x03\xe0A\x01R\x0erecipientEmail\"\x8e\x02\n" +
+	"\x0frecipient_email\x18\x02 \x01(\tB\x03\xe0A\x01R\x0erecipientEmail\"\xd4\x03\n" +
 	"\rInstanceStats\x12B\n" +
 	"\bdatabase\x18\x01 \x01(\v2&.memos.api.InstanceStats.DatabaseStatsR\bdatabase\x12.\n" +
 	"\x13local_storage_bytes\x18\x02 \x01(\x03R\x11localStorageBytes\x12A\n" +
-	"\x0egenerated_time\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\rgeneratedTime\x1aF\n" +
+	"\x0egenerated_time\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\rgeneratedTime\x12*\n" +
+	"\x0edata_directory\x18\x04 \x01(\tH\x00R\rdataDirectory\x88\x01\x01\x12\"\n" +
+	"\n" +
+	"notes_path\x18\x05 \x01(\tH\x01R\tnotesPath\x88\x01\x01\x128\n" +
+	"\x15attachments_directory\x18\x06 \x01(\tH\x02R\x14attachmentsDirectory\x88\x01\x01\x1aF\n" +
 	"\rDatabaseStats\x12\x16\n" +
 	"\x06driver\x18\x01 \x01(\tR\x06driver\x12\x1d\n" +
 	"\n" +
-	"size_bytes\x18\x02 \x01(\x03R\tsizeBytes\"\x19\n" +
+	"size_bytes\x18\x02 \x01(\x03R\tsizeBytesB\x11\n" +
+	"\x0f_data_directoryB\r\n" +
+	"\v_notes_pathB\x18\n" +
+	"\x16_attachments_directory\"\x19\n" +
 	"\x17GetInstanceStatsRequest\"\x1f\n" +
 	"\x1dGetConfigurationStatusRequest\"\xb9\x03\n" +
 	"\x13ConfigurationStatus\x12\x16\n" +
@@ -2919,6 +2953,7 @@ func file_api_instance_service_proto_init() {
 		(*InstanceSetting_AccessSetting_)(nil),
 		(*InstanceSetting_UsageLimitsSetting_)(nil),
 	}
+	file_api_instance_service_proto_msgTypes[8].OneofWrappers = []any{}
 	file_api_instance_service_proto_msgTypes[15].OneofWrappers = []any{
 		(*InstanceSetting_Storage_S3Config_)(nil),
 	}

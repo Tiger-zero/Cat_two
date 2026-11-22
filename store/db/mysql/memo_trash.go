@@ -58,7 +58,7 @@ func (d *DB) ApplyMemoTrash(ctx context.Context, mutation *store.MemoTrashMutati
 		if parentTrashed {
 			return nil, store.ErrMemoMutationConflict
 		}
-		if _, err := tx.ExecContext(ctx, `UPDATE memo SET deleted_ts = NULL, trash_root_id = NULL WHERE trash_root_id = ? OR id = ?`, mutation.MemoID, mutation.MemoID); err != nil {
+		if _, err := tx.ExecContext(ctx, `UPDATE memo SET deleted_ts = NULL, trash_root_id = NULL, revision = revision + 1 WHERE trash_root_id = ? OR id = ?`, mutation.MemoID, mutation.MemoID); err != nil {
 			return nil, errors.Wrap(err, "failed to restore memo")
 		}
 		return nil, errors.Wrap(tx.Commit(), "failed to commit memo restore")
@@ -72,7 +72,7 @@ func (d *DB) ApplyMemoTrash(ctx context.Context, mutation *store.MemoTrashMutati
 		for _, batch := range deleteUserBatches(ids, deleteUserBatchSize) {
 			clause, ids := deleteUserInClause(3, batch)
 			args := append([]any{mutation.NowTs, mutation.MemoID}, ids...)
-			if _, err := tx.ExecContext(ctx, `UPDATE memo SET deleted_ts = ?, trash_root_id = ? WHERE deleted_ts IS NULL AND id IN `+clause, args...); err != nil {
+			if _, err := tx.ExecContext(ctx, `UPDATE memo SET deleted_ts = ?, trash_root_id = ?, revision = revision + 1 WHERE deleted_ts IS NULL AND id IN `+clause, args...); err != nil {
 				return nil, errors.Wrap(err, "failed to move memo to the recycle bin")
 			}
 		}

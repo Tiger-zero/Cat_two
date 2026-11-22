@@ -58,6 +58,8 @@ func requireUpgradePreservesData(ctx context.Context, t *testing.T, previous *st
 	require.NoError(t, err)
 	memo.Pinned = true
 	require.NoError(t, previous.UpdateMemo(ctx, &store.UpdateMemo{ID: memo.ID, Pinned: &memo.Pinned, UpdatedTs: &memo.UpdatedTs}))
+	memo, err = previous.GetMemo(ctx, &store.FindMemo{ID: &memo.ID})
+	require.NoError(t, err)
 	const legacyView = `{"memoViews":[{"id":"upgrade","title":"Upgrade sentinel","filter":"has_incomplete_tasks"}]}`
 	insertView := "INSERT INTO user_setting (user_id, `key`, `value`) VALUES (?, 'MEMO_VIEWS', ?)"
 	readView := "SELECT `value` FROM user_setting WHERE user_id = ? AND `key` = 'MEMO_VIEWS'"

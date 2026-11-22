@@ -828,91 +828,55 @@ func TestUpdateInstanceSetting(t *testing.T) {
 		require.Contains(t, err.Error(), "smtp password is required")
 	})
 
-	t.Run("UpdateInstanceSetting - S3 secret is write-only and preserved on empty", func(t *testing.T) {
+	t.Run("UpdateInstanceSetting rejects legacy storage changes", func(t *testing.T) {
 		ts := NewTestService(t)
 		defer ts.Cleanup()
 
 		hostUser, err := ts.CreateHostUser(ctx, "admin")
 		require.NoError(t, err)
 		adminCtx := ts.CreateUserContext(ctx, hostUser.ID)
+		_, err = ts.Store.UpsertInstanceSetting(ctx, &storepb.InstanceSetting{
+			Key: storepb.InstanceSettingKey_STORAGE,
+			Value: &storepb.InstanceSetting_StorageSetting{StorageSetting: &storepb.InstanceStorageSetting{
+				StorageType: storepb.InstanceStorageSetting_S3,
+				S3Config: &storepb.StorageS3Config{
+					AccessKeyId: "original-id", AccessKeySecret: "original-secret",
+					Endpoint: "https://original.example.test", Region: "test", Bucket: "memos",
+				},
+			}},
+		})
+		require.NoError(t, err)
 
-		// Save storage setting with a real secret.
 		_, err = ts.Service.UpdateInstanceSetting(adminCtx, &apipb.UpdateInstanceSettingRequest{
 			InstanceSetting: &apipb.InstanceSetting{
 				Name: "instance/settings/STORAGE",
 				Value: &apipb.InstanceSetting_StorageSetting_{
 					StorageSetting: &apipb.InstanceSetting_StorageSetting{
 						S3Config: &apipb.InstanceSetting_StorageSetting_S3Config{
-							AccessKeyId:           "AKID",
-							AccessKeySecret:       "super-secret",
-							Endpoint:              "s3.example.com",
-							Region:                "us-east-1",
-							Bucket:                "memos",
-							InsecureSkipTlsVerify: true,
+							AccessKeyId: "replacement-id", AccessKeySecret: "replacement-secret",
+							Endpoint: "https://replacement.example.test", Region: "test", Bucket: "memos",
 						},
 					},
 				},
 			},
 		})
-		require.NoError(t, err)
+		require.Equal(t, codes.FailedPrecondition, status.Code(err))
+		require.NotContains(t, err.Error(), "replacement-secret")
 
-		// Read back: secret must not be returned.
 		resp, err := ts.Service.GetInstanceSetting(adminCtx, &apipb.GetInstanceSettingRequest{
 			Name: "instance/settings/STORAGE",
 		})
 		require.NoError(t, err)
-		require.Empty(t, resp.GetStorageSetting().GetS3Config().GetAccessKeySecret(),
-			"AccessKeySecret must never be returned in responses")
-		require.True(t, resp.GetStorageSetting().GetS3Config().GetInsecureSkipTlsVerify(),
-			"insecure_skip_tls_verify must round-trip through the API")
-		var defaultStorage *apipb.InstanceSetting_Storage
-		for _, configuredStorage := range resp.GetStorageSetting().GetStorages() {
-			if configuredStorage.GetId() == resp.GetStorageSetting().GetDefaultStorageId() {
-				defaultStorage = configuredStorage
-			}
-		}
-		require.NotNil(t, defaultStorage)
-		require.Empty(t, defaultStorage.GetS3Config().GetAccessKeySecret(),
-			"AccessKeySecret must be write-only in named storage responses")
-
-		// Update with empty secret; original must be preserved in the store.
-		_, err = ts.Service.UpdateInstanceSetting(adminCtx, &apipb.UpdateInstanceSettingRequest{
-			InstanceSetting: &apipb.InstanceSetting{
-				Name: "instance/settings/STORAGE",
-				Value: &apipb.InstanceSetting_StorageSetting_{
-					StorageSetting: &apipb.InstanceSetting_StorageSetting{
-						S3Config: &apipb.InstanceSetting_StorageSetting_S3Config{
-							AccessKeyId:           "AKID",
-							AccessKeySecret:       "", // omitted / not changed
-							Endpoint:              "s3-v2.example.com",
-							Region:                "us-east-1",
-							Bucket:                "memos",
-							InsecureSkipTlsVerify: true,
-						},
-					},
-				},
-			},
-		})
-		require.NoError(t, err)
+		setting := resp.GetStorageSetting()
+		require.Equal(t, apipb.InstanceSetting_StorageSetting_LOCAL, setting.GetStorageType())
+		require.Nil(t, setting.GetS3Config())
+		require.Len(t, setting.GetStorages(), 1)
+		require.Nil(t, setting.GetStorages()[0].GetS3Config())
 
 		stored, err := ts.Store.GetInstanceStorageSetting(ctx)
 		require.NoError(t, err)
-		require.Equal(t, "super-secret", stored.GetS3Config().GetAccessKeySecret(),
-			"existing AccessKeySecret must be preserved when an empty value is sent")
-		require.Equal(t, "s3-v2.example.com", stored.GetS3Config().GetEndpoint())
-		require.True(t, stored.GetS3Config().GetInsecureSkipTlsVerify())
-		var s3StorageCount int
-		var previousStorageFound bool
-		for _, configuredStorage := range stored.GetStorages() {
-			if configuredStorage.GetType() == storepb.StorageType_STORAGE_TYPE_S3 {
-				s3StorageCount++
-			}
-			if configuredStorage.GetS3Config().GetEndpoint() == "s3.example.com" {
-				previousStorageFound = true
-			}
-		}
-		require.Equal(t, 2, s3StorageCount, "changing the S3 namespace must preserve the previous storage")
-		require.True(t, previousStorageFound)
+		require.Equal(t, "original-secret", stored.GetS3Config().GetAccessKeySecret())
+		require.Equal(t, "https://original.example.test", stored.GetS3Config().GetEndpoint())
 	})
 
 	t.Run("UpdateInstanceSetting - AI provider keys are write-only and preserved on empty", func(t *testing.T) {
@@ -1124,44 +1088,6 @@ func TestUpdateInstanceSetting(t *testing.T) {
 		require.Equal(t, "en", stored.GetTranscription().GetLanguage())
 		require.Equal(t, "names: Alice", stored.GetTranscription().GetPrompt())
 	})
-}
-
-func TestUpdateInstanceSettingValidatesStorages(t *testing.T) {
-	ctx := context.Background()
-	ts := NewTestService(t)
-	defer ts.Cleanup()
-	hostUser, err := ts.CreateHostUser(ctx, "admin")
-	require.NoError(t, err)
-	adminCtx := ts.CreateUserContext(ctx, hostUser.ID)
-
-	update := func(storages []*apipb.InstanceSetting_Storage, defaultID string) error {
-		_, err := ts.Service.UpdateInstanceSetting(adminCtx, &apipb.UpdateInstanceSettingRequest{
-			InstanceSetting: &apipb.InstanceSetting{
-				Name: "instance/settings/STORAGE",
-				Value: &apipb.InstanceSetting_StorageSetting_{StorageSetting: &apipb.InstanceSetting_StorageSetting{
-					Storages:         storages,
-					DefaultStorageId: defaultID,
-				}},
-			},
-		})
-		return err
-	}
-	local := &apipb.InstanceSetting_Storage{Id: "local", Type: apipb.InstanceSetting_LOCAL}
-	archive := &apipb.InstanceSetting_Storage{
-		Id:   "archive",
-		Type: apipb.InstanceSetting_S3,
-		Config: &apipb.InstanceSetting_Storage_S3Config_{S3Config: &apipb.InstanceSetting_Storage_S3Config{
-			AccessKeyId: "AKID", AccessKeySecret: "secret", Endpoint: "https://s3.example.com", Bucket: "memos",
-		}},
-	}
-
-	// A non-default S3 storage without a region would fail on first use.
-	err = update([]*apipb.InstanceSetting_Storage{local, archive}, "local")
-	require.Equal(t, codes.InvalidArgument, status.Code(err))
-	require.Contains(t, err.Error(), "storage archive region is required")
-
-	archive.GetS3Config().Region = "us-east-1"
-	require.NoError(t, update([]*apipb.InstanceSetting_Storage{local, archive}, "local"))
 }
 
 func TestConfigurationStateIsNotExposed(t *testing.T) {

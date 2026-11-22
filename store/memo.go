@@ -28,6 +28,9 @@ var ErrMemoPermissionDenied = errors.New("memo mutation permission denied")
 // SPACE audience transition.
 var ErrMemoShareConflict = errors.New("active memo share conflicts with audience")
 
+// ErrMemoContentBudgetExceeded means the requested Markdown exceeds the read budget.
+var ErrMemoContentBudgetExceeded = errors.New("memo content budget exceeded")
+
 // Visibility is the type of a visibility.
 type Visibility string
 
@@ -73,11 +76,16 @@ type Memo struct {
 
 	// Domain specific fields
 	Content    string
+	BodyDigest string
 	Visibility Visibility
 	Pinned     bool
 	Payload    *storepb.MemoPayload
 	SpaceID    *int32
 	DeletedTs  *int64
+	// Revision changes whenever note content, metadata, or attachments are edited.
+	Revision int64
+	// CreationRequestDigest identifies the original idempotent create request.
+	CreationRequestDigest string
 
 	// Composed fields
 	ParentUID *string
@@ -99,6 +107,8 @@ type FindMemo struct {
 	CommentContextMemoID *int32
 	Access               *MemoAccessScope
 	ExcludeContent       bool
+	// MaxTotalContentBytes bounds the total Markdown bytes returned. Zero leaves it unbounded.
+	MaxTotalContentBytes int
 	ExcludeComments      bool
 	Filters              []string
 	Trash                MemoTrashScope
@@ -163,6 +173,7 @@ type UpdateMemo struct {
 	UpdatedTs  *int64
 	RowStatus  *RowStatus
 	Content    *string
+	BodyDigest string
 	Visibility *Visibility
 	Pinned     *bool
 	Payload    *storepb.MemoPayload
@@ -172,6 +183,8 @@ type UpdateMemo struct {
 	// in the same transaction as the update; nil preserves trusted internal and
 	// migration callers.
 	Policy *MemoWritePolicy
+	// ExpectedRevision optionally requires the revision read by the client.
+	ExpectedRevision *int64
 }
 
 // MemoWritePolicy identifies the actor and the intended kind of
@@ -242,6 +255,11 @@ func (s *Store) CreateMemo(ctx context.Context, create *Memo) (*Memo, error) {
 	if err := validateMemoCreate(create); err != nil {
 		return nil, err
 	}
+	digest, err := s.stageMemoBody(ctx, create.Content)
+	if err != nil {
+		return nil, err
+	}
+	create.BodyDigest = digest
 	return s.driver.CreateMemo(ctx, create)
 }
 
@@ -282,7 +300,22 @@ func validateMemoCreate(create *Memo) error {
 }
 
 func (s *Store) ListMemos(ctx context.Context, find *FindMemo) ([]*Memo, error) {
-	return s.driver.ListMemos(ctx, find)
+	memos, err := s.driver.ListMemos(ctx, find)
+	if err != nil || find.ExcludeContent {
+		return memos, err
+	}
+	if err := s.hydrateMemoBodies(ctx, memos); err != nil {
+		return nil, err
+	}
+	if budget := find.MaxTotalContentBytes; budget > 0 {
+		for _, memo := range memos {
+			budget -= len(memo.Content)
+			if budget < 0 {
+				return nil, ErrMemoContentBudgetExceeded
+			}
+		}
+	}
+	return memos, nil
 }
 
 // VisitActiveMemoTags visits the tags of each active top-level memo owned by the active account.
@@ -343,8 +376,12 @@ func (s *Store) UpdateMemo(ctx context.Context, update *UpdateMemo) error {
 	if err := validateMemoWritePolicy(update.Policy); err != nil {
 		return err
 	}
-	if update.Policy == nil {
-		return s.driver.UpdateMemo(ctx, update)
+	if update.Content != nil {
+		digest, err := s.stageMemoBody(ctx, *update.Content)
+		if err != nil {
+			return err
+		}
+		update.BodyDigest = digest
 	}
 	return s.driver.UpdateMemo(ctx, update)
 }

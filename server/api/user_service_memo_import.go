@@ -111,7 +111,6 @@ type memoImporter struct {
 	policy  apipb.ImportMemosRequest_ConflictPolicy
 	report  *apipb.ImportMemosReport
 
-	storageSetting *storepb.InstanceStorageSetting
 	// existing holds the instance memos whose UIDs the archive uses, keyed by
 	// UID, loaded once before any write.
 	existing map[string]*store.Memo
@@ -137,25 +136,20 @@ func (s *APIService) ImportMemoExport(ctx context.Context, user *store.User, arc
 	if policy == apipb.ImportMemosRequest_CONFLICT_POLICY_UNSPECIFIED {
 		policy = apipb.ImportMemosRequest_SKIP
 	}
-	storageSetting, err := s.Store.GetInstanceStorageSetting(ctx)
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to get instance storage setting")
-	}
 	existing, err := s.findMemosByUID(ctx, archive, false)
 	if err != nil {
 		return nil, err
 	}
 	importer := &memoImporter{
-		service:        s,
-		ctx:            ctx,
-		user:           user,
-		archive:        archive,
-		policy:         policy,
-		report:         &apipb.ImportMemosReport{Warnings: archiveIssues(archive.Warnings)},
-		storageSetting: storageSetting,
-		existing:       existing,
-		resolved:       make(map[string]*store.Memo, len(archive.Memos)),
-		spaces:         make(map[string]*int32),
+		service:  s,
+		ctx:      ctx,
+		user:     user,
+		archive:  archive,
+		policy:   policy,
+		report:   &apipb.ImportMemosReport{Warnings: archiveIssues(archive.Warnings)},
+		existing: existing,
+		resolved: make(map[string]*store.Memo, len(archive.Memos)),
+		spaces:   make(map[string]*int32),
 	}
 	for _, record := range archive.Memos {
 		if err := ctx.Err(); err != nil {
@@ -231,30 +225,14 @@ func (i *memoImporter) createMemo(record *memoexport.Memo, targetUID string, con
 	if err != nil {
 		return err
 	}
-	// Creation never sets pinned or the lifecycle state; they follow in a
-	// second write, as they do for a memo created through the API.
-	wantPinned, wantRowStatus := memo.Pinned, memo.RowStatus
 	err = i.bindAttachments(memo, memo.Content, nil, attachments, func(prepared *preparedMemoAttachments, required []int32) error {
-		if err := i.service.createMemoWithMutation(i.ctx, i.user, memo, parentID, prepared, required, nil, parentID != nil); err != nil {
+		if err := i.service.createMemoWithMutation(i.ctx, i.user, memo, parentID, prepared, required, nil, true); err != nil {
 			return mapMemoCreateError(err, targetUID, "failed to create memo")
 		}
 		return nil
 	})
 	if err != nil {
 		return err
-	}
-	if wantPinned || wantRowStatus == store.Archived {
-		update := &store.UpdateMemo{ID: memo.ID, UpdatedTs: &memo.UpdatedTs}
-		if wantPinned {
-			update.Pinned = &wantPinned
-		}
-		if wantRowStatus == store.Archived {
-			update.RowStatus = &wantRowStatus
-		}
-		if err := i.service.Store.UpdateMemo(i.ctx, update); err != nil {
-			return mapMemoWriteError(err, "failed to apply memo state")
-		}
-		memo.Pinned, memo.RowStatus = wantPinned, wantRowStatus
 	}
 	i.resolved[record.UID] = memo
 	i.written = append(i.written, writtenMemo{record: record, memo: memo})
@@ -562,7 +540,7 @@ func (i *memoImporter) storeAttachment(entry *memoexport.Attachment, uid, mimeTy
 			create.Payload.MediaMetadata = stored
 		}
 	}
-	attachment, err := i.service.processAndSaveAttachment(i.ctx, create, i.storageSetting, bytes.NewReader(data))
+	attachment, err := i.service.processAndSaveAttachment(i.ctx, create, bytes.NewReader(data))
 	if err != nil {
 		return "", err
 	}

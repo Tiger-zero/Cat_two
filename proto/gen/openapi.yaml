@@ -766,6 +766,13 @@ paths:
                      Format: ^[a-zA-Z0-9]([a-zA-Z0-9-]{0,34}[a-zA-Z0-9])?$
                   schema:
                     type: string
+                - name: idempotent
+                  in: query
+                  description: |-
+                    Optional. With an explicit memo_id, retry the same request to recover its
+                     committed memo. A different request using that ID returns ALREADY_EXISTS.
+                  schema:
+                    type: boolean
             requestBody:
                 content:
                     application/json:
@@ -917,6 +924,13 @@ paths:
                   schema:
                     type: string
                     format: field-mask
+                - name: expectedRevision
+                  in: query
+                  description: |-
+                    Optional. The revision returned by the read on which these changes are
+                     based. If it no longer matches, the update fails with ABORTED.
+                  schema:
+                    type: string
             requestBody:
                 content:
                     application/json:
@@ -1082,6 +1096,13 @@ paths:
                      CreateMemoRequest.memo_id. If empty, a unique ID is generated.
                   schema:
                     type: string
+                - name: idempotent
+                  in: query
+                  description: |-
+                    Optional. With an explicit comment_id, retry the same comment request to
+                     recover its committed memo. A conflicting request returns ALREADY_EXISTS.
+                  schema:
+                    type: boolean
             requestBody:
                 content:
                     application/json:
@@ -3862,7 +3883,7 @@ components:
                     description: Custom CSS injected into the web app.
                 additionalScript:
                     type: string
-                    description: Custom JavaScript injected into the web app.
+                    description: Legacy compatibility field. Cat_two rejects nonempty updates and omits stored values from responses.
             description: GeneralSetting is the general instance configuration.
         InstanceSetting_NotificationSetting:
             type: object
@@ -4002,6 +4023,15 @@ components:
                     type: string
                     description: The time the snapshot was generated on the server.
                     format: date-time
+                dataDirectory:
+                    type: string
+                    description: The absolute data directory in the running Cat_two process or container.
+                notesPath:
+                    type: string
+                    description: The managed directory containing Cat_two's Markdown note bodies.
+                attachmentsDirectory:
+                    type: string
+                    description: The managed directory used for new Cat_two attachment files.
             description: InstanceStats is a snapshot of the instance's resource usage.
         InstanceStats_DatabaseStats:
             type: object
@@ -4447,6 +4477,12 @@ components:
                         Optional. The channel reported by the client when the memo was created.
                          Values: web, telegram, browser_extension, wechat, unknown. Memos created
                          without a reported channel are returned as unknown.
+                revision:
+                    readOnly: true
+                    type: string
+                    description: |-
+                        Output only. Opaque revision of the writable memo state. Pass it as
+                         UpdateMemoRequest.expected_revision when saving changes based on this read.
             description: Memo is a Markdown note written by a user.
         MemoRelation:
             required:

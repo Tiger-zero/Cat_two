@@ -101,6 +101,7 @@ func bootInstance(ctx context.Context, t *testing.T, opts instanceOptions) *inst
 
 	storeInstance := store.New(dbDriver, instanceProfile)
 	require.NoError(t, storeInstance.Migrate(ctx), "should migrate database")
+	require.NoError(t, storeInstance.MigrateLocalAttachments(ctx), "should migrate legacy attachments")
 
 	configDir := opts.configDir
 	if configDir == "" {
@@ -115,6 +116,7 @@ func bootInstance(ctx context.Context, t *testing.T, opts instanceOptions) *inst
 		// As the server does: after the apply, so content attaches to declared users.
 		require.NoError(t, storeInstance.Seed(ctx), "should seed the demo content")
 	}
+	require.NoError(t, storeInstance.MigrateMemoBodies(ctx), "should migrate legacy Markdown bodies")
 
 	s, err := server.NewServer(ctx, instanceProfile, storeInstance)
 	require.NoError(t, err, "should construct server")

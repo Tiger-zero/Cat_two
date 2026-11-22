@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"google.golang.org/protobuf/proto"
 
 	storepb "github.com/usememos/memos/proto/gen/store"
 )
@@ -187,21 +186,4 @@ func TestValidateStorage(t *testing.T) {
 	require.ErrorContains(t, Validate(legacy), "s3_config is required")
 	legacy.GetStorageSetting().StorageType = storepb.InstanceStorageSetting_LOCAL
 	require.NoError(t, Validate(legacy))
-}
-
-func TestValidateUpdateSkipsUnchangedStorages(t *testing.T) {
-	stale := s3Storage("old")
-	stale.GetS3Config().Region = ""
-	existing := storageSetting("old", stale)
-
-	// Switching the default away from a storage stored before region was
-	// required does not fail on that storage.
-	update := storageSetting("local", &storepb.Storage{Id: "local", Type: storepb.StorageType_STORAGE_TYPE_LOCAL}, proto.CloneOf(stale))
-	require.NoError(t, ValidateUpdate(update, existing))
-	require.Error(t, Validate(update), "without an existing setting every storage is checked")
-
-	// Editing the stale storage checks it again.
-	edited := proto.CloneOf(stale)
-	edited.GetS3Config().Bucket = "renamed"
-	require.ErrorContains(t, ValidateUpdate(storageSetting("old", edited), existing), "region is required")
 }

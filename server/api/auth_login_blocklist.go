@@ -11,8 +11,6 @@ import (
 	"google.golang.org/grpc/status"
 
 	"github.com/usememos/memos/internal/httphandler"
-	"github.com/usememos/memos/server/auth"
-	"github.com/usememos/memos/store"
 )
 
 const (
@@ -50,41 +48,9 @@ type loginBlocklistPage struct {
 
 func (s *APIService) newLoginBlocklistHandler(authorizer *Authorizer) http.Handler {
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET "+loginBlocklistPath, s.authorizeLoginBlocklist(authorizer, s.listLoginBlocklist))
-	mux.HandleFunc("DELETE "+loginBlocklistPath+"/{ip}", s.authorizeLoginBlocklist(authorizer, s.removeLoginBlock))
+	mux.HandleFunc("GET "+loginBlocklistPath, s.authorizeAdminSession(authorizer, s.listLoginBlocklist))
+	mux.HandleFunc("DELETE "+loginBlocklistPath+"/{ip}", s.authorizeAdminSession(authorizer, s.removeLoginBlock))
 	return mux
-}
-
-func (s *APIService) authorizeLoginBlocklist(authorizer *Authorizer, handler func(http.ResponseWriter, *http.Request) error) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		setAPIResponseNoStoreHeaders(w.Header())
-		ctx := r.Context()
-		result := authorizer.Authenticate(ctx, r.Header.Get("Authorization"))
-		if result == nil {
-			writeGatewayAuthorizationError(w, ErrUnauthenticated)
-			return
-		}
-		if result.Claims == nil {
-			writeGatewayStatusError(w, status.Error(codes.PermissionDenied, "a web administrator session is required"))
-			return
-		}
-		if err := authorizer.Throttle(ctx, "", result); err != nil {
-			writeGatewayStatusError(w, err)
-			return
-		}
-		user, err := s.fetchCurrentUser(auth.ApplyToContext(ctx, result))
-		if err != nil {
-			writeGatewayStatusError(w, status.Error(codes.Internal, "failed to check the administrator session"))
-			return
-		}
-		if user == nil || user.Role != store.RoleAdmin {
-			writeGatewayStatusError(w, status.Error(codes.PermissionDenied, "a web administrator session is required"))
-			return
-		}
-		if err := handler(w, r); err != nil {
-			writeGatewayStatusError(w, err)
-		}
-	}
 }
 
 func (s *APIService) listLoginBlocklist(w http.ResponseWriter, r *http.Request) error {

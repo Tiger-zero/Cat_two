@@ -10,7 +10,6 @@ import (
 
 	"github.com/usememos/memos/internal/identifier"
 	storepb "github.com/usememos/memos/proto/gen/store"
-	"github.com/usememos/memos/provider/storage"
 )
 
 type Attachment struct {
@@ -247,18 +246,11 @@ func (s *Store) DeleteAttachments(ctx context.Context, attachments []*Attachment
 }
 
 func (s *Store) deleteAttachmentStorageSnapshots(ctx context.Context, attachments []*Attachment) error {
-	instanceStorageSetting, instanceStorageSettingErr := s.getAttachmentStorageCleanupInstanceSetting(ctx, attachments)
 	for _, attachment := range attachments {
 		if attachment == nil {
 			continue
 		}
-		var err error
-		if instanceStorageSettingErr != nil && AttachmentNeedsInstanceStorageSetting(attachment) {
-			err = instanceStorageSettingErr
-		} else {
-			err = s.deleteAttachmentStorageImpl(ctx, attachment, instanceStorageSetting)
-		}
-		if err != nil {
+		if err := s.DeleteAttachmentStorage(ctx, attachment); err != nil {
 			if attachment.StorageType == storepb.AttachmentStorageType_LOCAL {
 				return errors.Wrap(err, "failed to delete local file")
 			}
@@ -268,16 +260,8 @@ func (s *Store) deleteAttachmentStorageSnapshots(ctx context.Context, attachment
 	return nil
 }
 
+// DeleteAttachmentStorage removes a local attachment file and any derived assets.
 func (s *Store) DeleteAttachmentStorage(ctx context.Context, attachment *Attachment) error {
-	return s.deleteAttachmentStorageImpl(ctx, attachment, nil)
-}
-
-// DeleteAttachmentStorageWithInstanceSetting deletes attachment storage using a preloaded instance storage setting.
-func (s *Store) DeleteAttachmentStorageWithInstanceSetting(ctx context.Context, attachment *Attachment, instanceStorageSetting *storepb.InstanceStorageSetting) error {
-	return s.deleteAttachmentStorageImpl(ctx, attachment, instanceStorageSetting)
-}
-
-func (s *Store) deleteAttachmentStorageImpl(ctx context.Context, attachment *Attachment, instanceStorageSetting *storepb.InstanceStorageSetting) error {
 	if attachment == nil {
 		return nil
 	}
@@ -286,114 +270,23 @@ func (s *Store) deleteAttachmentStorageImpl(ctx context.Context, attachment *Att
 	}
 
 	if attachment.StorageType == storepb.AttachmentStorageType_LOCAL {
-		if err := func() error {
+		referenced, err := s.localAttachmentStorageReferenced(ctx, attachment.Reference, attachment.ID, false)
+		if err != nil {
+			return errors.Wrap(err, "failed to check other references to the attachment file")
+		}
+		if !referenced {
 			p := filepath.FromSlash(attachment.Reference)
 			if !filepath.IsAbs(p) {
 				p = filepath.Join(s.profile.Data, p)
 			}
-			err := os.Remove(p)
-			if err != nil && !os.IsNotExist(err) {
+			if err := os.Remove(p); err != nil && !os.IsNotExist(err) {
 				return errors.Wrap(err, "failed to delete local file")
 			}
-			return nil
-		}(); err != nil {
-			return err
-		}
-	} else if attachment.StorageType == storepb.AttachmentStorageType_S3 {
-		if err := func() error {
-			s3ObjectPayload := attachment.Payload.GetS3Object()
-			if s3ObjectPayload == nil {
-				return errors.Errorf("No s3 object found")
-			}
-			// Deletes resolve with the registry like reads do, so a legacy
-			// attachment picks up rotated credentials for its namespace instead
-			// of deleting with the stale embedded config.
-			if instanceStorageSetting == nil {
-				var err error
-				instanceStorageSetting, err = s.GetInstanceStorageSetting(ctx)
-				if err != nil {
-					if AttachmentNeedsInstanceStorageSetting(attachment) {
-						return errors.Wrap(err, "failed to get instance storage setting")
-					}
-					// The embedded config is sufficient on its own; keep the
-					// delete best-effort when the settings read fails.
-					instanceStorageSetting = nil
-				}
-			}
-
-			resolvedStorage, err := ResolveStorage(instanceStorageSetting, s3ObjectPayload.StorageId, s3ObjectPayload.S3Config)
-			if err != nil {
-				return errors.Wrap(err, "failed to resolve storage")
-			}
-			driver, err := s.StorageDriver(ctx, resolvedStorage)
-			if err != nil {
-				return errors.Wrap(err, "failed to create storage driver")
-			}
-			if err := driver.DeleteObject(ctx, s3ObjectPayload.Key); err != nil {
-				return errors.Wrap(err, "Failed to delete s3 object")
-			}
-			return nil
-		}(); err != nil {
-			return err
 		}
 	}
 
 	s.DeleteAttachmentDerivedCaches(attachment)
 	return nil
-}
-
-func (s *Store) getAttachmentStorageCleanupInstanceSetting(ctx context.Context, attachments []*Attachment) (*storepb.InstanceStorageSetting, error) {
-	for _, attachment := range attachments {
-		if AttachmentNeedsInstanceStorageSetting(attachment) {
-			instanceStorageSetting, err := s.GetInstanceStorageSetting(ctx)
-			if err != nil {
-				return nil, errors.Wrap(err, "failed to get instance storage setting")
-			}
-			return instanceStorageSetting, nil
-		}
-	}
-	return nil, nil
-}
-
-// ResolveAttachmentS3Driver resolves the storage driver referenced by an S3
-// attachment payload, validating the payload and supplying the instance setting.
-func (s *Store) ResolveAttachmentS3Driver(ctx context.Context, attachment *Attachment) (storage.Driver, *storepb.AttachmentPayload_S3Object, error) {
-	if attachment == nil {
-		return nil, nil, errors.New("attachment is missing")
-	}
-	if attachment.Payload == nil {
-		return nil, nil, errors.New("attachment payload is missing")
-	}
-	s3Object := attachment.Payload.GetS3Object()
-	if s3Object == nil {
-		return nil, nil, errors.New("S3 object payload is missing")
-	}
-	if s3Object.Key == "" {
-		return nil, nil, errors.New("S3 object key is missing")
-	}
-
-	instanceStorageSetting, err := s.GetInstanceStorageSetting(ctx)
-	if err != nil {
-		return nil, nil, errors.Wrap(err, "failed to get instance storage setting")
-	}
-	resolvedStorage, err := ResolveStorage(instanceStorageSetting, s3Object.StorageId, s3Object.S3Config)
-	if err != nil {
-		return nil, nil, errors.Wrap(err, "failed to resolve storage")
-	}
-	driver, err := s.StorageDriver(ctx, resolvedStorage)
-	if err != nil {
-		return nil, nil, errors.Wrap(err, "failed to create storage driver")
-	}
-	return driver, s3Object, nil
-}
-
-// AttachmentNeedsInstanceStorageSetting reports whether cleanup should load
-// the configured storage registry for an S3 attachment.
-func AttachmentNeedsInstanceStorageSetting(attachment *Attachment) bool {
-	if attachment == nil || attachment.StorageType != storepb.AttachmentStorageType_S3 {
-		return false
-	}
-	return attachment.Payload.GetS3Object() != nil
 }
 
 // DeleteAttachmentDerivedCaches removes every derived asset the file server

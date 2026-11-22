@@ -34,24 +34,37 @@ func TestStartupNotesAndFilesAreCreatorOnly(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, owner)
 
+	const content = "legacy private attachment"
+	type legacyNote struct {
+		memo       *store.Memo
+		attachment *store.Attachment
+		share      *store.MemoShare
+	}
+	var fixtures []legacyNote
 	for _, visibility := range []store.Visibility{store.Public, store.Protected} {
-		t.Run(string(visibility), func(t *testing.T) {
-			uid := "legacy-" + string(visibility)
-			memo, err := instance.server.Store.CreateMemo(ctx, &store.Memo{
-				UID: uid, CreatorID: owner.ID, Content: "legacy private note content", Visibility: visibility,
-			})
-			require.NoError(t, err)
-			content := []byte("legacy private attachment")
-			attachment, err := instance.server.Store.CreateAttachment(ctx, &store.Attachment{
-				UID: uid + "-file", Filename: "memo.txt", Type: "text/plain", MemoID: &memo.ID, CreatorID: owner.ID,
-				Blob: content, Size: int64(len(content)),
-			})
-			require.NoError(t, err)
-			share, err := instance.server.Store.CreateMemoShare(ctx, &store.MemoShare{
-				UID: uid + "-share", MemoID: memo.ID, CreatorID: owner.ID,
-			})
-			require.NoError(t, err)
+		uid := "legacy-" + string(visibility)
+		memo, err := instance.server.Store.CreateMemo(ctx, &store.Memo{
+			UID: uid, CreatorID: owner.ID, Content: "legacy private note content", Visibility: visibility,
+		})
+		require.NoError(t, err)
+		attachment, err := instance.server.Store.CreateAttachment(ctx, &store.Attachment{
+			UID: uid + "-file", Filename: "memo.txt", Type: "text/plain", MemoID: &memo.ID, CreatorID: owner.ID,
+			Blob: []byte(content), Size: int64(len(content)),
+		})
+		require.NoError(t, err)
+		share, err := instance.server.Store.CreateMemoShare(ctx, &store.MemoShare{
+			UID: uid + "-share", MemoID: memo.ID, CreatorID: owner.ID,
+		})
+		require.NoError(t, err)
+		fixtures = append(fixtures, legacyNote{memo: memo, attachment: attachment, share: share})
+	}
+	options := instanceOptions{dataDir: instance.profile.Data, instanceURL: instance.profile.InstanceURL}
+	instance.shutdown(ctx)
+	instance = bootInstance(ctx, t, options)
 
+	for _, fixture := range fixtures {
+		memo, attachment, share := fixture.memo, fixture.attachment, fixture.share
+		t.Run(string(memo.Visibility), func(t *testing.T) {
 			code, body := instance.do(t, http.MethodGet, "/api/memos/"+memo.UID, ownerSession.AccessToken, nil)
 			require.Equal(t, http.StatusOK, code, "%s", body)
 			var returned struct{ Visibility string }
@@ -64,7 +77,7 @@ func TestStartupNotesAndFilesAreCreatorOnly(t *testing.T) {
 			}{
 				{"/api/memos/" + memo.UID, memo.Content},
 				{"/api/attachments/" + attachment.UID, attachment.Filename},
-				{"/file/attachments/" + attachment.UID, string(content)},
+				{"/file/attachments/" + attachment.UID, content},
 			} {
 				code, body := instance.do(t, http.MethodGet, request.path, ownerSession.AccessToken, nil)
 				require.Equal(t, http.StatusOK, code, "%s: %s", request.path, body)

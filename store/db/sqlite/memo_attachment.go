@@ -40,7 +40,7 @@ func (d *DB) ApplyMemoMutation(ctx context.Context, mutation *store.MemoMutation
 				return err
 			}
 		}
-		if err := insertSQLiteMemo(ctx, conn, create); err != nil {
+		if err := insertSQLiteMemo(ctx, conn, create, mutation.PreserveInitialState); err != nil {
 			return err
 		}
 		mutation.MemoID = create.ID
@@ -70,11 +70,15 @@ func (d *DB) ApplyMemoMutation(ctx context.Context, mutation *store.MemoMutation
 
 	var creatorID int32
 	var content string
-	if err := conn.QueryRowContext(ctx, `SELECT creator_id, content FROM memo WHERE id = ? AND deleted_ts IS NULL`, mutation.MemoID).Scan(&creatorID, &content); err != nil {
+	var revision int64
+	if err := conn.QueryRowContext(ctx, `SELECT creator_id, content, revision FROM memo WHERE id = ? AND deleted_ts IS NULL`, mutation.MemoID).Scan(&creatorID, &content, &revision); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return errors.Wrap(store.ErrMemoMutationConflict, "memo no longer exists")
 		}
 		return errors.Wrap(err, "failed to lock memo")
+	}
+	if err := mutation.ValidateRevision(revision); err != nil {
+		return err
 	}
 	if creatorID != mutation.MemoCreatorID || content != mutation.ExpectedMemoContent {
 		return errors.Wrap(store.ErrMemoMutationConflict, "memo changed while applying mutation")
@@ -138,7 +142,11 @@ func (d *DB) ApplyMemoMutation(ctx context.Context, mutation *store.MemoMutation
 		if mutation.MemoUpdate.ID != mutation.MemoID {
 			return errors.New("memo update target does not match attachment mutation")
 		}
-		if err := applyMemoUpdate(ctx, conn, mutation.MemoUpdate); err != nil {
+		if err := applyMemoUpdate(ctx, conn, mutation.MemoUpdate, mutation.EditsBindings()); err != nil {
+			return err
+		}
+	} else if mutation.MemoCreate == nil && mutation.EditsBindings() {
+		if err := bumpMemoRevision(ctx, conn, mutation.MemoID); err != nil {
 			return err
 		}
 	}
@@ -188,7 +196,7 @@ type memoUpdateExecer interface {
 	ExecContext(context.Context, string, ...any) (sql.Result, error)
 }
 
-func applyMemoUpdate(ctx context.Context, executor memoUpdateExecer, update *store.UpdateMemo) error {
+func applyMemoUpdate(ctx context.Context, executor memoUpdateExecer, update *store.UpdateMemo, forceRevision bool) error {
 	set, args := []string{}, []any{}
 	if v := update.UID; v != nil {
 		set, args = append(set, "`uid` = ?"), append(args, *v)
@@ -203,7 +211,7 @@ func applyMemoUpdate(ctx context.Context, executor memoUpdateExecer, update *sto
 		set, args = append(set, "`row_status` = ?"), append(args, *v)
 	}
 	if v := update.Content; v != nil {
-		set, args = append(set, "`content` = ?"), append(args, *v)
+		set, args = append(set, "`content` = ?", "`body_digest` = ?"), append(args, *v, update.BodyDigest)
 	}
 	if v := update.Visibility; v != nil {
 		set, args = append(set, "`visibility` = ?"), append(args, *v)
@@ -223,12 +231,33 @@ func applyMemoUpdate(ctx context.Context, executor memoUpdateExecer, update *sto
 	} else if v := update.SpaceID; v != nil {
 		set, args = append(set, "`space_id` = ?"), append(args, *v)
 	}
-	if len(set) == 0 {
+	if len(set) == 0 && !forceRevision && update.ExpectedRevision == nil {
 		return nil
 	}
+	set = append(set, "revision = revision + 1")
 	args = append(args, update.ID)
-	if _, err := executor.ExecContext(ctx, "UPDATE `memo` SET "+strings.Join(set, ", ")+" WHERE `id` = ?", args...); err != nil {
+	query := "UPDATE `memo` SET " + strings.Join(set, ", ") + " WHERE `id` = ?"
+	if update.ExpectedRevision != nil {
+		args = append(args, *update.ExpectedRevision)
+		query += " AND `revision` = ?"
+	}
+	result, err := executor.ExecContext(ctx, query, args...)
+	if err != nil {
 		return errors.Wrap(err, "failed to update memo")
 	}
+	if update.ExpectedRevision != nil {
+		count, err := result.RowsAffected()
+		if err != nil {
+			return errors.Wrap(err, "failed to check memo revision")
+		}
+		if count != 1 {
+			return store.ErrMemoRevisionConflict
+		}
+	}
 	return nil
+}
+
+func bumpMemoRevision(ctx context.Context, executor memoUpdateExecer, memoID int32) error {
+	_, err := executor.ExecContext(ctx, `UPDATE memo SET revision = revision + 1 WHERE id = ?`, memoID)
+	return errors.Wrap(err, "failed to advance memo revision")
 }

@@ -1,7 +1,6 @@
 package api
 
 import (
-	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -15,18 +14,6 @@ import (
 	"github.com/usememos/memos/internal/httphandler"
 	"github.com/usememos/memos/store"
 )
-
-type mcpUserContextKey struct{}
-
-type mcpAPIRequest struct {
-	userID    int32
-	procedure string
-}
-
-// WithMCPRequest grants the in-process request the connection owner's identity for one API procedure.
-func WithMCPRequest(ctx context.Context, userID int32, procedure string) context.Context {
-	return context.WithValue(ctx, mcpUserContextKey{}, mcpAPIRequest{userID: userID, procedure: procedure})
-}
 
 func (s *APIService) newMCPConnectionHandler(authorizer *Authorizer) http.Handler {
 	mux := http.NewServeMux()
@@ -80,15 +67,16 @@ func (s *APIService) listMCPConnections(w http.ResponseWriter, r *http.Request, 
 
 func (s *APIService) createMCPConnection(w http.ResponseWriter, r *http.Request, userID int32) error {
 	var request struct {
-		Label    string `json:"label"`
-		Duration string `json:"duration"`
+		Label      string                        `json:"label"`
+		Duration   string                        `json:"duration"`
+		Permission store.MCPConnectionPermission `json:"permission"`
 	}
 	decoder := json.NewDecoder(r.Body)
 	if err := decoder.Decode(&request); err != nil || decoder.Decode(new(any)) != io.EOF {
-		return status.Error(codes.InvalidArgument, "expected a connection name and optional duration")
+		return status.Error(codes.InvalidArgument, "expected a connection name and optional duration and permission")
 	}
-	connection, token, err := mcpconnection.Issue(r.Context(), s.Store, userID, request.Label, request.Duration, time.Now())
-	if errors.Is(err, mcpconnection.ErrInvalidLabel) || errors.Is(err, mcpconnection.ErrInvalidDuration) {
+	connection, token, err := mcpconnection.Issue(r.Context(), s.Store, userID, request.Label, request.Duration, request.Permission, time.Now())
+	if errors.Is(err, mcpconnection.ErrInvalidLabel) || errors.Is(err, mcpconnection.ErrInvalidDuration) || errors.Is(err, mcpconnection.ErrInvalidPermission) {
 		return status.Error(codes.InvalidArgument, err.Error())
 	}
 	if err != nil {

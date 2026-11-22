@@ -135,6 +135,34 @@ func TestFrontendService_SecurityHeaders(t *testing.T) {
 	}
 }
 
+func TestFrontendService_PersonalScriptPolicy(t *testing.T) {
+	for _, tc := range []struct {
+		name, provider, scriptSource string
+	}{
+		{"stock server", "", "'self'"},
+		{"Turnstile", "turnstile", "'self' https://challenges.cloudflare.com"},
+		{"hCaptcha", "hcaptcha", "'self' https://hcaptcha.com https://*.hcaptcha.com"},
+		{"unrecognized provider", "https://custom.example.test", "'self'"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			service := NewFrontendService(&profile.Profile{Personal: true}, nil)
+			service.ChallengeProvider = tc.provider
+			handler := service.Handler(http.HandlerFunc(httphandler.NotFound))
+			for _, path := range []string{"/auth", "/auth/signup", "/home"} {
+				rec := httptest.NewRecorder()
+				handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
+				require.Equal(t, http.StatusOK, rec.Code)
+				policy := rec.Header().Get("Content-Security-Policy")
+				require.Contains(t, policy, "script-src "+tc.scriptSource+";")
+				require.Contains(t, policy, "script-src-attr 'none'")
+				require.Contains(t, policy, "worker-src 'self' blob:")
+				require.NotContains(t, policy, "'unsafe-inline'")
+				require.NotContains(t, policy, "'unsafe-eval'")
+			}
+		})
+	}
+}
+
 func TestFrontendService_MissingAssetsAreNotCached(t *testing.T) {
 	ctx := context.Background()
 	testStore := teststore.NewTestingStore(ctx, t)

@@ -12,8 +12,6 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	apipb "github.com/usememos/memos/proto/gen/api"
-	"github.com/usememos/memos/proto/gen/api/apiconnect"
-	"github.com/usememos/memos/server/api"
 	"github.com/usememos/memos/store"
 )
 
@@ -36,7 +34,7 @@ type memoSearchInput struct {
 	PageToken          string `json:"pageToken,omitempty" jsonschema:"Pass nextPageToken from the preceding search with the same filters and order."`
 }
 
-func registerPersonalMemoSearch(server *sdkmcp.Server, adapter *apiAdapter, listOperation *registeredOperation) {
+func registerPersonalMemoSearch(server *sdkmcp.Server, execute toolExecutor, listOperation *registeredOperation) {
 	const title = "Search Memos"
 	sdkmcp.AddTool(server, &sdkmcp.Tool{
 		Name:         "memo_search",
@@ -45,16 +43,11 @@ func registerPersonalMemoSearch(server *sdkmcp.Server, adapter *apiAdapter, list
 		OutputSchema: outputSchemaForOperation(listOperation.Operation),
 		Annotations:  annotationsForOperation(listOperation.Operation, title),
 	}, func(ctx context.Context, _ *sdkmcp.CallToolRequest, input memoSearchInput) (*sdkmcp.CallToolResult, any, error) {
-		userID, ok := ctx.Value(connectionUserIDContextKey{}).(int32)
-		if !ok || userID <= 0 {
-			return nil, nil, errors.New("MCP connection required")
-		}
 		arguments, err := input.listArguments()
 		if err != nil {
 			return nil, nil, err
 		}
-		ctx = api.WithMCPRequest(ctx, userID, apiconnect.MemoServiceListMemosProcedure)
-		result, err := adapter.execute(ctx, listOperation.Operation, arguments, "")
+		result, err := execute(ctx, listOperation.Operation, arguments, "")
 		return result, nil, err
 	})
 }

@@ -2,6 +2,7 @@ package server
 
 import (
 	"bytes"
+	"context"
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/sha1"
@@ -15,11 +16,13 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/usememos/memos/core/messagecapture"
 	"github.com/usememos/memos/internal/profile"
 	"github.com/usememos/memos/store"
 	teststore "github.com/usememos/memos/store/test"
@@ -45,9 +48,9 @@ func TestWeComMessageCapture(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() { s.apiService.CloseUploads(); s.apiService.SSEHub.Close() })
 
-	request := func(method, plaintext string) *httptest.ResponseRecorder {
+	requestWithToken := func(method, plaintext, callbackToken string) *httptest.ResponseRecorder {
 		ciphertext := encryptCaptureFixture(t, key, corp, plaintext)
-		parts := []string{token, strconv.FormatInt(time.Now().Unix(), 10), "fixture", ciphertext}
+		parts := []string{callbackToken, strconv.FormatInt(time.Now().Unix(), 10), "fixture", ciphertext}
 		query := url.Values{"timestamp": {parts[1]}, "nonce": {parts[2]}}
 		slices.Sort(parts)
 		digest := sha1.Sum([]byte(strings.Join(parts, "")))
@@ -63,6 +66,9 @@ func TestWeComMessageCapture(t *testing.T) {
 		s.handler.ServeHTTP(writer, httptest.NewRequest(method, weComCallbackPath+"?"+query.Encode(), strings.NewReader(payload)))
 		require.False(t, writer.readDeadline.IsZero(), "read deadline must cover final response handling")
 		return response
+	}
+	request := func(method, plaintext string) *httptest.ResponseRecorder {
+		return requestWithToken(method, plaintext, token)
 	}
 	verification := request(http.MethodGet, "fixture-challenge")
 	require.Equal(t, http.StatusOK, verification.Code)
@@ -103,6 +109,144 @@ func TestWeComMessageCapture(t *testing.T) {
 	require.Equal(t, "#微信\n\n收到笔记", memos[0].Content)
 	require.Equal(t, "wechat", memos[0].Payload.GetCreationChannel())
 	require.Contains(t, memos[0].Payload.GetTags(), "微信")
+
+	capture := s.messageCapture
+	settings, err := capture.GetConfiguration(ctx)
+	require.NoError(t, err)
+	require.Equal(t, messagecapture.SourceEnvironment, settings.WeComSource)
+	rotated := messagecapture.WeCom{
+		Enabled: true, CorpID: corp, AgentID: "1000002", UserID: "allowed",
+		CallbackToken: "rotated-callback-token",
+	}
+	settings, err = capture.UpdateConfiguration(ctx, messagecapture.Update{WeCom: &rotated})
+	require.NoError(t, err)
+	require.Equal(t, messagecapture.SourceSettings, settings.WeComSource)
+	require.Equal(t, base64.RawStdEncoding.EncodeToString(key), settings.WeCom.EncodingAESKey)
+	require.Equal(t, http.StatusForbidden, request(http.MethodGet, "old-challenge").Code)
+	require.Equal(t, http.StatusOK, requestWithToken(http.MethodGet, "new-challenge", rotated.CallbackToken).Code)
+
+	rotated.Enabled = false
+	_, err = capture.UpdateConfiguration(ctx, messagecapture.Update{WeCom: &rotated})
+	require.NoError(t, err)
+	require.Equal(t, http.StatusNotFound, requestWithToken(http.MethodGet, "disabled", rotated.CallbackToken).Code)
+}
+
+func TestTelegramCaptureReloadsChangedSettings(t *testing.T) {
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	db := teststore.NewTestingStore(ctx, t)
+	const initialToken = "42:fixture"
+	t.Setenv("CAT_TWO_TELEGRAM_BOT_TOKEN", initialToken)
+	t.Setenv("CAT_TWO_TELEGRAM_USER_ID", "1024")
+	s, err := NewServer(ctx, &profile.Profile{Personal: true, Data: t.TempDir()}, db)
+	require.NoError(t, err)
+	t.Cleanup(func() { s.apiService.CloseUploads(); s.apiService.SSEHub.Close() })
+
+	type poller struct {
+		token  string
+		sender int64
+		proxy  string
+		done   <-chan struct{}
+	}
+	started := make(chan poller, 4)
+	var active atomic.Int32
+	var overlap atomic.Bool
+	capture := s.messageCapture
+	capture.runTelegram = func(ctx context.Context, token string, sender int64, proxy string, _ func(context.Context, string, string) error) {
+		if active.Add(1) != 1 {
+			overlap.Store(true)
+		}
+		defer active.Add(-1)
+		started <- poller{token: token, sender: sender, proxy: proxy, done: ctx.Done()}
+		<-ctx.Done()
+	}
+	capture.start(ctx)
+	t.Cleanup(capture.stop)
+
+	waitForPoller := func() poller {
+		t.Helper()
+		select {
+		case run := <-started:
+			return run
+		case <-time.After(3 * time.Second):
+			t.Fatal("Telegram poller did not start")
+			return poller{}
+		}
+	}
+	expectRunning := func(run poller) {
+		t.Helper()
+		select {
+		case <-run.done:
+			t.Fatal("Telegram poller restarted unexpectedly")
+		default:
+		}
+	}
+
+	initial := waitForPoller()
+	require.Equal(t, initialToken, initial.token)
+	require.EqualValues(t, 1024, initial.sender)
+	_, err = capture.UpdateConfiguration(ctx, messagecapture.Update{WeCom: &messagecapture.WeCom{}})
+	require.NoError(t, err)
+	expectRunning(initial)
+
+	const proxy = "http://proxy.example.test:3128"
+	_, err = capture.UpdateNetworkConfiguration(ctx, messagecapture.NetworkUpdate{Enabled: true, ProxyURL: proxy})
+	require.NoError(t, err)
+	proxied := waitForPoller()
+	require.Equal(t, proxy, proxied.proxy)
+	_, err = capture.UpdateNetworkConfiguration(ctx, messagecapture.NetworkUpdate{Enabled: true})
+	require.NoError(t, err)
+	expectRunning(proxied)
+
+	settings, err := capture.UpdateConfiguration(ctx, messagecapture.Update{
+		Telegram: &messagecapture.Telegram{Enabled: true, UserID: "2048"},
+	})
+	require.NoError(t, err)
+	require.Equal(t, messagecapture.SourceSettings, settings.TelegramSource)
+	updated := waitForPoller()
+	require.Equal(t, initialToken, updated.token, "omitting the token retains the effective credential")
+	require.EqualValues(t, 2048, updated.sender)
+	require.Equal(t, proxy, updated.proxy)
+
+	_, err = capture.UpdateNetworkConfiguration(ctx, messagecapture.NetworkUpdate{Enabled: false})
+	require.NoError(t, err)
+	direct := waitForPoller()
+	require.Empty(t, direct.proxy, "an explicit disable connects directly even with host proxy variables")
+
+	saveErrors := make(chan error, 2)
+	go func() {
+		_, err := capture.UpdateConfiguration(ctx, messagecapture.Update{
+			Telegram: &messagecapture.Telegram{Enabled: true, UserID: "4096"},
+		})
+		saveErrors <- err
+	}()
+	go func() {
+		_, err := capture.UpdateNetworkConfiguration(ctx, messagecapture.NetworkUpdate{Enabled: true})
+		saveErrors <- err
+	}()
+	for range 2 {
+		require.NoError(t, <-saveErrors)
+	}
+	_ = waitForPoller()
+	concurrent := waitForPoller()
+	require.EqualValues(t, 4096, concurrent.sender)
+	require.Equal(t, proxy, concurrent.proxy)
+	cancel()
+	capture.stop()
+	require.Zero(t, active.Load())
+
+	// Disabling after the worker has stopped still saves its override.
+	_, err = capture.UpdateConfiguration(t.Context(), messagecapture.Update{
+		Telegram: &messagecapture.Telegram{UserID: "4096"},
+	})
+	require.NoError(t, err)
+	require.Zero(t, active.Load())
+	require.False(t, overlap.Load(), "the previous poller must exit before another starts")
+
+	reloaded, err := capture.repository.Load(t.Context(), capture.fallback)
+	require.NoError(t, err)
+	require.Equal(t, messagecapture.SourceSettings, reloaded.TelegramSource)
+	require.False(t, reloaded.Telegram.Enabled, "disabling persists across restart despite the legacy environment")
 }
 
 type captureDeadlineWriter struct {

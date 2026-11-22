@@ -109,7 +109,7 @@ export class DrawingSavedError extends Error {
 export interface MemoSaveOperations {
   /** The memo as the server has it now, to diff the draft against. */
   getMemo: (name: string) => Promise<Memo>;
-  updateMemo: (update: Partial<Memo>, updateMask: string[]) => Promise<Memo>;
+  updateMemo: (update: Partial<Memo>, updateMask: string[], expectedRevision?: string) => Promise<Memo>;
   /** Creates a memo, or a comment on `parent`. */
   createMemo: (memo: Memo, parent?: string) => Promise<Memo>;
 }
@@ -155,7 +155,7 @@ export const memoService = {
         return { memoName: prevMemo.name, hasChanges: false };
       }
 
-      let memo = mask.size > 0 ? await operations.updateMemo(patch, Array.from(mask)) : prevMemo;
+      let memo = mask.size > 0 ? await operations.updateMemo(patch, Array.from(mask), prevMemo.revision || undefined) : prevMemo;
       if (replacements.length > 0) {
         try {
           await uploadService.uploadFiles(replacements, options.onFileUploaded);

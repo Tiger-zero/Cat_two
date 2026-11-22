@@ -24,11 +24,39 @@ func attachmentLookupIndex(driver string) string {
 // just after the MCP connection migration, without changing its version marker.
 func removeSchemaAfterMCPConnection(ctx context.Context, t *testing.T, ts *store.Store, driver string) {
 	t.Helper()
+	removeMemoBodySchema(ctx, t, ts, driver)
 	db := ts.GetDriver().GetDB()
 	_, err := db.ExecContext(ctx, "DROP TABLE attachment_storage_cleanup")
 	require.NoError(t, err)
 	if driver == "sqlite" {
 		_, err := db.ExecContext(ctx, "DROP INDEX idx_memo_owner_pinned_created")
+		require.NoError(t, err)
+	}
+}
+
+func removeMemoBodySchema(ctx context.Context, t *testing.T, ts *store.Store, driver string) {
+	t.Helper()
+	removeMCPPermissionSchema(ctx, t, ts)
+	removeMemoRevisionSchema(ctx, t, ts)
+	db := ts.GetDriver().GetDB()
+	_, err := db.ExecContext(ctx, "ALTER TABLE memo DROP COLUMN body_digest")
+	require.NoError(t, err)
+	if driver == "sqlite" {
+		_, err := db.ExecContext(ctx, "DROP TABLE memo_body_namespace")
+		require.NoError(t, err)
+	}
+}
+
+func removeMCPPermissionSchema(ctx context.Context, t *testing.T, ts *store.Store) {
+	t.Helper()
+	_, err := ts.GetDriver().GetDB().ExecContext(ctx, "ALTER TABLE mcp_connection DROP COLUMN permission")
+	require.NoError(t, err)
+}
+
+func removeMemoRevisionSchema(ctx context.Context, t *testing.T, ts *store.Store) {
+	t.Helper()
+	for _, column := range []string{"creation_request_digest", "revision"} {
+		_, err := ts.GetDriver().GetDB().ExecContext(ctx, "ALTER TABLE memo DROP COLUMN "+column)
 		require.NoError(t, err)
 	}
 }

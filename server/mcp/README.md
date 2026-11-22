@@ -5,19 +5,19 @@ This package serves an [OpenAPI](https://www.openapis.org/)-driven
 `/mcp`. It exposes a curated, memo-focused toolset over the **Streamable HTTP**
 transport using the official `github.com/modelcontextprotocol/go-sdk`.
 
-The curated tools come from the generated OpenAPI document
-(`proto/gen/openapi.yaml`, embedded via `proto.OpenAPIYAML()`) and execute
-in-process against the existing REST API. Cat_two personal mode adds typed
+The curated tool schemas come from the generated OpenAPI document
+(`proto/gen/openapi.yaml`, embedded via `proto.OpenAPIYAML()`). Cat_two personal
+mode invokes the same typed API service methods as REST and Connect. It adds
 read tools for note searches, batch reads and tag discovery. The transport
 authenticates a dedicated MCP connection token and supplies the connection
-owner's identity to the tool and any internal API call.
+owner's identity to the service methods.
 
 ## Integration
 
-`server.NewServer` calls `mcp.NewMCPService` after registering the API, file, and gRPC-gateway routes, passing the same HTTP handler:
+`server.NewServer` passes the shared API service and the HTTP handler used by compatibility mode.
 
 ```go
-mcpService, err := mcp.NewMCPService(profile, s.handler, s.Store)
+mcpService, err := mcp.NewMCPService(profile, s.handler, apiService)
 if err != nil {
     return nil, errors.Wrap(err, "failed to create MCP service")
 }
@@ -66,20 +66,15 @@ fast on any inconsistency:
 5. For an OpenAPI tool, `newMCPToolHandler` (`service.go`) decodes the JSON
    arguments into a map.
 6. `validateToolArguments` (`validation.go`) checks them against the tool's
-   input schema. The tool handler then binds the personal-mode identity to
-   the specific API procedure in the request context.
-7. `apiAdapter.execute` (`adapter.go`) builds the API request
-   (`buildAPIRequest`: path-parameter substitution, query encoding, JSON body),
-   presents the caller's resolved client address as the request peer, and runs
-   it against the HTTP handler through an `httptest.ResponseRecorder`. In
-   non-personal mode it forwards the caller's Bearer header.
-8. The recorder body is decoded; a non-2xx status becomes a tool error
-   (`newToolErrorResult`), otherwise the value is wrapped by
-   `newStructuredToolResult`.
+   input schema. `personalAPI.execute` translates them into API request
+   messages, applying the same query and field-mask rules as REST.
+7. The typed API methods enforce memo access, mutation rules and revision
+   checks. The shared JSON marshaler writes their results directly to the MCP
+   result, and a failed status becomes a tool error.
 
-Personal batch reads and tag tools use store queries scoped to the
-authenticated owner. They share the API's request budget when rate limiting
-is enabled. Personal search goes through the existing memo list API.
+Search reuses the memo list method. Batch and tag tools use the API service's
+authenticated memo scope. Compatibility mode uses `apiAdapter.execute` to
+dispatch its wider tool set to REST and forward the caller's Bearer header.
 
 ## Schema resolution
 
@@ -129,25 +124,26 @@ response has no JSON body, the fallback is:
   `_meta.io.modelcontextprotocol/protocolVersion` on every request, and must
   send the `Mcp-Protocol-Version`, `Mcp-Method`, and (for `tools/call`)
   `Mcp-Name` headers.
-- **Capabilities:** tools only, without `listChanged` — the catalog is fixed at
-  startup, so `tools/list` and `server/discover` advertise a 24-hour `ttlMs`
-  instead of change notifications.
-- **Request size:** request bodies are limited to 256 MiB before SDK dispatch.
+- **Capabilities:** tools only. `tools/list` and `server/discover` advertise a
+  24-hour `ttlMs`. Cat_two marks those results private because tool discovery
+  depends on the token's permissions.
+- **Request size:** request bodies are limited to 16 MiB in Cat_two personal
+  mode and 256 MiB in Memos non-personal mode before SDK dispatch.
 - **Cat_two personal mode** requires an active MCP connection token on every
   `/mcp` request, including requests from clients with a cached tool catalog.
   Missing or invalid credentials, including tokens for deleted connections,
   return `401`. Inactive connections, including old awaiting or pending
   connections and denied, revoked or expired tokens, return `403`.
+  Read-only tokens can discover and call the read tools. The server checks
+  tool access on every call, including when the client cached a tool catalog.
 - **Memos non-personal mode:** the caller's Bearer header is forwarded to the
   API. Mutating tools require a valid personal access token or access token.
   Anonymous reads follow the instance's REST API permissions.
-- **Client address:** the `/mcp` request passes through the same client-address
-  middleware as every other route, which resolves the caller behind trusted
-  proxies. The adapter reads that resolved address from the tool handler's
-  context and sets it as the in-process request's peer, so the middleware's
-  second pass resolves to the same value. Without this every tool call would
-  present `httptest`'s placeholder peer (`192.0.2.1`), and all anonymous MCP
-  callers would share one rate-limit bucket.
+- **Rate limits:** when application limits are enabled, Cat_two allows 300 MCP
+  transport requests per minute per resolved client IP before token lookup.
+  Limit responses include `Retry-After`. Authenticated tool calls also share
+  the standard 600 requests per minute per account with REST. Client addresses
+  are resolved by the same trusted-proxy middleware as other routes.
 - **Origin safety:** desktop clients may omit `Origin`. Browser origins must
   match the configured instance's scheme, host and port or the origin of a
   direct connection. Set `MEMOS_INSTANCE_URL` to the public HTTPS URL when
@@ -158,8 +154,9 @@ response has no JSON body, the fallback is:
 Point a Streamable HTTP client at `https://<your-instance>/mcp`. In Cat_two
 personal mode, sign in to Cat_two, open **Settings → MCP and API**, and create
 an MCP connection. Choose 7 days (the default), 14 days, one calendar year
-from issuance, or a permanent token. The token works immediately and is
-shown once at creation.
+from issuance, or a permanent token. Choose read-only or read and write.
+Read and write is the default and applies to connections from older releases.
+The token works immediately and is shown once at creation.
 In Codex, leave the Bearer token environment-variable field blank and set the
 `Authorization` request header to the full copied value. The following JSON
 illustrates the equivalent configuration for clients that use this format.
@@ -193,9 +190,11 @@ tokens, as do MCP clients in non-personal Memos mode.
 ### Managing Cat_two connections
 
 Management requires a signed-in session. `GET /api/mcpConnections` lists the
-account's connections with their current state, token expiration, and first
-connection IP once recorded. `POST /api/mcpConnections` creates a connection
-from `{"label":"My Codex","duration":"7d"}`. The duration starts at issuance.
+account's connections with their permission, current state, token expiration,
+and first connection IP once recorded. `POST /api/mcpConnections` creates a
+connection from `{"label":"My Codex","duration":"7d","permission":"read_only"}`.
+The duration starts at issuance. Omit `permission` or pass `read_write` for
+a connection that can create and update notes.
 Supported values are `7d` (the default), `14d`, `1y` (one calendar year in UTC),
 and `permanent`. The creation response includes the token once.
 
@@ -217,7 +216,7 @@ The following read-only tools use the connection owner's notes.
 | Tool | Parameters and scope | Result |
 | --- | --- | --- |
 | `memo_search` | Search active top-level notes. All supplied filters must match. `query` matches a literal substring of the Markdown body. `tag` accepts a path with an optional `#` and includes descendants. `startDate` and `endDate` are inclusive creation dates in `YYYY-MM-DD` and use Asia/Shanghai. Either bound can be omitted. `hasIncompleteTasks`, `hasAttachments`, and `pinned` accept booleans. `creationChannel` accepts `web`, `telegram`, `browser_extension`, `wechat`, or `unknown`. | `{memos, nextPageToken?}`. The memos include Markdown content. Use `pageSize` between 1 and 50 (default 20) and pass `nextPageToken` as `pageToken` with the same search parameters. `orderBy` accepts `create_time asc`, `create_time desc` (default), `update_time asc` or `update_time desc`. |
-| `memo_batch_get` | `names` contains 1–50 canonical `memos/<uid>` names. The first occurrence of each name determines the order. Reads owned active and archived notes. | `{memos, unavailable}`. Memos include `name`, Markdown `content`, `tags`, `createTime`, `updateTime`, `pinned`, `state`, and `creationChannel`. Timestamps are RFC 3339 in UTC. Missing, foreign and trashed notes all go into `unavailable` by name. Use `memo_get_memo` for details such as attachments. |
+| `memo_batch_get` | `names` contains 1–50 canonical `memos/<uid>` names. The first occurrence of each name determines the order. Reads owned active and archived notes. | `{memos, unavailable}`. Memos include `name`, Markdown `content`, `tags`, `createTime`, `updateTime`, `pinned`, `state`, `creationChannel`, and `revision`. Timestamps are RFC 3339 in UTC. Missing, foreign and trashed notes go into `unavailable` by name. Batches above 4 MiB of Markdown return a tool error. Split larger batches or use `memo_get_memo` for a single note. |
 | `tag_tree` | Browse tag paths in active top-level notes. Optional `offset` starts at 0 and `pageSize` defaults to 50 with a maximum of 200. | `{tags: [{path, parent?, memoCount}], total, nextOffset?}`. Results are sorted by full path. Counts include descendants and count each note once per path. |
 | `tag_search` | Search the same tag paths by a nonblank, case-insensitive substring `query` with an optional leading `#`. Uses the same pagination as `tag_tree`. | The same result shape as `tag_tree`. `total` counts matching paths before pagination. |
 
@@ -229,9 +228,13 @@ Clients connected to older images can also use `memo_list_memos` and
 
 Write Markdown tags such as `#project/cat_two` in `body.content` of
 `memo_create_memo` or `memo_update_memo`. Creation accepts an optional
-`body.createTime` in RFC 3339. For an update to the body, use
-`updateMask: "content"`. Read the target note before updating and preview
-the planned changes before writing.
+`body.createTime` in RFC 3339. For safe retry, set top-level `memoId` and
+`idempotent: true` and preserve exactly the same inputs. A matching replay
+returns the current readable note. Reusing the ID for a different payload
+returns a conflict. For an update to the body, use `updateMask: "content"`
+and pass the revision returned by the read as top-level `expectedRevision`.
+If the revision changed, read the latest note and review the proposed change
+before retrying.
 
 The full Memos non-personal allowlist (`curatedOperationIDs` in `catalog.go`)
 includes the following operations.

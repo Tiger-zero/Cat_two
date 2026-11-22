@@ -222,7 +222,7 @@ message InstanceSetting {
     // Custom CSS injected into the web app.
     string additional_style = 7;
 
-    // Custom JavaScript injected into the web app.
+    // Legacy compatibility field. Cat_two rejects nonempty updates and omits stored values from responses.
     string additional_script = 8;
 
     // CustomProfile is the instance branding.
@@ -550,6 +550,15 @@ message InstanceStats {
 
   // The time the snapshot was generated on the server.
   google.protobuf.Timestamp generated_time = 3;
+
+  // The absolute data directory in the running Cat_two process or container.
+  optional string data_directory = 4;
+
+  // The managed directory containing Cat_two's Markdown note bodies.
+  optional string notes_path = 5;
+
+  // The managed directory used for new Cat_two attachment files.
+  optional string attachments_directory = 6;
 
   // DatabaseStats is the database size statistics.
   message DatabaseStats {

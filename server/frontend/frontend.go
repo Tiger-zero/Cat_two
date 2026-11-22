@@ -27,8 +27,9 @@ const (
 )
 
 type FrontendService struct {
-	Profile *profile.Profile
-	Store   *store.Store
+	Profile           *profile.Profile
+	Store             *store.Store
+	ChallengeProvider string
 }
 
 func NewFrontendService(profile *profile.Profile, store *store.Store) *FrontendService {
@@ -45,8 +46,9 @@ func (s *FrontendService) Serve(_ context.Context, mux *http.ServeMux, fallback 
 }
 
 // Handler serves static files and SPA routes, passing API namespaces to fallback.
-func (*FrontendService) Handler(fallback http.Handler) http.Handler {
+func (s *FrontendService) Handler(fallback http.Handler) http.Handler {
 	frontendFS := getFileSystem("dist")
+	policy := s.contentSecurityPolicy()
 	return httphandler.Func(func(w http.ResponseWriter, r *http.Request) error {
 		requestPath := r.URL.Path
 		if shouldSkipFrontendStatic(requestPath) {
@@ -85,7 +87,7 @@ func (*FrontendService) Handler(fallback http.Handler) http.Handler {
 			return errors.New("frontend file does not support seeking")
 		}
 		if strings.HasSuffix(filename, ".html") {
-			w.Header().Set("Content-Security-Policy", "frame-ancestors 'none'; object-src 'none'; base-uri 'self'")
+			w.Header().Set("Content-Security-Policy", policy)
 			w.Header().Set("X-Frame-Options", "DENY")
 			w.Header().Set("X-Content-Type-Options", "nosniff")
 			w.Header().Set("Referrer-Policy", "no-referrer")
@@ -93,6 +95,24 @@ func (*FrontendService) Handler(fallback http.Handler) http.Handler {
 		http.ServeContent(w, r, info.Name(), info.ModTime(), content)
 		return nil
 	})
+}
+
+func (s *FrontendService) contentSecurityPolicy() string {
+	const base = "frame-ancestors 'none'; object-src 'none'; base-uri 'self'"
+	if s.Profile == nil || !s.Profile.Personal {
+		return base
+	}
+	sources := "'self'"
+	switch s.ChallengeProvider {
+	case "turnstile":
+		sources += " https://challenges.cloudflare.com"
+	case "hcaptcha":
+		sources += " https://hcaptcha.com https://*.hcaptcha.com"
+	default:
+		// An unconfigured or unrecognized provider adds no script sources.
+	}
+	// Drawing and image previews start blob workers supplied by the bundled canvas library.
+	return base + "; script-src " + sources + "; script-src-attr 'none'; worker-src 'self' blob:"
 }
 
 func shouldSkipFrontendStatic(requestPath string) bool {

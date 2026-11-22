@@ -85,128 +85,6 @@ func NormalizeInstanceStorageSetting(setting *storepb.InstanceStorageSetting) {
 	synchronizeLegacyStorageFields(setting)
 }
 
-// PrepareInstanceStorageSettingUpdate preserves storages still referenced by
-// existing attachments and assigns a new identity when a physical namespace changes.
-func PrepareInstanceStorageSettingUpdate(incoming, existing *storepb.InstanceStorageSetting) error {
-	if incoming == nil {
-		return errors.New("storage setting is required")
-	}
-
-	if existing != nil {
-		NormalizeInstanceStorageSetting(existing)
-	}
-	// A request may reference a storage the server preserves without resending
-	// it; adopt the stored entry so the reference survives validation and
-	// normalization instead of being silently replaced by a fallback default.
-	if incoming.DefaultStorageId != "" && FindStorage(incoming, incoming.DefaultStorageId) == nil {
-		preserved := FindStorage(existing, incoming.DefaultStorageId)
-		if preserved == nil {
-			return errors.Errorf("default storage %q is not configured", incoming.DefaultStorageId)
-		}
-		incoming.Storages = append(incoming.Storages, proto.CloneOf(preserved))
-	}
-
-	legacyRequest := len(incoming.Storages) == 0
-	if !legacyRequest {
-		if err := validateInstanceStorages(incoming); err != nil {
-			return err
-		}
-	}
-	// Normalization guarantees every invariant validateInstanceStorages checks,
-	// so only the raw canonical request above needs explicit validation.
-	NormalizeInstanceStorageSetting(incoming)
-	if existing == nil {
-		return nil
-	}
-
-	existingByID := make(map[string]*storepb.Storage, len(existing.Storages))
-	for _, storage := range existing.Storages {
-		existingByID[storage.Id] = storage
-	}
-
-	if legacyRequest {
-		incomingDefault := GetDefaultStorage(incoming)
-		if matching := findEquivalentStorage(existing.Storages, incomingDefault); matching != nil {
-			incomingDefault.Id = matching.Id
-			if incomingDefault.Name == defaultStorageName(incomingDefault) {
-				incomingDefault.Name = matching.Name
-			}
-			incoming.DefaultStorageId = matching.Id
-		}
-	}
-
-	reidentifiedStorages := map[*storepb.Storage]bool{}
-	for _, storage := range incoming.Storages {
-		previous := existingByID[storage.Id]
-		if previous != nil && !StorageNamespaceEqual(previous, storage) {
-			oldID := storage.Id
-			storage.Id = storageID(storage)
-			reidentifiedStorages[storage] = true
-			if incoming.DefaultStorageId == oldID {
-				incoming.DefaultStorageId = storage.Id
-			}
-			previous = nil
-		}
-
-		if storage.GetS3Config() != nil && storage.GetS3Config().AccessKeySecret == "" {
-			if previous != nil && previous.GetS3Config() != nil {
-				storage.GetS3Config().AccessKeySecret = previous.GetS3Config().AccessKeySecret
-			} else {
-				candidate := findStorageCredentialSource(existing.Storages, storage)
-				// Legacy clients have always used an empty secret to preserve the
-				// current credential while editing any S3 field. Keep that contract,
-				// while canonical named-storage requests use the scoped lookup above.
-				if candidate == nil && legacyRequest {
-					candidate = findLegacyStorageCredentialSource(existing.Storages, storage.GetS3Config().AccessKeyId)
-				}
-				if candidate != nil {
-					storage.GetS3Config().AccessKeySecret = candidate.GetS3Config().AccessKeySecret
-				}
-			}
-		}
-	}
-
-	// A namespace edit can move a storage onto an identity already present in
-	// the request. Resolve the duplicate here in favor of the re-identified
-	// entry — it carries the admin's latest input — instead of letting the
-	// normalization dedupe silently discard it.
-	dedupedStorages := make([]*storepb.Storage, 0, len(incoming.Storages))
-	indexByID := make(map[string]int, len(incoming.Storages))
-	for _, storage := range incoming.Storages {
-		if i, ok := indexByID[storage.Id]; ok {
-			if reidentifiedStorages[storage] && !reidentifiedStorages[dedupedStorages[i]] {
-				dedupedStorages[i] = storage
-			}
-			continue
-		}
-		indexByID[storage.Id] = len(dedupedStorages)
-		dedupedStorages = append(dedupedStorages, storage)
-	}
-	incoming.Storages = dedupedStorages
-
-	// Secrets are backfilled from stored credentials above; a storage that still
-	// has none would fail at runtime with an opaque S3 auth error, so reject it
-	// at save time instead.
-	for _, storage := range incoming.Storages {
-		if s3Config := storage.GetS3Config(); s3Config != nil && s3Config.AccessKeyId != "" && s3Config.AccessKeySecret == "" {
-			return errors.Errorf("storage %q access key secret is required", storage.Id)
-		}
-	}
-
-	incomingIDs := make(map[string]bool, len(incoming.Storages))
-	for _, storage := range incoming.Storages {
-		incomingIDs[storage.Id] = true
-	}
-	for _, storage := range existing.Storages {
-		if !incomingIDs[storage.Id] {
-			incoming.Storages = append(incoming.Storages, proto.CloneOf(storage))
-		}
-	}
-
-	NormalizeInstanceStorageSetting(incoming)
-	return nil
-}
-
 // ResolveStorage resolves the configured storage referenced by an attachment.
 // It returns a registry entry when one matches — its Id is the stable identity —
 // or a synthesized storage wrapping the legacy config otherwise (empty Id).
@@ -457,36 +335,6 @@ func findEquivalentStorage(storages []*storepb.Storage, target *storepb.Storage)
 	return nil
 }
 
-func findStorageCredentialSource(storages []*storepb.Storage, target *storepb.Storage) *storepb.Storage {
-	targetConfig := target.GetS3Config()
-	if targetConfig == nil {
-		return nil
-	}
-	// Credentials may authorize multiple buckets, but must not cross S3
-	// providers that happen to use the same access key ID.
-	for _, storage := range storages {
-		config := storage.GetS3Config()
-		if config != nil &&
-			config.AccessKeyId == targetConfig.AccessKeyId &&
-			config.AccessKeySecret != "" &&
-			normalizeEndpoint(config.Endpoint) == normalizeEndpoint(targetConfig.Endpoint) &&
-			strings.TrimSpace(config.Region) == strings.TrimSpace(targetConfig.Region) {
-			return storage
-		}
-	}
-	return nil
-}
-
-func findLegacyStorageCredentialSource(storages []*storepb.Storage, accessKeyID string) *storepb.Storage {
-	for _, storage := range storages {
-		config := storage.GetS3Config()
-		if config != nil && config.AccessKeyId == accessKeyID && config.AccessKeySecret != "" {
-			return storage
-		}
-	}
-	return nil
-}
-
 // moveDefaultStorageFirst keeps the registry ordered by most recent activation.
 // This lets clients fall back to the most recently used storage of a given type
 // while attachments continue to resolve storages by ID.
@@ -520,29 +368,6 @@ func synchronizeLegacyStorageFields(setting *storepb.InstanceStorageSetting) {
 		}
 	}
 	setting.S3Config = nil
-}
-
-func validateInstanceStorages(setting *storepb.InstanceStorageSetting) error {
-	seenIDs := map[string]bool{}
-	for _, storage := range setting.Storages {
-		if storage == nil || storage.Id == "" {
-			return errors.New("storage ID is required")
-		}
-		if seenIDs[storage.Id] {
-			return errors.Errorf("duplicate storage ID %q", storage.Id)
-		}
-		seenIDs[storage.Id] = true
-		if storage.Type == storepb.StorageType_STORAGE_TYPE_UNSPECIFIED {
-			return errors.Errorf("storage %q type is required", storage.Id)
-		}
-		if storage.Type == storepb.StorageType_STORAGE_TYPE_S3 && storage.GetS3Config() == nil {
-			return errors.Errorf("storage %q S3 config is required", storage.Id)
-		}
-	}
-	if !seenIDs[setting.DefaultStorageId] {
-		return errors.Errorf("default storage %q is not configured", setting.DefaultStorageId)
-	}
-	return nil
 }
 
 func normalizeEndpoint(endpoint string) string {

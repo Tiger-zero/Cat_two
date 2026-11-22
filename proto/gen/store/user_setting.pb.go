@@ -616,7 +616,9 @@ type RefreshTokensUserSetting_RefreshToken struct {
 	// Client information for session management UI
 	ClientInfo *RefreshTokensUserSetting_ClientInfo `protobuf:"bytes,4,opt,name=client_info,json=clientInfo,proto3" json:"client_info,omitempty"`
 	// Optional description
-	Description   string `protobuf:"bytes,5,opt,name=description,proto3" json:"description,omitempty"`
+	Description string `protobuf:"bytes,5,opt,name=description,proto3" json:"description,omitempty"`
+	// Stable ID of the browser session across refresh-token rotations.
+	SessionId     string `protobuf:"bytes,6,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -682,6 +684,13 @@ func (x *RefreshTokensUserSetting_RefreshToken) GetClientInfo() *RefreshTokensUs
 func (x *RefreshTokensUserSetting_RefreshToken) GetDescription() string {
 	if x != nil {
 		return x.Description
+	}
+	return ""
+}
+
+func (x *RefreshTokensUserSetting_RefreshToken) GetSessionId() string {
+	if x != nil {
+		return x.SessionId
 	}
 	return ""
 }
@@ -970,9 +979,9 @@ const file_store_user_setting_proto_rawDesc = "" +
 	"\x04tags\x18\x01 \x03(\v2&.memos.store.TagsUserSetting.TagsEntryR\x04tags\x1aU\n" +
 	"\tTagsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x122\n" +
-	"\x05value\x18\x02 \x01(\v2\x1c.memos.store.UserTagMetadataR\x05value:\x028\x01\"\xa4\x04\n" +
+	"\x05value\x18\x02 \x01(\v2\x1c.memos.store.UserTagMetadataR\x05value:\x028\x01\"\xc3\x04\n" +
 	"\x18RefreshTokensUserSetting\x12Y\n" +
-	"\x0erefresh_tokens\x18\x01 \x03(\v22.memos.store.RefreshTokensUserSetting.RefreshTokenR\rrefreshTokens\x1a\x94\x02\n" +
+	"\x0erefresh_tokens\x18\x01 \x03(\v22.memos.store.RefreshTokensUserSetting.RefreshTokenR\rrefreshTokens\x1a\xb3\x02\n" +
 	"\fRefreshToken\x12\x19\n" +
 	"\btoken_id\x18\x01 \x01(\tR\atokenId\x129\n" +
 	"\n" +
@@ -981,7 +990,9 @@ const file_store_user_setting_proto_rawDesc = "" +
 	"created_at\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x12Q\n" +
 	"\vclient_info\x18\x04 \x01(\v20.memos.store.RefreshTokensUserSetting.ClientInfoR\n" +
 	"clientInfo\x12 \n" +
-	"\vdescription\x18\x05 \x01(\tR\vdescription\x1a\x95\x01\n" +
+	"\vdescription\x18\x05 \x01(\tR\vdescription\x12\x1d\n" +
+	"\n" +
+	"session_id\x18\x06 \x01(\tR\tsessionId\x1a\x95\x01\n" +
 	"\n" +
 	"ClientInfo\x12\x1d\n" +
 	"\n" +

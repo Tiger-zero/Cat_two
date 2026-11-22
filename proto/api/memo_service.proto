@@ -292,6 +292,10 @@ message Memo {
     (google.api.field_behavior) = IMMUTABLE
   ];
 
+  // Output only. Opaque revision of the writable memo state. Pass it as
+  // UpdateMemoRequest.expected_revision when saving changes based on this read.
+  string revision = 19 [(google.api.field_behavior) = OUTPUT_ONLY];
+
   // Property holds properties computed from the memo content.
   message Property {
     // The text of the H1 heading when it is the first block of the content.
@@ -392,6 +396,10 @@ message CreateMemoRequest {
   // its resource name. If empty, a unique ID is generated.
   // Format: ^[a-zA-Z0-9]([a-zA-Z0-9-]{0,34}[a-zA-Z0-9])?$
   string memo_id = 2 [(google.api.field_behavior) = OPTIONAL];
+
+  // Optional. With an explicit memo_id, retry the same request to recover its
+  // committed memo. A different request using that ID returns ALREADY_EXISTS.
+  bool idempotent = 3 [(google.api.field_behavior) = OPTIONAL];
 }
 
 // Request message for MemoService.UpdateMemo.
@@ -403,6 +411,10 @@ message UpdateMemoRequest {
   // space, pinned, state, create_time, update_time, location, attachments,
   // relations.
   google.protobuf.FieldMask update_mask = 2 [(google.api.field_behavior) = REQUIRED];
+
+  // Optional. The revision returned by the read on which these changes are
+  // based. If it no longer matches, the update fails with ABORTED.
+  string expected_revision = 3 [(google.api.field_behavior) = OPTIONAL];
 }
 
 // Request message for MemoService.DeleteMemo.
@@ -593,6 +605,10 @@ message CreateMemoCommentRequest {
   // Optional. The ID to use for the comment memo, in the same format as
   // CreateMemoRequest.memo_id. If empty, a unique ID is generated.
   string comment_id = 3 [(google.api.field_behavior) = OPTIONAL];
+
+  // Optional. With an explicit comment_id, retry the same comment request to
+  // recover its committed memo. A conflicting request returns ALREADY_EXISTS.
+  bool idempotent = 4 [(google.api.field_behavior) = OPTIONAL];
 }
 
 // Reaction is a reaction a user leaves on a memo.

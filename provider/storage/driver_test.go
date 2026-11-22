@@ -1,8 +1,8 @@
 package storage
 
 import (
-	"bytes"
 	"context"
+	"io"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -23,10 +23,13 @@ func TestNewDriver(t *testing.T) {
 		})
 		require.NoError(t, err)
 
-		content := []byte("created through the storage driver factory")
-		key, err := driver.UploadObject(ctx, "factory/object.txt", "text/plain", bytes.NewReader(content))
+		const key = "factory/object.txt"
+		content := []byte("existing attachment object")
+		require.NoError(t, fake.PutObject("driver-factory", key, "text/plain", content))
+		stream, err := driver.GetObjectStream(ctx, key)
 		require.NoError(t, err)
-		downloaded, err := driver.GetObject(ctx, key)
+		t.Cleanup(func() { _ = stream.Body.Close() })
+		downloaded, err := io.ReadAll(stream.Body)
 		require.NoError(t, err)
 		require.Equal(t, content, downloaded)
 	})

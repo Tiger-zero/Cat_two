@@ -194,8 +194,11 @@ type Memo struct {
 	// Values: web, telegram, browser_extension, wechat, unknown. Memos created
 	// without a reported channel are returned as unknown.
 	CreationChannel string `protobuf:"bytes,18,opt,name=creation_channel,json=creationChannel,proto3" json:"creation_channel,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	// Output only. Opaque revision of the writable memo state. Pass it as
+	// UpdateMemoRequest.expected_revision when saving changes based on this read.
+	Revision      string `protobuf:"bytes,19,opt,name=revision,proto3" json:"revision,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *Memo) Reset() {
@@ -350,6 +353,13 @@ func (x *Memo) GetUpdateTime() *timestamppb.Timestamp {
 func (x *Memo) GetCreationChannel() string {
 	if x != nil {
 		return x.CreationChannel
+	}
+	return ""
+}
+
+func (x *Memo) GetRevision() string {
+	if x != nil {
+		return x.Revision
 	}
 	return ""
 }
@@ -587,7 +597,10 @@ type CreateMemoRequest struct {
 	// Optional. The ID to use for the memo, which becomes the final segment of
 	// its resource name. If empty, a unique ID is generated.
 	// Format: ^[a-zA-Z0-9]([a-zA-Z0-9-]{0,34}[a-zA-Z0-9])?$
-	MemoId        string `protobuf:"bytes,2,opt,name=memo_id,json=memoId,proto3" json:"memo_id,omitempty"`
+	MemoId string `protobuf:"bytes,2,opt,name=memo_id,json=memoId,proto3" json:"memo_id,omitempty"`
+	// Optional. With an explicit memo_id, retry the same request to recover its
+	// committed memo. A different request using that ID returns ALREADY_EXISTS.
+	Idempotent    bool `protobuf:"varint,3,opt,name=idempotent,proto3" json:"idempotent,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -636,6 +649,13 @@ func (x *CreateMemoRequest) GetMemoId() string {
 	return ""
 }
 
+func (x *CreateMemoRequest) GetIdempotent() bool {
+	if x != nil {
+		return x.Idempotent
+	}
+	return false
+}
+
 // Request message for MemoService.UpdateMemo.
 type UpdateMemoRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -644,9 +664,12 @@ type UpdateMemoRequest struct {
 	// Required. The fields to update. Supported paths: content, visibility,
 	// space, pinned, state, create_time, update_time, location, attachments,
 	// relations.
-	UpdateMask    *fieldmaskpb.FieldMask `protobuf:"bytes,2,opt,name=update_mask,json=updateMask,proto3" json:"update_mask,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	UpdateMask *fieldmaskpb.FieldMask `protobuf:"bytes,2,opt,name=update_mask,json=updateMask,proto3" json:"update_mask,omitempty"`
+	// Optional. The revision returned by the read on which these changes are
+	// based. If it no longer matches, the update fails with ABORTED.
+	ExpectedRevision string `protobuf:"bytes,3,opt,name=expected_revision,json=expectedRevision,proto3" json:"expected_revision,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *UpdateMemoRequest) Reset() {
@@ -691,6 +714,13 @@ func (x *UpdateMemoRequest) GetUpdateMask() *fieldmaskpb.FieldMask {
 		return x.UpdateMask
 	}
 	return nil
+}
+
+func (x *UpdateMemoRequest) GetExpectedRevision() string {
+	if x != nil {
+		return x.ExpectedRevision
+	}
+	return ""
 }
 
 // Request message for MemoService.DeleteMemo.
@@ -1377,7 +1407,10 @@ type CreateMemoCommentRequest struct {
 	Comment *Memo `protobuf:"bytes,2,opt,name=comment,proto3" json:"comment,omitempty"`
 	// Optional. The ID to use for the comment memo, in the same format as
 	// CreateMemoRequest.memo_id. If empty, a unique ID is generated.
-	CommentId     string `protobuf:"bytes,3,opt,name=comment_id,json=commentId,proto3" json:"comment_id,omitempty"`
+	CommentId string `protobuf:"bytes,3,opt,name=comment_id,json=commentId,proto3" json:"comment_id,omitempty"`
+	// Optional. With an explicit comment_id, retry the same comment request to
+	// recover its committed memo. A conflicting request returns ALREADY_EXISTS.
+	Idempotent    bool `protobuf:"varint,4,opt,name=idempotent,proto3" json:"idempotent,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1431,6 +1464,13 @@ func (x *CreateMemoCommentRequest) GetCommentId() string {
 		return x.CommentId
 	}
 	return ""
+}
+
+func (x *CreateMemoCommentRequest) GetIdempotent() bool {
+	if x != nil {
+		return x.Idempotent
+	}
+	return false
 }
 
 // Reaction is a reaction a user leaves on a memo.
@@ -2406,7 +2446,7 @@ var File_api_memo_service_proto protoreflect.FileDescriptor
 
 const file_api_memo_service_proto_rawDesc = "" +
 	"\n" +
-	"\x16api/memo_service.proto\x12\tmemos.api\x1a\x1capi/attachment_service.proto\x1a\x10api/common.proto\x1a\x1cgoogle/api/annotations.proto\x1a\x17google/api/client.proto\x1a\x1fgoogle/api/field_behavior.proto\x1a\x19google/api/resource.proto\x1a\x1bgoogle/protobuf/empty.proto\x1a google/protobuf/field_mask.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xa1\t\n" +
+	"\x16api/memo_service.proto\x12\tmemos.api\x1a\x1capi/attachment_service.proto\x1a\x10api/common.proto\x1a\x1cgoogle/api/annotations.proto\x1a\x17google/api/client.proto\x1a\x1fgoogle/api/field_behavior.proto\x1a\x19google/api/resource.proto\x1a\x1bgoogle/protobuf/empty.proto\x1a google/protobuf/field_mask.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xc2\t\n" +
 	"\x04Memo\x12\x17\n" +
 	"\x04name\x18\x01 \x01(\tB\x03\xe0A\bR\x04name\x120\n" +
 	"\acreator\x18\x02 \x01(\tB\x16\xe0A\x03\xfaA\x10\n" +
@@ -2433,7 +2473,8 @@ const file_api_memo_service_proto_rawDesc = "" +
 	"createTime\x12@\n" +
 	"\vupdate_time\x18\x11 \x01(\v2\x1a.google.protobuf.TimestampB\x03\xe0A\x01R\n" +
 	"updateTime\x121\n" +
-	"\x10creation_channel\x18\x12 \x01(\tB\x06\xe0A\x01\xe0A\x05R\x0fcreationChannel\x1a\xd6\x01\n" +
+	"\x10creation_channel\x18\x12 \x01(\tB\x06\xe0A\x01\xe0A\x05R\x0fcreationChannel\x12\x1f\n" +
+	"\brevision\x18\x13 \x01(\tB\x03\xe0A\x03R\brevision\x1a\xd6\x01\n" +
 	"\bProperty\x12\x14\n" +
 	"\x05title\x18\x01 \x01(\tR\x05title\x12\x19\n" +
 	"\bhas_link\x18\x02 \x01(\bR\ahasLink\x12\x19\n" +
@@ -2458,14 +2499,18 @@ const file_api_memo_service_proto_rawDesc = "" +
 	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"<\n" +
 	"\x0eGetMemoRequest\x12*\n" +
 	"\x04name\x18\x01 \x01(\tB\x16\xe0A\x02\xfaA\x10\n" +
-	"\x0ememos.api/MemoR\x04name\"[\n" +
+	"\x0ememos.api/MemoR\x04name\"\x80\x01\n" +
 	"\x11CreateMemoRequest\x12(\n" +
 	"\x04memo\x18\x01 \x01(\v2\x0f.memos.api.MemoB\x03\xe0A\x02R\x04memo\x12\x1c\n" +
-	"\amemo_id\x18\x02 \x01(\tB\x03\xe0A\x01R\x06memoId\"\x7f\n" +
+	"\amemo_id\x18\x02 \x01(\tB\x03\xe0A\x01R\x06memoId\x12#\n" +
+	"\n" +
+	"idempotent\x18\x03 \x01(\bB\x03\xe0A\x01R\n" +
+	"idempotent\"\xb1\x01\n" +
 	"\x11UpdateMemoRequest\x12(\n" +
 	"\x04memo\x18\x01 \x01(\v2\x0f.memos.api.MemoB\x03\xe0A\x02R\x04memo\x12@\n" +
 	"\vupdate_mask\x18\x02 \x01(\v2\x1a.google.protobuf.FieldMaskB\x03\xe0A\x02R\n" +
-	"updateMask\"Z\n" +
+	"updateMask\x120\n" +
+	"\x11expected_revision\x18\x03 \x01(\tB\x03\xe0A\x01R\x10expectedRevision\"Z\n" +
 	"\x11DeleteMemoRequest\x12*\n" +
 	"\x04name\x18\x01 \x01(\tB\x16\xe0A\x02\xfaA\x10\n" +
 	"\x0ememos.api/MemoR\x04name\x12\x19\n" +
@@ -2521,13 +2566,16 @@ const file_api_memo_service_proto_rawDesc = "" +
 	"\border_by\x18\x04 \x01(\tB\x03\xe0A\x01R\aorderBy\"o\n" +
 	"\x18ListMemoCommentsResponse\x12+\n" +
 	"\bcomments\x18\x01 \x03(\v2\x0f.memos.api.MemoR\bcomments\x12&\n" +
-	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"\x9e\x01\n" +
+	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"\xc3\x01\n" +
 	"\x18CreateMemoCommentRequest\x12.\n" +
 	"\x06parent\x18\x01 \x01(\tB\x16\xe0A\x02\xfaA\x10\n" +
 	"\x0ememos.api/MemoR\x06parent\x12.\n" +
 	"\acomment\x18\x02 \x01(\v2\x0f.memos.api.MemoB\x03\xe0A\x02R\acomment\x12\"\n" +
 	"\n" +
-	"comment_id\x18\x03 \x01(\tB\x03\xe0A\x01R\tcommentId\"\x95\x02\n" +
+	"comment_id\x18\x03 \x01(\tB\x03\xe0A\x01R\tcommentId\x12#\n" +
+	"\n" +
+	"idempotent\x18\x04 \x01(\bB\x03\xe0A\x01R\n" +
+	"idempotent\"\x95\x02\n" +
 	"\bReaction\x12\x1a\n" +
 	"\x04name\x18\x01 \x01(\tB\x06\xe0A\x03\xe0A\bR\x04name\x120\n" +
 	"\acreator\x18\x02 \x01(\tB\x16\xe0A\x03\xfaA\x10\n" +

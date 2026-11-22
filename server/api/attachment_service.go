@@ -186,13 +186,9 @@ func (s *APIService) CreateAttachment(ctx context.Context, request *apipb.Create
 	if err := s.throttleAndCharge(ratelimit.ScopeUploadUser, userKey(create.CreatorID), 1); err != nil {
 		return nil, err
 	}
-	instanceStorageSetting, err := s.Store.GetInstanceStorageSetting(ctx)
-	if err != nil {
-		return nil, status.Errorf(codes.Internal, "failed to get instance storage setting: %v", err)
-	}
 	content := request.Attachment.Content
 	create.Size = int64(len(content))
-	return s.processAndSaveAttachment(ctx, create, instanceStorageSetting, bytes.NewReader(content))
+	return s.processAndSaveAttachment(ctx, create, bytes.NewReader(content))
 }
 
 // attachmentSource is the file content handed to the processing pipeline: a
@@ -205,19 +201,18 @@ type attachmentSource interface {
 // processAndSaveAttachment detects motion photos, strips EXIF metadata, stores
 // the content, and creates the database row. create.Size must hold the source
 // length on entry; it is updated when stripping re-encodes the image.
-func (s *APIService) processAndSaveAttachment(ctx context.Context, create *store.Attachment, instanceStorageSetting *storepb.InstanceStorageSetting, source attachmentSource) (*apipb.Attachment, error) {
-	if err := s.processAndStoreContent(ctx, create, instanceStorageSetting, source, 0); err != nil {
+func (s *APIService) processAndSaveAttachment(ctx context.Context, create *store.Attachment, source attachmentSource) (*apipb.Attachment, error) {
+	if err := s.processAndStoreContent(ctx, create, source, false); err != nil {
 		return nil, err
 	}
-	return s.persistAttachment(ctx, create, instanceStorageSetting)
+	return s.persistAttachment(ctx, create)
 }
 
 // processAndStoreContent strips EXIF metadata and writes the content to the
-// default storage, filling in create's storage fields. A newly uploaded
-// Android motion photo keeps its embedded video. A replacement can restore
-// the missing file referenced by replacingID. It creates no database row.
-func (s *APIService) processAndStoreContent(ctx context.Context, create *store.Attachment, instanceStorageSetting *storepb.InstanceStorageSetting, source attachmentSource, replacingID int32) error {
-	if replacingID == 0 && create.Payload.GetMotionMedia() == nil && (create.Type == "image/jpeg" || create.Type == "image/jpg") {
+// local filesystem, filling in create's storage fields. A newly uploaded
+// Android motion photo keeps its embedded video. This does not create a database row.
+func (s *APIService) processAndStoreContent(ctx context.Context, create *store.Attachment, source attachmentSource, replacing bool) error {
+	if !replacing && create.Payload.GetMotionMedia() == nil && (create.Type == "image/jpeg" || create.Type == "image/jpg") {
 		detected, err := motionphoto.DetectJPEGReader(source, create.Size)
 		if err != nil {
 			return status.Errorf(codes.Internal, "failed to inspect motion photo: %v", err)
@@ -265,17 +260,17 @@ func (s *APIService) processAndStoreContent(ctx context.Context, create *store.A
 	if _, err := content.Seek(0, io.SeekStart); err != nil {
 		return status.Errorf(codes.Internal, "failed to rewind attachment content: %v", err)
 	}
-	if err := saveAttachmentContent(ctx, s.Profile, s.Store, create, instanceStorageSetting, content, replacingID); err != nil {
-		return status.Errorf(codes.Internal, "failed to save attachment blob: %v", err)
+	if err := saveAttachmentContent(ctx, s.Profile.Data, create, content); err != nil {
+		return status.Errorf(codes.Internal, "failed to save attachment file: %v", err)
 	}
 	return nil
 }
 
-func (s *APIService) persistAttachment(ctx context.Context, create *store.Attachment, instanceStorageSetting *storepb.InstanceStorageSetting) (*apipb.Attachment, error) {
+func (s *APIService) persistAttachment(ctx context.Context, create *store.Attachment) (*apipb.Attachment, error) {
 	attachment, err := s.Store.CreateAttachment(ctx, create)
 	if err != nil {
 		createErr := mapMemoWriteError(err, "failed to create attachment")
-		persistedObject, cleanupErr := cleanupSavedAttachmentBlob(ctx, s.Store, create, instanceStorageSetting)
+		persistedObject, cleanupErr := cleanupSavedAttachmentFile(ctx, s.Store, create)
 		if cleanupErr != nil {
 			slog.Error("failed to compensate attachment storage after database create failure",
 				slog.String("attachment_uid", create.UID),

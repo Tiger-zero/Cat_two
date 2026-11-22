@@ -20,8 +20,10 @@ Cat_two is a self-hosted personal note-taking app based on Fumos and Memos.
 - Add migrations for all database drivers when schema changes, and update each driver's `LATEST.sql`.
 - Add public API endpoints to `server/api/acl_config.go`.
 - Ask before adding heavy dependencies, changing auth/token behavior, or altering Docker/release workflows.
-- Use the [Cat_two development skill](.agents/skills/cat-two-development/SKILL.md) for repository development and the
-  [Cat_two MCP skill](.agents/skills/cat-two-mcp/SKILL.md) for connecting to a deployed instance and organizing notes.
+- Start repository work with the [project development skill](.agents/skills/cat-two-development/SKILL.md).
+  Use the [product development skill](.agents/skills/cat-two-product-development/SKILL.md) for feature and API work,
+  and the [UI development skill](.agents/skills/cat-two-ui-development/SKILL.md) for desktop design and frontend work.
+  Use the [MCP usage skill](.agents/skills/cat-two-mcp/SKILL.md) when connecting to a deployed instance and organizing notes.
 
 ## Documentation
 
@@ -29,7 +31,8 @@ Cat_two is a self-hosted personal note-taking app based on Fumos and Memos.
 - Keep active design documents in step with their implementation until a tagged release ships the feature. After release, freeze the body and
   record later design changes in a dated `## Amendments` section. See the [design archive](.agents/skills/cat-two-development/references/design/README.md).
   Verify current behavior in source code and tests.
-- Keep the Cat_two [deployment README](README.md) and [feature guide](.agents/skills/cat-two-development/references/product-guide.md) current.
+- Keep the [deployment README](README.md) and the relevant project, product or UI skill current. Maintain the work log in the
+  [project development skill](.agents/skills/cat-two-development/SKILL.md#开发记录).
 - Keep contributor guidance in this file and package-local `README.md` or `doc.go` files current when relevant code changes.
 
 ## Commands
@@ -124,32 +127,8 @@ Black-box service tests live in `server/api/test/`, unit tests next to the code.
 
 ## Frontend Conventions
 
-- Use `@/` for absolute imports.
-- Follow Biome formatting: 2-space indent, double quotes, semicolons, 140-character line width.
-- Put server data in React Query hooks under `web/src/hooks/`; keep UI-only state in contexts or component state.
-- Show, edit and compose memos through `web/src/components/MemoEditor` (a name or draft seed plus a mode); see its `README.md`.
-- Keep generated proto TypeScript under `web/src/types/proto/` out of manual edits and Biome rewrites.
-- UI work reads `web/node_modules/@usememos/ui/llms.txt` first: `@usememos/ui` is the design system (tokens, type classes,
-  components). Controls come from the package; build a part it lacks on Base UI as its `custom-components.md` describes.
-- Use a package component when one fits (`Button`, `Link`, `Spinner`, `Badge`). Its class functions (`buttonClasses()`,
-  `menuClasses()`, `badgeClasses()`) are for elements it can't render, such as a router link or a Base UI trigger.
-- Menus have fixed density; do not pass `size` to `Menu.Root` or `menuClasses()`, or use `mu-compact` to size menu rows.
-  Compact three-dot trigger buttons keep `sm`.
-- Field text follows its component size on every device; do not add touch-specific font sizing.
-- Style with Tailwind CSS v4 and the package's `mu-` utilities (`bg-mu-surface`, `text-mu-text-secondary`, `rounded-mu-md`),
-  text with its type classes (`mu-caption`, `mu-body`, `mu-label`, `mu-title`), and `cn()` for class merging. No Tailwind
-  text sizes or old color names (`muted-foreground`, `destructive`, `popover`). The exceptions are the brand wordmark and
-  emoji glyphs, whose font size is their icon box (`SpaceIcon`, `SpaceMark`, `ReactionSelector`).
-- Custom controls using `mu-focus` must reserve a real 1px border (transparent for borderless controls).
-- Focus shows through `mu-focus`. Never add `ring-*` or `focus-visible:ring-*`, and never pair `mu-focus` with
-  `outline-none`, which overrides it. Visually hidden text uses `mu-visually-hidden`; a control that appears on focus keeps
-  Tailwind's `sr-only focus-visible:not-sr-only` pair.
-- Report failures with `showErrorToast` from `web/src/lib/toast.ts`. A form's own validation errors go under the field
-  (`Field.Error`, kept in `useFieldErrors`), not in a toast.
-- Every new key in `web/src/locales/en.json` is translated into all locales; `tests/locale-resources.test.ts` fails
-  otherwise. A plural message is stored as `key_one`, `key_other`, … and looked up by its base key with `count`.
-- Lucide icons outside a package control take a size class that sets box and stroke together: `mu-icon-xs` (12px),
-  `mu-icon-sm` (14px) or `mu-icon` (16px). No Tailwind sizes on 12–16px icons and no `strokeWidth`.
+Use the [UI development skill](.agents/skills/cat-two-ui-development/SKILL.md) for the design system, editor, React Query,
+localization, accessibility, and desktop verification. Read it before editing frontend code.
 
 ## Database And Proto Rules
 

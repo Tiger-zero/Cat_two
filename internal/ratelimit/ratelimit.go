@@ -20,6 +20,8 @@ const (
 	ScopeAnonymous Scope = "anonymous"
 	// ScopeAuthenticated is the catch-all budget for requests with an identity, per user.
 	ScopeAuthenticated Scope = "authenticated"
+	// ScopeMCPIP bounds MCP requests before credentials are checked, per client address.
+	ScopeMCPIP Scope = "mcp_ip"
 	// ScopeSignInIP counts failed sign-ins per client address.
 	ScopeSignInIP Scope = "signin_ip"
 	// ScopeSignInAccount counts failed password sign-ins per submitted username.
@@ -64,6 +66,7 @@ func DefaultPolicy() Policy {
 	return Policy{
 		ScopeAnonymous:          {Limit: 300, Window: time.Minute},
 		ScopeAuthenticated:      {Limit: 600, Window: time.Minute},
+		ScopeMCPIP:              {Limit: 300, Window: time.Minute},
 		ScopeSignInIP:           {Limit: 30, Window: 15 * time.Minute},
 		ScopeSignInAccount:      {Limit: 10, Window: 15 * time.Minute},
 		ScopeSignupIP:           {Limit: 10, Window: time.Hour},

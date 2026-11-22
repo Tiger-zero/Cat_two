@@ -17,6 +17,7 @@ export const EditorContent = forwardRef<EditorController, EditorContentProps>(({
   const { actions, dispatch } = useEditorContext();
   const content = useEditorSelector((s) => s.content);
   const isFocusMode = useEditorSelector((s) => s.ui.isFocusMode);
+  const isSaving = useEditorSelector((s) => s.ui.isLoading.saving);
   const attachments = useEditorSelector((s) => s.metadata.attachments);
 
   const handleContentChange = (content: string) => {
@@ -30,6 +31,7 @@ export const EditorContent = forwardRef<EditorController, EditorContentProps>(({
         className="memo-editor-content"
         value={content}
         placeholder={placeholder || ""}
+        readOnly={isSaving}
         isFocusMode={isFocusMode}
         mode={isSourceMode ? "source" : "rich"}
         attachments={attachments}

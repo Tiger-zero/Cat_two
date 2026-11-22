@@ -1,7 +1,6 @@
 package api
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"net/http"
@@ -71,11 +70,6 @@ func TestMemoTrashAttachmentCleanupRetriesAfterReopen(t *testing.T) {
 	svc := open()
 	owner := createSpaceTestUser(ctx, t, svc, "cleanup-retry-owner", store.RoleUser)
 	ownerCtx := userCtx(ctx, owner.ID)
-	_, err := svc.Store.UpsertInstanceSetting(ctx, &storepb.InstanceSetting{
-		Key:   storepb.InstanceSettingKey_STORAGE,
-		Value: &storepb.InstanceSetting_StorageSetting{StorageSetting: localAttachmentTestSetting("assets/{filename}")},
-	})
-	require.NoError(t, err)
 	memo, err := svc.CreateMemo(ownerCtx, &apipb.CreateMemoRequest{Memo: &apipb.Memo{Content: "memo to purge"}})
 	require.NoError(t, err)
 	createAttachment := func(filename, content string, memoName *string) *store.Attachment {
@@ -156,60 +150,39 @@ func TestMemoTrashExpiryKeepsSharedLocalAttachment(t *testing.T) {
 	require.NoFileExists(t, removePath)
 }
 
-func TestMemoTrashS3CleanupUsesStorageNamespace(t *testing.T) {
+func TestMemoTrashCleanupLeavesLegacyS3Object(t *testing.T) {
 	ctx := t.Context()
 	svc := newIntegrationService(t)
-	fake := fakes3.New(t, "retired-bucket", "active-bucket")
-	retired := &storepb.Storage{Id: "retired", Type: storepb.StorageType_STORAGE_TYPE_S3, Config: &storepb.Storage_S3Config{S3Config: fake.Config("retired-bucket")}}
-	active := &storepb.Storage{Id: "active", Type: storepb.StorageType_STORAGE_TYPE_S3, Config: &storepb.Storage_S3Config{S3Config: fake.Config("active-bucket")}}
-	_, err := svc.Store.UpsertInstanceSetting(ctx, &storepb.InstanceSetting{
-		Key: storepb.InstanceSettingKey_STORAGE,
-		Value: &storepb.InstanceSetting_StorageSetting{StorageSetting: &storepb.InstanceStorageSetting{
-			DefaultStorageId: active.Id,
-			Storages:         []*storepb.Storage{retired, active},
-		}},
-	})
-	require.NoError(t, err)
+	const bucket, key = "retired-bucket", "legacy/original.txt"
+	original := []byte("remote attachment")
+	fake := fakes3.New(t, bucket)
+	require.NoError(t, fake.PutObject(bucket, key, "text/plain", original))
 	owner := createSpaceTestUser(ctx, t, svc, "cleanup-s3-owner", store.RoleUser)
 	memo, err := svc.Store.CreateMemo(ctx, &store.Memo{UID: "trashed-s3-memo", CreatorID: owner.ID, Content: "removed", Visibility: store.Private})
 	require.NoError(t, err)
+	attachment, err := svc.Store.CreateAttachment(ctx, &store.Attachment{
+		UID: "retired-object", CreatorID: owner.ID, MemoID: &memo.ID, StorageType: storepb.AttachmentStorageType_S3,
+		Payload: &storepb.AttachmentPayload{Payload: &storepb.AttachmentPayload_S3Object_{
+			S3Object: &storepb.AttachmentPayload_S3Object{S3Config: fake.Config(bucket), Key: key},
+		}},
+	})
+	require.NoError(t, err)
 
-	saveObject := func(storage *storepb.Storage, key string) {
-		t.Helper()
-		driver, err := svc.Store.StorageDriver(ctx, storage)
-		require.NoError(t, err)
-		_, err = driver.UploadObject(ctx, key, "text/plain", bytes.NewReader([]byte(storage.Id)))
-		require.NoError(t, err)
-	}
-	saveObject(retired, "legacy/reused.txt")
-	saveObject(retired, "legacy/shared.txt")
-	saveObject(active, "legacy/reused.txt")
-	create := func(uid string, memoID *int32, object *storepb.AttachmentPayload_S3Object) {
-		t.Helper()
-		_, err := svc.Store.CreateAttachment(ctx, &store.Attachment{
-			UID: uid, CreatorID: owner.ID, MemoID: memoID, StorageType: storepb.AttachmentStorageType_S3,
-			Payload: &storepb.AttachmentPayload{Payload: &storepb.AttachmentPayload_S3Object_{S3Object: object}},
-		})
-		require.NoError(t, err)
-	}
-	create("retired-object", &memo.ID, &storepb.AttachmentPayload_S3Object{StorageId: retired.Id, Key: "legacy/reused.txt"})
-	create("retired-shared-object", &memo.ID, &storepb.AttachmentPayload_S3Object{StorageId: retired.Id, Key: "legacy/shared.txt"})
-	create("active-reused-object", nil, &storepb.AttachmentPayload_S3Object{StorageId: active.Id, Key: "legacy/reused.txt"})
-	create("active-legacy-object", nil, &storepb.AttachmentPayload_S3Object{S3Config: retired.GetS3Config(), Key: "legacy/shared.txt"})
 	now := time.Now()
 	_, err = svc.Store.ApplyMemoTrash(ctx, &store.MemoTrashMutation{
 		MemoID: memo.ID, ActorUserID: owner.ID, Action: store.MemoTrashMove, NowTs: now.Add(-store.MemoTrashRetention).Unix(),
 	})
 	require.NoError(t, err)
 	require.NoError(t, svc.PurgeExpiredMemoTrash(ctx, now))
-	_, err = fake.GetObject("retired-bucket", "legacy/reused.txt")
-	require.Error(t, err)
-	data, err := fake.GetObject("active-bucket", "legacy/reused.txt")
+	stored, err := svc.Store.GetAttachment(ctx, &store.FindAttachment{ID: &attachment.ID})
 	require.NoError(t, err)
-	require.Equal(t, active.Id, string(data))
-	data, err = fake.GetObject("retired-bucket", "legacy/shared.txt")
+	require.Nil(t, stored)
+	pending, err := svc.Store.ListMemoTrashAttachmentCleanup(ctx, 0, now.Add(24*time.Hour), 100)
 	require.NoError(t, err)
-	require.Equal(t, retired.Id, string(data))
+	require.Empty(t, pending)
+	data, err := fake.GetObject(bucket, key)
+	require.NoError(t, err)
+	require.Equal(t, original, data)
 }
 
 func TestMemoTrashBrowserAndRestore(t *testing.T) {

@@ -11,8 +11,6 @@ import {
   InstanceSetting_GeneralSetting,
   InstanceSetting_GeneralSettingSchema,
   InstanceSetting_Key,
-  InstanceSetting_StorageSetting,
-  InstanceSetting_StorageSettingSchema,
 } from "@/types/proto/api/instance_service_pb";
 import { setManagedAttachmentInstanceUrl } from "@/utils/managed-attachment";
 
@@ -39,10 +37,8 @@ interface InstanceState {
 interface InstanceContextValue extends InstanceState {
   accessSetting: InstanceSetting_AccessSetting;
   generalSetting: InstanceSetting_GeneralSetting;
-  storageSetting: InstanceSetting_StorageSetting;
   initialize: () => Promise<void>;
   fetchSetting: (key: InstanceSetting_Key) => Promise<void>;
-  fetchSettings: (keys: InstanceSetting_Key[]) => Promise<void>;
   updateSetting: (setting: InstanceSetting) => Promise<void>;
 }
 
@@ -76,14 +72,6 @@ export function InstanceProvider({ children }: { children: ReactNode }) {
       return setting.value.value;
     }
     return create(InstanceSetting_GeneralSettingSchema, {});
-  }, [state.settings]);
-
-  const storageSetting = useMemo((): InstanceSetting_StorageSetting => {
-    const setting = state.settings.find((s) => s.name === `${instanceSettingNamePrefix}STORAGE`);
-    if (setting?.value.case === "storageSetting") {
-      return setting.value.value;
-    }
-    return create(InstanceSetting_StorageSettingSchema, {});
   }, [state.settings]);
 
   const initialize = useCallback(async () => {
@@ -130,34 +118,6 @@ export function InstanceProvider({ children }: { children: ReactNode }) {
       isInitialized: true,
       isLoading: false,
     }));
-  }, []);
-
-  const fetchSettings = useCallback(async (keys: InstanceSetting_Key[]) => {
-    const names = keys
-      .filter((key) => key !== InstanceSetting_Key.ACCESS)
-      .map(buildInstanceSettingName)
-      .filter((name) => !fetchedSettingsRef.current.has(name));
-    if (names.length === 0) {
-      return;
-    }
-
-    for (const name of names) {
-      fetchedSettingsRef.current.add(name);
-    }
-
-    try {
-      const response = await instanceServiceClient.batchGetInstanceSettings({ names });
-      const fetchedNames = new Set(response.instanceSettings.map((setting) => setting.name));
-      setState((prev) => ({
-        ...prev,
-        settings: [...prev.settings.filter((setting) => !fetchedNames.has(setting.name)), ...response.instanceSettings],
-      }));
-    } catch (error) {
-      for (const name of names) {
-        fetchedSettingsRef.current.delete(name);
-      }
-      throw error;
-    }
   }, []);
 
   const fetchSetting = useCallback(async (key: InstanceSetting_Key) => {
@@ -210,13 +170,11 @@ export function InstanceProvider({ children }: { children: ReactNode }) {
       ...state,
       accessSetting,
       generalSetting,
-      storageSetting,
       initialize,
       fetchSetting,
-      fetchSettings,
       updateSetting,
     }),
-    [state, accessSetting, generalSetting, storageSetting, initialize, fetchSetting, fetchSettings, updateSetting],
+    [state, accessSetting, generalSetting, initialize, fetchSetting, updateSetting],
   );
 
   return <InstanceContext.Provider value={value}>{children}</InstanceContext.Provider>;

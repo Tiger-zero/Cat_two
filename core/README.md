@@ -8,6 +8,7 @@ apply the same way.
 | --- | --- |
 | `access/` | who may read a memo, given viewer, space membership, and share links |
 | `notification/` | building and dispatching inbox and email notifications |
+| `messagecapture/` | validating and encrypting Telegram, WeCom and Telegram proxy settings |
 | `memopayload/` | rebuilding a memo's derived payload from its markdown |
 | `memoexport/` | the Memos Export Format container and records used for export and import |
 | `identityprovider/` | the rules an identity provider must meet before it is stored, and its API↔store conversion |

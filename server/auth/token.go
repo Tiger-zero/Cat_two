@@ -77,6 +77,7 @@ type AccessTokenClaims struct {
 	Username        string `json:"username"`  // Username for display
 	AuthHash        string `json:"auth_hash"` // Password-bound session validation
 	SessionRevision string `json:"session_revision,omitempty"`
+	SessionID       string `json:"sid,omitempty"`
 	jwt.RegisteredClaims
 }
 
@@ -86,7 +87,16 @@ type RefreshTokenClaims struct {
 	Type            string `json:"type"` // "refresh"
 	TokenID         string `json:"tid"`  // Token ID for revocation lookup
 	SessionRevision string `json:"session_revision,omitempty"`
+	SessionID       string `json:"sid,omitempty"`
 	jwt.RegisteredClaims
+}
+
+// StableSessionID uses the original refresh ID when upgrading a legacy session.
+func (c *RefreshTokenClaims) StableSessionID() string {
+	if c.SessionID != "" {
+		return c.SessionID
+	}
+	return c.TokenID
 }
 
 // GenerateAccessToken generates a JWT access token for a user.
@@ -137,15 +147,15 @@ func generateToken(username string, userID int32, audience string, expirationTim
 
 // GenerateAccessTokenV2 generates a short-lived access token bound to the user's current password hash.
 func GenerateAccessTokenV2(userID int32, username, role, status, passwordHash string, secret []byte) (string, time.Time, error) {
-	return issueAccessTokenV2(userID, username, role, status, passwordHash, "", secret)
+	return issueAccessTokenV2(userID, username, role, status, passwordHash, "", "", secret)
 }
 
 // GenerateSessionAccessToken issues an access token for a proven factor revision.
-func GenerateSessionAccessToken(user *store.User, revision string, secret []byte) (string, time.Time, error) {
-	return issueAccessTokenV2(user.ID, user.Username, string(user.Role), string(user.RowStatus), user.PasswordHash, revision, secret)
+func GenerateSessionAccessToken(user *store.User, sessionID, revision string, secret []byte) (string, time.Time, error) {
+	return issueAccessTokenV2(user.ID, user.Username, string(user.Role), string(user.RowStatus), user.PasswordHash, sessionID, revision, secret)
 }
 
-func issueAccessTokenV2(userID int32, username, role, status, passwordHash, revision string, secret []byte) (string, time.Time, error) {
+func issueAccessTokenV2(userID int32, username, role, status, passwordHash, sessionID, revision string, secret []byte) (string, time.Time, error) {
 	expiresAt := time.Now().Add(AccessTokenDuration)
 
 	claims := &AccessTokenClaims{
@@ -155,6 +165,7 @@ func issueAccessTokenV2(userID int32, username, role, status, passwordHash, revi
 		Username:        username,
 		AuthHash:        accessTokenAuthHash(userID, passwordHash, secret),
 		SessionRevision: revision,
+		SessionID:       sessionID,
 		Issuer:          Issuer,
 		Audience:        jwt.ClaimStrings{AccessTokenAudienceName},
 		Subject:         fmt.Sprint(userID),
@@ -184,17 +195,18 @@ func accessTokenAuthHash(userID int32, passwordHash string, secret []byte) strin
 
 // GenerateRefreshToken generates a long-lived refresh token.
 func GenerateRefreshToken(userID int32, tokenID string, secret []byte) (string, time.Time, error) {
-	return GenerateSessionRefreshToken(userID, tokenID, "", secret)
+	return GenerateSessionRefreshToken(userID, tokenID, "", "", secret)
 }
 
 // GenerateSessionRefreshToken issues a refresh token for a proven factor revision.
-func GenerateSessionRefreshToken(userID int32, tokenID, revision string, secret []byte) (string, time.Time, error) {
+func GenerateSessionRefreshToken(userID int32, tokenID, sessionID, revision string, secret []byte) (string, time.Time, error) {
 	expiresAt := time.Now().Add(RefreshTokenDuration)
 
 	claims := &RefreshTokenClaims{
 		Type:            "refresh",
 		TokenID:         tokenID,
 		SessionRevision: revision,
+		SessionID:       sessionID,
 		Issuer:          Issuer,
 		Audience:        jwt.ClaimStrings{RefreshTokenAudienceName},
 		Subject:         fmt.Sprint(userID),
@@ -276,6 +288,9 @@ func ParseRefreshToken(tokenString string, secret []byte) (*RefreshTokenClaims, 
 	}
 	if claims.Type != "refresh" {
 		return nil, errors.New("invalid token type: expected refresh token")
+	}
+	if claims.TokenID == "" {
+		return nil, errors.New("refresh token missing token ID")
 	}
 	return claims, nil
 }

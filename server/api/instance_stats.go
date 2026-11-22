@@ -80,6 +80,11 @@ func (s *APIService) computeInstanceStats(ctx context.Context) (*apipb.InstanceS
 		LocalStorageBytes: -1,
 		GeneratedTime:     timestamppb.Now(),
 	}
+	if s.personalMode() {
+		stats.DataDirectory = new(s.Profile.Data)
+		stats.NotesPath = new(filepath.Join(s.Profile.Data, store.MemoBodyDirectory))
+		stats.AttachmentsDirectory = new(filepath.Join(s.Profile.Data, store.AttachmentDirectory))
+	}
 
 	type result struct {
 		name string

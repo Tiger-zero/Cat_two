@@ -15,7 +15,6 @@ import (
 
 	"github.com/usememos/memos/internal/httphandler"
 	"github.com/usememos/memos/internal/testutil"
-	"github.com/usememos/memos/internal/testutil/fakes3"
 	apipb "github.com/usememos/memos/proto/gen/api"
 	storepb "github.com/usememos/memos/proto/gen/store"
 	"github.com/usememos/memos/server/api"
@@ -52,85 +51,57 @@ func localFilePath(data, reference string) string {
 func TestReplaceAttachmentContent(t *testing.T) {
 	original, err := os.ReadFile("testdata/v1.canvas.png")
 	require.NoError(t, err)
-	const bucket = "file-server-attachments"
 
-	for _, storageName := range []string{"database", "local", "s3"} {
-		t.Run(storageName, func(t *testing.T) {
-			ctx := context.Background()
-			svc, fs, stores, cleanup := newShareAttachmentTestServices(ctx, t)
-			defer cleanup()
-			var fake *fakes3.Server
-			switch storageName {
-			case "database":
-				configureDatabaseStorage(ctx, t, stores)
-			case "local":
-				configureLocalStorage(ctx, t, stores)
-			case "s3":
-				fake = fakes3.New(t, bucket)
-				configureFakeS3Storage(ctx, t, stores, fake)
-			default:
-				t.Fatalf("unknown storage %q", storageName)
-			}
+	ctx := context.Background()
+	svc, fs, stores, cleanup := newShareAttachmentTestServices(ctx, t)
+	defer cleanup()
 
-			owner, err := stores.CreateUser(ctx, &store.User{Username: "artist", Role: store.RoleUser, Email: "artist@example.com"})
-			require.NoError(t, err)
-			ownerCtx := context.WithValue(ctx, auth.UserIDContextKey, owner.ID)
-			attachment := createDrawingInline(ownerCtx, t, svc, original)
-			memo, err := svc.CreateMemo(ownerCtx, &apipb.CreateMemoRequest{Memo: &apipb.Memo{
-				Content:     "a drawing",
-				Visibility:  apipb.Visibility_PRIVATE,
-				Attachments: []*apipb.Attachment{{Name: attachment.Name}},
-			}})
-			require.NoError(t, err)
+	owner, err := stores.CreateUser(ctx, &store.User{Username: "artist", Role: store.RoleUser, Email: "artist@example.com"})
+	require.NoError(t, err)
+	ownerCtx := context.WithValue(ctx, auth.UserIDContextKey, owner.ID)
+	attachment := createDrawingInline(ownerCtx, t, svc, original)
+	memo, err := svc.CreateMemo(ownerCtx, &apipb.CreateMemoRequest{Memo: &apipb.Memo{
+		Content:     "a drawing",
+		Visibility:  apipb.Visibility_PRIVATE,
+		Attachments: []*apipb.Attachment{{Name: attachment.Name}},
+	}})
+	require.NoError(t, err)
 
-			uid, err := api.ExtractAttachmentUIDFromName(attachment.Name)
-			require.NoError(t, err)
-			before, err := stores.GetAttachment(ctx, &store.FindAttachment{UID: &uid})
-			require.NoError(t, err)
-			// A thumbnail the file server cached for the previous content. The
-			// store and the file server share one data directory in a real server.
-			thumbnail := filepath.Join(stores.GetDataDir(), ".thumbnail_cache", uid+".v2.jpeg")
-			require.NoError(t, os.MkdirAll(filepath.Dir(thumbnail), 0o755))
-			require.NoError(t, os.WriteFile(thumbnail, []byte("stale"), 0o644))
+	uid, err := api.ExtractAttachmentUIDFromName(attachment.Name)
+	require.NoError(t, err)
+	before, err := stores.GetAttachment(ctx, &store.FindAttachment{UID: &uid})
+	require.NoError(t, err)
+	// A thumbnail the file server cached for the previous content. The
+	// store and the file server share one data directory in a real server.
+	thumbnail := filepath.Join(stores.GetDataDir(), ".thumbnail_cache", uid+".v2.jpeg")
+	require.NoError(t, os.MkdirAll(filepath.Dir(thumbnail), 0o755))
+	require.NoError(t, os.WriteFile(thumbnail, []byte("stale"), 0o644))
 
-			edited := testutil.BuildPNG(8, 8)
-			replaced, err := replaceContent(ownerCtx, svc, attachment.Name, "drawing-20261106-130000.canvas.png", edited)
-			require.NoError(t, err)
+	edited := testutil.BuildPNG(8, 8)
+	replaced, err := replaceContent(ownerCtx, svc, attachment.Name, "drawing-20261106-130000.canvas.png", edited)
+	require.NoError(t, err)
 
-			require.Equal(t, attachment.Name, replaced.Name, "the attachment keeps its name")
-			require.Equal(t, "drawing-20261106-130000.canvas.png", replaced.Filename)
-			require.Equal(t, int64(len(edited)), replaced.Size)
-			require.Equal(t, memo.Name, replaced.GetMemo(), "the attachment stays on its memo")
-			require.Equal(t, attachment.CreateTime.AsTime(), replaced.CreateTime.AsTime())
-			require.NoFileExists(t, thumbnail, "the cached thumbnail of the previous content is dropped")
+	require.Equal(t, attachment.Name, replaced.Name, "the attachment keeps its name")
+	require.Equal(t, "drawing-20261106-130000.canvas.png", replaced.Filename)
+	require.Equal(t, int64(len(edited)), replaced.Size)
+	require.Equal(t, memo.Name, replaced.GetMemo(), "the attachment stays on its memo")
+	require.Equal(t, attachment.CreateTime.AsTime(), replaced.CreateTime.AsTime())
+	require.NoFileExists(t, thumbnail, "the cached thumbnail of the previous content is dropped")
 
-			mux := http.NewServeMux()
-			fs.RegisterRoutes(mux, http.HandlerFunc(httphandler.NotFound))
-			recorder := httptest.NewRecorder()
-			mux.ServeHTTP(recorder, newAuthenticatedFileRequest(ctx, t, svc, owner.ID, fmt.Sprintf("/file/%s/%s", replaced.Name, replaced.Filename)))
-			require.Equal(t, http.StatusOK, recorder.Code)
-			require.Equal(t, edited, recorder.Body.Bytes())
+	mux := http.NewServeMux()
+	fs.RegisterRoutes(mux, http.HandlerFunc(httphandler.NotFound))
+	recorder := httptest.NewRecorder()
+	mux.ServeHTTP(recorder, newAuthenticatedFileRequest(ctx, t, svc, owner.ID, fmt.Sprintf("/file/%s/%s", replaced.Name, replaced.Filename)))
+	require.Equal(t, http.StatusOK, recorder.Code)
+	require.Equal(t, edited, recorder.Body.Bytes())
 
-			after, err := stores.GetAttachment(ctx, &store.FindAttachment{UID: &uid})
-			require.NoError(t, err)
-			require.Equal(t, before.ID, after.ID)
-			require.Equal(t, before.StorageType, after.StorageType)
-
-			// The previous file is gone from its storage; the new one is there.
-			switch storageName {
-			case "local":
-				require.FileExists(t, localFilePath(svc.Profile.Data, after.Reference))
-				require.NoFileExists(t, localFilePath(svc.Profile.Data, before.Reference))
-			case "s3":
-				_, err := fake.GetObject(bucket, before.Payload.GetS3Object().GetKey())
-				require.Error(t, err)
-				_, err = fake.GetObject(bucket, after.Payload.GetS3Object().GetKey())
-				require.NoError(t, err)
-			default:
-				// A database blob is replaced in the row itself.
-			}
-		})
-	}
+	after, err := stores.GetAttachment(ctx, &store.FindAttachment{UID: &uid})
+	require.NoError(t, err)
+	require.Equal(t, before.ID, after.ID)
+	require.Equal(t, before.StorageType, after.StorageType)
+	require.Equal(t, storepb.AttachmentStorageType_LOCAL, after.StorageType)
+	require.FileExists(t, localFilePath(svc.Profile.Data, after.Reference))
+	require.NoFileExists(t, localFilePath(svc.Profile.Data, before.Reference))
 }
 
 func TestReplaceAttachmentContentRefusals(t *testing.T) {
@@ -215,7 +186,6 @@ func TestReplaceAttachmentContentConcurrently(t *testing.T) {
 	ctx := context.Background()
 	svc, _, stores, cleanup := newShareAttachmentTestServices(ctx, t)
 	defer cleanup()
-	configureLocalStorage(ctx, t, stores)
 	owner, err := stores.CreateUser(ctx, &store.User{Username: "owner", Role: store.RoleUser, Email: "owner@example.com"})
 	require.NoError(t, err)
 	ownerCtx := context.WithValue(ctx, auth.UserIDContextKey, owner.ID)

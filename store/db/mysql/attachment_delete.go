@@ -38,8 +38,8 @@ func (d *DB) DeleteAttachmentsWithPolicy(ctx context.Context, policy *store.Atta
 		return err
 	}
 
-	for _, attachmentID := range attachmentIDs {
-		result, err := tx.ExecContext(ctx, "DELETE FROM attachment WHERE id = ?", attachmentID)
+	for _, attachment := range attachments {
+		result, err := tx.ExecContext(ctx, "DELETE FROM attachment WHERE id = ? AND memo_id <=> ?", attachment.ID, attachment.MemoID)
 		if err != nil {
 			return errors.Wrap(err, "failed to delete attachment")
 		}
@@ -47,6 +47,11 @@ func (d *DB) DeleteAttachmentsWithPolicy(ctx context.Context, policy *store.Atta
 			return errors.Wrap(err, "failed to count deleted attachment")
 		} else if rows != 1 {
 			return store.ErrMemoMutationConflict
+		}
+	}
+	for _, memoID := range memoIDs {
+		if err := bumpMemoRevision(ctx, tx, memoID); err != nil {
+			return err
 		}
 	}
 	if err := tx.Commit(); err != nil {
@@ -70,7 +75,7 @@ func authorizeMySQLAttachmentMutation(
 		var spaceID sql.NullInt64
 		var content string
 		if err := tx.QueryRowContext(ctx, `SELECT creator_id, row_status, space_id, visibility, content
-			FROM memo WHERE id = ? AND deleted_ts IS NULL`, memoID).Scan(
+			FROM memo WHERE id = ? AND deleted_ts IS NULL FOR UPDATE`, memoID).Scan(
 			&snapshot.CreatorID, &snapshot.RowStatus, &spaceID, &snapshot.Visibility, &content,
 		); err != nil {
 			if errors.Is(err, sql.ErrNoRows) {

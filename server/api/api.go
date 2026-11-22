@@ -96,6 +96,8 @@ type APIService struct {
 	MarkdownService         markdown.Service
 	SSEHub                  *SSEHub
 	NotificationEmailSender notification.EmailSender
+	NotificationSettings    NotificationSettingsService
+	NetworkSettings         NetworkSettingsService
 
 	// RateLimiter bounds request rates; nil disables every limit.
 	RateLimiter ratelimit.Limiter
@@ -140,7 +142,7 @@ func NewAPIService(secret string, profile *profile.Profile, store *store.Store) 
 	return service
 }
 
-// newGatewayMarshaler mirrors grpc-gateway's default JSON marshaler with one
+// NewJSONMarshaler mirrors grpc-gateway's default JSON marshaler with one
 // change: EmitDefaultValues replaces EmitUnpopulated. Both keep proto3 scalar
 // defaults ("" / 0 / false) and empty lists in the payload — the generated
 // OpenAPI schema declares several of them required — but EmitUnpopulated also
@@ -150,7 +152,7 @@ func NewAPIService(secret string, profile *profile.Profile, store *store.Store) 
 // same schema as their outputSchema, and strict MCP clients fail every call
 // that returns an attachment. EmitDefaultValues omits unset message fields
 // instead, which the schema already allows.
-func newGatewayMarshaler() *runtime.HTTPBodyMarshaler {
+func NewJSONMarshaler() *runtime.HTTPBodyMarshaler {
 	return &runtime.HTTPBodyMarshaler{
 		Marshaler: &runtime.JSONPb{
 			EmitDefaultValues: true,
@@ -191,18 +193,7 @@ func (s *APIService) NewHandler(ctx context.Context) (http.Handler, error) {
 				writeGatewayStatusError(w, status.Error(codes.PermissionDenied, authBrowserOriginError))
 				return
 			}
-			var result *auth.AuthResult
-			if request, ok := ctx.Value(mcpUserContextKey{}).(mcpAPIRequest); ok {
-				// Compare with the binding the gateway actually matched. An
-				// MCP tool can only borrow the identity for its own procedure.
-				if procedure == "" || procedure != request.procedure {
-					writeGatewayStatusError(w, status.Error(codes.PermissionDenied, "MCP connection cannot access this API procedure"))
-					return
-				}
-				result = &auth.AuthResult{User: &store.User{ID: request.userID}}
-			} else {
-				result = authorizer.Authenticate(ctx, r.Header.Get("Authorization"))
-			}
+			result := authorizer.Authenticate(ctx, r.Header.Get("Authorization"))
 			if s.isRetiredProcedure(procedure) {
 				writeGatewayStatusError(w, retiredModuleError())
 				return
@@ -234,7 +225,7 @@ func (s *APIService) NewHandler(ctx context.Context) (http.Handler, error) {
 
 	// Create gRPC-Gateway mux with auth middleware.
 	gwMux := runtime.NewServeMux(
-		runtime.WithMarshalerOption(runtime.MIMEWildcard, newGatewayMarshaler()),
+		runtime.WithMarshalerOption(runtime.MIMEWildcard, NewJSONMarshaler()),
 		runtime.WithMiddlewares(gatewayAuthMiddleware),
 		runtime.WithErrorHandler(gatewayErrorHandler),
 		runtime.WithIncomingHeaderMatcher(gatewayIncomingHeaderMatcher),
@@ -293,11 +284,8 @@ func (s *APIService) NewHandler(ctx context.Context) (http.Handler, error) {
 	trashHandler := s.newMemoTrashHandler(authorizer)
 	mcpConnectionHandler := s.newMCPConnectionHandler(authorizer)
 	loginBlocklistHandler := s.newLoginBlocklistHandler(authorizer)
+	captureSettingsHandler := s.newCaptureSettingsHandler(authorizer)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if _, authenticatedMCP := r.Context().Value(mcpUserContextKey{}).(mcpAPIRequest); authenticatedMCP {
-			gwMux.ServeHTTP(w, r)
-			return
-		}
 		requestPath := r.URL.Path
 		if r.URL.RawPath != "" {
 			requestPath = r.URL.RawPath
@@ -311,6 +299,8 @@ func (s *APIService) NewHandler(ctx context.Context) (http.Handler, error) {
 			mcpConnectionHandler.ServeHTTP(w, r)
 		case s.personalMode() && (requestPath == loginBlocklistPath || strings.HasPrefix(requestPath, loginBlocklistPath+"/")):
 			loginBlocklistHandler.ServeHTTP(w, r)
+		case requestPath == notificationSettingsPath || requestPath == networkSettingsPath:
+			captureSettingsHandler.ServeHTTP(w, r)
 		case strings.HasPrefix(requestPath, "/api/v1/"):
 			removedAPIVersionHandler(false).ServeHTTP(w, r)
 		case strings.HasPrefix(requestPath, "/memos.api.v1."):
@@ -380,7 +370,7 @@ func gatewayIncomingHeaderMatcher(key string) (string, bool) {
 	switch http.CanonicalHeaderKey(key) {
 	case challengeTokenHeader:
 		return challengeTokenMetadataKey, true
-	case "Cookie", "Origin", "X-Forwarded-Proto", "Forwarded":
+	case "Cookie", "Origin", "X-Forwarded-Proto", "Forwarded", "X-Memos-Session-Id":
 		return strings.ToLower(key), true
 	}
 	return runtime.DefaultHeaderMatcher(key)

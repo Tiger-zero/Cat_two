@@ -2,7 +2,6 @@ package api
 
 import (
 	"context"
-	"log/slog"
 	"strings"
 
 	"github.com/pkg/errors"
@@ -122,8 +121,13 @@ func (s *APIService) getInstanceSettingByName(ctx context.Context, name string, 
 		setting, err = s.Store.GetInstanceGeneralSetting(ctx)
 		instanceSetting = &storepb.InstanceSetting{Key: instanceSettingKey, Value: &storepb.InstanceSetting_GeneralSetting{GeneralSetting: setting}}
 	case storepb.InstanceSettingKey_STORAGE:
-		var setting *storepb.InstanceStorageSetting
-		setting, err = s.Store.GetInstanceStorageSetting(ctx)
+		// Only startup migration needs the old provider registry. Report the
+		// storage actually used for new files, independently of that registry.
+		setting := &storepb.InstanceStorageSetting{
+			StorageType:      storepb.InstanceStorageSetting_LOCAL,
+			FilepathTemplate: store.DefaultAttachmentPathTemplate,
+		}
+		store.NormalizeInstanceStorageSetting(setting)
 		instanceSetting = &storepb.InstanceSetting{Key: instanceSettingKey, Value: &storepb.InstanceSetting_StorageSetting{StorageSetting: setting}}
 	case storepb.InstanceSettingKey_TAGS:
 		var setting *storepb.InstanceTagsSetting
@@ -213,12 +217,18 @@ func (s *APIService) UpdateInstanceSetting(ctx context.Context, request *apipb.U
 	if _, err := ExtractInstanceSettingKeyFromName(request.InstanceSetting.Name); err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, "invalid instance setting name: %v", err)
 	}
+	if request.InstanceSetting.GetGeneralSetting().GetAdditionalScript() != "" {
+		return nil, status.Error(codes.FailedPrecondition, "custom JavaScript is unavailable in Cat_two")
+	}
 	// TODO: Apply update_mask if specified
 	_ = request.UpdateMask
 
 	updateSetting := instancesetting.ToStore(request.InstanceSetting)
 	if s.personalMode() && (updateSetting.Key == storepb.InstanceSettingKey_NOTIFICATION || updateSetting.Key == storepb.InstanceSettingKey_ACCESS) {
 		return nil, retiredModuleError()
+	}
+	if updateSetting.Key == storepb.InstanceSettingKey_STORAGE {
+		return nil, status.Error(codes.FailedPrecondition, "attachment storage is managed by Cat_two")
 	}
 	if updateSetting.Key == storepb.InstanceSettingKey_USAGE_LIMITS {
 		usageLimits, err := s.convertUsageLimitsSettingToStore(ctx, request.InstanceSetting.GetUsageLimitsSetting())
@@ -230,7 +240,6 @@ func (s *APIService) UpdateInstanceSetting(ctx context.Context, request *apipb.U
 
 	// Preserve write-only credential fields when the caller sends an empty value.
 	// An empty string means "no change", not "clear the credential".
-	var existingSetting *storepb.InstanceSetting
 	switch updateSetting.Key {
 	case storepb.InstanceSettingKey_TAGS:
 		if err := validateInstanceTagsSetting(request.InstanceSetting.GetTagsSetting()); err != nil {
@@ -246,21 +255,6 @@ func (s *APIService) UpdateInstanceSetting(ctx context.Context, request *apipb.U
 				notif.Email.SmtpPassword = existing.Email.SmtpPassword
 			}
 		}
-	case storepb.InstanceSettingKey_STORAGE:
-		existing, err := s.Store.GetInstanceStorageSetting(ctx)
-		if err != nil {
-			// A corrupt stored setting must not block repair: treat it as unset so
-			// a valid update can overwrite it.
-			slog.Warn("failed to load existing storage setting; treating it as unset", "error", err)
-			existing = nil
-		}
-		if err := store.PrepareInstanceStorageSettingUpdate(updateSetting.GetStorageSetting(), existing); err != nil {
-			return nil, status.Errorf(codes.InvalidArgument, "invalid storage setting: %v", err)
-		}
-		existingSetting = &storepb.InstanceSetting{
-			Key:   storepb.InstanceSettingKey_STORAGE,
-			Value: &storepb.InstanceSetting_StorageSetting{StorageSetting: existing},
-		}
 	case storepb.InstanceSettingKey_AI:
 		if err := s.prepareInstanceAISettingForUpdate(ctx, updateSetting.GetAiSetting()); err != nil {
 			return nil, status.Errorf(codes.InvalidArgument, "invalid AI setting: %v", err)
@@ -268,7 +262,7 @@ func (s *APIService) UpdateInstanceSetting(ctx context.Context, request *apipb.U
 	default:
 		// No credential preservation needed for other setting types.
 	}
-	if err := instancesetting.ValidateUpdate(updateSetting, existingSetting); err != nil {
+	if err := instancesetting.Validate(updateSetting); err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, "invalid instance setting: %v", err)
 	}
 	if err := s.checkManagedSettingChange(ctx, updateSetting); err != nil {

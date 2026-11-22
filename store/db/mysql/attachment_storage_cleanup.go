@@ -4,13 +4,14 @@ import (
 	"context"
 	"database/sql"
 
+	storepb "github.com/usememos/memos/proto/gen/store"
 	"github.com/usememos/memos/store"
 )
 
 func (d *DB) ListMemoTrashAttachmentCleanup(ctx context.Context, afterID int32, nowTs int64, limit int) ([]*store.Attachment, error) {
 	var attachments []*store.Attachment
 	err := appendDeleteUserAttachments(ctx, d.db, `
-        SELECT attachment_id, uid, creator_id, memo_id, storage_type, reference, payload
+        SELECT attachment_id, uid, creator_id, memo_id, storage_type, reference, '{}'
         FROM attachment_storage_cleanup
         WHERE attachment_id > ? AND next_attempt_ts <= ? ORDER BY attachment_id LIMIT ?`,
 		[]any{afterID, nowTs, limit}, make(map[int32]struct{}), &attachments)
@@ -44,11 +45,22 @@ func (d *DB) ListLocalAttachmentStorageMatches(ctx context.Context, basename, su
 	return d.db.QueryContext(ctx, query, args...)
 }
 
-func (d *DB) ListS3AttachmentStorageMatches(ctx context.Context, key string) ([]*store.Attachment, error) {
-	var attachments []*store.Attachment
-	err := appendDeleteUserAttachments(ctx, d.db, `
-        SELECT id, uid, creator_id, memo_id, storage_type, reference, payload
-        FROM attachment WHERE storage_type = 'S3' AND JSON_UNQUOTE(COALESCE(JSON_EXTRACT(payload, '$.s3Object.key'), JSON_EXTRACT(payload, '$.s3_object.key'))) = ?`,
-		[]any{key}, make(map[int32]struct{}), &attachments)
-	return attachments, err
+func (d *DB) ListLegacyAttachmentIDs(ctx context.Context, afterID int32, limit int) (*sql.Rows, error) {
+	return d.db.QueryContext(ctx, `
+        SELECT id FROM attachment
+        WHERE id > ? AND storage_type NOT IN ('LOCAL', 'EXTERNAL') ORDER BY id LIMIT ?`, afterID, limit)
+}
+
+func (d *DB) LocalizeAttachment(ctx context.Context, original *store.Attachment, reference, payload string) (bool, error) {
+	result, err := d.db.ExecContext(ctx, `
+        UPDATE attachment SET storage_type = 'LOCAL', reference = ?, payload = ?, blob = NULL
+        WHERE id = ? AND uid = ? AND updated_ts = FROM_UNIXTIME(?) AND reference = ?
+          AND storage_type NOT IN ('LOCAL', 'EXTERNAL') AND (storage_type = 'S3') = ?`,
+		reference, payload, original.ID, original.UID, original.UpdatedTs, original.Reference,
+		original.StorageType == storepb.AttachmentStorageType_S3)
+	if err != nil {
+		return false, err
+	}
+	count, err := result.RowsAffected()
+	return count == 1, err
 }

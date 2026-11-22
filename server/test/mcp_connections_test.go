@@ -27,6 +27,7 @@ type observedMCPConnection struct {
 	RequestedAt int64  `json:"requestedAt"`
 	ExpiresAt   int64  `json:"expiresAt"`
 	RemoteIP    string `json:"remoteIp"`
+	Permission  string `json:"permission"`
 }
 
 const mcpConnectionsPath = "/api/mcpConnections"
@@ -48,6 +49,7 @@ func createMCPConnection(t *testing.T, inst *instance, browserToken, label, dura
 	require.NotEmpty(t, created.Connection.ID)
 	require.Equal(t, label, created.Connection.Label)
 	require.Equal(t, "approved", created.Connection.Status)
+	require.Equal(t, "read_write", created.Connection.Permission)
 	require.Positive(t, created.Connection.CreatedAt)
 	require.Zero(t, created.Connection.RequestedAt)
 	require.Empty(t, created.Connection.RemoteIP)

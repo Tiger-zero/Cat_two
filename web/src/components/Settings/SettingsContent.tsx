@@ -1,30 +1,23 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import SidebarRow from "@/components/AppSidebar/SidebarRow";
 import SidebarSection, { SIDEBAR_SECTION_STACK_CLASSES } from "@/components/AppSidebar/SidebarSection";
-import { useInstance } from "@/contexts/InstanceContext";
 import useCurrentUser from "@/hooks/useCurrentUser";
 import { User_Role } from "@/types/proto/api/user_service_pb";
 import { useTranslate } from "@/utils/i18n";
-import { DEFAULT_SETTING_SECTION, SETTINGS_SECTIONS, type SettingSectionDefinition } from "./settingSections";
+import { resolveSettingSectionKey, SETTINGS_SECTIONS, type SettingSectionDefinition } from "./settingSections";
 
 const basicSections = SETTINGS_SECTIONS.filter((section) => section.scope === "basic");
 const adminSections = SETTINGS_SECTIONS.filter((section) => section.scope === "admin");
-const adminPreloadKeys = [...new Set(adminSections.flatMap((section) => section.preloadSettingKeys ?? []))];
 
 export default function SettingsContent({ initialSection }: { initialSection: string | null }) {
   const t = useTranslate();
   const user = useCurrentUser();
-  const { fetchSettings } = useInstance();
   const isAdmin = user?.role === User_Role.ADMIN;
-  const [selectedKey, setSelectedKey] = useState(initialSection || DEFAULT_SETTING_SECTION);
+  const [selectedKey, setSelectedKey] = useState(() => resolveSettingSectionKey(initialSection));
   const visibleSections = isAdmin ? SETTINGS_SECTIONS : basicSections;
   const activeSection = visibleSections.find((section) => section.key === selectedKey) ?? basicSections[0];
   const ActiveSection = activeSection.component;
   const contentRef = useRef<HTMLElement>(null);
-
-  useEffect(() => {
-    if (isAdmin) void fetchSettings(adminPreloadKeys);
-  }, [fetchSettings, isAdmin]);
 
   useLayoutEffect(() => {
     if (contentRef.current) contentRef.current.scrollTop = 0;

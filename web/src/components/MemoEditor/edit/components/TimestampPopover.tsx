@@ -56,7 +56,8 @@ function nowLabel(): string {
 /** The memo's time as a control; a memo being written that has no time yet reads "Now". */
 export const TimestampPopover: FC = () => {
   const t = useTranslate();
-  const { actions, dispatch } = useEditorContext();
+  const { actions, dispatch, getState } = useEditorContext();
+  const saving = useEditorSelector((s) => s.ui.isLoading.saving);
   const createTime = useEditorSelector((s) => s.timestamps.createTime);
   const updateTime = useEditorSelector((s) => s.timestamps.updateTime);
 
@@ -64,17 +65,23 @@ export const TimestampPopover: FC = () => {
 
   return (
     <Popover.Root>
-      <Popover.Trigger render={<button type="button" className={MEMO_TIME_CONTROL_CLASSES} />}>{formatDate(createTime)}</Popover.Trigger>
+      <Popover.Trigger disabled={saving} render={<button type="button" className={MEMO_TIME_CONTROL_CLASSES} />}>
+        {formatDate(createTime)}
+      </Popover.Trigger>
       <Popover.Popup align="start" className="w-auto">
         <TimestampInput
           label={t("common.created-at")}
           date={createTime}
-          onChange={(d) => dispatch(actions.setTimestamps({ createTime: d }))}
+          onChange={(d) => {
+            if (!getState().ui.isLoading.saving) dispatch(actions.setTimestamps({ createTime: d }));
+          }}
         />
         <TimestampInput
           label={t("common.last-updated-at")}
           date={updateTime}
-          onChange={(d) => dispatch(actions.setTimestamps({ updateTime: d }))}
+          onChange={(d) => {
+            if (!getState().ui.isLoading.saving) dispatch(actions.setTimestamps({ updateTime: d }));
+          }}
         />
       </Popover.Popup>
     </Popover.Root>

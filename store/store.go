@@ -14,9 +14,11 @@ type Store struct {
 	profile *profile.Profile
 	driver  Driver
 
-	authConfigMu   sync.Mutex
-	refreshTokenMu sync.Mutex
-	patMu          sync.Mutex
+	authConfigMu      sync.Mutex
+	refreshTokenMu    sync.Mutex
+	patMu             sync.Mutex
+	memoBodyMu        sync.Mutex
+	memoBodyNamespace string
 
 	// Cache settings
 	cacheConfig cache.Config
@@ -62,6 +64,11 @@ func (s *Store) GetDriver() Driver {
 // GetDataDir returns the store data directory.
 func (s *Store) GetDataDir() string {
 	return s.profile.Data
+}
+
+// IsPersonalMode reports whether this store belongs to a Cat_two instance.
+func (s *Store) IsPersonalMode() bool {
+	return s.profile.Personal
 }
 
 func (s *Store) Close() error {

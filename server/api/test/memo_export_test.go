@@ -255,6 +255,11 @@ func TestImportMemoExportIntoAnotherAccount(t *testing.T) {
 	ts := NewTestService(t)
 	defer ts.Cleanup()
 	fixture := buildArchiveFixture(t, ts, "exporter")
+	_, err := ts.Service.UpdateMemo(fixture.userCtx, &apipb.UpdateMemoRequest{
+		Memo:       &apipb.Memo{Name: fixture.archived.Name, Pinned: true},
+		UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"pinned"}},
+	})
+	require.NoError(t, err)
 	archive := exportArchive(t, ts, fixture.user)
 
 	ctx := context.Background()
@@ -321,6 +326,8 @@ func TestImportMemoExportIntoAnotherAccount(t *testing.T) {
 	archived := byContent["Old note"]
 	require.NotNil(t, archived)
 	require.Equal(t, store.Archived, archived.RowStatus)
+	require.True(t, archived.Pinned)
+	require.EqualValues(t, 1, archived.Revision, "archived and pinned state is part of the initial write")
 	require.Equal(t, store.Private, archived.Visibility)
 
 	attachments, err := ts.Store.ListAttachments(ctx, &store.FindAttachment{MemoID: &parent.ID})

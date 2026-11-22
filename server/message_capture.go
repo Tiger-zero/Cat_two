@@ -7,89 +7,196 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"time"
 
+	"github.com/usememos/memos/core/messagecapture"
 	"github.com/usememos/memos/server/inbox"
 )
 
 const weComCallbackPath = "/integrations/wecom"
 
-func (s *Server) configureMessageCapture(mux *http.ServeMux) {
-	callback := http.NotFoundHandler()
-	if s.Profile.Personal && !s.Profile.Demo {
-		s.configureTelegramCapture()
-		callback = s.weComCaptureHandler()
-	}
+type messageCapture struct {
+	mu            sync.Mutex
+	repository    *messagecapture.Repository
+	fallback      messagecapture.Configuration
+	configuration messagecapture.Configuration
+	network       messagecapture.NetworkConfiguration
+	saveMemo      func(context.Context, string, string, string) error
+	runTelegram   func(context.Context, string, int64, string, func(context.Context, string, string) error)
 
-	// WeCom authenticates the request with its own signature and encryption.
-	// This endpoint receives messages and offers no access to the note API.
-	mux.HandleFunc(weComCallbackPath, func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Cache-Control", "no-store")
-		deadline := time.Now().Add(5 * time.Second)
-		// Keep the deadline through net/http's response finalization, which
-		// can drain the unread body of an early rejection.
-		_ = http.NewResponseController(w).SetReadDeadline(deadline)
-		ctx, cancel := context.WithDeadline(r.Context(), deadline)
-		defer cancel()
-		callback.ServeHTTP(w, r.WithContext(ctx))
-	})
+	lifecycle      context.Context
+	telegramCancel context.CancelFunc
+	telegramDone   chan struct{}
+	weComCallback  atomic.Pointer[http.Handler]
 }
 
-func (s *Server) configureTelegramCapture() {
-	token := captureEnv("CAT_TWO_TELEGRAM_BOT_TOKEN")
-	sender := captureEnv("CAT_TWO_TELEGRAM_USER_ID")
-	if token == "" && sender == "" {
+func (s *Server) configureMessageCapture(ctx context.Context, mux *http.ServeMux) error {
+	capture := &messageCapture{
+		saveMemo:    s.apiService.CaptureMemo,
+		runTelegram: inbox.RunTelegram,
+	}
+	if s.Profile.Personal && !s.Profile.Demo {
+		capture.repository = messagecapture.NewRepository(s.Store, s.Secret)
+		capture.fallback = messagecapture.FromEnvironment(os.Getenv)
+		configuration, err := capture.repository.Load(ctx, capture.fallback)
+		if err != nil {
+			return err
+		}
+		network, err := capture.repository.LoadNetwork(ctx)
+		if err != nil {
+			return err
+		}
+		capture.configuration = configuration
+		capture.network = network
+		capture.setWeCom(configuration.WeCom)
+		if configuration.TelegramSource == messagecapture.SourceEnvironment && !configuration.Telegram.Enabled {
+			slog.Warn("Telegram capture disabled: configure a BotFather token and a positive Telegram user ID")
+		}
+		if configuration.WeComSource == messagecapture.SourceEnvironment && !configuration.WeCom.Enabled {
+			slog.Warn("WeCom capture disabled: invalid or incomplete callback configuration")
+		}
+		s.messageCapture = capture
+		s.apiService.NotificationSettings = capture
+		s.apiService.NetworkSettings = capture
+	}
+
+	// WeCom authenticates with its own signature and encryption.
+	mux.HandleFunc(weComCallbackPath, capture.serveWeCom)
+	return nil
+}
+
+func (c *messageCapture) GetConfiguration(_ context.Context) (messagecapture.Configuration, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.configuration, nil
+}
+
+func (c *messageCapture) UpdateConfiguration(ctx context.Context, update messagecapture.Update) (messagecapture.Configuration, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	next, err := c.repository.Save(ctx, c.fallback, update)
+	if err != nil {
+		return messagecapture.Configuration{}, err
+	}
+	if next.WeCom != c.configuration.WeCom {
+		c.setWeCom(next.WeCom)
+	}
+	if next.Telegram != c.configuration.Telegram {
+		c.restartTelegram(next.Telegram, telegramProxy(c.network))
+	}
+	c.configuration = next
+	return next, nil
+}
+
+func (c *messageCapture) GetNetworkConfiguration(_ context.Context) (messagecapture.NetworkConfiguration, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.network, nil
+}
+
+func (c *messageCapture) UpdateNetworkConfiguration(ctx context.Context, update messagecapture.NetworkUpdate) (messagecapture.NetworkConfiguration, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	next, err := c.repository.SaveNetwork(ctx, update)
+	if err != nil {
+		return messagecapture.NetworkConfiguration{}, err
+	}
+	if proxy := telegramProxy(next); proxy != telegramProxy(c.network) {
+		c.restartTelegram(c.configuration.Telegram, proxy)
+	}
+	c.network = next
+	return next, nil
+}
+
+func (c *messageCapture) start(ctx context.Context) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.lifecycle = ctx
+	c.restartTelegram(c.configuration.Telegram, telegramProxy(c.network))
+}
+
+func (c *messageCapture) stop() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.lifecycle = nil
+	c.stopTelegram()
+}
+
+// The caller holds mu. Waiting for the old poller prevents competing
+// getUpdates requests, including when only its proxy or sender changes.
+func (c *messageCapture) restartTelegram(setting messagecapture.Telegram, proxy string) {
+	c.stopTelegram()
+	if !setting.Enabled || c.lifecycle == nil || c.lifecycle.Err() != nil {
 		return
 	}
-	senderID, err := strconv.ParseInt(sender, 10, 64)
-	if err != nil || senderID <= 0 || !validTelegramToken(token) {
-		slog.Warn("Telegram capture disabled: configure a BotFather token and a positive Telegram user ID")
-		return
-	}
-	botID, _, _ := strings.Cut(token, ":")
-	s.receiveTelegram = func(ctx context.Context) {
-		inbox.RunTelegram(ctx, token, senderID, func(ctx context.Context, messageID, text string) error {
-			return s.apiService.CaptureMemo(ctx, "telegram", botID+"/"+messageID, text)
+	senderID, _ := strconv.ParseInt(setting.UserID, 10, 64)
+	botID, _, _ := strings.Cut(setting.BotToken, ":")
+	ctx, cancel := context.WithCancel(c.lifecycle)
+	done := make(chan struct{})
+	c.telegramCancel = cancel
+	c.telegramDone = done
+	go func() {
+		defer close(done)
+		c.runTelegram(ctx, setting.BotToken, senderID, proxy, func(ctx context.Context, messageID, text string) error {
+			return c.saveMemo(ctx, "telegram", botID+"/"+messageID, text)
 		})
-	}
+	}()
 	slog.Info("Telegram capture enabled")
 }
 
-func (s *Server) weComCaptureHandler() http.Handler {
-	corpID := captureEnv("CAT_TWO_WECOM_CORP_ID")
-	agent := captureEnv("CAT_TWO_WECOM_AGENT_ID")
-	token := captureEnv("CAT_TWO_WECOM_CALLBACK_TOKEN")
-	aesKey := captureEnv("CAT_TWO_WECOM_ENCODING_AES_KEY")
-	sender := captureEnv("CAT_TWO_WECOM_USER_ID")
-	if corpID == "" && agent == "" && token == "" && aesKey == "" && sender == "" {
-		return http.NotFoundHandler()
+func (c *messageCapture) stopTelegram() {
+	if c.telegramCancel != nil {
+		c.telegramCancel()
+		<-c.telegramDone
+		c.telegramCancel = nil
+		c.telegramDone = nil
 	}
-	agentID, err := strconv.ParseInt(agent, 10, 64)
-	if err != nil || agentID <= 0 || corpID == "" || token == "" || aesKey == "" || sender == "" {
-		slog.Warn("WeCom capture disabled: configure the corporate ID, agent ID, callback token, encoding AES key and user ID")
-		return http.NotFoundHandler()
+}
+
+func telegramProxy(network messagecapture.NetworkConfiguration) string {
+	if network.Source == "" {
+		return inbox.TelegramProxyFromEnvironment()
 	}
-	handler, err := inbox.NewWeCom(corpID, agentID, token, aesKey, sender, func(ctx context.Context, messageID, text string) error {
-		return s.apiService.CaptureMemo(ctx, "wechat", messageID, text)
+	if !network.Enabled {
+		return ""
+	}
+	return network.ProxyURL
+}
+
+func (c *messageCapture) setWeCom(setting messagecapture.WeCom) {
+	if !setting.Enabled {
+		c.weComCallback.Store(nil)
+		return
+	}
+	agentID, _ := strconv.ParseInt(setting.AgentID, 10, 64)
+	handler, err := inbox.NewWeCom(setting.CorpID, agentID, setting.CallbackToken, setting.EncodingAESKey, setting.UserID, func(ctx context.Context, messageID, text string) error {
+		return c.saveMemo(ctx, "wechat", messageID, text)
 	})
 	if err != nil {
+		c.weComCallback.Store(nil)
 		slog.Warn("WeCom capture disabled: invalid callback configuration")
-		return http.NotFoundHandler()
+		return
 	}
+	c.weComCallback.Store(&handler)
 	slog.Info("WeCom capture enabled", slog.String("callbackPath", weComCallbackPath))
-	return handler
 }
 
-func captureEnv(key string) string {
-	return strings.TrimSpace(os.Getenv(key))
-}
-
-func validTelegramToken(token string) bool {
-	bot, secret, ok := strings.Cut(token, ":")
-	botID, err := strconv.ParseUint(bot, 10, 64)
-	if !ok || err != nil || botID == 0 || secret == "" || len(token) > 128 {
-		return false
+func (c *messageCapture) serveWeCom(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "no-store")
+	deadline := time.Now().Add(5 * time.Second)
+	// Keep the deadline through net/http's response finalization, which
+	// can drain the unread body of an early rejection.
+	_ = http.NewResponseController(w).SetReadDeadline(deadline)
+	ctx, cancel := context.WithDeadline(r.Context(), deadline)
+	defer cancel()
+	callback := c.weComCallback.Load()
+	if callback == nil {
+		http.NotFound(w, r)
+		return
 	}
-	const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-"
-	return !strings.ContainsFunc(secret, func(r rune) bool { return !strings.ContainsRune(alphabet, r) })
+	(*callback).ServeHTTP(w, r.WithContext(ctx))
 }

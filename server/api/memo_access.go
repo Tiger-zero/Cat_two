@@ -175,6 +175,8 @@ func (s *APIService) memoWritePolicy(actorUserID int32, lifecycleOnly bool) *sto
 
 func mapMemoWriteError(err error, operation string) error {
 	switch {
+	case stderrors.Is(err, store.ErrMemoRevisionConflict):
+		return status.Error(codes.Aborted, "memo revision changed")
 	case stderrors.Is(err, store.ErrMemoMutationConflict):
 		return status.Errorf(codes.FailedPrecondition, "memo state changed: %v", err)
 	case stderrors.Is(err, store.ErrMemoSpaceNotWritable):

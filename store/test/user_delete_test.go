@@ -39,10 +39,10 @@ func TestDeleteUserBatchBoundariesAndRollback(t *testing.T) {
 			require.NoError(t, err)
 			keepMemo, err := ts.CreateMemo(ctx, &store.Memo{UID: "keep-memo", CreatorID: peer.ID, Content: "keep", Visibility: store.Public})
 			require.NoError(t, err)
-			keepMemo, err = ts.GetMemo(ctx, &store.FindMemo{ID: &keepMemo.ID})
-			require.NoError(t, err)
 			keepAttachment, err := ts.CreateAttachment(ctx, &store.Attachment{UID: "keep-attachment", CreatorID: peer.ID,
 				MemoID: &keepMemo.ID, Filename: "keep.txt", Type: "text/plain", Blob: []byte("keep")})
+			require.NoError(t, err)
+			keepMemo, err = ts.GetMemo(ctx, &store.FindMemo{ID: &keepMemo.ID})
 			require.NoError(t, err)
 			keepInbox, err := ts.CreateInbox(ctx, &store.Inbox{SenderID: peer.ID, ReceiverID: peer.ID, Status: store.UNREAD,
 				Message: &storepb.InboxMessage{Type: storepb.InboxMessage_MEMO_MENTION}})

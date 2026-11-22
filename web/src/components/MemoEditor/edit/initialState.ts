@@ -1,5 +1,5 @@
 import type { Memo } from "@/types/proto/api/memo_service_pb";
-import { draftCalendarDay, memoDraftRevision } from "./draftRevision";
+import { draftCalendarDay, matchesMemoDraftRevision } from "./draftRevision";
 import { cacheService } from "./services/cacheService";
 import { memoService } from "./services/memoService";
 import { createInitialState, type EditorState } from "./state/types";
@@ -11,6 +11,8 @@ export interface InitialEditorStateOptions {
   draftKey: string;
   defaultCreateTime?: Date;
   rawDraft?: string | null;
+  /** The user chose to review an older draft against the memo now on the server. */
+  reviewStaleDraft?: boolean;
 }
 
 /**
@@ -23,6 +25,7 @@ export function initialEditorState({
   draftKey,
   defaultCreateTime,
   rawDraft = cacheService.readRaw(draftKey),
+  reviewStaleDraft = false,
 }: InitialEditorStateOptions): EditorState {
   const base = {
     ...createInitialState(),
@@ -30,7 +33,7 @@ export function initialEditorState({
     calendarDefault: defaultCreateTime,
   };
   const draft = cacheService.loadDraft(draftKey, rawDraft);
-  if (memo && draft.baseRevision !== memoDraftRevision(memo)) {
+  if (memo && !matchesMemoDraftRevision(memo, draft.baseRevision) && !(reviewStaleDraft && draft.baseRevision)) {
     // Older versions never wrote an existing memo draft.
     if (draft.baseRevision === undefined && rawDraft !== null) cacheService.clear(draftKey, rawDraft);
     return base;

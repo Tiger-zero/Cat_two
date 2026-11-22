@@ -165,7 +165,6 @@ func generalSettingFromStore(setting *storepb.InstanceGeneralSetting) *apipb.Ins
 	generalSetting := &apipb.InstanceSetting_GeneralSetting{
 		DisallowUserRegistration: setting.DisallowUserRegistration,
 		DisallowPasswordAuth:     setting.DisallowPasswordAuth,
-		AdditionalScript:         setting.AdditionalScript,
 		AdditionalStyle:          setting.AdditionalStyle,
 		WeekStartDayOffset:       setting.WeekStartDayOffset,
 		DisallowChangeUsername:   setting.DisallowChangeUsername,
@@ -188,7 +187,6 @@ func generalSettingToStore(setting *apipb.InstanceSetting_GeneralSetting) *store
 	generalSetting := &storepb.InstanceGeneralSetting{
 		DisallowUserRegistration: setting.DisallowUserRegistration,
 		DisallowPasswordAuth:     setting.DisallowPasswordAuth,
-		AdditionalScript:         setting.AdditionalScript,
 		AdditionalStyle:          setting.AdditionalStyle,
 		WeekStartDayOffset:       setting.WeekStartDayOffset,
 		DisallowChangeUsername:   setting.DisallowChangeUsername,

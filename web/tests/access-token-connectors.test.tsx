@@ -86,18 +86,25 @@ describe("MCP and REST setup in access token settings", () => {
   });
 
   it.each([
-    { choice: "7 days", duration: "7d", expiry: "2026-11-28T16:00:00Z", shanghaiExpiry: "2026-11-29 00:00:00" },
-    { choice: "14 days", duration: "14d", expiry: "2026-12-05T16:00:00Z", shanghaiExpiry: "2026-12-06 00:00:00" },
-    { choice: "1 year", duration: "1y", expiry: "2027-11-21T16:00:00Z", shanghaiExpiry: "2027-11-22 00:00:00" },
-    { choice: "Permanent", duration: "permanent", expiry: null, shanghaiExpiry: null },
-  ])("creates a $choice credential and only shows it until the dialog closes", async ({ choice, duration, expiry, shanghaiExpiry }) => {
+    { choice: "7 days", duration: "7d", expiry: "2026-11-28T16:00:00Z", shanghaiExpiry: "2026-11-29 00:00:00", readOnly: false },
+    { choice: "14 days", duration: "14d", expiry: "2026-12-05T16:00:00Z", shanghaiExpiry: "2026-12-06 00:00:00", readOnly: true },
+    { choice: "1 year", duration: "1y", expiry: "2027-11-21T16:00:00Z", shanghaiExpiry: "2027-11-22 00:00:00", readOnly: false },
+    { choice: "Permanent", duration: "permanent", expiry: null, shanghaiExpiry: null, readOnly: false },
+  ])("creates a $choice credential and only shows it until the dialog closes", async ({
+    choice,
+    duration,
+    expiry,
+    shanghaiExpiry,
+    readOnly,
+  }) => {
     const token = "fixture-mcp-token";
-    const issuedConnection = { ...connection, expiresAt: expiry ? Date.parse(expiry) / 1_000 : 0 };
+    const permission = readOnly ? "read_only" : "read_write";
+    const issuedConnection = { ...connection, permission, expiresAt: expiry ? Date.parse(expiry) / 1_000 : 0 };
     let connections: (typeof connection)[] = [];
     authenticatedFetch.mockImplementation(async (url, init) => {
       expect(url).toBe(connectionsPath);
       if (init?.method === "POST") {
-        expect(JSON.parse(String(init.body))).toEqual({ label: connection.label, duration });
+        expect(JSON.parse(String(init.body))).toEqual({ label: connection.label, duration, permission });
         connections = [issuedConnection];
         return Response.json({ connection: issuedConnection, token }, { status: 201 });
       }
@@ -117,6 +124,13 @@ describe("MCP and REST setup in access token settings", () => {
       fireEvent.click(option);
       expect(option).toBeChecked();
     }
+    const accessGroup = within(createDialog.getByRole("radiogroup", { name: "Access" }));
+    expect(accessGroup.getByRole("radio", { name: "Read and write" })).toBeChecked();
+    if (readOnly) {
+      const option = accessGroup.getByRole("radio", { name: "Read only" });
+      fireEvent.click(option);
+      expect(option).toBeChecked();
+    }
     fireEvent.change(createDialog.getByRole("textbox", { name: "Connection name" }), { target: { value: connection.label } });
     fireEvent.click(createDialog.getByRole("button", { name: "Create" }));
 
@@ -129,6 +143,7 @@ describe("MCP and REST setup in access token settings", () => {
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
     expect(await screen.findByText(connection.label)).toBeVisible();
     expect(screen.getByText("Not connected yet")).toBeVisible();
+    expect(screen.getByText(readOnly ? "Read only" : "Read and write")).toBeVisible();
     const validity = shanghaiExpiry ? `Connection valid until ${shanghaiExpiry} (UTC+8)` : "Valid permanently";
     expect(screen.getByText(validity)).toBeVisible();
     expect(screen.queryByText(`Bearer ${token}`)).not.toBeInTheDocument();

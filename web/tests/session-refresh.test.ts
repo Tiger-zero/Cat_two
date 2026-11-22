@@ -31,6 +31,10 @@ function unauthorizedRefresh() {
   return Response.json({ code: "unauthenticated", message: "refresh revoked" }, { status: 401 });
 }
 
+function browserToken(sessionID: string, revision = 1) {
+  return `test.${btoa(JSON.stringify({ sid: sessionID, revision })).replace(/=+$/u, "")}.token`;
+}
+
 describe("rotation of the refresh cookie shared by tabs", () => {
   beforeEach(() => {
     localStorage.clear();
@@ -113,5 +117,75 @@ describe("rotation of the refresh cookie shared by tabs", () => {
     tab.setAccessToken("old-access-token", testTokenExpiry());
 
     await expect(tab.refreshAccessToken()).rejects.toMatchObject({ code: Code.Unauthenticated });
+  });
+
+  it("uses the existing cookie once when upgrading an unbound access token", async () => {
+    const tab = await openTab();
+    tab.setAccessToken("legacy-access-token", testTokenExpiry());
+    const upgraded = browserToken("migrated-session");
+    const fetch = vi.fn(async (input: URL | string, init: RequestInit) => {
+      const headers = new Headers(init.headers);
+      if (new URL(input).pathname === refreshPath) {
+        expect(headers.get("x-memos-session-id")).toBeNull();
+        return refreshResponse(upgraded);
+      }
+      if (headers.get("Authorization") === "Bearer legacy-access-token") return unauthorizedRefresh();
+      expect(headers.get("Authorization")).toBe(`Bearer ${upgraded}`);
+      return Response.json({ memos: [] });
+    });
+    vi.stubGlobal("fetch", fetch);
+
+    await expect(tab.authenticatedFetch("/api/trash")).resolves.toMatchObject({ status: 200 });
+    expect(tab.getAccessToken()).toBe(upgraded);
+    expect(fetch).toHaveBeenCalledTimes(3);
+  });
+
+  it("ends the same session in another tab and preserves a different session", async () => {
+    const first = await openTab();
+    const originalToken = browserToken("sign-out-target");
+    const otherToken = browserToken("other-session");
+    first.setAccessToken(originalToken, testTokenExpiry());
+    const peer = await openTab();
+    expect(peer.getAccessToken()).toBe(originalToken);
+    const peerEnded = vi.fn();
+    const unsubscribePeer = peer.onAccessSessionEnd(peerEnded);
+    const other = await openTab();
+    other.setAccessToken(otherToken, testTokenExpiry());
+    const otherEnded = vi.fn();
+    const unsubscribeOther = other.onAccessSessionEnd(otherEnded);
+
+    first.endAccessSession(originalToken);
+    window.dispatchEvent(new StorageEvent("storage", { key: "memos_signed_out_session", newValue: "sign-out-target" }));
+
+    expect(peerEnded).toHaveBeenCalledOnce();
+    expect(peer.getAccessToken()).toBeNull();
+    expect(otherEnded).not.toHaveBeenCalled();
+    expect(other.getAccessToken()).toBe(otherToken);
+    expect(localStorage.getItem("memos_access_token")).toBe(otherToken);
+    unsubscribePeer();
+    unsubscribeOther();
+  });
+
+  it("keeps a tab signed out if its in-flight refresh finishes after logout", async () => {
+    const tab = await openTab();
+    const originalToken = browserToken("interrupted-session");
+    tab.setAccessToken(originalToken, testTokenExpiry());
+    let completeRefresh!: (response: Response) => void;
+    const fetch = vi.fn(async (_input: string, init: RequestInit) => {
+      expect(new Headers(init.headers).get("x-memos-session-id")).toBe("interrupted-session");
+      return new Promise<Response>((resolve) => {
+        completeRefresh = resolve;
+      });
+    });
+    vi.stubGlobal("fetch", fetch);
+
+    const pending = tab.refreshAccessToken();
+    await vi.waitFor(() => expect(fetch).toHaveBeenCalledOnce());
+    tab.endAccessSession(originalToken);
+    completeRefresh(refreshResponse(browserToken("interrupted-session", 2)));
+
+    await expect(pending).rejects.toMatchObject({ code: Code.Unauthenticated });
+    expect(tab.getAccessToken()).toBeNull();
+    expect(localStorage.getItem("memos_access_token")).toBeNull();
   });
 });

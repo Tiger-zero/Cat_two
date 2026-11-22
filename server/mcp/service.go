@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"strconv"
-	"strings"
 	"time"
 
 	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
@@ -39,7 +38,7 @@ const toolCatalogTTL = 24 * time.Hour
 type MCPService struct {
 	profile *profile.Profile
 	store   *store.Store
-	// RateLimiter shares the API's request budget with reads served inside MCP.
+	// RateLimiter shares API request budgets and bounds MCP transport requests.
 	RateLimiter ratelimit.Limiter
 
 	operationsByTool map[string]*registeredOperation
@@ -47,13 +46,11 @@ type MCPService struct {
 	requestBodyLimit int64
 }
 
-type connectionUserIDContextKey struct{}
-
-// NewMCPService creates an MCP service backed by the in-process API routes.
-func NewMCPService(profile *profile.Profile, handler http.Handler, db *store.Store) (*MCPService, error) {
+// NewMCPService connects personal tools to the typed API service.
+func NewMCPService(profile *profile.Profile, handler http.Handler, apiService *api.APIService) (*MCPService, error) {
 	personal := profile != nil && profile.Personal
-	if personal && db == nil {
-		return nil, errors.New("MCP connection authentication requires a store")
+	if personal && (apiService == nil || apiService.Store == nil) {
+		return nil, errors.New("MCP connection authentication requires the API service and store")
 	}
 	spec, err := loadMCPServiceOpenAPISpec()
 	if err != nil {
@@ -86,27 +83,31 @@ func NewMCPService(profile *profile.Profile, handler http.Handler, db *store.Sto
 	})
 	server.AddReceivingMiddleware(catalogCacheMiddleware)
 
-	adapter := newAPIAdapter(handler)
+	var execute toolExecutor = newAPIAdapter(handler).execute
+	if personal {
+		execute = personalAPI{service: apiService, marshaler: api.NewJSONMarshaler()}.execute
+	}
 	for _, tool := range tools {
 		operation := operationsByTool[tool.Name]
 		if personal && !isPersonalMCPOperation(operation.OperationID) {
 			delete(operationsByTool, tool.Name)
 			continue
 		}
-		server.AddTool(tool, newMCPToolHandler(adapter, operation))
+		server.AddTool(tool, newMCPToolHandler(execute, operation))
 	}
 	service := &MCPService{
 		profile:          profile,
-		store:            db,
 		operationsByTool: operationsByTool,
 		requestBodyLimit: maxMCPRequestBytes,
 	}
 	if personal {
+		service.store = apiService.Store
+		service.RateLimiter = apiService.RateLimiter
 		service.requestBodyLimit = maxPersonalMCPRequestBytes
-		registerPersonalMemoSearch(server, adapter, operationsByTool["memo_list_memos"])
-		registerPersonalMemoBatchGet(server, db)
-		registerPersonalTagTools(server, db)
-		server.AddReceivingMiddleware(service.limitPersonalReads)
+		registerPersonalMemoSearch(server, execute, operationsByTool["memo_list_memos"])
+		registerPersonalMemoBatchGet(server, apiService)
+		registerPersonalTagTools(server, apiService)
+		server.AddReceivingMiddleware(service.authorizePersonalTools)
 	}
 
 	streamableHandler := sdkmcp.NewStreamableHTTPHandler(func(*http.Request) *sdkmcp.Server {
@@ -136,29 +137,6 @@ func isPersonalMCPOperation(id string) bool {
 		return true
 	default:
 		return false
-	}
-}
-
-func (s *MCPService) limitPersonalReads(next sdkmcp.MethodHandler) sdkmcp.MethodHandler {
-	return func(ctx context.Context, method string, request sdkmcp.Request) (sdkmcp.Result, error) {
-		call, ok := request.(*sdkmcp.CallToolRequest)
-		if s.RateLimiter == nil || !ok || call.Params == nil {
-			return next(ctx, method, request)
-		}
-		// Search and the existing tools use the API handler's own limiter.
-		switch call.Params.Name {
-		case "memo_batch_get", "tag_tree", "tag_search":
-		default:
-			return next(ctx, method, request)
-		}
-		userID, ok := ctx.Value(connectionUserIDContextKey{}).(int32)
-		if !ok || userID <= 0 {
-			return newToolErrorResult("MCP connection authentication required"), nil
-		}
-		if !s.RateLimiter.Consume(ratelimit.ScopeAuthenticated, strconv.FormatInt(int64(userID), 10), 1).Allowed {
-			return newToolErrorResult("MCP request rate limit exceeded"), nil
-		}
-		return next(ctx, method, request)
 	}
 }
 
@@ -193,7 +171,7 @@ func loadMCPServiceOpenAPISpec() (*openAPISpec, error) {
 	return spec, nil
 }
 
-func newMCPToolHandler(adapter *apiAdapter, operation *registeredOperation) sdkmcp.ToolHandler {
+func newMCPToolHandler(execute toolExecutor, operation *registeredOperation) sdkmcp.ToolHandler {
 	return func(ctx context.Context, request *sdkmcp.CallToolRequest) (*sdkmcp.CallToolResult, error) {
 		arguments := map[string]any{}
 		if request.Params != nil && len(request.Params.Arguments) > 0 {
@@ -209,11 +187,7 @@ func newMCPToolHandler(adapter *apiAdapter, operation *registeredOperation) sdkm
 		if request.Extra != nil {
 			authorization = request.Extra.Header.Get("Authorization")
 		}
-		if userID, ok := ctx.Value(connectionUserIDContextKey{}).(int32); ok {
-			procedure := "/memos.api." + strings.Replace(operation.OperationID, "_", "/", 1)
-			ctx = api.WithMCPRequest(ctx, userID, procedure)
-		}
-		return adapter.execute(ctx, operation.Operation, arguments, authorization)
+		return execute(ctx, operation.Operation, arguments, authorization)
 	}
 }
 
@@ -240,8 +214,17 @@ func (s *MCPService) RegisterRoutes(mux *http.ServeMux) {
 func (s *MCPService) servePersonal(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
 	ctx := r.Context()
+	remoteIP := clientip.FromContext(ctx)
+	if s.RateLimiter != nil {
+		if decision := s.RateLimiter.Consume(ratelimit.ScopeMCPIP, remoteIP, 1); !decision.Allowed {
+			seconds := max(1, int((decision.RetryAfter+time.Second-1)/time.Second))
+			w.Header().Set("Retry-After", strconv.Itoa(seconds))
+			httphandler.WriteError(w, r, &httphandler.Error{Code: http.StatusTooManyRequests, Message: "MCP request rate limit exceeded"})
+			return
+		}
+	}
 	token := auth.ExtractBearerToken(r.Header.Get("Authorization"))
-	userID, err := mcpconnection.Authenticate(ctx, s.store, token, clientip.FromContext(ctx), r.Method == http.MethodPost, time.Now())
+	connection, err := mcpconnection.Authenticate(ctx, s.store, token, remoteIP, r.Method == http.MethodPost, time.Now())
 	if err != nil {
 		var response *httphandler.Error
 		switch {
@@ -256,7 +239,9 @@ func (s *MCPService) servePersonal(w http.ResponseWriter, r *http.Request) {
 		httphandler.WriteError(w, r, response)
 		return
 	}
-	r = r.Clone(context.WithValue(ctx, connectionUserIDContextKey{}, userID))
+	ctx = auth.SetUserInContext(ctx, &store.User{ID: connection.UserID}, "")
+	ctx = context.WithValue(ctx, connectionPermissionContextKey{}, connection.Permission)
+	r = r.Clone(ctx)
 	r.Header.Del("Authorization")
 	s.handler.ServeHTTP(w, r)
 }

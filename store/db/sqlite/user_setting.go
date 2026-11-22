@@ -26,6 +26,21 @@ func (d *DB) UpsertUserSetting(ctx context.Context, upsert *store.UserSetting) (
 	return upsert, nil
 }
 
+func (d *DB) CompareAndSetUserSetting(ctx context.Context, setting *store.UserSetting, previous *string) (bool, error) {
+	command := "INSERT INTO user_setting (user_id, key, value) VALUES (?, ?, ?) ON CONFLICT(user_id, key) DO NOTHING"
+	args := []any{setting.UserID, setting.Key.String(), setting.Value}
+	if previous != nil {
+		command = "UPDATE user_setting SET value = ? WHERE user_id = ? AND key = ? AND value = ?"
+		args = []any{setting.Value, setting.UserID, setting.Key.String(), *previous}
+	}
+	result, err := d.db.ExecContext(ctx, command, args...)
+	if err != nil {
+		return false, err
+	}
+	count, err := result.RowsAffected()
+	return count == 1, err
+}
+
 func (d *DB) ListUserSettings(ctx context.Context, find *store.FindUserSetting) ([]*store.UserSetting, error) {
 	where, args := []string{"1 = 1"}, []any{}
 

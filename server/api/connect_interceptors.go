@@ -55,6 +55,9 @@ func (*MetadataInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc 
 		if cookie := header.Get("Cookie"); cookie != "" {
 			md.Set("cookie", cookie)
 		}
+		if sessionID := header.Get(refreshSessionIDHeader); sessionID != "" {
+			md.Set(refreshSessionIDHeader, sessionID)
+		}
 		if token := header.Get(challengeTokenHeader); token != "" {
 			md.Set(challengeTokenMetadataKey, token)
 		}

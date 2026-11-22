@@ -2,10 +2,13 @@ package api
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"strings"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
 
 	"github.com/usememos/memos/core/memopayload"
 	apipb "github.com/usememos/memos/proto/gen/api"
@@ -17,9 +20,91 @@ func mapMemoCreateError(err error, uid, operation string) error {
 	if strings.Contains(errMessage, "UNIQUE constraint failed") ||
 		strings.Contains(errMessage, "duplicate key") ||
 		strings.Contains(errMessage, "Duplicate entry") {
-		return status.Errorf(codes.AlreadyExists, "memo with ID %q already exists", uid)
+		return memoAlreadyExists(uid)
 	}
 	return mapMemoWriteError(err, operation)
+}
+
+func memoAlreadyExists(uid string) error {
+	return status.Errorf(codes.AlreadyExists, "memo with ID %q already exists", uid)
+}
+
+// memoCreationDigest fingerprints the original request independently of the
+// Markdown and attachment state later used to prepare the write. A replay
+// still matches after that state changes, such as an attachment being bound.
+func memoCreationDigest(uid string, idempotent bool, request proto.Message) (string, error) {
+	if !idempotent {
+		return "", nil
+	}
+	if strings.TrimSpace(uid) == "" {
+		return "", status.Error(codes.InvalidArgument, "idempotent creation requires an explicit ID")
+	}
+	encoded, err := (proto.MarshalOptions{Deterministic: true}).Marshal(request)
+	if err != nil {
+		return "", status.Error(codes.InvalidArgument, "invalid memo creation request")
+	}
+	// Include the RPC request type, so a comment and a top-level memo cannot
+	// claim the same operation even if their wire representations overlap.
+	name := request.ProtoReflect().Descriptor().FullName()
+	digest := sha256.New()
+	_, _ = digest.Write([]byte(string(name) + "\x00"))
+	_, _ = digest.Write(encoded)
+	return hex.EncodeToString(digest.Sum(nil)), nil
+}
+
+func (s *APIService) replayMemoCreation(ctx context.Context, userID int32, uid, digest string) (*apipb.Memo, error) {
+	if digest == "" {
+		return nil, nil
+	}
+	existing, err := s.Store.GetMemo(ctx, &store.FindMemo{UID: &uid, ExcludeContent: true, Trash: store.MemoTrashInclude})
+	if err != nil {
+		return nil, status.Error(codes.Internal, "failed to look up memo creation result")
+	}
+	if existing == nil {
+		return nil, nil
+	}
+	if existing.CreatorID != userID || existing.CreationRequestDigest != digest || existing.DeletedTs != nil {
+		return nil, memoAlreadyExists(uid)
+	}
+	memo, err := s.Store.GetMemo(ctx, &store.FindMemo{ID: &existing.ID})
+	if err != nil {
+		return nil, status.Error(codes.Internal, "failed to load memo creation result")
+	}
+	if memo == nil {
+		return nil, status.Error(codes.NotFound, "memo not found")
+	}
+	return s.readMemoResponse(ctx, memo)
+}
+
+// saveNewMemo either commits the memo with its initial attachments and
+// relations, or returns the resource produced by an exact prior request.
+func (s *APIService) saveNewMemo(ctx context.Context, user *store.User, input *apipb.Memo, uid, digest string, parent *store.Memo) (*store.Memo, *apipb.Memo, error) {
+	if replay, err := s.replayMemoCreation(ctx, user.ID, uid, digest); replay != nil || err != nil {
+		return nil, replay, err
+	}
+	var parentID *int32
+	if parent != nil {
+		if parent.RowStatus != store.Normal {
+			return nil, nil, status.Error(codes.FailedPrecondition, "cannot comment on an archived memo")
+		}
+		parentID = &parent.ID
+	}
+	prepared, err := s.prepareMemoCreate(ctx, user, input, uid)
+	if err == nil {
+		prepared.memo.CreationRequestDigest = digest
+		err = s.createMemoWithMutation(ctx, user, prepared.memo, parentID, prepared.attachments, prepared.requiredAttachmentIDs, prepared.referenceRelations, false)
+		if err == nil {
+			s.SSEHub.publishMemoChanged()
+			return prepared.memo, nil, nil
+		}
+		err = mapMemoCreateError(err, uid, "failed to create memo")
+	}
+	// A concurrent request may have committed since the first lookup. It
+	// could have claimed the same attachments before we even got to insert.
+	if replay, replayErr := s.replayMemoCreation(ctx, user.ID, uid, digest); replay != nil || replayErr != nil {
+		return nil, replay, replayErr
+	}
+	return nil, nil, err
 }
 
 type preparedMemoCreate struct {

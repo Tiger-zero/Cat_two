@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	apipb "github.com/usememos/memos/proto/gen/api"
+	storepb "github.com/usememos/memos/proto/gen/store"
 	"github.com/usememos/memos/server/api"
 	"github.com/usememos/memos/server/auth"
 )
@@ -115,6 +116,42 @@ func TestSSEHandler_Authentication(t *testing.T) {
 		line, err = reader.ReadString('\n')
 		require.NoError(t, err)
 		require.Equal(t, "\n", line)
+	})
+
+	t.Run("revoked session stops streaming before the next event", func(t *testing.T) {
+		const sessionID = "sse-session"
+		require.NoError(t, ts.Store.AddUserRefreshToken(ctx, user.ID, &storepb.RefreshTokensUserSetting_RefreshToken{
+			TokenId: "refresh-credential", SessionId: sessionID,
+		}))
+		token, _, err := auth.GenerateSessionAccessToken(user, sessionID, "", []byte(ts.Secret))
+		require.NoError(t, err)
+		server := httptest.NewTestServer(t, e)
+		client := server.Client()
+		requestCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+		defer cancel()
+		req, err := http.NewRequestWithContext(requestCtx, http.MethodGet, server.URL+"/api/sse", nil)
+		require.NoError(t, err)
+		req.Header.Set("Authorization", "Bearer "+token)
+		resp, err := client.Do(req)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+		require.Equal(t, http.StatusOK, resp.StatusCode)
+		reader := bufio.NewReader(resp.Body)
+		line, err := reader.ReadString('\n')
+		require.NoError(t, err)
+		require.Equal(t, ": connected\n", line)
+		line, err = reader.ReadString('\n')
+		require.NoError(t, err)
+		require.Equal(t, "\n", line)
+
+		require.NoError(t, ts.Store.RemoveUserRefreshToken(ctx, user.ID, sessionID))
+		_, err = ts.Service.CreateMemo(ts.CreateUserContext(ctx, user.ID), &apipb.CreateMemoRequest{
+			MemoId: "after-sign-out", Memo: &apipb.Memo{Content: "saved after sign-out"},
+		})
+		require.NoError(t, err)
+		line, err = reader.ReadString('\n')
+		require.ErrorIs(t, err, io.EOF)
+		require.Empty(t, line)
 	})
 
 	t.Run("hub close disconnects stream", func(t *testing.T) {

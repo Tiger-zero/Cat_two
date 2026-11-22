@@ -135,10 +135,6 @@ func (s *APIService) finishAttachmentReplace(ctx context.Context, upload *attach
 	if err != nil {
 		return nil, err
 	}
-	setting, err := s.Store.GetInstanceStorageSetting(ctx)
-	if err != nil {
-		return nil, status.Errorf(codes.Internal, "failed to get storage setting: %v", err)
-	}
 	file, err := os.Open(upload.path)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to open upload file: %v", err)
@@ -150,8 +146,6 @@ func (s *APIService) finishAttachmentReplace(ctx context.Context, upload *attach
 		return nil, status.Errorf(codes.Internal, "failed to read attachment header: %v", err)
 	}
 	// Validate the filename, type and media metadata with the actual MIME type.
-	// The prepared attachment carries a fresh UID, which names the new storage
-	// object apart from the one it replaces until the row points at it.
 	content, err := s.prepareAttachment(ctx, &apipb.CreateAttachmentRequest{Attachment: metadata})
 	if err != nil {
 		return nil, err
@@ -160,7 +154,7 @@ func (s *APIService) finishAttachmentReplace(ctx context.Context, upload *attach
 	upload.state.finalizeAttempted = true
 	// A replacement is never part of a motion photo: a motion JPEG is stored as
 	// a plain, EXIF-stripped image.
-	if err := s.processAndStoreContent(ctx, content, setting, file, replaced.ID); err != nil {
+	if err := s.processAndStoreContent(ctx, content, file, true); err != nil {
 		return nil, err
 	}
 	// From here the new object is the attachment's, under the replaced UID.
@@ -168,7 +162,7 @@ func (s *APIService) finishAttachmentReplace(ctx context.Context, upload *attach
 	// discardContent removes the new object when no row points at it. It checks
 	// the row first, so an update that committed before failing keeps its object.
 	discardContent := func(reason string) {
-		if _, err := cleanupSavedAttachmentBlob(ctx, s.Store, content, setting); err != nil {
+		if _, err := cleanupSavedAttachmentFile(ctx, s.Store, content); err != nil {
 			slog.Error("failed to remove replacement content "+reason,
 				slog.String("attachment_uid", replaced.UID),
 				slog.Any("error", err),
@@ -192,7 +186,6 @@ func (s *APIService) finishAttachmentReplace(ctx context.Context, upload *attach
 			Size:        content.Size,
 			StorageType: content.StorageType,
 			Reference:   content.Reference,
-			Blob:        content.Blob,
 		},
 		Policy: s.memoWritePolicy(user.ID, false),
 	}); err != nil {
@@ -220,7 +213,7 @@ func (s *APIService) finishAttachmentReplace(ctx context.Context, upload *attach
 	}
 	if hasSameManagedStorageObject(s.Store.GetDataDir(), replaced, updated) {
 		s.Store.DeleteAttachmentDerivedCaches(replaced)
-	} else if err := s.Store.DeleteAttachmentStorageWithInstanceSetting(ctx, replaced, setting); err != nil {
+	} else if err := s.Store.DeleteAttachmentStorage(ctx, replaced); err != nil {
 		// The attachment is consistent; the previous file is only orphaned.
 		slog.Warn("failed to delete replaced attachment content",
 			slog.String("attachment_uid", replaced.UID),
@@ -256,11 +249,7 @@ func (s *APIService) deleteReplacedContent(ctx context.Context, leftover *store.
 	if current == nil || hasSameManagedStorageObject(s.Store.GetDataDir(), current, leftover) {
 		return true
 	}
-	setting, err := s.Store.GetInstanceStorageSetting(ctx)
-	if err != nil {
-		return logFailure("failed to get storage setting before deleting replaced content", err)
-	}
-	if err := s.Store.DeleteAttachmentStorageWithInstanceSetting(ctx, leftover, setting); err != nil {
+	if err := s.Store.DeleteAttachmentStorage(ctx, leftover); err != nil {
 		return logFailure("failed to delete replaced attachment content", err)
 	}
 	return true

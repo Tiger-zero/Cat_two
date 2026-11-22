@@ -41,6 +41,8 @@ export const EditSession: React.FC<EditSessionProps> = ({
   className,
   draftKey,
   initialDraftRaw,
+  reviewDraftRevision,
+  onReviewDraft,
   frameless,
   expandOnFocus,
   timestampLead,
@@ -95,27 +97,49 @@ export const EditSession: React.FC<EditSessionProps> = ({
   const reportDraftStorageError = useCallback(() => showErrorToast(t("editor.draft.storage-failed")), [t]);
   const {
     discardDraft: discardText,
+    flushDraft,
     getBaseRevision,
+    getFilesRevision,
+    getCreateAttempt,
+    recordCreateAttempt,
     rebaseDraft,
-  } = useAutoSave(draftKey, isInitialized, memo, reportDraftStorageError, initialDraftRaw);
+  } = useAutoSave(draftKey, isInitialized, memo, reportDraftStorageError, initialDraftRaw, reviewDraftRevision);
+  const hasEditConflict = useRef(false);
+  const staleDraftToast = useRef<string | undefined>(undefined);
   const warnedAboutStaleDraft = useRef(false);
-  const notifyStaleDraft = useCallback(() => {
-    if (warnedAboutStaleDraft.current) return;
-    warnedAboutStaleDraft.current = true;
-    const stored = cacheService.loadDraft(draftKey);
-    const canCopy = stored.content && stored.baseRevision !== getBaseRevision();
-    toast.add({
-      title: t("editor.draft.outdated"),
-      type: "warning",
-      timeout: 0,
-      actionProps: canCopy ? { children: t("editor.draft.copy-text"), onClick: () => copy(stored.content) } : undefined,
-    });
-  }, [draftKey, getBaseRevision, t]);
+  const notifyStaleDraft = useCallback(
+    (filesRevision?: string) => {
+      if (warnedAboutStaleDraft.current) return;
+      warnedAboutStaleDraft.current = true;
+      const stored = cacheService.loadDraft(draftKey);
+      const canCopy = stored.content && stored.baseRevision !== getBaseRevision();
+      const reviewRevision = filesRevision ?? stored.stagedFilesRevision ?? stored.baseRevision;
+      const actionProps =
+        reviewRevision && onReviewDraft
+          ? { children: t("editor.draft.review"), onClick: () => onReviewDraft(reviewRevision) }
+          : canCopy
+            ? { children: t("editor.draft.copy-text"), onClick: () => copy(stored.content) }
+            : undefined;
+      staleDraftToast.current = toast.add({
+        title: t(hasEditConflict.current ? "editor.draft.conflict" : "editor.draft.outdated"),
+        type: "warning",
+        timeout: 0,
+        actionProps,
+      });
+    },
+    [draftKey, getBaseRevision, onReviewDraft, t],
+  );
+  useEffect(
+    () => () => {
+      if (staleDraftToast.current) toast.close(staleDraftToast.current);
+    },
+    [],
+  );
 
   const discardFiles = useStagedDraftFiles({
     key: draftKey,
     enabled: isInitialized,
-    getBaseRevision,
+    getBaseRevision: getFilesRevision,
     createBlobUrl,
     onStorageError: reportDraftStorageError,
     onStaleDraft: notifyStaleDraft,
@@ -127,8 +151,8 @@ export const EditSession: React.FC<EditSessionProps> = ({
   useEffect(() => {
     const baseRevision = getBaseRevision();
     const stored = cacheService.loadDraft(draftKey);
-    if (baseRevision && stored.baseRevision && stored.baseRevision !== baseRevision) notifyStaleDraft();
-  }, [draftKey, getBaseRevision, notifyStaleDraft]);
+    if (!reviewDraftRevision && baseRevision && stored.baseRevision && stored.baseRevision !== baseRevision) notifyStaleDraft();
+  }, [draftKey, getBaseRevision, notifyStaleDraft, reviewDraftRevision]);
 
   const { containerRef: editorContainerRef, placeholderHeight, animateFocusMode } = useFocusMode(isFocusMode);
   useEffect(() => {
@@ -230,10 +254,20 @@ export const EditSession: React.FC<EditSessionProps> = ({
   };
 
   const handleCancel = useCallback(async () => {
-    if (memoName) await discardDraft();
-    else rememberCursor();
+    if (memoName) {
+      if (hasEditConflict.current || reviewDraftRevision) {
+        if (!flushDraft()) return;
+      } else {
+        await discardDraft();
+      }
+    } else rememberCursor();
     onCancel?.();
-  }, [discardDraft, memoName, onCancel, rememberCursor]);
+  }, [discardDraft, flushDraft, memoName, onCancel, rememberCursor, reviewDraftRevision]);
+
+  const handleEditConflict = useCallback(() => {
+    hasEditConflict.current = true;
+    notifyStaleDraft();
+  }, [notifyStaleDraft]);
 
   const handleStartAudioRecording = async () => {
     setIsAudioRecorderOpen(true);
@@ -289,7 +323,11 @@ export const EditSession: React.FC<EditSessionProps> = ({
     parentMemoName,
     defaultCreateTime,
     discardDraft,
+    flushDraft,
     getBaseRevision,
+    getCreateAttempt,
+    recordCreateAttempt,
+    onEditConflict: handleEditConflict,
     rebaseDraft,
     onConfirm,
     onCancel: onCancel ? handleCancel : undefined,

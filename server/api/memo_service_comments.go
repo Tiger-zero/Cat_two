@@ -43,13 +43,17 @@ func (s *APIService) CreateMemoComment(ctx context.Context, request *apipb.Creat
 	if err := s.checkMemoReadAccess(ctx, relatedMemo); err != nil {
 		return nil, err
 	}
-	if relatedMemo.RowStatus != store.Normal {
+	if !request.Idempotent && relatedMemo.RowStatus != store.Normal {
 		return nil, status.Errorf(codes.FailedPrecondition, "cannot comment on an archived memo")
 	}
 	if request.Comment == nil {
 		return nil, status.Errorf(codes.InvalidArgument, "comment is required")
 	}
 
+	digest, err := memoCreationDigest(request.CommentId, request.Idempotent, request)
+	if err != nil {
+		return nil, err
+	}
 	memoUID, err = ValidateAndGenerateUID(request.CommentId)
 	if err != nil {
 		return nil, err
@@ -57,14 +61,10 @@ func (s *APIService) CreateMemoComment(ctx context.Context, request *apipb.Creat
 	if memoUID == relatedMemo.UID {
 		return nil, status.Error(codes.InvalidArgument, "a memo cannot comment on itself")
 	}
-	prepared, err := s.prepareMemoCreate(ctx, user, request.Comment, memoUID)
-	if err != nil {
-		return nil, err
+	memo, replay, err := s.saveNewMemo(ctx, user, request.Comment, memoUID, digest, relatedMemo)
+	if replay != nil || err != nil {
+		return replay, err
 	}
-	if err := s.createMemoWithMutation(ctx, user, prepared.memo, &relatedMemo.ID, prepared.attachments, prepared.requiredAttachmentIDs, prepared.referenceRelations, false); err != nil {
-		return nil, mapMemoCreateError(err, memoUID, "failed to create memo comment")
-	}
-	memo := prepared.memo
 	attachments, err := s.Store.ListAttachments(ctx, &store.FindAttachment{MemoID: &memo.ID})
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to load memo comment attachments")
@@ -85,8 +85,6 @@ func (s *APIService) CreateMemoComment(ctx context.Context, request *apipb.Creat
 	}
 
 	s.dispatchMemoMentionNotificationsBestEffort(ctx, memo, relatedMemo, "")
-
-	s.SSEHub.publishMemoChanged()
 
 	return memoComment, nil
 }

@@ -22,6 +22,8 @@ type apiAdapter struct {
 	handler http.Handler
 }
 
+type toolExecutor func(context.Context, *openAPIOperation, map[string]any, string) (*sdkmcp.CallToolResult, error)
+
 func newAPIAdapter(handler http.Handler) *apiAdapter {
 	return &apiAdapter{handler: handler}
 }
@@ -51,18 +53,7 @@ func buildAPIRequest(ctx context.Context, operation *openAPIOperation, arguments
 		return nil, err
 	}
 
-	query := url.Values{}
-	for _, parameter := range operation.Parameters {
-		if parameter.In != "query" {
-			continue
-		}
-		value, ok := arguments[parameter.Name]
-		if !ok || value == nil {
-			continue
-		}
-		query.Set(parameter.Name, valueToString(value))
-	}
-	if encoded := query.Encode(); encoded != "" {
+	if encoded := operationQuery(operation, arguments).Encode(); encoded != "" {
 		path += "?" + encoded
 	}
 
@@ -102,6 +93,16 @@ func buildAPIRequest(ctx context.Context, operation *openAPIOperation, arguments
 		req.Header.Set("Authorization", authorization)
 	}
 	return req, nil
+}
+
+func operationQuery(operation *openAPIOperation, arguments map[string]any) url.Values {
+	query := url.Values{}
+	for _, parameter := range operation.Parameters {
+		if parameter.In == "query" && arguments[parameter.Name] != nil {
+			query.Set(parameter.Name, valueToString(arguments[parameter.Name]))
+		}
+	}
+	return query
 }
 
 func substitutePathParameters(operation *openAPIOperation, arguments map[string]any) (string, error) {

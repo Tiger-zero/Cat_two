@@ -155,6 +155,10 @@ func runServer() error {
 	if err := storeInstance.Migrate(ctx); err != nil {
 		return errors.Wrap(err, "failed to migrate database")
 	}
+	// Legacy S3 attachments need the storage configuration already in the database.
+	if err := storeInstance.MigrateLocalAttachments(ctx); err != nil {
+		return errors.Wrap(err, "failed to migrate attachments to local storage")
+	}
 	if err := applyConfigurationAtStartup(ctx, storeInstance); err != nil {
 		return errors.Wrap(err, "failed to apply the declarative configuration")
 	}
@@ -166,6 +170,9 @@ func runServer() error {
 		if err := storeInstance.Seed(ctx); err != nil {
 			return errors.Wrap(err, "failed to seed the demo content")
 		}
+	}
+	if err := storeInstance.MigrateMemoBodies(ctx); err != nil {
+		return errors.Wrap(err, "failed to migrate Markdown files to local storage")
 	}
 	accessSetting, err := storeInstance.GetInstanceAccessSetting(ctx)
 	if err != nil {

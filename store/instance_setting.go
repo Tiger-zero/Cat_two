@@ -303,8 +303,9 @@ func (s *Store) GetInstanceAISetting(ctx context.Context) (*storepb.InstanceAISe
 }
 
 const (
-	defaultInstanceStorageType      = storepb.InstanceStorageSetting_LOCAL
-	defaultInstanceFilepathTemplate = "assets/{timestamp}_{uuid}_{filename}"
+	defaultInstanceStorageType = storepb.InstanceStorageSetting_LOCAL
+	// DefaultAttachmentPathTemplate is the managed local upload path relative to the data directory.
+	DefaultAttachmentPathTemplate = AttachmentDirectory + "/{timestamp}_{uuid}_{filename}"
 )
 
 func (s *Store) GetInstanceStorageSetting(ctx context.Context) (*storepb.InstanceStorageSetting, error) {
@@ -325,7 +326,7 @@ func (s *Store) GetInstanceStorageSetting(ctx context.Context) (*storepb.Instanc
 		instanceStorageSetting.StorageType = defaultInstanceStorageType
 	}
 	if instanceStorageSetting.FilepathTemplate == "" {
-		instanceStorageSetting.FilepathTemplate = defaultInstanceFilepathTemplate
+		instanceStorageSetting.FilepathTemplate = DefaultAttachmentPathTemplate
 	}
 	// Only write back when normalization changed the cached value; on the common
 	// path the cache already holds the normalized setting.

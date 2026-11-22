@@ -23,6 +23,8 @@ type Driver interface {
 	ListAttachments(ctx context.Context, find *FindAttachment) ([]*Attachment, error)
 	GetAttachmentStorageUsage(ctx context.Context, creatorID int32) (int64, error)
 	UpdateAttachment(ctx context.Context, update *UpdateAttachment) error
+	ListLegacyAttachmentIDs(ctx context.Context, afterID int32, limit int) (*sql.Rows, error)
+	LocalizeAttachment(ctx context.Context, original *Attachment, reference, payload string) (bool, error)
 	DeleteAttachment(ctx context.Context, delete *DeleteAttachment) error
 	DeleteAttachments(ctx context.Context, deletes []*DeleteAttachment) error
 	DeleteAttachmentsWithPolicy(ctx context.Context, policy *AttachmentDeletionPolicy, attachmentIDs []int32) error
@@ -31,7 +33,6 @@ type Driver interface {
 	ClaimMemoTrashAttachmentCleanup(ctx context.Context, attachmentID int32, nowTs, retryTs int64) (bool, error)
 	CompleteMemoTrashAttachmentCleanup(ctx context.Context, attachmentID int32, retryTs int64) error
 	ListLocalAttachmentStorageMatches(ctx context.Context, basename, suffixPattern string, replacingID int32, includePending bool) (*sql.Rows, error)
-	ListS3AttachmentStorageMatches(ctx context.Context, key string) ([]*Attachment, error)
 
 	// Memo model related methods.
 	CreateMemo(ctx context.Context, create *Memo) (*Memo, error)
@@ -98,6 +99,9 @@ type Driver interface {
 
 	// UserSetting model related methods.
 	UpsertUserSetting(ctx context.Context, upsert *UserSetting) (*UserSetting, error)
+	// CompareAndSetUserSetting writes a setting only if its value has not changed.
+	// A nil previous value matches an absent row.
+	CompareAndSetUserSetting(ctx context.Context, setting *UserSetting, previous *string) (bool, error)
 	ListUserSettings(ctx context.Context, find *FindUserSetting) ([]*UserSetting, error)
 	DeleteUserSettings(ctx context.Context, delete *DeleteUserSetting) error
 	// GetUserByPATHash returns the token matching tokenHash with its owner ID, or

@@ -23,6 +23,12 @@ var (
 	errReactionCreatorNotFound = stderrors.New("reaction creator not found")
 )
 
+// MemoRevision identifies one writable state of a memo. Its row identity
+// prevents a revision from matching a different memo that later reuses a UID.
+func MemoRevision(memo *store.Memo) string {
+	return fmt.Sprintf("%d:%d", memo.ID, memo.Revision)
+}
+
 func (s *APIService) convertMemoFromStore(ctx context.Context, memo *store.Memo, reactions []*store.Reaction, attachments []*store.Attachment, relations []*apipb.MemoRelation) (*apipb.Memo, error) {
 	creatorMap, err := s.listUsersByID(ctx, []int32{memo.CreatorID})
 	if err != nil {
@@ -51,6 +57,7 @@ func (s *APIService) convertMemoFromStoreWithCreators(ctx context.Context, memo 
 		Content:         memo.Content,
 		Visibility:      apipb.Visibility_PRIVATE,
 		Pinned:          memo.Pinned,
+		Revision:        MemoRevision(memo),
 	}
 	// An assigned memo needs a read context for its placement projection; an
 	// unassigned memo needs none.

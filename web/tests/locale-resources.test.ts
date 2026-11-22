@@ -167,10 +167,9 @@ describe("locale resources", () => {
       }
     });
 
-    it(`preserves literal input values in ${path}`, () => {
+    it(`preserves the ZIP format in import instructions in ${path}`, () => {
       const messages = flatten(module.default);
 
-      expect(messages["setting.storage.filepath-template-description"]).toContain("assets/{timestamp}_{uuid}_{filename}");
       expect(messages["setting.memo-export.import-detail"]).toMatch(/zip/i);
     });
   }

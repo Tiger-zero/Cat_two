@@ -2,7 +2,6 @@ package storage
 
 import (
 	"context"
-	"io"
 
 	"github.com/pkg/errors"
 
@@ -10,29 +9,15 @@ import (
 	"github.com/usememos/memos/provider/storage/s3"
 )
 
-// ErrRangeNotSatisfiable reports a ranged read whose byte range falls outside
-// the object, so HTTP handlers can answer 416 instead of 500.
-var ErrRangeNotSatisfiable = s3.ErrRangeNotSatisfiable
-
-// RangeNotSatisfiableError carries response metadata for an unsatisfied range.
-type RangeNotSatisfiableError = s3.RangeNotSatisfiableError
-
-// ObjectStream is object content with the metadata needed to answer HTTP
-// range requests. Aliased so driver consumers never import a concrete backend.
+// ObjectStream is the content and length of a legacy attachment object.
 type ObjectStream = s3.ObjectStream
 
-// Driver provides object operations for a configured attachment storage.
+// Driver reads complete objects for the attachment storage migration.
 type Driver interface {
-	UploadObject(ctx context.Context, key string, fileType string, content io.Reader) (string, error)
-	GetObject(ctx context.Context, key string) ([]byte, error)
-	// GetObjectStream streams an object; a non-empty byteRange is forwarded as
-	// an HTTP Range header and yields a partial object. byteRange must request at
-	// most one range because S3 does not support multipart range responses.
-	GetObjectStream(ctx context.Context, key string, byteRange string) (*ObjectStream, error)
-	DeleteObject(ctx context.Context, key string) error
+	GetObjectStream(ctx context.Context, key string) (*ObjectStream, error)
 }
 
-// NewDriver creates the driver for a configured storage.
+// NewDriver creates a read-only driver for a legacy object store.
 func NewDriver(ctx context.Context, configuredStorage *storepb.Storage) (Driver, error) {
 	if configuredStorage == nil {
 		return nil, errors.New("storage is required")

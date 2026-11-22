@@ -2,6 +2,7 @@ import { Menu, menuClasses } from "@usememos/ui";
 import { ArchiveIcon, ChevronRightIcon, GlobeIcon, LogOutIcon, type LucideIcon, PaletteIcon, SettingsIcon } from "lucide-react";
 import { type ReactNode, useState } from "react";
 import { Link, matchPath, useLocation } from "react-router-dom";
+import { hasStoredToken } from "@/auth-state";
 import { ScopePanelRowIcon } from "@/components/AppSidebar/SidebarRow";
 import { SCOPE_PANEL_ICON_CLASSES, SCOPE_PANEL_ROW_CLASSES, SIDEBAR_LEADING_SLOT_CLASSES } from "@/components/AppSidebar/sidebar-layout";
 import UserAvatar from "@/components/UserAvatar";
@@ -12,6 +13,8 @@ import { useSSEConnectionStatus } from "@/hooks/useLiveMemoRefresh";
 import { useThemePreference } from "@/hooks/useResolvedTheme";
 import { useUpdateUserGeneralSetting } from "@/hooks/useUserQueries";
 import { locales } from "@/i18n";
+import { handleError } from "@/lib/error";
+import { showErrorToast } from "@/lib/toast";
 import { cn } from "@/lib/utils";
 import { Routes } from "@/router";
 import { buildAuthRoute } from "@/utils/auth-redirect";
@@ -144,9 +147,16 @@ const UserMenu = ({ onClose, onOpenSettings }: { onClose: () => void; onOpenSett
   };
 
   const handleSignOut = async () => {
-    await logout();
     try {
-      const keysToPreserve = ["memos-theme", "memos-locale", "memos-view-setting", "tag-view-as-tree"];
+      await logout();
+    } catch (error) {
+      handleError(error, showErrorToast, { context: "Sign out" });
+      return;
+    }
+    // A newer same-origin login might have supplied a different session.
+    if (hasStoredToken()) return;
+    try {
+      const keysToPreserve = ["memos-theme", "memos-locale", "memos-view-setting", "tag-view-as-tree", "memos_signed_out_session"];
       const keysToRemove: string[] = [];
       for (let i = 0; i < localStorage.length; i++) {
         const key = localStorage.key(i);

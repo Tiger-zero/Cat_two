@@ -47,10 +47,10 @@ type Server struct {
 	Profile *profile.Profile
 	Store   *store.Store
 
-	handler         http.Handler
-	httpServer      *http.Server
-	apiService      *api.APIService
-	receiveTelegram func(context.Context)
+	handler        http.Handler
+	httpServer     *http.Server
+	apiService     *api.APIService
+	messageCapture *messageCapture
 
 	// backgroundCancel stops the startup jobs, and backgroundJobs waits for
 	// them, before the store closes.
@@ -97,13 +97,18 @@ func NewServer(ctx context.Context, profile *profile.Profile, store *store.Store
 
 	apiService := api.NewAPIService(s.Secret, profile, store)
 	s.apiService = apiService
-	s.configureMessageCapture(mux)
+	if err := s.configureMessageCapture(ctx, mux); err != nil {
+		return nil, errors.Wrap(err, "failed to load message capture settings")
+	}
 
 	apiHandler, err := apiService.NewHandler(ctx)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to create API handler")
 	}
 	frontendService := frontend.NewFrontendService(profile, store)
+	if apiService.Challenge != nil {
+		frontendService.ChallengeProvider = apiService.Challenge.Provider()
+	}
 	frontendService.Serve(ctx, mux, apiHandler)
 	fileServerService := fileserver.NewFileServerService(s.Profile, s.Store, s.Secret)
 	fileServerService.MemoExporter = apiService
@@ -122,11 +127,10 @@ func NewServer(ctx context.Context, profile *profile.Profile, store *store.Store
 	})
 	s.handler = httphandler.Recover(clientip.Middleware(clientIPResolver)(newCORSMiddleware(profile, mux)(router)))
 
-	mcpService, err := mcp.NewMCPService(profile, s.handler, s.Store)
+	mcpService, err := mcp.NewMCPService(profile, s.handler, apiService)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to create MCP service")
 	}
-	mcpService.RateLimiter = apiService.RateLimiter
 	mcpService.RegisterRoutes(mux)
 
 	return s, nil
@@ -160,13 +164,13 @@ func (s *Server) Start() error {
 		ReadTimeout:       readRequestTimeout,
 		IdleTimeout:       idleTimeout,
 	}
+	s.startBackgroundJobs()
 	go func() {
 		if err := s.httpServer.Serve(listener); err != nil && err != http.ErrServerClosed {
 			slog.Error("failed to start HTTP server", "error", err)
 		}
 	}()
 
-	s.startBackgroundJobs()
 	return nil
 }
 
@@ -174,8 +178,8 @@ func (s *Server) Start() error {
 func (s *Server) startBackgroundJobs() {
 	ctx, cancel := context.WithCancel(context.Background())
 	s.backgroundCancel = cancel
-	if s.receiveTelegram != nil {
-		s.backgroundJobs.Go(func() { s.receiveTelegram(ctx) })
+	if s.messageCapture != nil {
+		s.messageCapture.start(ctx)
 	}
 	runner := memopayload.NewRunner(s.Store, s.apiService.MarkdownService)
 	s.backgroundJobs.Go(func() {
@@ -199,9 +203,9 @@ func (s *Server) startBackgroundJobs() {
 	})
 }
 
-func (s *Server) stopBackgroundJobs() {
-	if s.backgroundCancel != nil {
-		s.backgroundCancel()
+func (s *Server) waitForBackgroundJobs() {
+	if s.messageCapture != nil {
+		s.messageCapture.stop()
 	}
 	s.backgroundJobs.Wait()
 }
@@ -212,10 +216,13 @@ func (s *Server) Shutdown(ctx context.Context) {
 
 	slog.Info("server shutting down")
 
+	if s.backgroundCancel != nil {
+		s.backgroundCancel()
+	}
 	s.closeLongLivedConnections()
 	s.shutdownHTTPServer(ctx)
 	s.apiService.CloseUploads()
-	s.stopBackgroundJobs()
+	s.waitForBackgroundJobs()
 
 	// Close database connection.
 	if err := s.Store.Close(); err != nil {

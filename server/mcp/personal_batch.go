@@ -10,10 +10,14 @@ import (
 
 	"github.com/usememos/memos/internal/identifier"
 	"github.com/usememos/memos/server/api"
+	"github.com/usememos/memos/server/auth"
 	"github.com/usememos/memos/store"
 )
 
-const maxMemoBatchNames = 50
+const (
+	maxMemoBatchNames        = 50
+	maxMemoBatchContentBytes = 4 << 20
+)
 
 type personalMemoBatchInput struct {
 	Names []string `json:"names"`
@@ -28,6 +32,7 @@ type personalMemoBatchEntry struct {
 	Pinned          bool            `json:"pinned"`
 	State           store.RowStatus `json:"state"`
 	CreationChannel string          `json:"creationChannel"`
+	Revision        string          `json:"revision"`
 }
 
 type personalMemoBatchResult struct {
@@ -35,13 +40,13 @@ type personalMemoBatchResult struct {
 	Unavailable []string                 `json:"unavailable"`
 }
 
-func registerPersonalMemoBatchGet(server *sdkmcp.Server, db *store.Store) {
+func registerPersonalMemoBatchGet(server *sdkmcp.Server, apiService *api.APIService) {
 	const title = "Get Memos in Batch"
 	namePattern := "^" + api.MemoNamePrefix + strings.TrimPrefix(identifier.UIDMatcher.String(), "^")
 	sdkmcp.AddTool(server, &sdkmcp.Tool{
 		Name:        "memo_batch_get",
 		Title:       title,
-		Description: "Read full Markdown and basic metadata for up to 50 of your memos, including archived memos. Unreadable names are listed in unavailable. Use memo_get_memo for attachment details.",
+		Description: "Read full Markdown and basic metadata for up to 50 of your memos, including archived memos. Total Markdown is limited to 4 MiB per batch. Unreadable names are listed in unavailable. Use memo_get_memo for individual notes and attachment details.",
 		Annotations: annotationsForMethod("GET", title),
 		InputSchema: jsonSchema{
 			"type": "object",
@@ -57,8 +62,7 @@ func registerPersonalMemoBatchGet(server *sdkmcp.Server, db *store.Store) {
 			"additionalProperties": false,
 		},
 	}, func(ctx context.Context, _ *sdkmcp.CallToolRequest, input personalMemoBatchInput) (*sdkmcp.CallToolResult, personalMemoBatchResult, error) {
-		userID, ok := ctx.Value(connectionUserIDContextKey{}).(int32)
-		if !ok || userID <= 0 {
+		if auth.GetUserID(ctx) == 0 {
 			return nil, personalMemoBatchResult{}, errors.New("MCP authentication required")
 		}
 		if len(input.Names) == 0 || len(input.Names) > maxMemoBatchNames {
@@ -78,12 +82,10 @@ func registerPersonalMemoBatchGet(server *sdkmcp.Server, db *store.Store) {
 			seen[uid] = struct{}{}
 			uids = append(uids, uid)
 		}
-		memos, err := db.ListMemos(ctx, &store.FindMemo{
-			UIDList:   uids,
-			CreatorID: &userID,
-			Access:    &store.MemoAccessScope{OwnerOnly: true, UserID: &userID},
-			Trash:     store.MemoTrashExclude,
-		})
+		memos, err := apiService.ListMCPMemoBatch(ctx, uids, maxMemoBatchContentBytes)
+		if errors.Is(err, store.ErrMemoContentBudgetExceeded) {
+			return nil, personalMemoBatchResult{}, errors.New("memo batch exceeds 4 MiB of Markdown; request fewer notes or use memo_get_memo for an individual note")
+		}
 		if err != nil {
 			return nil, personalMemoBatchResult{}, errors.New("failed to read memo batch")
 		}
@@ -119,6 +121,7 @@ func registerPersonalMemoBatchGet(server *sdkmcp.Server, db *store.Store) {
 				Pinned:          memo.Pinned,
 				State:           memo.RowStatus,
 				CreationChannel: channel,
+				Revision:        api.MemoRevision(memo),
 			})
 		}
 		return nil, result, nil

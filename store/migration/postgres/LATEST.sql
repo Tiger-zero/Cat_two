@@ -53,7 +53,8 @@ CREATE TABLE mcp_connection (
   created_ts BIGINT NOT NULL,
   requested_ts BIGINT NOT NULL DEFAULT 0,
   expires_ts BIGINT NOT NULL DEFAULT 0,
-  remote_ip TEXT NOT NULL DEFAULT ''
+  remote_ip TEXT NOT NULL DEFAULT '',
+  permission TEXT NOT NULL DEFAULT 'read_write' CHECK (permission IN ('read_only', 'read_write'))
 );
 
 CREATE INDEX idx_mcp_connection_user_created ON mcp_connection (user_id, created_ts, id);
@@ -95,6 +96,9 @@ CREATE TABLE memo (
   updated_ts BIGINT NOT NULL DEFAULT EXTRACT(EPOCH FROM NOW()),
   row_status TEXT NOT NULL DEFAULT 'NORMAL',
   content TEXT NOT NULL,
+  body_digest VARCHAR(64) NOT NULL DEFAULT '',
+  revision BIGINT NOT NULL DEFAULT 1,
+  creation_request_digest VARCHAR(64) NOT NULL DEFAULT '',
   deleted_ts BIGINT,
   trash_root_id INTEGER,
   visibility TEXT NOT NULL DEFAULT 'PRIVATE',

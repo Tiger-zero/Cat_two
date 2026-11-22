@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strconv"
 	"strings"
 	"time"
 
@@ -22,14 +23,16 @@ import (
 	"github.com/usememos/memos/store"
 )
 
+const refreshSessionIDHeader = "x-memos-session-id"
+
 func (s *APIService) doSignIn(ctx context.Context, user *store.User, revision string) (string, time.Time, error) {
 	// Generate refresh token
-	tokenID := random.UUID()
-	refreshToken, refreshExpiresAt, err := auth.GenerateSessionRefreshToken(user.ID, tokenID, revision, []byte(s.Secret))
+	tokenID, sessionID := random.UUID(), random.UUID()
+	refreshToken, refreshExpiresAt, err := auth.GenerateSessionRefreshToken(user.ID, tokenID, sessionID, revision, []byte(s.Secret))
 	if err != nil {
 		return "", time.Time{}, status.Errorf(codes.Internal, "failed to generate refresh token: %v", err)
 	}
-	accessToken, accessExpiresAt, err := auth.GenerateSessionAccessToken(user, revision, []byte(s.Secret))
+	accessToken, accessExpiresAt, err := auth.GenerateSessionAccessToken(user, sessionID, revision, []byte(s.Secret))
 	if err != nil {
 		return "", time.Time{}, status.Errorf(codes.Internal, "failed to generate access token: %v", err)
 	}
@@ -38,6 +41,7 @@ func (s *APIService) doSignIn(ctx context.Context, user *store.User, revision st
 	clientInfo := s.extractClientInfo(ctx)
 	refreshTokenRecord := &storepb.RefreshTokensUserSetting_RefreshToken{
 		TokenId:    tokenID,
+		SessionId:  sessionID,
 		ExpiresAt:  timestamppb.New(refreshExpiresAt),
 		CreatedAt:  timestamppb.Now(),
 		ClientInfo: clientInfo,
@@ -56,34 +60,25 @@ func (s *APIService) doSignIn(ctx context.Context, user *store.User, revision st
 	return accessToken, accessExpiresAt, nil
 }
 
-// SignOut terminates the user's authentication.
-// Revokes the refresh token and clears the authentication cookie.
-//
-// Authentication: Required (access token).
-// Returns: Empty response on success.
+// SignOut revokes the session identified by the access token.
 func (s *APIService) SignOut(ctx context.Context, _ *apipb.SignOutRequest) (*emptypb.Empty, error) {
-	// Get user from access token claims
 	claims := auth.GetUserClaims(ctx)
-	if claims != nil {
-		// Revoke refresh token if we can identify it
-		refreshToken := ""
-		if md, ok := metadata.FromIncomingContext(ctx); ok {
-			if cookies := md.Get("cookie"); len(cookies) > 0 {
-				refreshToken = auth.ExtractRefreshTokenFromCookie(cookies[0])
-			}
-		}
-		if refreshToken != "" {
-			refreshClaims, err := auth.ParseRefreshToken(refreshToken, []byte(s.Secret))
-			if err == nil {
-				// Remove refresh token from user_setting by token_id
-				_ = s.Store.RemoveUserRefreshToken(ctx, claims.UserID, refreshClaims.TokenID)
-			}
+	if claims == nil {
+		return nil, status.Error(codes.PermissionDenied, "sign out requires an interactive session")
+	}
+	id := currentSessionID(ctx, s.Secret, claims.UserID)
+	if id != "" {
+		if err := s.Store.RemoveUserRefreshToken(ctx, claims.UserID, id); err != nil {
+			slog.ErrorContext(ctx, "failed to revoke session on sign out", "error", err)
+			return nil, status.Error(codes.Internal, "failed to revoke session")
 		}
 	}
-
-	// Clear refresh token cookie
-	if err := s.clearAuthCookies(ctx); err != nil {
-		return nil, status.Errorf(codes.Internal, "failed to clear auth cookies, error: %v", err)
+	// Another browser session can hold the same-origin cookie. Clear it only
+	// when it belongs to the session that just signed out.
+	if cookie := refreshCookieClaims(ctx, s.Secret, claims.UserID); cookie != nil && cookie.StableSessionID() == id {
+		if err := s.clearAuthCookies(ctx); err != nil {
+			return nil, status.Errorf(codes.Internal, "failed to clear auth cookies: %v", err)
+		}
 	}
 	return &emptypb.Empty{}, nil
 }
@@ -105,14 +100,7 @@ func (s *APIService) SignOut(ctx context.Context, _ *apipb.SignOutRequest) (*emp
 // Authentication: Requires valid refresh token in cookie (public endpoint)
 // Returns: New access token and expiry timestamp.
 func (s *APIService) RefreshToken(ctx context.Context, _ *apipb.RefreshTokenRequest) (*apipb.RefreshTokenResponse, error) {
-	// Extract refresh token from cookie
-	refreshToken := ""
-	if md, ok := metadata.FromIncomingContext(ctx); ok {
-		if cookies := md.Get("cookie"); len(cookies) > 0 {
-			refreshToken = auth.ExtractRefreshTokenFromCookie(cookies[0])
-		}
-	}
-
+	refreshToken := refreshTokenFromContext(ctx)
 	if refreshToken == "" {
 		return nil, status.Errorf(codes.Unauthenticated, "refresh token not found")
 	}
@@ -123,16 +111,20 @@ func (s *APIService) RefreshToken(ctx context.Context, _ *apipb.RefreshTokenRequ
 	if err != nil {
 		return nil, status.Errorf(codes.Unauthenticated, "invalid refresh token: %v", err)
 	}
+	sessionID := oldSession.StableSessionID()
+	if expected := metadata.ValueFromIncomingContext(ctx, refreshSessionIDHeader); len(expected) != 0 && expected[0] != sessionID {
+		return nil, status.Error(codes.Unauthenticated, "refresh cookie belongs to a different session")
+	}
 
 	// --- Refresh Token Rotation ---
 	// Generate new refresh token with fresh 30-day expiry (sliding window)
 	newTokenID := random.UUID()
-	newRefreshToken, newRefreshExpiresAt, err := auth.GenerateSessionRefreshToken(user.ID, newTokenID, oldSession.SessionRevision, []byte(s.Secret))
+	newRefreshToken, newRefreshExpiresAt, err := auth.GenerateSessionRefreshToken(user.ID, newTokenID, sessionID, oldSession.SessionRevision, []byte(s.Secret))
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to generate refresh token: %v", err)
 	}
 
-	accessToken, expiresAt, err := auth.GenerateSessionAccessToken(user, oldSession.SessionRevision, []byte(s.Secret))
+	accessToken, expiresAt, err := auth.GenerateSessionAccessToken(user, sessionID, oldSession.SessionRevision, []byte(s.Secret))
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to generate access token: %v", err)
 	}
@@ -142,6 +134,7 @@ func (s *APIService) RefreshToken(ctx context.Context, _ *apipb.RefreshTokenRequ
 	clientInfo := s.extractClientInfo(ctx)
 	newRefreshTokenRecord := &storepb.RefreshTokensUserSetting_RefreshToken{
 		TokenId:    newTokenID,
+		SessionId:  sessionID,
 		ExpiresAt:  timestamppb.New(newRefreshExpiresAt),
 		CreatedAt:  timestamppb.Now(),
 		ClientInfo: clientInfo,
@@ -168,9 +161,7 @@ func (s *APIService) RefreshToken(ctx context.Context, _ *apipb.RefreshTokenRequ
 	}, nil
 }
 
-// currentRefreshTokenID returns the token ID of the refresh cookie on the
-// request, or "" when the request carries no valid refresh cookie.
-func currentRefreshTokenID(ctx context.Context, secret string) string {
+func refreshTokenFromContext(ctx context.Context) string {
 	md, ok := metadata.FromIncomingContext(ctx)
 	if !ok {
 		return ""
@@ -179,15 +170,31 @@ func currentRefreshTokenID(ctx context.Context, secret string) string {
 	if len(cookies) == 0 {
 		return ""
 	}
-	refreshToken := auth.ExtractRefreshTokenFromCookie(cookies[0])
+	return auth.ExtractRefreshTokenFromCookie(cookies[0])
+}
+
+func refreshCookieClaims(ctx context.Context, secret string, userID int32) *auth.RefreshTokenClaims {
+	refreshToken := refreshTokenFromContext(ctx)
 	if refreshToken == "" {
-		return ""
+		return nil
 	}
 	claims, err := auth.ParseRefreshToken(refreshToken, []byte(secret))
-	if err != nil {
-		return ""
+	if err != nil || claims.Subject != strconv.FormatInt(int64(userID), 10) {
+		return nil
 	}
-	return claims.TokenID
+	return claims
+}
+
+// currentSessionID identifies a session independently of refresh rotation.
+// A legacy signed cookie can identify the session before it is upgraded.
+func currentSessionID(ctx context.Context, secret string, userID int32) string {
+	if claims := auth.GetUserClaims(ctx); claims != nil && claims.UserID == userID && claims.SessionID != "" {
+		return claims.SessionID
+	}
+	if cookie := refreshCookieClaims(ctx, secret, userID); cookie != nil {
+		return cookie.StableSessionID()
+	}
+	return ""
 }
 
 func (s *APIService) clearAuthCookies(ctx context.Context) error {

@@ -22,6 +22,8 @@ var (
 	ErrInvalidLabel = errors.New("enter a connection name of 1 to 80 characters")
 	// ErrInvalidDuration indicates that a token lifetime is unknown.
 	ErrInvalidDuration = errors.New("connection duration must be 7d, 14d, 1y, or permanent")
+	// ErrInvalidPermission indicates that a requested tool permission is unknown.
+	ErrInvalidPermission = errors.New("connection permission must be read_only or read_write")
 	// ErrRevocationConflict indicates that no revocable connection matches the request.
 	ErrRevocationConflict = errors.New("connection cannot be revoked")
 	// ErrInvalidToken indicates that the credential or its account is unavailable.
@@ -32,7 +34,7 @@ var (
 
 // Issue creates an active MCP-only connection token and returns its plaintext once.
 // The token's expiration governs every connection made with it.
-func Issue(ctx context.Context, db *store.Store, userID int32, label, duration string, now time.Time) (*store.MCPConnection, string, error) {
+func Issue(ctx context.Context, db *store.Store, userID int32, label, duration string, permission store.MCPConnectionPermission, now time.Time) (*store.MCPConnection, string, error) {
 	label = strings.TrimSpace(label)
 	if label == "" || utf8.RuneCountInString(label) > 80 {
 		return nil, "", ErrInvalidLabel
@@ -50,15 +52,23 @@ func Issue(ctx context.Context, db *store.Store, userID int32, label, duration s
 	default:
 		return nil, "", ErrInvalidDuration
 	}
+	switch permission {
+	case "":
+		permission = store.MCPConnectionReadWrite
+	case store.MCPConnectionReadOnly, store.MCPConnectionReadWrite:
+	default:
+		return nil, "", ErrInvalidPermission
+	}
 	token := tokenPrefix + rand.Text()
 	connection := &store.MCPConnection{
-		ID:        random.UUID(),
-		UserID:    userID,
-		Label:     label,
-		TokenHash: hashToken(token),
-		Status:    store.MCPConnectionApproved,
-		CreatedAt: now.Unix(),
-		ExpiresAt: expiresAt,
+		ID:         random.UUID(),
+		UserID:     userID,
+		Label:      label,
+		TokenHash:  hashToken(token),
+		Status:     store.MCPConnectionApproved,
+		CreatedAt:  now.Unix(),
+		ExpiresAt:  expiresAt,
+		Permission: permission,
 	}
 	if err := db.CreateMCPConnection(ctx, connection); err != nil {
 		return nil, "", err
@@ -85,33 +95,33 @@ func Revoke(ctx context.Context, db *store.Store, userID int32, id string) error
 	return ErrRevocationConflict
 }
 
-// Authenticate returns the connection owner's ID and records its first authenticated POST.
-func Authenticate(ctx context.Context, db *store.Store, token, remoteIP string, recordUse bool, now time.Time) (int32, error) {
+// Authenticate returns the active connection and records its first authenticated POST.
+func Authenticate(ctx context.Context, db *store.Store, token, remoteIP string, recordUse bool, now time.Time) (*store.MCPConnection, error) {
 	if !strings.HasPrefix(token, tokenPrefix) {
-		return 0, ErrInvalidToken
+		return nil, ErrInvalidToken
 	}
 	digest := hashToken(token)
 	connection, ownerStatus, err := db.GetMCPConnectionByHash(ctx, digest)
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
 	if connection == nil {
-		return 0, ErrInvalidToken
+		return nil, ErrInvalidToken
 	}
 	// Earlier versions may have stored credentials that never received the
 	// owner's approval. Only tokens already active can authenticate.
 	if StatusAt(connection, now) != store.MCPConnectionApproved {
-		return 0, ErrInactive
+		return nil, ErrInactive
 	}
-	if ownerStatus != store.Normal {
-		return 0, ErrInvalidToken
+	if ownerStatus != store.Normal || (connection.Permission != store.MCPConnectionReadOnly && connection.Permission != store.MCPConnectionReadWrite) {
+		return nil, ErrInvalidToken
 	}
 	if recordUse && connection.RequestedAt == 0 {
 		if err := db.RecordMCPConnectionFirstUse(ctx, digest, now.Unix(), remoteIP); err != nil {
-			return 0, err
+			return nil, err
 		}
 	}
-	return connection.UserID, nil
+	return connection, nil
 }
 
 func hashToken(token string) string {

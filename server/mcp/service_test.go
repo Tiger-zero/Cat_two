@@ -20,6 +20,8 @@ import (
 	"github.com/usememos/memos/internal/profile"
 	"github.com/usememos/memos/internal/ratelimit"
 	memosproto "github.com/usememos/memos/proto"
+	"github.com/usememos/memos/server/api"
+	"github.com/usememos/memos/server/auth"
 	"github.com/usememos/memos/store"
 )
 
@@ -58,7 +60,7 @@ func TestIsAllowedMCPOrigin(t *testing.T) {
 
 func TestPersonalMCPRequestBodyLimit(t *testing.T) {
 	mux := http.NewServeMux()
-	service, err := NewMCPService(&profile.Profile{Personal: true}, mux, &store.Store{})
+	service, err := NewMCPService(&profile.Profile{Personal: true}, mux, &api.APIService{Store: &store.Store{}})
 	require.NoError(t, err)
 	service.RegisterRoutes(mux)
 	request := httptest.NewRequest(http.MethodPost, "/mcp", strings.NewReader("{}"))
@@ -84,7 +86,7 @@ func TestNewMCPServiceRegistersCuratedTools(t *testing.T) {
 }
 
 func TestPersonalMCPCatalogOmitsSpaces(t *testing.T) {
-	service, err := NewMCPService(&profile.Profile{Personal: true}, http.NewServeMux(), &store.Store{})
+	service, err := NewMCPService(&profile.Profile{Personal: true}, http.NewServeMux(), &api.APIService{Store: &store.Store{}})
 	require.NoError(t, err)
 	require.Contains(t, service.operationsByTool, "memo_list_memos")
 	for _, operation := range service.operationsByTool {
@@ -92,28 +94,24 @@ func TestPersonalMCPCatalogOmitsSpaces(t *testing.T) {
 	}
 }
 
-func TestPersonalNativeReadToolsShareAccountRateLimit(t *testing.T) {
+func TestPersonalToolsShareAccountRateLimit(t *testing.T) {
 	limiter := ratelimit.NewMemoryLimiter(ratelimit.Policy{
 		ratelimit.ScopeAuthenticated: {Limit: 1, Window: time.Hour},
 	})
 	service := &MCPService{RateLimiter: limiter}
 	success := &sdkmcp.CallToolResult{}
-	handler := service.limitPersonalReads(func(context.Context, string, sdkmcp.Request) (sdkmcp.Result, error) {
+	handler := service.authorizePersonalTools(func(context.Context, string, sdkmcp.Request) (sdkmcp.Result, error) {
 		return success, nil
 	})
-	ctx := context.WithValue(t.Context(), connectionUserIDContextKey{}, int32(7))
-	request := &sdkmcp.CallToolRequest{Params: &sdkmcp.CallToolParamsRaw{Name: "tag_tree"}}
+	ctx := auth.SetUserInContext(t.Context(), &store.User{ID: 7}, "")
+	ctx = context.WithValue(ctx, connectionPermissionContextKey{}, store.MCPConnectionReadWrite)
 	require.True(t, limiter.Consume(ratelimit.ScopeAuthenticated, "7", 1).Allowed)
-	result, err := handler(ctx, "tools/call", request)
-	require.NoError(t, err)
-	require.IsType(t, &sdkmcp.CallToolResult{}, result)
-	require.Equal(t, newToolErrorResult("MCP request rate limit exceeded"), result)
-
-	// Only native reads are charged here. The REST-backed search has its own check.
-	request.Params.Name = "memo_search"
-	result, err = handler(ctx, "tools/call", request)
-	require.NoError(t, err)
-	require.Same(t, success, result)
+	for _, tool := range []string{"tag_tree", "memo_search", "memo_create_memo", "unknown"} {
+		request := &sdkmcp.CallToolRequest{Params: &sdkmcp.CallToolParamsRaw{Name: tool}}
+		result, err := handler(ctx, "tools/call", request)
+		require.NoError(t, err)
+		require.Equal(t, newToolErrorResult("MCP request rate limit exceeded"), result)
+	}
 }
 
 func TestNewMCPServiceUsesEmbeddedOpenAPISpec(t *testing.T) {
@@ -148,7 +146,7 @@ func TestMCPToolHandlerForwardsArgumentsAndAuthorization(t *testing.T) {
 			Parameters: []openAPIParameter{{Name: "pageSize", In: "query", Schema: jsonSchema{"type": "integer"}}},
 		},
 	}
-	handler := newMCPToolHandler(newAPIAdapter(mux), operation)
+	handler := newMCPToolHandler(newAPIAdapter(mux).execute, operation)
 	arguments, err := json.Marshal(map[string]any{"pageSize": 7})
 	require.NoError(t, err)
 

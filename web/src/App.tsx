@@ -27,21 +27,12 @@ const App = () => {
   }, [profileLoaded, instanceProfile.needsSetup, navigateTo]);
 
   useEffect(() => {
-    if (instanceGeneralSetting.additionalStyle) {
-      const styleEl = document.createElement("style");
-      styleEl.innerHTML = instanceGeneralSetting.additionalStyle;
-      styleEl.setAttribute("type", "text/css");
-      document.body.insertAdjacentElement("beforeend", styleEl);
-    }
+    if (!instanceGeneralSetting.additionalStyle) return;
+    const style = document.createElement("style");
+    style.textContent = instanceGeneralSetting.additionalStyle;
+    document.body.appendChild(style);
+    return () => style.remove();
   }, [instanceGeneralSetting.additionalStyle]);
-
-  useEffect(() => {
-    if (instanceGeneralSetting.additionalScript) {
-      const scriptEl = document.createElement("script");
-      scriptEl.innerHTML = instanceGeneralSetting.additionalScript;
-      document.head.appendChild(scriptEl);
-    }
-  }, [instanceGeneralSetting.additionalScript]);
 
   // Dynamic update metadata with customized profile
   useEffect(() => {

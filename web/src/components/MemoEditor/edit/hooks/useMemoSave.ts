@@ -1,6 +1,9 @@
+import { equals } from "@bufbuild/protobuf";
+import { timestampDate } from "@bufbuild/protobuf/wkt";
 import { Code, ConnectError } from "@connectrpc/connect";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback } from "react";
+import { v4 as uuidv4 } from "uuid";
 import { useNewMemo } from "@/contexts/NewMemoContext";
 import { attachmentKeys } from "@/hooks/useAttachmentQueries";
 import { memoDetailQueryOptions, useCreateMemo, useUpdateMemo } from "@/hooks/useMemoQueries";
@@ -8,10 +11,11 @@ import { userKeys } from "@/hooks/useUserQueries";
 import { handleError } from "@/lib/error";
 import { showErrorToast, toast } from "@/lib/toast";
 import type { Attachment } from "@/types/proto/api/attachment_service_pb";
-import type { Memo } from "@/types/proto/api/memo_service_pb";
+import { type Memo, MemoSchema } from "@/types/proto/api/memo_service_pb";
 import { useTranslate } from "@/utils/i18n";
-import { memoDraftRevision } from "../draftRevision";
+import { matchesMemoDraftRevision } from "../draftRevision";
 import { errorService, memoService, validationService } from "../services";
+import type { MemoCreateAttempt } from "../services/cacheService";
 import { DrawingNotSavedError, DrawingSavedError, type MemoSaveOperations, mergeUploadedAttachments } from "../services/memoService";
 import { useEditorContext } from "../state";
 import { renameUploadedKeys } from "../utils/attachmentOrder";
@@ -22,13 +26,18 @@ interface UseMemoSaveOptions {
   parentMemoName?: string;
   defaultCreateTime?: Date;
   discardDraft: () => void | Promise<void>;
+  flushDraft?: () => boolean;
   getBaseRevision?: () => string | undefined;
+  getCreateAttempt?: () => MemoCreateAttempt | undefined;
+  recordCreateAttempt?: (attempt: MemoCreateAttempt) => boolean;
+  onEditConflict?: () => void;
   rebaseDraft?: (memo: Memo) => void;
   onConfirm?: (memoName: string) => void;
   onCancel?: () => void;
 }
 
 class MemoChangedError extends Error {}
+class DraftSubmissionStorageError extends Error {}
 
 /**
  * Owns the editor's save transaction and its post-save state. The memo itself is
@@ -41,7 +50,11 @@ export function useMemoSave({
   parentMemoName,
   defaultCreateTime,
   discardDraft,
+  flushDraft,
   getBaseRevision,
+  getCreateAttempt,
+  recordCreateAttempt,
+  onEditConflict,
   rebaseDraft,
   onConfirm,
   onCancel,
@@ -86,33 +99,47 @@ export function useMemoSave({
       dispatch(actions.setAttachmentOrder(renameUploadedKeys(current.attachmentOrder, uploaded)));
     };
 
+    const pendingCreate = !memoName ? getCreateAttempt?.() : undefined;
+    const createID = !memoName ? (pendingCreate?.id ?? uuidv4()) : undefined;
+    const now = new Date(pendingCreate?.submittedAt ?? Date.now());
     const operations: MemoSaveOperations = {
       // The server's current copy, fetched afresh into the detail cache.
       getMemo: async (name) => {
         const memo = await queryClient.fetchQuery({ ...memoDetailQueryOptions(name), staleTime: 0 });
         if (!memo) throw new ConnectError("memo not found", Code.NotFound);
         const baseRevision = getBaseRevision?.();
-        if (baseRevision && baseRevision !== memoDraftRevision(memo)) throw new MemoChangedError();
+        if (baseRevision && !matchesMemoDraftRevision(memo, baseRevision)) throw new MemoChangedError();
         return memo;
       },
-      updateMemo: async (update, updateMask) => {
-        const updated = await updateMemo({ update, updateMask });
+      updateMemo: async (update, updateMask, expectedRevision) => {
+        const updated = await updateMemo({ update, updateMask, expectedRevision });
         rebaseDraft?.(updated);
         return updated;
       },
-      createMemo: (memo, parent) => createMemo({ memo, parent }),
+      createMemo: (memo, parent) => {
+        // Write ahead of the RPC: a timeout or a tab reload cannot tell whether the server committed.
+        if (pendingCreate && equals(MemoSchema, pendingCreate.memo, memo))
+          return createMemo({ memo: pendingCreate.memo, parent, id: createID });
+        if (createID && recordCreateAttempt && !recordCreateAttempt({ id: createID, submittedAt: now.valueOf(), memo })) {
+          throw new DraftSubmissionStorageError();
+        }
+        return createMemo({ memo, parent, id: createID });
+      },
     };
 
     try {
       // A new memo composed on a selected day keeps the day but is stamped with
       // the time of saving, so consecutive memos do not share one createTime.
-      const now = new Date();
       const calendarDefault = state.calendarDefault ?? defaultCreateTime;
+      const stamp = (time: Date | undefined, attempted: Memo["createTime"]) => {
+        if (pendingCreate && time === calendarDefault) return attempted && timestampDate(attempted);
+        return restampDefaultCreateTime(time, calendarDefault, now);
+      };
       const timestamps = memoName
         ? state.timestamps
         : {
-            createTime: restampDefaultCreateTime(state.timestamps.createTime, calendarDefault, now),
-            updateTime: restampDefaultCreateTime(state.timestamps.updateTime, calendarDefault, now),
+            createTime: stamp(state.timestamps.createTime, pendingCreate?.memo.createTime),
+            updateTime: stamp(state.timestamps.updateTime, pendingCreate?.memo.updateTime),
           };
       const result = await memoService.save(
         { ...state, timestamps },
@@ -156,13 +183,32 @@ export function useMemoSave({
       onConfirm?.(result.memoName);
     } catch (error) {
       keepUploadedFiles();
+      flushDraft?.();
       if (uploaded.size > 0) {
         // The uploads landed even though the save did not.
         void queryClient.invalidateQueries({ queryKey: attachmentKeys.lists() });
         void queryClient.invalidateQueries({ queryKey: userKeys.stats() });
       }
-      if (error instanceof MemoChangedError) {
-        showErrorToast(t("editor.draft.conflict"));
+      if (error instanceof MemoChangedError || (error instanceof ConnectError && error.code === Code.Aborted)) {
+        if (memoName && onEditConflict) onEditConflict();
+        else showErrorToast(t("editor.draft.conflict"));
+        return;
+      }
+      if (error instanceof DraftSubmissionStorageError) {
+        showErrorToast(t("editor.draft.submission-storage-failed"));
+        return;
+      }
+      if (createID && error instanceof ConnectError && error.code === Code.AlreadyExists) {
+        const memoPath = `/memos/${encodeURIComponent(createID)}`;
+        toast.add({
+          title: t("editor.draft.create-conflict"),
+          type: "warning",
+          timeout: 0,
+          actionProps: {
+            children: t("editor.draft.open-saved-memo"),
+            onClick: () => window.open(memoPath, "_blank", "noopener,noreferrer"),
+          },
+        });
         return;
       }
       if (error instanceof DrawingSavedError) {
@@ -190,15 +236,19 @@ export function useMemoSave({
     defaultCreateTime,
     discardDraft,
     dispatch,
+    flushDraft,
     getState,
     getBaseRevision,
+    getCreateAttempt,
     markNewMemo,
     memoName,
     onCancel,
     onConfirm,
+    onEditConflict,
     parentMemoName,
     queryClient,
     rebaseDraft,
+    recordCreateAttempt,
     t,
     updateMemo,
   ]);

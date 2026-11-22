@@ -150,6 +150,7 @@ func TestLoginIPBlocksSurviveSQLiteMigrationAndRestart(t *testing.T) {
 	st := openStore()
 	_, err := st.GetDriver().GetDB().ExecContext(ctx, "DROP TABLE login_ip_attempt")
 	require.NoError(t, err)
+	removeMemoBodySchema(ctx, t, st, "sqlite")
 	basic, err := st.GetInstanceBasicSetting(ctx)
 	require.NoError(t, err)
 	_, err = st.UpsertInstanceSetting(ctx, &storepb.InstanceSetting{

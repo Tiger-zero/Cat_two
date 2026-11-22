@@ -53,6 +53,7 @@ CREATE TABLE mcp_connection (
   requested_ts BIGINT NOT NULL DEFAULT 0,
   expires_ts BIGINT NOT NULL DEFAULT 0,
   remote_ip VARCHAR(64) NOT NULL DEFAULT '',
+  permission VARCHAR(16) CHARACTER SET ascii COLLATE ascii_bin NOT NULL DEFAULT 'read_write' CHECK (permission IN ('read_only', 'read_write')),
   INDEX idx_mcp_connection_user_created (user_id, created_ts, id),
   FOREIGN KEY (user_id) REFERENCES `user`(id) ON DELETE CASCADE
 ) ENGINE=InnoDB;
@@ -94,6 +95,9 @@ CREATE TABLE `memo` (
   `updated_ts` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `row_status` VARCHAR(256) NOT NULL DEFAULT 'NORMAL',
   `content` TEXT NOT NULL,
+  `body_digest` VARCHAR(64) NOT NULL DEFAULT '',
+  revision BIGINT NOT NULL DEFAULT 1,
+  creation_request_digest VARCHAR(64) NOT NULL DEFAULT '',
   deleted_ts BIGINT,
   trash_root_id INTEGER,
   `visibility` VARCHAR(256) NOT NULL DEFAULT 'PRIVATE',

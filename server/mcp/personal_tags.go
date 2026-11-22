@@ -10,7 +10,7 @@ import (
 	"github.com/pkg/errors"
 	"golang.org/x/text/cases"
 
-	"github.com/usememos/memos/store"
+	"github.com/usememos/memos/server/api"
 )
 
 const (
@@ -40,14 +40,14 @@ type personalTagResults struct {
 	NextOffset int           `json:"nextOffset,omitempty"`
 }
 
-func registerPersonalTagTools(server *sdkmcp.Server, db *store.Store) {
+func registerPersonalTagTools(server *sdkmcp.Server, apiService *api.APIService) {
 	sdkmcp.AddTool(server, &sdkmcp.Tool{
 		Name:        "tag_tree",
 		Title:       "List Tag Paths",
 		Description: "List your active notes' tag paths and their parents, in path order. Count each note once per tag, including notes tagged with any descendant.",
 		Annotations: annotationsForMethod(http.MethodGet, "List Tag Paths"),
 	}, func(ctx context.Context, _ *sdkmcp.CallToolRequest, input personalTagPagination) (*sdkmcp.CallToolResult, personalTagResults, error) {
-		result, err := listPersonalTags(ctx, db, "", input)
+		result, err := listPersonalTags(ctx, apiService, "", input)
 		return nil, result, err
 	})
 	sdkmcp.AddTool(server, &sdkmcp.Tool{
@@ -60,16 +60,12 @@ func registerPersonalTagTools(server *sdkmcp.Server, db *store.Store) {
 		if query == "" {
 			return nil, personalTagResults{}, errors.New("query must not be empty")
 		}
-		result, err := listPersonalTags(ctx, db, query, input.personalTagPagination)
+		result, err := listPersonalTags(ctx, apiService, query, input.personalTagPagination)
 		return nil, result, err
 	})
 }
 
-func listPersonalTags(ctx context.Context, db *store.Store, query string, page personalTagPagination) (personalTagResults, error) {
-	userID, ok := ctx.Value(connectionUserIDContextKey{}).(int32)
-	if !ok || userID <= 0 {
-		return personalTagResults{}, errors.New("an authenticated MCP connection is required")
-	}
+func listPersonalTags(ctx context.Context, apiService *api.APIService, query string, page personalTagPagination) (personalTagResults, error) {
 	if page.Offset < 0 || page.PageSize < 0 {
 		return personalTagResults{}, errors.New("offset and pageSize must be nonnegative")
 	}
@@ -79,7 +75,7 @@ func listPersonalTags(ctx context.Context, db *store.Store, query string, page p
 	}
 
 	counts := make(map[string]int)
-	err := db.VisitActiveMemoTags(ctx, userID, func(tags []string) { countMemoTagPaths(counts, tags) })
+	err := apiService.VisitOwnMemoTags(ctx, func(tags []string) { countMemoTagPaths(counts, tags) })
 	if err != nil {
 		return personalTagResults{}, errors.Wrap(err, "failed to list tags")
 	}

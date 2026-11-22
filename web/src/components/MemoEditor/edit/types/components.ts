@@ -14,6 +14,9 @@ export interface EditSessionProps {
   draftKey: string;
   /** Cached snapshot the editor started from, used to guard writes from competing tabs. */
   initialDraftRaw: string | null;
+  /** Accepts the saved text and files for an older revision after an explicit review. */
+  reviewDraftRevision?: string;
+  onReviewDraft?: (filesRevision: string) => void;
   /** Inside a card that is the frame already: no background, border or padding of its own outside focus mode. */
   frameless?: boolean;
   /** Expand a desktop inline new-note composer while in use. */

@@ -7,7 +7,7 @@ import { type User, User_Role, UserSchema } from "@/types/proto/api/user_service
 
 const instance = vi.hoisted(() => ({
   generalSetting: {
-    additionalScript: "",
+    additionalScript: "legacy script source",
     additionalStyle: "",
     customProfile: undefined,
     disallowChangeNickname: true,
@@ -82,6 +82,7 @@ describe("<InstanceSection> access setting", () => {
     expect(setting.name).toBe("instance/settings/GENERAL");
     expect(setting.value.case).toBe("generalSetting");
     expect(setting.value.value).toMatchObject({
+      additionalScript: "",
       additionalStyle: "body { margin: 0; }",
       disallowUserRegistration: true,
       disallowPasswordAuth: false,
@@ -91,7 +92,7 @@ describe("<InstanceSection> access setting", () => {
     expect(instance.fetchSetting).toHaveBeenCalledWith(InstanceSetting_Key.GENERAL);
   });
 
-  it("orders general settings before administrator access and custom code", () => {
+  it("orders general settings before administrator access and custom styles", () => {
     render(<InstanceSection />);
 
     const groupHeadings = screen.getAllByRole("heading", { level: 4 });
@@ -104,5 +105,6 @@ describe("<InstanceSection> access setting", () => {
     const weekStartDay = screen.getByText("setting.instance.week-start-day");
     const accessHeading = screen.getByRole("heading", { level: 4, name: "setting.instance.access-title" });
     expect(weekStartDay.compareDocumentPosition(accessHeading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.queryByPlaceholderText("setting.system.additional-script-placeholder")).not.toBeInTheDocument();
   });
 });

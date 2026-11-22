@@ -56,6 +56,10 @@ func (a *Authenticator) resolveAccessToken(ctx context.Context, accessToken stri
 	if err != nil {
 		return nil, nil //nolint:nilerr // Invalid credentials permit fallback; only store failures are errors.
 	}
+	if claims.SessionID == "" && a.store.IsPersonalMode() {
+		// Upgraded browsers exchange their existing refresh cookie for a bound token.
+		return nil, nil
+	}
 
 	userID, err := parseInt32(claims.Subject)
 	if err != nil {
@@ -78,6 +82,15 @@ func (a *Authenticator) resolveAccessToken(ctx context.Context, accessToken stri
 	if claims.SessionRevision != factor.SessionRevision {
 		return nil, nil
 	}
+	if claims.SessionID != "" {
+		active, err := a.store.IsUserSessionActive(ctx, userID, claims.SessionID)
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to check access token session")
+		}
+		if !active {
+			return nil, nil
+		}
+	}
 
 	return &bearerAuth{
 		user: user,
@@ -87,6 +100,7 @@ func (a *Authenticator) resolveAccessToken(ctx context.Context, accessToken stri
 			Role:            claims.Role,
 			Status:          claims.Status,
 			SessionRevision: claims.SessionRevision,
+			SessionID:       claims.SessionID,
 		},
 	}, nil
 }
@@ -117,7 +131,7 @@ func (a *Authenticator) AuthenticateRefreshSession(ctx context.Context, refreshT
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "failed to get refresh token")
 	}
-	if token == nil {
+	if token == nil || token.GetSessionId() != claims.SessionID {
 		return nil, nil, errors.New("refresh token revoked")
 	}
 

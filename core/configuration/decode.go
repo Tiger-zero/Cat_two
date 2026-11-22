@@ -19,8 +19,9 @@ import (
 )
 
 var (
-	referencePattern = regexp.MustCompile(`^\$\{(env|file):([^}]*)\}$`)
-	envNamePattern   = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
+	referencePattern     = regexp.MustCompile(`^\$\{(env|file):([^}]*)\}$`)
+	envNamePattern       = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
+	additionalScriptPath = regexp.MustCompile(`^instance(?:Settings|_settings)\[[0-9]+\]\.general(?:Setting|_setting)\.additional(?:Script|_script)$`)
 
 	// protojson errors can quote the rejected value, which may be a
 	// substituted secret. Only these value-free forms are passed on.
@@ -58,7 +59,7 @@ func decodeDocument(content []byte, resolver Resolver) (*apipb.Configuration, ma
 
 	inspector := &inspector{}
 	inspector.message("", value, document.ProtoReflect().Descriptor())
-	return document, declaredUserFields(object), inspector.warnings, inspector.problems
+	return document, declaredUserFields(object), append(r.warnings, inspector.warnings...), inspector.problems
 }
 
 // optionalUserFields are the User fields managed only when a file declares them.
@@ -95,6 +96,7 @@ func declaredUserFields(document map[string]any) map[int][]string {
 type jsonReader struct {
 	decoder  *json.Decoder
 	resolver Resolver
+	warnings []string
 }
 
 func (r *jsonReader) value(path string) (any, error) {
@@ -158,6 +160,11 @@ func (r *jsonReader) value(path string) (any, error) {
 // ${file:PATH} reference, and turns each $${ into a literal ${. Errors name
 // the path and the reference, never a resolved value.
 func (r *jsonReader) substitute(path, value string) (string, error) {
+	// Drop retired scripts before reading any legacy secret or environment reference.
+	if additionalScriptPath.MatchString(path) {
+		r.warnings = append(r.warnings, path+" is ignored because custom JavaScript is unavailable in Cat_two")
+		return "", nil
+	}
 	if !hasUnescapedReference(value) {
 		return strings.ReplaceAll(value, "$${", "${"), nil
 	}

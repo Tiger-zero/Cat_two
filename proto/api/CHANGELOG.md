@@ -39,7 +39,8 @@ instead, and update `core/configuration/testdata/compat/` in the same change. Af
   Affected REST and Connect calls return `UNIMPLEMENTED`. An existing note's author can still use notes that belonged
   to a Space.
 - Cat_two personal mode requires a dedicated connection token for `/mcp`. `POST /api/mcpConnections` accepts
-  `label` and `duration`. Choose `7d` (the default), `14d`, `1y` (one calendar year), or `permanent`.
+  `label`, `duration`, and `permission`. Choose `7d` (the default), `14d`, `1y` (one calendar year), or `permanent`.
+  `read_only` limits discovery and calls to read tools. `read_write` is the default for existing and new connections.
   Tokens work immediately and retain their assigned expiration. Owners can delete their connection with
   `DELETE /api/mcpConnections/{id}`, which returns `204` and invalidates the token on the next MCP request.
   The legacy `POST /api/mcpConnections/{id}/decision` endpoint still accepts `{"action":"revoke"}`.
@@ -50,6 +51,14 @@ instead, and update `core/configuration/testdata/compat/` in the same change. Af
 - When an account enables two-step verification, password sign-in requires `password_credentials.otp_code`.
   `ErrorInfo.reason` is `TOTP_REQUIRED` for a missing code and `TOTP_INVALID` for an invalid or reused code.
   Changing or resetting the factor revokes the account's interactive sessions. Personal access tokens remain valid.
+- Cat_two binds browser access and refresh credentials to the same revocable session. Refresh credentials issued
+  before upgrading can establish a bound session through the normal refresh endpoint. `SignOut` invalidates both
+  kinds of credential for the current session.
+- Cat_two retires `GENERAL.additionalScript`. Settings responses omit old script content, and direct attempts to
+  supply executable customization return `FAILED_PRECONDITION`. Branding and styling remain configurable.
+- Create memo and comment requests accept optional `idempotent` with an explicit `memoId` or `commentId`. An exact
+  retry returns the committed note. A conflicting payload returns `ALREADY_EXISTS`. Memo responses include
+  `revision`. Updates can pass `expectedRevision` for a transactional precondition, with `ABORTED` on stale edits.
 - Cat_two removed the built-in transcription service. `POST /api/ai:transcribe` and
   `/memos.api.AIService/Transcribe` return `404 Not Found`. Existing `instance/settings/AI` values and
   declarative configuration remain compatible. They no longer drive server-side model calls.
@@ -64,6 +73,11 @@ instead, and update `core/configuration/testdata/compat/` in the same change. Af
 - Cat_two no longer enforces the `USAGE_LIMITS` instance setting on memos or attachments.
   Existing entries and configuration files remain readable. `GetUserUsage` reports usage with empty `limits`
   and a `limit_index` of `-1`. Request and upload chunk validation continue to apply.
+- Cat_two stores new attachment files in the managed `assets/` directory. Reading `instance/settings/STORAGE`
+  reports `LOCAL` and the managed path template. Updates return `FAILED_PRECONDITION`.
+  Existing declarative `STORAGE` entries remain accepted to support migration of legacy attachments.
+  Admin-only `GetInstanceStats` adds the running data directory, managed Markdown directory, and managed
+  attachment directory.
 - Removed `InstanceSetting.MemoRelatedSetting`, `memo_related_setting`, and the `MEMO_RELATED` key.
   Reactions now use the full Unicode emoji picker. Configuration files declaring `instance/settings/MEMO_RELATED` or
   `memoRelatedSetting` are rejected; remove that setting from configuration files. Stored reactions are preserved.

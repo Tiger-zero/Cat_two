@@ -2,8 +2,8 @@ import { fromJson, type JsonValue, toJson } from "@bufbuild/protobuf";
 import type { EditorMode } from "@usememos/editor";
 import type { Attachment } from "@/types/proto/api/attachment_service_pb";
 import { AttachmentSchema } from "@/types/proto/api/attachment_service_pb";
-import type { MemoRelation } from "@/types/proto/api/memo_service_pb";
-import { MemoRelationSchema } from "@/types/proto/api/memo_service_pb";
+import type { Memo, MemoRelation } from "@/types/proto/api/memo_service_pb";
+import { MemoRelationSchema, MemoSchema } from "@/types/proto/api/memo_service_pb";
 import type { EditorSelection } from "../types/editorController";
 
 // A selection's shape depends on the editor mode it was taken in, so each one keeps its mode.
@@ -11,16 +11,25 @@ const cursors = new Map<string, { selection: EditorSelection; mode: EditorMode }
 const STRUCTURED_CACHE_ENTRY_KIND = "memos.editor-cache";
 const STRUCTURED_CACHE_ENTRY_VERSION = 4;
 
+export interface MemoCreateAttempt {
+  id: string;
+  submittedAt: number;
+  memo: Memo;
+}
+
 export interface EditorDraft {
   content: string;
   attachments: Attachment[];
   space?: string;
   baseRevision?: string;
+  /** Kept when a recovered draft adopts a new server baseline but its files have the original draft identity. */
+  stagedFilesRevision?: string;
   relations?: MemoRelation[];
   attachmentOrder?: string[];
   calendarDay?: string;
   createTime?: number;
   updateTime?: number;
+  createAttempt?: MemoCreateAttempt;
 }
 
 function deserializeDraft(raw: string): EditorDraft {
@@ -47,6 +56,7 @@ function deserializeDraft(raw: string): EditorDraft {
       const draft: EditorDraft = { content: parsed.content, attachments, space };
       if (parsed.version !== STRUCTURED_CACHE_ENTRY_VERSION) return draft;
       if (typeof parsed.baseRevision === "string") draft.baseRevision = parsed.baseRevision;
+      if (typeof parsed.stagedFilesRevision === "string") draft.stagedFilesRevision = parsed.stagedFilesRevision;
       if (Array.isArray(parsed.relations)) {
         draft.relations = parsed.relations.flatMap((value) => {
           try {
@@ -64,6 +74,23 @@ function deserializeDraft(raw: string): EditorDraft {
         draft.createTime = parsed.createTime;
       if (typeof parsed.updateTime === "number" && Number.isFinite(new Date(parsed.updateTime).valueOf()))
         draft.updateTime = parsed.updateTime;
+      const attempt = parsed.createAttempt as { id?: unknown; submittedAt?: unknown; memo?: JsonValue } | undefined;
+      if (
+        attempt?.memo &&
+        typeof attempt.id === "string" &&
+        typeof attempt.submittedAt === "number" &&
+        Number.isFinite(new Date(attempt.submittedAt).valueOf())
+      ) {
+        try {
+          draft.createAttempt = {
+            id: attempt.id,
+            submittedAt: attempt.submittedAt,
+            memo: fromJson(MemoSchema, attempt.memo),
+          };
+        } catch {
+          // A malformed submission does not prevent recovering the rest of the draft.
+        }
+      }
       return draft;
     }
   } catch {
@@ -73,21 +100,26 @@ function deserializeDraft(raw: string): EditorDraft {
   return { content: raw, attachments: [] };
 }
 
-function serializeDraft({ attachments, relations, ...draft }: EditorDraft): string {
+function serializeDraft({ attachments, relations, createAttempt, ...draft }: EditorDraft): string {
   return JSON.stringify({
     kind: STRUCTURED_CACHE_ENTRY_KIND,
     version: STRUCTURED_CACHE_ENTRY_VERSION,
     ...draft,
     attachments: attachments.map((attachment) => toJson(AttachmentSchema, attachment)),
     relations: relations?.map((relation) => toJson(MemoRelationSchema, relation)),
+    createAttempt: createAttempt && { ...createAttempt, memo: toJson(MemoSchema, createAttempt.memo) },
   });
 }
 
 // The caller's last observed value prevents an older tab from replacing
 // a draft written or discarded elsewhere. Null means no saved entry.
-function writeEntry(key: string, draft?: EditorDraft, expected?: string | null): string | null | undefined {
+function storeEntry(
+  key: string,
+  draft?: EditorDraft,
+  expected?: string | null,
+): { kind: "saved"; raw: string | null } | { kind: "conflict" | "unavailable" } {
   try {
-    if (expected !== undefined && localStorage.getItem(key) !== expected) return undefined;
+    if (expected !== undefined && localStorage.getItem(key) !== expected) return { kind: "conflict" };
     if (
       draft &&
       (draft.content.trim() ||
@@ -97,17 +129,23 @@ function writeEntry(key: string, draft?: EditorDraft, expected?: string | null):
         draft.relations?.length ||
         draft.createTime !== undefined ||
         draft.updateTime !== undefined ||
-        draft.attachmentOrder?.length)
+        draft.attachmentOrder?.length ||
+        draft.createAttempt)
     ) {
       const raw = serializeDraft(draft);
       localStorage.setItem(key, raw);
-      return raw;
+      return { kind: "saved", raw };
     }
     localStorage.removeItem(key);
-    return null;
+    return { kind: "saved", raw: null };
   } catch {
-    return undefined;
+    return { kind: "unavailable" };
   }
+}
+
+function writeEntry(key: string, draft?: EditorDraft, expected?: string | null): string | null | undefined {
+  const result = storeEntry(key, draft, expected);
+  return result.kind === "saved" ? result.raw : undefined;
 }
 
 function readRaw(key: string): string | null {
@@ -125,6 +163,7 @@ export const cacheService = {
   },
 
   saveNow: (key: string, draft: EditorDraft, expected?: string | null) => writeEntry(key, draft, expected),
+  saveSubmission: (key: string, draft: EditorDraft, expected: string | null) => storeEntry(key, draft, expected),
 
   readRaw,
 

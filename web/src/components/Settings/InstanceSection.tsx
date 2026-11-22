@@ -63,7 +63,7 @@ const InstanceSection = () => {
         name: buildInstanceSettingName(InstanceSetting_Key.GENERAL),
         value: {
           case: "generalSetting",
-          value: instanceGeneralSetting,
+          value: create(InstanceSetting_GeneralSettingSchema, { ...instanceGeneralSetting, additionalScript: "" }),
         },
       }),
       errorContext: "Update general settings",
@@ -123,14 +123,6 @@ const InstanceSection = () => {
           placeholder={t("setting.system.additional-style-placeholder")}
           value={instanceGeneralSetting.additionalStyle}
           onChange={(additionalStyle) => updatePartialSetting({ additionalStyle })}
-        />
-
-        <SettingCodeEditor
-          label={t("setting.system.additional-script")}
-          description={t("setting.system.additional-script-description")}
-          placeholder={t("setting.system.additional-script-placeholder")}
-          value={instanceGeneralSetting.additionalScript}
-          onChange={(additionalScript) => updatePartialSetting({ additionalScript })}
         />
       </SettingGroup>
 

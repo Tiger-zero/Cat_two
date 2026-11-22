@@ -62,6 +62,14 @@ func handleSSE(w http.ResponseWriter, r *http.Request, hub *SSEHub, authenticato
 	defer hub.Unsubscribe(client)
 
 	ctx := r.Context()
+	stillAuthenticated := func() bool {
+		if result.Claims != nil {
+			_, err := authenticator.AuthenticateByAccessTokenV2(ctx, result.AccessToken)
+			return err == nil
+		}
+		_, _, err := authenticator.AuthenticateByPAT(ctx, result.AccessToken)
+		return err == nil
+	}
 
 	slog.Debug("SSE client connected", "userID", userID)
 
@@ -96,8 +104,7 @@ func handleSSE(w http.ResponseWriter, r *http.Request, hub *SSEHub, authenticato
 			return nil
 
 		case frame, ok := <-client.events:
-			if !ok {
-				// Channel closed, client was unsubscribed.
+			if !ok || !stillAuthenticated() {
 				return nil
 			}
 			if _, err := w.Write(frame); err != nil {
@@ -109,6 +116,9 @@ func handleSSE(w http.ResponseWriter, r *http.Request, hub *SSEHub, authenticato
 			resetSSETimer(heartbeat)
 
 		case <-heartbeat.C:
+			if !stillAuthenticated() {
+				return nil
+			}
 			// Send a heartbeat comment to keep the connection alive.
 			if _, err := io.WriteString(w, sseHeartbeatComment); err != nil {
 				return nil

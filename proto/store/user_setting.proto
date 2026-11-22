@@ -88,6 +88,8 @@ message RefreshTokensUserSetting {
     ClientInfo client_info = 4;
     // Optional description
     string description = 5;
+    // Stable ID of the browser session across refresh-token rotations.
+    string session_id = 6;
   }
 
   message ClientInfo {

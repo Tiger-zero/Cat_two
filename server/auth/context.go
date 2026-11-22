@@ -73,6 +73,7 @@ type UserClaims struct {
 	Role            string
 	Status          string
 	SessionRevision string
+	SessionID       string
 }
 
 // GetUserClaims retrieves the user claims from context.

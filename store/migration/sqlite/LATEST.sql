@@ -45,7 +45,8 @@ CREATE TABLE mcp_connection (
   created_ts BIGINT NOT NULL,
   requested_ts BIGINT NOT NULL DEFAULT 0,
   expires_ts BIGINT NOT NULL DEFAULT 0,
-  remote_ip TEXT NOT NULL DEFAULT ''
+  remote_ip TEXT NOT NULL DEFAULT '',
+  permission TEXT NOT NULL DEFAULT 'read_write' CHECK (permission IN ('read_only', 'read_write'))
 );
 
 CREATE INDEX idx_mcp_connection_user_created ON mcp_connection (user_id, created_ts, id);
@@ -96,6 +97,9 @@ CREATE TABLE memo (
   updated_ts BIGINT NOT NULL DEFAULT (strftime('%s', 'now')),
   row_status TEXT NOT NULL CHECK (row_status IN ('NORMAL', 'ARCHIVED')) DEFAULT 'NORMAL',
   content TEXT NOT NULL DEFAULT '',
+  body_digest TEXT NOT NULL DEFAULT '',
+  revision BIGINT NOT NULL DEFAULT 1,
+  creation_request_digest TEXT NOT NULL DEFAULT '',
   deleted_ts INTEGER,
   trash_root_id INTEGER,
   visibility TEXT NOT NULL CHECK (visibility IN ('PUBLIC', 'PROTECTED', 'PRIVATE', 'SPACE')) DEFAULT 'PRIVATE',
@@ -112,6 +116,14 @@ CREATE INDEX idx_memo_trash_root ON memo(trash_root_id);
 CREATE INDEX idx_memo_owner_pinned_created
   ON memo(creator_id, row_status, pinned DESC, created_ts DESC, id DESC)
   WHERE deleted_ts IS NULL;
+
+-- memo_body_namespace
+CREATE TABLE memo_body_namespace (
+  id INTEGER NOT NULL PRIMARY KEY CHECK (id = 1),
+  namespace TEXT NOT NULL
+);
+
+INSERT INTO memo_body_namespace (id, namespace) VALUES (1, lower(hex(randomblob(16))));
 
 -- memo_relation
 CREATE TABLE memo_relation (

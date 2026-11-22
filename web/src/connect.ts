@@ -2,10 +2,12 @@ import { timestampDate } from "@bufbuild/protobuf/wkt";
 import { Code, ConnectError, createClient, type Interceptor } from "@connectrpc/connect";
 import { createConnectTransport } from "@connectrpc/connect-web";
 import {
+  accessSessionID,
   adoptSharedAccessToken,
   getAccessToken,
   hasStoredToken,
   isTokenExpired,
+  mayRefreshAccessSession,
   REQUEST_TOKEN_EXPIRY_BUFFER_MS,
   setAccessToken,
 } from "./auth-state";
@@ -76,11 +78,16 @@ const refreshTransport = createConnectTransport({
 
 const refreshAuthClient = createClient(AuthService, refreshTransport);
 
-async function doRefreshAccessToken(): Promise<void> {
-  const response = await refreshAuthClient.refreshToken({});
+async function doRefreshAccessToken(previousToken: string | null): Promise<void> {
+  const sessionID = accessSessionID(previousToken);
+  const response = await refreshAuthClient.refreshToken({}, { headers: sessionID ? { "x-memos-session-id": sessionID } : undefined });
 
   if (!response.accessToken) {
     throw new ConnectError("Refresh token response missing access token", Code.Internal);
+  }
+  const activeSession = accessSessionID(getAccessToken());
+  if (!mayRefreshAccessSession() || (activeSession && activeSession !== accessSessionID(response.accessToken))) {
+    throw new ConnectError("Session changed during refresh", Code.Unauthenticated);
   }
 
   const expiresAt = response.accessTokenExpireTime ? timestampDate(response.accessTokenExpireTime) : undefined;
@@ -92,8 +99,9 @@ async function doRefreshAccessToken(): Promise<void> {
 export async function refreshAccessToken(previousToken = getAccessToken()): Promise<void> {
   return tokenRefreshManager.refresh(async () => {
     const refresh = async () => {
+      if (!mayRefreshAccessSession()) throw new ConnectError("Session signed out", Code.Unauthenticated);
       if (!adoptSharedAccessToken(previousToken)) {
-        await doRefreshAccessToken();
+        await doRefreshAccessToken(previousToken);
       }
     };
     if (navigator.locks) {

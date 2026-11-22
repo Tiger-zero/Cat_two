@@ -18,7 +18,8 @@ import (
 )
 
 const (
-	telegramAPI = "https://api.telegram.org"
+	telegramAPIHost = "api.telegram.org"
+	telegramAPI     = "https://" + telegramAPIHost
 
 	telegramPollTimeout   = 30 // Sent to Telegram in seconds.
 	telegramPollLimit     = 50
@@ -67,11 +68,34 @@ type telegramReplyParameters struct {
 	AllowSendingWithoutReply bool  `json:"allow_sending_without_reply"`
 }
 
+// TelegramProxyFromEnvironment follows Go's HTTPS_PROXY and NO_PROXY rules
+// for Telegram's fixed API origin.
+func TelegramProxyFromEnvironment() string {
+	proxy, _ := http.ProxyFromEnvironment(&http.Request{URL: &url.URL{Scheme: "https", Host: telegramAPIHost}})
+	if proxy == nil {
+		return ""
+	}
+	return proxy.String()
+}
+
 // RunTelegram polls for private messages from senderID until ctx is canceled.
-// save receives a stable event ID followed by the original message text.
-func RunTelegram(ctx context.Context, token string, senderID int64, save func(context.Context, string, string) error) {
+// An empty proxyURL connects directly. save receives a stable event ID followed
+// by the original message text.
+func RunTelegram(ctx context.Context, token string, senderID int64, proxyURL string, save func(context.Context, string, string) error) {
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	defer transport.CloseIdleConnections()
+	transport.Proxy = nil
+	if proxyURL != "" {
+		proxy, err := url.Parse(proxyURL)
+		if err != nil {
+			slog.WarnContext(ctx, "Telegram polling disabled by invalid proxy configuration")
+			return
+		}
+		transport.Proxy = http.ProxyURL(proxy)
+	}
 	client := &http.Client{
-		Timeout: time.Duration(telegramPollTimeout+10) * time.Second,
+		Transport: transport,
+		Timeout:   time.Duration(telegramPollTimeout+10) * time.Second,
 		CheckRedirect: func(*http.Request, []*http.Request) error {
 			return http.ErrUseLastResponse
 		},

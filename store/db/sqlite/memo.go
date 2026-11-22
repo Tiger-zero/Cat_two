@@ -23,7 +23,7 @@ func (d *DB) CreateMemo(ctx context.Context, create *store.Memo) (*store.Memo, e
 	if err := validateSQLiteMemoCreate(ctx, tx, create); err != nil {
 		return nil, err
 	}
-	if err := insertSQLiteMemo(ctx, tx, create); err != nil {
+	if err := insertSQLiteMemo(ctx, tx, create, false); err != nil {
 		return nil, err
 	}
 	if err := tx.Commit(); err != nil {
@@ -32,9 +32,9 @@ func (d *DB) CreateMemo(ctx context.Context, create *store.Memo) (*store.Memo, e
 	return create, nil
 }
 
-func insertSQLiteMemo(ctx context.Context, tx dbExecutor, create *store.Memo) error {
-	fields := []string{"`uid`", "`creator_id`", "`content`", "`visibility`", "`payload`", "`space_id`"}
-	placeholder := []string{"?", "?", "?", "?", "?", "?"}
+func insertSQLiteMemo(ctx context.Context, tx dbExecutor, create *store.Memo, preserveInitialState bool) error {
+	fields := []string{"`uid`", "`creator_id`", "`content`", "`body_digest`", "`visibility`", "`payload`", "`space_id`", "`creation_request_digest`"}
+	placeholder := []string{"?", "?", "?", "?", "?", "?", "?", "?"}
 	payload := "{}"
 	if create.Payload != nil {
 		payloadBytes, err := protojson.Marshal(create.Payload)
@@ -43,7 +43,13 @@ func insertSQLiteMemo(ctx context.Context, tx dbExecutor, create *store.Memo) er
 		}
 		payload = string(payloadBytes)
 	}
-	args := []any{create.UID, create.CreatorID, create.Content, create.Visibility, payload, create.SpaceID}
+	args := []any{create.UID, create.CreatorID, create.Content, create.BodyDigest, create.Visibility, payload, create.SpaceID, create.CreationRequestDigest}
+
+	if preserveInitialState {
+		fields = append(fields, "`row_status`", "`pinned`")
+		placeholder = append(placeholder, "?", "?")
+		args = append(args, create.RowStatus, create.Pinned)
+	}
 
 	// Add custom timestamps if provided
 	if create.CreatedTs != 0 {
@@ -57,12 +63,13 @@ func insertSQLiteMemo(ctx context.Context, tx dbExecutor, create *store.Memo) er
 		args = append(args, create.UpdatedTs)
 	}
 
-	stmt := "INSERT INTO `memo` (" + strings.Join(fields, ", ") + ") VALUES (" + strings.Join(placeholder, ", ") + ") RETURNING `id`, `created_ts`, `updated_ts`, `row_status`"
+	stmt := "INSERT INTO `memo` (" + strings.Join(fields, ", ") + ") VALUES (" + strings.Join(placeholder, ", ") + ") RETURNING `id`, `created_ts`, `updated_ts`, `row_status`, `revision`"
 	if err := tx.QueryRowContext(ctx, stmt, args...).Scan(
 		&create.ID,
 		&create.CreatedTs,
 		&create.UpdatedTs,
 		&create.RowStatus,
+		&create.Revision,
 	); err != nil {
 		return err
 	}
@@ -233,8 +240,19 @@ func (d *DB) ListMemos(ctx context.Context, find *store.FindMemo) ([]*store.Memo
 			WHERE parent_relation.memo_id = memo.id AND parent_relation.type = 'COMMENT'
 			ORDER BY parent_memo.id LIMIT 1) AS parent_uid`,
 	}
+	fields = append(fields, "`memo`.`revision`", "`memo`.`creation_request_digest`")
+	checkContentBudget := !find.ExcludeContent && find.MaxTotalContentBytes > 0 && find.Limit == nil
 	if !find.ExcludeContent {
-		fields = append(fields, "`memo`.`content` AS `content`")
+		readLegacyBody := "`memo`.`body_digest` = ''"
+		if checkContentBudget {
+			// An unpaged batch can decide its total using the search projection
+			// and reject it before opening Markdown files or reading legacy bodies.
+			const totalBytes = "SUM(length(CAST(`memo`.`content` AS BLOB))) OVER ()"
+			fields = append(fields, totalBytes)
+			readLegacyBody += " AND " + totalBytes + " <= ?"
+			args = append([]any{find.MaxTotalContentBytes}, args...)
+		}
+		fields = append(fields, "CASE WHEN "+readLegacyBody+" THEN `memo`.`content` ELSE '' END", "`memo`.`body_digest`")
 	}
 
 	query := "SELECT " + strings.Join(fields, ", ") + " FROM `memo` " +
@@ -259,6 +277,7 @@ func (d *DB) ListMemos(ctx context.Context, find *store.FindMemo) ([]*store.Memo
 	for rows.Next() {
 		var memo store.Memo
 		var payloadBytes []byte
+		var totalContentBytes int64
 		dests := []any{
 			&memo.ID,
 			&memo.UID,
@@ -272,12 +291,20 @@ func (d *DB) ListMemos(ctx context.Context, find *store.FindMemo) ([]*store.Memo
 			&memo.SpaceID,
 			&memo.DeletedTs,
 			&memo.ParentUID,
+			&memo.Revision,
+			&memo.CreationRequestDigest,
+		}
+		if checkContentBudget {
+			dests = append(dests, &totalContentBytes)
 		}
 		if !find.ExcludeContent {
-			dests = append(dests, &memo.Content)
+			dests = append(dests, &memo.Content, &memo.BodyDigest)
 		}
 		if err := rows.Scan(dests...); err != nil {
 			return nil, err
+		}
+		if checkContentBudget && totalContentBytes > int64(find.MaxTotalContentBytes) {
+			return nil, store.ErrMemoContentBudgetExceeded
 		}
 		payload := &storepb.MemoPayload{}
 		if err := protojsonUnmarshaler.Unmarshal(payloadBytes, payload); err != nil {
@@ -315,7 +342,7 @@ func (d *DB) CountUserMemos(ctx context.Context, creatorID int32) (int64, error)
 
 func (d *DB) UpdateMemo(ctx context.Context, update *store.UpdateMemo) error {
 	if update.Policy == nil {
-		return applyMemoUpdate(ctx, d.db, update)
+		return applyMemoUpdate(ctx, d.db, update, false)
 	}
 	tx, err := d.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -325,7 +352,7 @@ func (d *DB) UpdateMemo(ctx context.Context, update *store.UpdateMemo) error {
 	if _, err := validateSQLiteMemoWritePolicy(ctx, tx, update.ID, update.Policy, update); err != nil {
 		return err
 	}
-	if err := applyMemoUpdate(ctx, tx, update); err != nil {
+	if err := applyMemoUpdate(ctx, tx, update, false); err != nil {
 		return err
 	}
 	return tx.Commit()

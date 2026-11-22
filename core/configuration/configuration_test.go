@@ -105,6 +105,34 @@ func TestLoadDirectoryEdgeCases(t *testing.T) {
 	require.ErrorContains(t, err, "larger than")
 }
 
+func TestLoadIgnoresRetiredAdditionalScriptReferences(t *testing.T) {
+	for name, content := range map[string]string{
+		"json names":  `{"instanceSettings":[{"name":"instance/settings/GENERAL","generalSetting":{"additionalScript":"${env:UNSET_SCRIPT}","additionalStyle":"body { color: black; }","customProfile":{"title":"Personal notes"}}}]}`,
+		"proto names": `{"instance_settings":[{"name":"instance/settings/GENERAL","general_setting":{"additional_script":"${file:/missing/script.js}","additional_style":"body { color: black; }","custom_profile":{"title":"Personal notes"}}}]}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			resolver := Resolver{
+				LookupEnv: func(string) (string, bool) {
+					t.Fatal("retired script environment reference must not be resolved")
+					return "", false
+				},
+				ReadFile: func(string) ([]byte, error) {
+					t.Fatal("retired script file reference must not be resolved")
+					return nil, nil
+				},
+			}
+			desired, err := Load(writeFiles(t, map[string]string{"legacy.json": content}), resolver)
+			require.NoError(t, err)
+			require.Len(t, desired.Warnings, 1)
+			require.Contains(t, desired.Warnings[0], "custom JavaScript is unavailable in Cat_two")
+			general := desired.Configuration.InstanceSettings[0].GetGeneralSetting()
+			require.Empty(t, general.GetAdditionalScript())
+			require.Equal(t, "body { color: black; }", general.GetAdditionalStyle())
+			require.Equal(t, "Personal notes", general.GetCustomProfile().GetTitle())
+		})
+	}
+}
+
 func TestLoadDecodesStrictly(t *testing.T) {
 	tests := map[string]struct {
 		document string

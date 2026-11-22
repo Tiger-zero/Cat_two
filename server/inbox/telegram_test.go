@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -15,6 +16,43 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func TestTelegramPollUsesConfiguredProxy(t *testing.T) {
+	ctx, cancel := context.WithTimeout(t.Context(), 3*time.Second)
+	defer cancel()
+	connected := make(chan struct{}, 1)
+	proxy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, http.MethodConnect, r.Method)
+		assert.Equal(t, "api.telegram.org:443", r.Host)
+		assert.Equal(t, "Basic Zml4dHVyZTpzZWNyZXQ=", r.Header.Get("Proxy-Authorization"))
+		assert.Empty(t, r.URL.Path, "the bot token stays inside the Telegram TLS connection")
+		w.WriteHeader(http.StatusBadGateway)
+		select {
+		case connected <- struct{}{}:
+		default:
+		}
+	}))
+	t.Cleanup(proxy.Close)
+	proxyURL, err := url.Parse(proxy.URL)
+	require.NoError(t, err)
+	proxyURL.User = url.UserPassword("fixture", "secret")
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		RunTelegram(ctx, "123:synthetic", 123, proxyURL.String(), func(context.Context, string, string) error {
+			t.Error("no message should be delivered")
+			return nil
+		})
+	}()
+	select {
+	case <-connected:
+		cancel()
+	case <-ctx.Done():
+		t.Error("Telegram did not connect through the configured proxy")
+	}
+	<-done
+}
 
 func TestTelegramSavesOnlyAuthorizedPrivateTextInOrder(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)

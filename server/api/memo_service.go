@@ -37,19 +37,19 @@ func (s *APIService) CreateMemo(ctx context.Context, request *apipb.CreateMemoRe
 		return nil, status.Errorf(codes.InvalidArgument, "memo is required")
 	}
 
+	digest, err := memoCreationDigest(request.MemoId, request.Idempotent, request)
+	if err != nil {
+		return nil, err
+	}
 	memoUID, err := ValidateAndGenerateUID(request.MemoId)
 	if err != nil {
 		return nil, err
 	}
 
-	prepared, err := s.prepareMemoCreate(ctx, user, request.Memo, memoUID)
-	if err != nil {
-		return nil, err
+	memo, replay, err := s.saveNewMemo(ctx, user, request.Memo, memoUID, digest, nil)
+	if replay != nil || err != nil {
+		return replay, err
 	}
-	if err := s.createMemoWithMutation(ctx, user, prepared.memo, nil, prepared.attachments, prepared.requiredAttachmentIDs, prepared.referenceRelations, false); err != nil {
-		return nil, mapMemoCreateError(err, memoUID, "failed to create memo")
-	}
-	memo := prepared.memo
 
 	attachments, err := s.Store.ListAttachments(ctx, &store.FindAttachment{
 		MemoID: &memo.ID,
@@ -70,8 +70,6 @@ func (s *APIService) CreateMemo(ctx context.Context, request *apipb.CreateMemoRe
 	if err := s.DispatchMemoCreatedWebhook(ctx, memoMessage); err != nil {
 		slog.Warn("Failed to dispatch memo created webhook", slog.Any("err", err))
 	}
-
-	s.SSEHub.publishMemoChanged()
 
 	s.dispatchMemoMentionNotificationsBestEffort(ctx, memo, nil, "")
 
@@ -240,7 +238,10 @@ func (s *APIService) GetMemo(ctx context.Context, request *apipb.GetMemoRequest)
 	if memo == nil {
 		return nil, status.Errorf(codes.NotFound, "memo not found")
 	}
+	return s.readMemoResponse(ctx, memo)
+}
 
+func (s *APIService) readMemoResponse(ctx context.Context, memo *store.Memo) (*apipb.Memo, error) {
 	if err := s.checkMemoReadAccess(ctx, memo); err != nil {
 		return nil, err
 	}
@@ -307,6 +308,12 @@ func (s *APIService) UpdateMemo(ctx context.Context, request *apipb.UpdateMemoRe
 
 	update := &store.UpdateMemo{
 		ID: memo.ID,
+	}
+	if expected := request.GetExpectedRevision(); expected != "" {
+		if expected != MemoRevision(memo) {
+			return nil, mapMemoWriteError(store.ErrMemoRevisionConflict, "failed to update memo")
+		}
+		update.ExpectedRevision = &memo.Revision
 	}
 	updatePaths := make(map[string]bool, len(request.UpdateMask.Paths))
 	for _, path := range request.UpdateMask.Paths {

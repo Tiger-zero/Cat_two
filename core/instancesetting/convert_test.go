@@ -20,7 +20,7 @@ func TestConversionRoundTrips(t *testing.T) {
 	}
 	settings := []*storepb.InstanceSetting{
 		{Key: storepb.InstanceSettingKey_GENERAL, Value: &storepb.InstanceSetting_GeneralSetting{GeneralSetting: &storepb.InstanceGeneralSetting{
-			DisallowUserRegistration: true, DisallowPasswordAuth: true, AdditionalScript: "s", AdditionalStyle: "c",
+			DisallowUserRegistration: true, DisallowPasswordAuth: true, AdditionalStyle: "c",
 			WeekStartDayOffset: 1, DisallowChangeUsername: true, DisallowChangeNickname: true,
 			CustomProfile: &storepb.InstanceCustomProfile{Title: "t", Description: "d", LogoUrl: "https://example.com/logo.png"},
 		}}},
@@ -58,6 +58,21 @@ func TestConversionRoundTrips(t *testing.T) {
 			require.True(t, proto.Equal(setting, ToStore(api)), "round trip changed %s", setting.Key)
 		})
 	}
+}
+
+func TestConversionDropsRetiredCustomJavaScript(t *testing.T) {
+	legacy := &storepb.InstanceSetting{
+		Key: storepb.InstanceSettingKey_GENERAL,
+		Value: &storepb.InstanceSetting_GeneralSetting{GeneralSetting: &storepb.InstanceGeneralSetting{
+			AdditionalScript: "old script source",
+			AdditionalStyle:  "body { color: black; }",
+		}},
+	}
+	setting := FromStore(legacy)
+	require.Empty(t, setting.GetGeneralSetting().GetAdditionalScript())
+	require.Equal(t, legacy.GetGeneralSetting().AdditionalStyle, setting.GetGeneralSetting().GetAdditionalStyle())
+	setting.GetGeneralSetting().AdditionalScript = "client script source"
+	require.Empty(t, ToStore(setting).GetGeneralSetting().GetAdditionalScript())
 }
 
 func TestUsageLimitsConversion(t *testing.T) {

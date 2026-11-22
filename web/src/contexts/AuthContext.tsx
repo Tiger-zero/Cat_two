@@ -1,6 +1,7 @@
+import { Code, ConnectError } from "@connectrpc/connect";
 import { useQueryClient } from "@tanstack/react-query";
-import { createContext, type ReactNode, useCallback, useContext, useMemo, useState } from "react";
-import { clearAccessToken, getAccessToken } from "@/auth-state";
+import { createContext, type ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { accessSessionID, clearAccessToken, endAccessSession, getAccessToken, onAccessSessionEnd } from "@/auth-state";
 import { authServiceClient, refreshAccessToken, userServiceClient } from "@/connect";
 import { userKeys } from "@/hooks/useUserQueries";
 import type {
@@ -52,6 +53,7 @@ const UNAUTHENTICATED_STATE: AuthState = {
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const queryClient = useQueryClient();
+  const initialization = useRef(0);
   const [state, setState] = useState<AuthState>({
     currentUser: undefined,
     userGeneralSetting: undefined,
@@ -64,7 +66,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     isLoading: true,
   });
 
+  useEffect(
+    () =>
+      onAccessSessionEnd(() => {
+        initialization.current++;
+        setState(UNAUTHENTICATED_STATE);
+        queryClient.clear();
+      }),
+    [queryClient],
+  );
+
   const fetchUserSettings = useCallback(async (userName: string) => {
+    const initializedAt = initialization.current;
     const { userSettings: settings } = await userServiceClient.listUserSettings({ parent: userName });
     const generalSetting = settings.find((s) => s.value.case === "generalSetting");
     const webhooksSetting = settings.find((s) => s.value.case === "webhooksSetting");
@@ -80,7 +93,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Tag settings control sensitive-content blurring. Publish them as soon as
     // this request settles.
     setState((prev) =>
-      prev.currentUser?.name === userName
+      initializedAt === initialization.current && prev.currentUser?.name === userName
         ? {
             ...prev,
             ...userSettings,
@@ -93,6 +106,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const initialize = useCallback(async () => {
+    const attempt = ++initialization.current;
     // `initialize` also runs after sign-in, when the previous unauthenticated
     // state is already marked initialized. Reset the full-readiness flag so
     // consumers cannot render with the new identity and stale/default settings.
@@ -110,6 +124,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     }
 
+    if (initialization.current !== attempt) return;
+
     // If we still don't have a token after refresh attempt, skip getCurrentUser call
     // to avoid unnecessary network request for unauthenticated users.
     if (!getAccessToken()) {
@@ -119,6 +135,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     try {
       const { user: currentUser } = await authServiceClient.getCurrentUser({});
+      if (initialization.current !== attempt) return;
 
       if (!currentUser) {
         clearAccessToken();
@@ -138,6 +155,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       queryClient.setQueryData(userKeys.detail(currentUser.name), currentUser);
 
       const settings = await fetchUserSettings(currentUser.name);
+      if (initialization.current !== attempt) return;
 
       setState({
         currentUser,
@@ -148,6 +166,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isLoading: false,
       });
     } catch (error) {
+      if (initialization.current !== attempt) return;
       console.error("Failed to initialize auth:", error);
       clearAccessToken();
       setState(UNAUTHENTICATED_STATE);
@@ -155,16 +174,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [fetchUserSettings, queryClient]);
 
   const logout = useCallback(async () => {
+    const token = getAccessToken();
     try {
       await authServiceClient.signOut({});
     } catch (error) {
-      console.error("[AuthContext] Failed to sign out:", error);
-    } finally {
-      clearAccessToken();
-      setState(UNAUTHENTICATED_STATE);
-      queryClient.clear();
+      if (!(error instanceof ConnectError) || error.code !== Code.Unauthenticated) throw error;
     }
-  }, [queryClient]);
+    // During the upgrade the interceptor can obtain a session-bound token by
+    // refreshing the old browser credentials before completing sign-out.
+    endAccessSession(accessSessionID(token) ? token : (getAccessToken() ?? token));
+  }, []);
 
   const refetchSettings = useCallback(async () => {
     const currentUserName = state.currentUser?.name;

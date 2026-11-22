@@ -173,10 +173,6 @@ func (s *APIService) finishAttachmentUpload(ctx context.Context, upload *attachm
 			return s.GetAttachment(ctx, &apipb.GetAttachmentRequest{Name: "attachments/" + upload.state.uid})
 		}
 	}
-	setting, err := s.Store.GetInstanceStorageSetting(ctx)
-	if err != nil {
-		return nil, status.Errorf(codes.Internal, "failed to get storage setting: %v", err)
-	}
 	file, err := os.Open(upload.path)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to open upload file: %v", err)
@@ -194,5 +190,5 @@ func (s *APIService) finishAttachmentUpload(ctx context.Context, upload *attachm
 	}
 	create.Size = upload.totalSize
 	upload.state.finalizeAttempted = true
-	return s.processAndSaveAttachment(ctx, create, setting, file)
+	return s.processAndSaveAttachment(ctx, create, file)
 }

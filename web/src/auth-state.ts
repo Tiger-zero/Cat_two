@@ -2,9 +2,11 @@
 // Tokens are cleared on logout or expiry.
 let accessToken: string | null = null;
 let tokenExpiresAt: Date | null = null;
+let signedOutInThisTab = false;
 
 const TOKEN_KEY = "memos_access_token";
 const EXPIRES_KEY = "memos_token_expires_at";
+const SIGNED_OUT_SESSION_KEY = "memos_signed_out_session";
 
 // BroadcastChannel lets tabs share freshly-refreshed tokens so that only one
 // tab needs to hit the refresh endpoint. When another tab successfully refreshes
@@ -18,9 +20,63 @@ const TOKEN_CHANNEL_NAME = "memos_token_sync";
 export const REQUEST_TOKEN_EXPIRY_BUFFER_MS = 30 * 1000;
 export const FOCUS_TOKEN_EXPIRY_BUFFER_MS = 2 * 60 * 1000;
 
-interface TokenBroadcastMessage {
-  token: string;
-  expiresAt: string; // ISO string
+type TokenBroadcastMessage = { token: string; expiresAt: string } | { signedOutSession: string };
+
+const signedOutSessions = new Set<string>();
+const sessionEndListeners = new Set<() => void>();
+
+export function accessSessionID(token: string | null): string {
+  const encoded = token?.split(".")[1];
+  if (!encoded) return "";
+  try {
+    const claims = JSON.parse(atob(encoded.replace(/-/g, "+").replace(/_/g, "/"))) as { sid?: unknown } | null;
+    return typeof claims?.sid === "string" ? claims.sid : "";
+  } catch {
+    return "";
+  }
+}
+
+function isSameAccessSession(left: string | null, right: string | null): boolean {
+  const session = accessSessionID(left);
+  return left === right || (session !== "" && session === accessSessionID(right));
+}
+
+function canAdoptAccessToken(token: string): boolean {
+  const currentSession = accessSessionID(accessToken);
+  const nextSession = accessSessionID(token);
+  return !signedOutInThisTab && !hasEnded(nextSession) && (!currentSession || currentSession === nextSession);
+}
+
+function hasEnded(sessionID: string): boolean {
+  if (!sessionID) return false;
+  if (signedOutSessions.has(sessionID)) return true;
+  try {
+    return localStorage.getItem(SIGNED_OUT_SESSION_KEY) === sessionID;
+  } catch {
+    return false;
+  }
+}
+
+function applySessionEnd(sessionID: string): void {
+  if (!sessionID) return;
+  signedOutSessions.add(sessionID);
+  let endedHere = accessSessionID(accessToken) === sessionID;
+  try {
+    const persisted = localStorage.getItem(TOKEN_KEY);
+    if (accessSessionID(persisted) === sessionID) {
+      localStorage.removeItem(TOKEN_KEY);
+      localStorage.removeItem(EXPIRES_KEY);
+      endedHere ||= accessToken === null;
+    }
+  } catch {
+    // A tab can retain its session in memory without localStorage.
+  }
+  if (endedHere) {
+    signedOutInThisTab = true;
+    accessToken = null;
+    tokenExpiresAt = null;
+    for (const listener of sessionEndListeners) listener();
+  }
 }
 
 let tokenChannel: BroadcastChannel | null = null;
@@ -30,8 +86,14 @@ function getTokenChannel(): BroadcastChannel | null {
   try {
     tokenChannel = new BroadcastChannel(TOKEN_CHANNEL_NAME);
     tokenChannel.onmessage = (event: MessageEvent<TokenBroadcastMessage>) => {
-      const { token, expiresAt } = event.data ?? {};
-      if (token && expiresAt) {
+      const message = event.data;
+      if (!message) return;
+      if ("signedOutSession" in message) {
+        applySessionEnd(message.signedOutSession);
+        return;
+      }
+      const { token, expiresAt } = message;
+      if (token && expiresAt && canAdoptAccessToken(token)) {
         // Another tab refreshed — adopt the token in-memory so we don't
         // fire our own refresh request.
         accessToken = token;
@@ -48,6 +110,15 @@ function getTokenChannel(): BroadcastChannel | null {
 // Initialize the channel at module load so the listener is registered
 // before any token refresh can occur in any tab.
 getTokenChannel();
+window.addEventListener("storage", (event) => {
+  if (event.key === SIGNED_OUT_SESSION_KEY && event.newValue) applySessionEnd(event.newValue);
+});
+
+/** Subscribe to sign-out in other same-origin tabs for this session. */
+export function onAccessSessionEnd(listener: () => void): () => void {
+  sessionEndListeners.add(listener);
+  return () => sessionEndListeners.delete(listener);
+}
 
 export const getAccessToken = (): string | null => {
   if (!accessToken) {
@@ -55,7 +126,7 @@ export const getAccessToken = (): string | null => {
       const storedToken = localStorage.getItem(TOKEN_KEY);
       const storedExpires = localStorage.getItem(EXPIRES_KEY);
 
-      if (storedToken && storedExpires) {
+      if (storedToken && storedExpires && canAdoptAccessToken(storedToken)) {
         const expiresAt = new Date(storedExpires);
         if (expiresAt > new Date()) {
           accessToken = storedToken;
@@ -81,7 +152,7 @@ export function adoptSharedAccessToken(previousToken: string | null): boolean {
   try {
     const storedToken = localStorage.getItem(TOKEN_KEY);
     const storedExpires = localStorage.getItem(EXPIRES_KEY);
-    if (storedToken && storedToken !== previousToken && storedExpires) {
+    if (storedToken && storedToken !== previousToken && storedExpires && canAdoptAccessToken(storedToken)) {
       const expiresAt = new Date(storedExpires);
       if (expiresAt.getTime() > Date.now()) {
         accessToken = storedToken;
@@ -96,6 +167,8 @@ export function adoptSharedAccessToken(previousToken: string | null): boolean {
 }
 
 export const setAccessToken = (token: string | null, expiresAt?: Date): void => {
+  if (token && hasEnded(accessSessionID(token))) return;
+  if (token) signedOutInThisTab = false;
   accessToken = token;
   tokenExpiresAt = expiresAt || null;
 
@@ -136,13 +209,39 @@ export const hasStoredToken = (): boolean => {
 };
 
 export const clearAccessToken = (): void => {
+  const current = accessToken;
   accessToken = null;
   tokenExpiresAt = null;
 
   try {
-    localStorage.removeItem(TOKEN_KEY);
-    localStorage.removeItem(EXPIRES_KEY);
+    if ((!current && !signedOutInThisTab) || isSameAccessSession(current, localStorage.getItem(TOKEN_KEY))) {
+      localStorage.removeItem(TOKEN_KEY);
+      localStorage.removeItem(EXPIRES_KEY);
+    }
   } catch (e) {
     console.warn("Failed to clear localStorage:", e);
   }
 };
+
+// A signed-out tab needs an explicit sign-in before it may refresh again.
+export const mayRefreshAccessSession = (): boolean => !signedOutInThisTab;
+
+/** Clear a confirmed logout without disturbing a newer or different session. */
+export function endAccessSession(token: string | null): void {
+  const sessionID = accessSessionID(token);
+  if (!sessionID) {
+    if (isSameAccessSession(token, accessToken)) {
+      clearAccessToken();
+      signedOutInThisTab = true;
+      for (const listener of sessionEndListeners) listener();
+    }
+    return;
+  }
+  applySessionEnd(sessionID);
+  getTokenChannel()?.postMessage({ signedOutSession: sessionID } satisfies TokenBroadcastMessage);
+  try {
+    localStorage.setItem(SIGNED_OUT_SESSION_KEY, sessionID);
+  } catch {
+    // BroadcastChannel still delivers the same logout when storage is disabled.
+  }
+}

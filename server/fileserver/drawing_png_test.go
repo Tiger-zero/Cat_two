@@ -12,9 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/usememos/memos/internal/httphandler"
-	"github.com/usememos/memos/internal/testutil/fakes3"
 	apipb "github.com/usememos/memos/proto/gen/api"
-	storepb "github.com/usememos/memos/proto/gen/store"
 	"github.com/usememos/memos/server/api"
 	"github.com/usememos/memos/server/auth"
 	"github.com/usememos/memos/store"
@@ -30,67 +28,43 @@ func TestDrawingPNGRoundTripsUnchanged(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, bytes.Contains(fixture, []byte("zTXtmemos-canvas\x00")), "fixture carries the scene chunk")
 
-	storages := map[string]func(context.Context, *testing.T, *store.Store){
-		"database": configureDatabaseStorage,
-		"local":    configureLocalStorage,
-		"s3": func(ctx context.Context, t *testing.T, stores *store.Store) {
-			configureFakeS3Storage(ctx, t, stores, fakes3.New(t, "file-server-attachments"))
-		},
-	}
 	uploads := map[string]func(context.Context, *testing.T, *api.APIService, []byte) *apipb.Attachment{
 		"inline":  createDrawingInline,
 		"chunked": uploadDrawingInChunks,
 	}
 
-	for storageName, configure := range storages {
-		for uploadName, upload := range uploads {
-			t.Run(storageName+"/"+uploadName, func(t *testing.T) {
-				ctx := context.Background()
-				svc, fs, stores, cleanup := newShareAttachmentTestServices(ctx, t)
-				defer cleanup()
-				configure(ctx, t, stores)
+	for uploadName, upload := range uploads {
+		t.Run(uploadName, func(t *testing.T) {
+			ctx := context.Background()
+			svc, fs, stores, cleanup := newShareAttachmentTestServices(ctx, t)
+			defer cleanup()
 
-				creator, err := stores.CreateUser(ctx, &store.User{Username: "artist", Role: store.RoleUser, Email: "artist@example.com"})
-				require.NoError(t, err)
-				creatorCtx := context.WithValue(ctx, auth.UserIDContextKey, creator.ID)
+			creator, err := stores.CreateUser(ctx, &store.User{Username: "artist", Role: store.RoleUser, Email: "artist@example.com"})
+			require.NoError(t, err)
+			creatorCtx := context.WithValue(ctx, auth.UserIDContextKey, creator.ID)
 
-				attachment := upload(creatorCtx, t, svc, fixture)
-				require.Equal(t, int64(len(fixture)), attachment.Size)
-				_, err = svc.CreateMemo(creatorCtx, &apipb.CreateMemoRequest{Memo: &apipb.Memo{
-					Content:     "a drawing",
-					Visibility:  apipb.Visibility_PRIVATE,
-					Attachments: []*apipb.Attachment{{Name: attachment.Name}},
-				}})
-				require.NoError(t, err)
+			attachment := upload(creatorCtx, t, svc, fixture)
+			require.Equal(t, int64(len(fixture)), attachment.Size)
+			_, err = svc.CreateMemo(creatorCtx, &apipb.CreateMemoRequest{Memo: &apipb.Memo{
+				Content:     "a drawing",
+				Visibility:  apipb.Visibility_PRIVATE,
+				Attachments: []*apipb.Attachment{{Name: attachment.Name}},
+			}})
+			require.NoError(t, err)
 
-				mux := http.NewServeMux()
-				fs.RegisterRoutes(mux, http.HandlerFunc(httphandler.NotFound))
-				recorder := httptest.NewRecorder()
-				mux.ServeHTTP(recorder, newAuthenticatedFileRequest(ctx, t, svc, creator.ID, fmt.Sprintf("/file/%s/%s", attachment.Name, attachment.Filename)))
+			mux := http.NewServeMux()
+			fs.RegisterRoutes(mux, http.HandlerFunc(httphandler.NotFound))
+			recorder := httptest.NewRecorder()
+			mux.ServeHTTP(recorder, newAuthenticatedFileRequest(ctx, t, svc, creator.ID, fmt.Sprintf("/file/%s/%s", attachment.Name, attachment.Filename)))
 
-				require.Equal(t, http.StatusOK, recorder.Code)
-				require.Equal(t, "image/png", recorder.Header().Get("Content-Type"))
-				require.Equal(t, fixture, recorder.Body.Bytes(), "the original file is served byte for byte")
-			})
-		}
+			require.Equal(t, http.StatusOK, recorder.Code)
+			require.Equal(t, "image/png", recorder.Header().Get("Content-Type"))
+			require.Equal(t, fixture, recorder.Body.Bytes(), "the original file is served byte for byte")
+		})
 	}
 }
 
 const drawingFilename = "drawing-20261106-101500.canvas.png"
-
-// configureDatabaseStorage makes the database the instance's default
-// attachment storage. Without a setting the test harness stores locally.
-func configureDatabaseStorage(ctx context.Context, t *testing.T, stores *store.Store) {
-	t.Helper()
-	_, err := stores.UpsertInstanceSetting(ctx, &storepb.InstanceSetting{
-		Key: storepb.InstanceSettingKey_STORAGE,
-		Value: &storepb.InstanceSetting_StorageSetting{StorageSetting: &storepb.InstanceStorageSetting{
-			Storages:         []*storepb.Storage{{Id: "database", Name: "Database", Type: storepb.StorageType_STORAGE_TYPE_DATABASE}},
-			DefaultStorageId: "database",
-		}},
-	})
-	require.NoError(t, err)
-}
 
 func createDrawingInline(ctx context.Context, t *testing.T, svc *api.APIService, content []byte) *apipb.Attachment {
 	t.Helper()

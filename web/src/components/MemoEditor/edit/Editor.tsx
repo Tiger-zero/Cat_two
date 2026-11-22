@@ -20,6 +20,7 @@ interface EditorProps {
   onFiles: (files: File[], origin: EditorFileOrigin) => void;
   /** Invoked by the in-editor save shortcut (Cmd/Ctrl+Enter). */
   onSubmit: () => void;
+  readOnly?: boolean;
   isFocusMode?: boolean;
   /** Rich text, or the whole memo as Markdown text. Switching changes no text. */
   mode?: EditorMode;
@@ -38,7 +39,7 @@ const EDITOR_ATTRIBUTES = {
 
 /** The composer's editor: MemoMarkdown, editable, with the composer's extensions, behind the EditorController contract. */
 const Editor = forwardRef(function Editor(props: EditorProps, ref: React.ForwardedRef<EditorController>) {
-  const { className, value, placeholder, onContentChange, onFiles, onSubmit, isFocusMode, mode, attachments } = props;
+  const { className, value, placeholder, onContentChange, onFiles, onSubmit, readOnly, isFocusMode, mode, attachments } = props;
   const t = useTranslate();
   const editorRef = useRef<MarkdownEditorInstance | null>(null);
   // The extensions read the latest callbacks through refs, written after commit so
@@ -88,7 +89,7 @@ const Editor = forwardRef(function Editor(props: EditorProps, ref: React.Forward
         <MemoMarkdown
           editorRef={editorRef}
           value={value}
-          editable
+          editable={!readOnly}
           onChange={onContentChange}
           onSubmit={onSubmit}
           placeholder={placeholder}

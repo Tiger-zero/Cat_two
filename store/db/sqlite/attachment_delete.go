@@ -37,8 +37,8 @@ func (d *DB) DeleteAttachmentsWithPolicy(ctx context.Context, policy *store.Atta
 		return err
 	}
 
-	for _, attachmentID := range attachmentIDs {
-		result, err := tx.ExecContext(ctx, "DELETE FROM attachment WHERE id = ?", attachmentID)
+	for _, attachment := range attachments {
+		result, err := tx.ExecContext(ctx, "DELETE FROM attachment WHERE id = ? AND memo_id IS ?", attachment.ID, attachment.MemoID)
 		if err != nil {
 			return errors.Wrap(err, "failed to delete attachment")
 		}
@@ -46,6 +46,11 @@ func (d *DB) DeleteAttachmentsWithPolicy(ctx context.Context, policy *store.Atta
 			return errors.Wrap(err, "failed to count deleted attachment")
 		} else if rows != 1 {
 			return store.ErrMemoMutationConflict
+		}
+	}
+	for _, memoID := range memoIDs {
+		if err := bumpMemoRevision(ctx, tx, memoID); err != nil {
+			return err
 		}
 	}
 	if err := tx.Commit(); err != nil {

@@ -8,12 +8,12 @@ import (
 	"github.com/usememos/memos/store"
 )
 
-const mcpConnectionColumns = "id, user_id, label, token_hash, status, created_ts, requested_ts, expires_ts, remote_ip"
+const mcpConnectionColumns = "id, user_id, label, token_hash, status, created_ts, requested_ts, expires_ts, remote_ip, permission"
 
 func (d *DB) CreateMCPConnection(ctx context.Context, connection *store.MCPConnection) error {
 	_, err := d.db.ExecContext(ctx, `INSERT INTO mcp_connection (`+mcpConnectionColumns+`)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`, connection.ID, connection.UserID, connection.Label, connection.TokenHash, connection.Status,
-		connection.CreatedAt, connection.RequestedAt, connection.ExpiresAt, connection.RemoteIP,
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, connection.ID, connection.UserID, connection.Label, connection.TokenHash, connection.Status,
+		connection.CreatedAt, connection.RequestedAt, connection.ExpiresAt, connection.RemoteIP, connection.Permission,
 	)
 	return err
 }
@@ -45,12 +45,12 @@ func (d *DB) GetMCPConnectionByHash(ctx context.Context, tokenHash string) (*sto
 	var ownerStatus store.RowStatus
 	err := d.db.QueryRowContext(ctx, `
 		SELECT c.id, c.user_id, c.label, c.token_hash, c.status,
-		       c.created_ts, c.requested_ts, c.expires_ts, c.remote_ip, u.row_status
+		       c.created_ts, c.requested_ts, c.expires_ts, c.remote_ip, c.permission, u.row_status
 		FROM mcp_connection c
 		JOIN user u ON u.id = c.user_id
 		WHERE c.token_hash = ?`, tokenHash).Scan(
 		&connection.ID, &connection.UserID, &connection.Label, &connection.TokenHash, &connection.Status,
-		&connection.CreatedAt, &connection.RequestedAt, &connection.ExpiresAt, &connection.RemoteIP, &ownerStatus,
+		&connection.CreatedAt, &connection.RequestedAt, &connection.ExpiresAt, &connection.RemoteIP, &connection.Permission, &ownerStatus,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, "", nil
@@ -91,7 +91,7 @@ func (d *DB) DeleteMCPConnection(ctx context.Context, userID int32, id string) (
 func scanMCPConnection(row interface{ Scan(...any) error }) (*store.MCPConnection, error) {
 	connection := &store.MCPConnection{}
 	if err := row.Scan(&connection.ID, &connection.UserID, &connection.Label, &connection.TokenHash, &connection.Status,
-		&connection.CreatedAt, &connection.RequestedAt, &connection.ExpiresAt, &connection.RemoteIP); err != nil {
+		&connection.CreatedAt, &connection.RequestedAt, &connection.ExpiresAt, &connection.RemoteIP, &connection.Permission); err != nil {
 		return nil, err
 	}
 	return connection, nil

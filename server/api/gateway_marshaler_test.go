@@ -130,7 +130,7 @@ func TestGatewayMarshalerKeepsEmptyCollections(t *testing.T) {
 func marshalThroughGateway(t *testing.T, message any) map[string]any {
 	t.Helper()
 
-	data, err := newGatewayMarshaler().Marshal(message)
+	data, err := NewJSONMarshaler().Marshal(message)
 	require.NoError(t, err)
 
 	payload := map[string]any{}

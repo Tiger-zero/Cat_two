@@ -14,7 +14,6 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
-	"strconv"
 	"strings"
 	"time"
 
@@ -30,7 +29,6 @@ import (
 	"github.com/usememos/memos/internal/profile"
 	"github.com/usememos/memos/internal/ratelimit"
 	storepb "github.com/usememos/memos/proto/gen/store"
-	"github.com/usememos/memos/provider/storage"
 	"github.com/usememos/memos/server/auth"
 	"github.com/usememos/memos/store"
 )
@@ -169,9 +167,7 @@ func (s *FileServerService) serveAttachmentFile(w http.ResponseWriter, r *http.R
 	wantThumbnail := r.URL.Query().Get("thumbnail") == "true"
 	wantMotion := r.URL.Query().Get("motion") == "true"
 
-	// Authorize on metadata alone. Database-stored bytes are loaded only
-	// after the read is permitted, so an unauthorized request never pulls a
-	// blob out of the database.
+	// Authorize the attachment before opening a file or serving a derivative.
 	attachment, err := s.Store.GetAttachment(ctx, &store.FindAttachment{UID: &uid})
 	if err != nil {
 		return &httphandler.Error{Code: http.StatusInternalServerError, Message: "failed to get attachment", Cause: err}
@@ -188,34 +184,15 @@ func (s *FileServerService) serveAttachmentFile(w http.ResponseWriter, r *http.R
 	if attachment.StorageType == storepb.AttachmentStorageType_EXTERNAL {
 		return serveExternalAttachment(w, r, attachment)
 	}
-	if attachment.StorageType != storepb.AttachmentStorageType_LOCAL && attachment.StorageType != storepb.AttachmentStorageType_S3 {
-		// Scope the second lookup too. The binding or account lifecycle may
-		// have changed since the first read.
-		attachment, err = s.Store.GetAttachment(ctx, &store.FindAttachment{
-			ID:      &attachment.ID,
-			GetBlob: true,
-			Access:  &store.MemoAccessScope{OwnerOnly: true, UserID: &user.ID},
-		})
-		if err != nil {
-			return &httphandler.Error{Code: http.StatusInternalServerError, Message: "failed to get attachment", Cause: err}
-		}
-		if attachment == nil {
-			return &httphandler.Error{Code: http.StatusNotFound, Message: "attachment not found"}
-		}
+	if attachment.StorageType != storepb.AttachmentStorageType_LOCAL {
+		return &httphandler.Error{Code: http.StatusNotFound, Message: "attachment file not found"}
 	}
 
 	if wantMotion {
 		return s.serveMotionClip(w, r, attachment)
 	}
 
-	contentType := sanitizeContentType(attachment.Type)
-
-	// Stream video/audio to avoid loading entire file into memory.
-	if isMediaType(attachment.Type) {
-		return s.serveMediaStream(w, r, attachment, contentType)
-	}
-
-	return s.serveStaticFile(w, r, attachment, contentType, wantThumbnail)
+	return s.serveAttachmentContent(w, r, attachment, wantThumbnail)
 }
 
 // serveUserAvatar serves user avatar images.
@@ -287,28 +264,8 @@ func serveExternalAttachment(w http.ResponseWriter, r *http.Request, attachment 
 	return nil
 }
 
-// serveMediaStream serves video/audio files using streaming to avoid memory exhaustion.
-func (s *FileServerService) serveMediaStream(w http.ResponseWriter, r *http.Request, attachment *store.Attachment, contentType string) error {
-	setSecurityHeaders(w)
-	setMediaHeaders(w, contentType, attachment.Type)
-
-	switch attachment.StorageType {
-	case storepb.AttachmentStorageType_LOCAL:
-		return s.serveLocalFile(w, r, attachment)
-
-	case storepb.AttachmentStorageType_S3:
-		return s.streamS3Object(w, r, attachment, contentType)
-
-	default:
-		// Database storage fallback.
-		modTime := time.Unix(attachment.UpdatedTs, 0)
-		http.ServeContent(w, r, attachment.Filename, modTime, bytes.NewReader(attachment.Blob))
-		return nil
-	}
-}
-
-// serveStaticFile serves non-streaming files (images, documents, etc.).
-func (s *FileServerService) serveStaticFile(w http.ResponseWriter, r *http.Request, attachment *store.Attachment, contentType string, wantThumbnail bool) error {
+// serveAttachmentContent serves a local attachment or its generated thumbnail.
+func (s *FileServerService) serveAttachmentContent(w http.ResponseWriter, r *http.Request, attachment *store.Attachment, wantThumbnail bool) error {
 	// Generate thumbnail for supported image types.
 	if wantThumbnail && thumbnailSupportedTypes[attachment.Type] {
 		if thumbnailBlob, err := s.getOrGenerateThumbnail(r.Context(), attachment); err != nil {
@@ -322,71 +279,21 @@ func (s *FileServerService) serveStaticFile(w http.ResponseWriter, r *http.Reque
 		}
 	}
 
+	contentType := sanitizeContentType(attachment.Type)
 	setSecurityHeaders(w)
 	setMediaHeaders(w, contentType, attachment.Type)
 
 	// Force download for non-media files to prevent XSS execution.
-	if !strings.HasPrefix(contentType, "image/") && contentType != "application/pdf" {
+	if !isMediaType(attachment.Type) && !strings.HasPrefix(contentType, "image/") && contentType != "application/pdf" {
 		w.Header().Set("Content-Disposition", mime.FormatMediaType("attachment", map[string]string{"filename": attachment.Filename}))
 	}
 
-	switch attachment.StorageType {
-	case storepb.AttachmentStorageType_LOCAL:
-		return s.serveLocalFile(w, r, attachment)
-	case storepb.AttachmentStorageType_S3:
-		return s.streamS3Object(w, r, attachment, contentType)
-	default:
-		return httphandler.Blob(w, http.StatusOK, contentType, attachment.Blob)
-	}
+	return s.serveLocalFile(w, r, attachment)
 }
 
 // =============================================================================
 // Storage Operations
 // =============================================================================
-
-// getAttachmentBlob retrieves the binary content of an attachment from storage.
-func (s *FileServerService) getAttachmentBlob(ctx context.Context, attachment *store.Attachment) ([]byte, error) {
-	reader, err := s.getAttachmentReader(ctx, attachment)
-	if err != nil {
-		return nil, err
-	}
-	defer reader.Close()
-
-	blob, err := io.ReadAll(reader)
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to read attachment content")
-	}
-	return blob, nil
-}
-
-// getAttachmentReader returns a reader for streaming attachment content.
-func (s *FileServerService) getAttachmentReader(ctx context.Context, attachment *store.Attachment) (io.ReadCloser, error) {
-	switch attachment.StorageType {
-	case storepb.AttachmentStorageType_LOCAL:
-		file, err := os.Open(s.resolveLocalPath(attachment.Reference))
-		if err != nil {
-			if os.IsNotExist(err) {
-				return nil, errors.Wrap(err, "file not found")
-			}
-			return nil, errors.Wrap(err, "failed to open file")
-		}
-		return file, nil
-
-	case storepb.AttachmentStorageType_S3:
-		driver, s3Object, err := s.Store.ResolveAttachmentS3Driver(ctx, attachment)
-		if err != nil {
-			return nil, err
-		}
-		object, err := driver.GetObjectStream(ctx, s3Object.Key, "")
-		if err != nil {
-			return nil, errors.Wrap(err, "failed to stream from S3")
-		}
-		return object.Body, nil
-
-	default:
-		return io.NopCloser(bytes.NewReader(attachment.Blob)), nil
-	}
-}
 
 // resolveLocalPath converts a storage reference to an absolute file path.
 func (s *FileServerService) resolveLocalPath(reference string) string {
@@ -416,63 +323,6 @@ func (s *FileServerService) serveLocalFile(w http.ResponseWriter, r *http.Reques
 	return nil
 }
 
-// streamS3Object streams S3 content through the server, forwarding a supported
-// single Range so media players and document viewers can seek without a direct
-// S3 URL. Multipart ranges are ignored and served as a complete response
-// because S3 does not support multipart range responses.
-func (s *FileServerService) streamS3Object(w http.ResponseWriter, r *http.Request, attachment *store.Attachment, contentType string) error {
-	ctx := r.Context()
-	driver, s3Object, err := s.Store.ResolveAttachmentS3Driver(ctx, attachment)
-	if err != nil {
-		return &httphandler.Error{Code: http.StatusInternalServerError, Message: "failed to resolve S3 attachment driver", Cause: err}
-	}
-
-	object, err := driver.GetObjectStream(ctx, s3Object.Key, singleRangeHeader(r.Header))
-	if err != nil {
-		if errors.Is(err, storage.ErrRangeNotSatisfiable) {
-			h := w.Header()
-			h.Set("Accept-Ranges", "bytes")
-			var rangeErr *storage.RangeNotSatisfiableError
-			if errors.As(err, &rangeErr) && rangeErr.ContentRange != "" {
-				h.Set("Content-Range", rangeErr.ContentRange)
-			}
-			return &httphandler.Error{Code: http.StatusRequestedRangeNotSatisfiable, Message: "requested range not satisfiable"}
-		}
-		return &httphandler.Error{Code: http.StatusInternalServerError, Message: "failed to stream from S3", Cause: err}
-	}
-	defer object.Body.Close()
-
-	h := w.Header()
-	h.Set("Accept-Ranges", "bytes")
-	if object.ContentLength >= 0 {
-		h.Set("Content-Length", strconv.FormatInt(object.ContentLength, 10))
-	}
-	status := http.StatusOK
-	if object.ContentRange != "" {
-		h.Set("Content-Range", object.ContentRange)
-		status = http.StatusPartialContent
-	}
-	w.Header().Set("Content-Type", contentType)
-	w.WriteHeader(status)
-	_, err = io.Copy(w, object.Body)
-	return err
-}
-
-// singleRangeHeader returns a Range value only when it contains one range.
-// Ignoring unsupported Range requests is permitted by HTTP and lets the caller
-// send the complete representation instead of relaying a request S3 rejects.
-func singleRangeHeader(header http.Header) string {
-	values := header.Values("Range")
-	if len(values) != 1 || strings.Contains(values[0], ",") {
-		return ""
-	}
-	unit, ranges, ok := strings.Cut(values[0], "=")
-	if !ok || !strings.EqualFold(strings.TrimSpace(unit), "bytes") || strings.TrimSpace(ranges) == "" {
-		return ""
-	}
-	return values[0]
-}
-
 // =============================================================================
 // Thumbnail Generation
 // =============================================================================
@@ -493,7 +343,7 @@ func (s *FileServerService) getOrGenerateThumbnail(ctx context.Context, attachme
 		return nil, errUseOriginalForThumbnail
 	}
 
-	useOriginal, err := s.shouldUseOriginalForThumbnail(ctx, attachment)
+	useOriginal, err := s.shouldUseOriginalForThumbnail(attachment)
 	if err != nil {
 		return nil, err
 	}
@@ -515,7 +365,7 @@ func (s *FileServerService) getOrGenerateThumbnail(ctx context.Context, attachme
 		return nil, errUseOriginalForThumbnail
 	}
 
-	blob, err := s.generateThumbnail(ctx, attachment, thumbnailPath)
+	blob, err := s.generateThumbnail(attachment, thumbnailPath)
 	if errors.Is(err, errThumbnailUnsupported) && ctx.Err() == nil {
 		// Remember the verdict so the next request serves the original
 		// without decoding again. A canceled request is not a verdict on the
@@ -538,7 +388,7 @@ func (s *FileServerService) getThumbnailPath(attachment *store.Attachment) (stri
 	return filepath.Join(cacheFolder, filename), nil
 }
 
-func (s *FileServerService) shouldUseOriginalForThumbnail(ctx context.Context, attachment *store.Attachment) (bool, error) {
+func (s *FileServerService) shouldUseOriginalForThumbnail(attachment *store.Attachment) (bool, error) {
 	if attachment.Type == "image/heic" || attachment.Type == "image/heif" {
 		return true, nil
 	}
@@ -547,7 +397,7 @@ func (s *FileServerService) shouldUseOriginalForThumbnail(ctx context.Context, a
 		return false, nil
 	}
 
-	reader, err := s.getAttachmentReader(ctx, attachment)
+	reader, err := os.Open(s.resolveLocalPath(attachment.Reference))
 	if err != nil {
 		return false, errors.Wrap(err, "failed to open image for metadata probe")
 	}
@@ -601,18 +451,18 @@ func hasThumbnailSensitiveMetadata(data []byte) bool {
 }
 
 // generateThumbnail creates a new thumbnail and saves it to disk.
-func (s *FileServerService) generateThumbnail(ctx context.Context, attachment *store.Attachment, thumbnailPath string) ([]byte, error) {
+func (s *FileServerService) generateThumbnail(attachment *store.Attachment, thumbnailPath string) ([]byte, error) {
 	// Bound the decode before paying for it: the pixel count is read from
 	// the header, and the upload path only enforces it for the formats it
 	// re-encodes, so a stored image may still declare far more pixels than
 	// the server is willing to allocate.
-	if err := s.checkThumbnailSourceBounds(ctx, attachment); err != nil {
+	if err := s.checkThumbnailSourceBounds(attachment); err != nil {
 		return nil, err
 	}
 
-	reader, err := s.getAttachmentReader(ctx, attachment)
+	reader, err := os.Open(s.resolveLocalPath(attachment.Reference))
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to get attachment reader")
+		return nil, errors.Wrap(err, "failed to open attachment for thumbnail")
 	}
 	defer reader.Close()
 
@@ -639,8 +489,8 @@ func (s *FileServerService) generateThumbnail(ctx context.Context, attachment *s
 
 // checkThumbnailSourceBounds reads the image header and refuses images whose
 // declared dimensions exceed the decode budget.
-func (s *FileServerService) checkThumbnailSourceBounds(ctx context.Context, attachment *store.Attachment) error {
-	reader, err := s.getAttachmentReader(ctx, attachment)
+func (s *FileServerService) checkThumbnailSourceBounds(attachment *store.Attachment) error {
+	reader, err := os.Open(s.resolveLocalPath(attachment.Reference))
 	if err != nil {
 		return errors.Wrap(err, "failed to open image for size probe")
 	}
@@ -670,7 +520,7 @@ func (s *FileServerService) serveMotionClip(w http.ResponseWriter, r *http.Reque
 		return &httphandler.Error{Code: http.StatusBadRequest, Message: "attachment does not have motion clip"}
 	}
 
-	clipBlob, err := s.getOrExtractMotionClip(r.Context(), attachment)
+	clipBlob, err := s.getOrExtractMotionClip(attachment)
 	if err != nil {
 		return &httphandler.Error{Code: http.StatusInternalServerError, Message: "failed to get motion clip", Cause: err}
 	}
@@ -682,7 +532,7 @@ func (s *FileServerService) serveMotionClip(w http.ResponseWriter, r *http.Reque
 	return nil
 }
 
-func (s *FileServerService) getOrExtractMotionClip(ctx context.Context, attachment *store.Attachment) ([]byte, error) {
+func (s *FileServerService) getOrExtractMotionClip(attachment *store.Attachment) ([]byte, error) {
 	motionPath, err := s.getMotionPath(attachment)
 	if err != nil {
 		return nil, err
@@ -692,9 +542,9 @@ func (s *FileServerService) getOrExtractMotionClip(ctx context.Context, attachme
 		return blob, nil
 	}
 
-	blob, err := s.getAttachmentBlob(ctx, attachment)
+	blob, err := os.ReadFile(s.resolveLocalPath(attachment.Reference))
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "failed to read attachment file")
 	}
 
 	videoBlob, _ := motionphoto.ExtractVideo(blob)
@@ -732,7 +582,7 @@ func (s *FileServerService) checkAttachmentPermission(ctx context.Context, user 
 		return nil
 	}
 
-	memo, err := s.Store.GetMemo(ctx, &store.FindMemo{ID: attachment.MemoID})
+	memo, err := s.Store.GetMemo(ctx, &store.FindMemo{ID: attachment.MemoID, ExcludeContent: true})
 	if err != nil {
 		return &httphandler.Error{Code: http.StatusInternalServerError, Message: "failed to find memo", Cause: err}
 	}

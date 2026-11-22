@@ -11,7 +11,7 @@ interface Options {
   getBaseRevision: () => string | undefined;
   createBlobUrl: (file: File) => string;
   onStorageError: () => void;
-  onStaleDraft: () => void;
+  onStaleDraft: (baseRevision?: string) => void;
 }
 
 export function useStagedDraftFiles({ key, enabled, getBaseRevision, createBlobUrl, onStorageError, onStaleDraft }: Options) {
@@ -113,7 +113,7 @@ export function useStagedDraftFiles({ key, enabled, getBaseRevision, createBlobU
           expected = saved.writeId ?? null;
           hasDraft = saved.baseRevision === openedRevision;
           if (!hasDraft) {
-            onStaleDraft();
+            onStaleDraft(saved.baseRevision);
             return;
           }
           if (discarded) return;

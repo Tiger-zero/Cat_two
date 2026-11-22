@@ -511,11 +511,11 @@ func (s *APIService) UpdateUser(ctx context.Context, request *apipb.UpdateUserRe
 		// A new password ends every other session. The caller's own browser
 		// session survives when they changed their own password; an admin
 		// resetting another account revokes all of that account's sessions.
-		keepTokenID := ""
+		keepSessionID := ""
 		if currentUser.ID == user.ID {
-			keepTokenID = currentRefreshTokenID(ctx, s.Secret)
+			keepSessionID = currentSessionID(ctx, s.Secret, user.ID)
 		}
-		if err := s.Store.RemoveUserRefreshTokensExcept(ctx, user.ID, keepTokenID); err != nil {
+		if err := s.Store.RemoveUserRefreshTokensExcept(ctx, user.ID, keepSessionID); err != nil {
 			slog.Warn("failed to revoke sessions after password change", "user_id", user.ID, "error", err)
 		}
 	}

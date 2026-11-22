@@ -48,17 +48,3 @@ func TestRemovedAPIVersionRoutesReturnGone(t *testing.T) {
 	e.ServeHTTP(rec, req)
 	require.Equal(t, http.StatusOK, rec.Code)
 }
-
-func TestMCPIdentityRequiresMatchingAPIProcedure(t *testing.T) {
-	svc, _ := newUploadTestService(t)
-	handler, err := svc.NewHandler(context.Background())
-	require.NoError(t, err)
-
-	ctx := WithMCPRequest(context.Background(), 1, "/memos.api.MemoService/ListMemos")
-	request := httptest.NewRequestWithContext(ctx, http.MethodGet, "/api/users", nil)
-	recorder := httptest.NewRecorder()
-	handler.ServeHTTP(recorder, request)
-
-	require.Equal(t, http.StatusForbidden, recorder.Code)
-	require.Contains(t, recorder.Body.String(), "MCP connection cannot access this API procedure")
-}

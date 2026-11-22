@@ -23,7 +23,7 @@ func TestMCPConnectionStore(t *testing.T) {
 
 	connection := &store.MCPConnection{
 		ID: "first", UserID: owner.ID, Label: strings.Repeat("📝", 80), TokenHash: strings.Repeat("ab", 32),
-		Status: store.MCPConnectionApproved, CreatedAt: 100, ExpiresAt: 200,
+		Status: store.MCPConnectionApproved, CreatedAt: 100, ExpiresAt: 200, Permission: store.MCPConnectionReadOnly,
 	}
 	require.NoError(t, ts.CreateMCPConnection(ctx, connection))
 	duplicate := *connection
@@ -34,6 +34,7 @@ func TestMCPConnectionStore(t *testing.T) {
 		Status: store.MCPConnectionApproved, CreatedAt: 101,
 	}
 	require.NoError(t, ts.CreateMCPConnection(ctx, foreign))
+	require.Equal(t, store.MCPConnectionReadWrite, foreign.Permission)
 
 	list, err := ts.ListMCPConnections(ctx, owner.ID)
 	require.NoError(t, err)
@@ -207,9 +208,9 @@ func TestMigrationMCPConnection(t *testing.T) {
 	t.Cleanup(func() { require.NoError(t, ts.Close()) })
 	owner, err := createTestingHostUser(ctx, ts)
 	require.NoError(t, err)
+	removeSchemaAfterMCPConnection(ctx, t, ts, getDriverFromEnv())
 	_, err = ts.GetDriver().GetDB().ExecContext(ctx, "DROP TABLE mcp_connection")
 	require.NoError(t, err)
-	removeSchemaAfterMCPConnection(ctx, t, ts, getDriverFromEnv())
 	setSchemaVersion(ctx, t, ts, "26.11.3")
 	require.NoError(t, ts.Migrate(ctx))
 	require.NoError(t, ts.Migrate(ctx), "a completed migration can restart")
@@ -226,5 +227,27 @@ func TestMigrationMCPConnection(t *testing.T) {
 	stored, ownerStatus, err := ts.GetMCPConnectionByHash(ctx, connection.TokenHash)
 	require.NoError(t, err)
 	require.Equal(t, connection, stored)
+	require.Equal(t, store.Normal, ownerStatus)
+}
+
+func TestMigrationMCPConnectionPermissionDefaultsToReadWrite(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	ts := NewTestingStore(ctx, t)
+	t.Cleanup(func() { require.NoError(t, ts.Close()) })
+	owner, err := createTestingHostUser(ctx, ts)
+	require.NoError(t, err)
+	connection := &store.MCPConnection{
+		ID: "legacy-permission", UserID: owner.ID, Label: "Existing connector", TokenHash: strings.Repeat("d1", 32),
+		Status: store.MCPConnectionApproved, CreatedAt: 100,
+	}
+	require.NoError(t, ts.CreateMCPConnection(ctx, connection))
+	removeMCPPermissionSchema(ctx, t, ts)
+	setSchemaVersion(ctx, t, ts, "26.11.9")
+	require.NoError(t, ts.Migrate(ctx))
+	stored, ownerStatus, err := ts.GetMCPConnectionByHash(ctx, connection.TokenHash)
+	require.NoError(t, err)
+	require.Equal(t, connection, stored)
+	require.Equal(t, store.MCPConnectionReadWrite, stored.Permission)
 	require.Equal(t, store.Normal, ownerStatus)
 }

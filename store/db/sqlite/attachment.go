@@ -15,10 +15,10 @@ import (
 )
 
 func (d *DB) CreateAttachment(ctx context.Context, create *store.Attachment) (*store.Attachment, error) {
-	if create.Policy == nil {
+	if create.Policy == nil && create.MemoID == nil {
 		return insertSQLiteAttachment(ctx, d.db, create)
 	}
-	if create.MemoID == nil || create.CreatorID != create.Policy.ActorUserID {
+	if create.MemoID == nil || (create.Policy != nil && create.CreatorID != create.Policy.ActorUserID) {
 		return nil, store.ErrMemoPermissionDenied
 	}
 	tx, err := d.db.BeginTx(ctx, nil)
@@ -26,7 +26,12 @@ func (d *DB) CreateAttachment(ctx context.Context, create *store.Attachment) (*s
 		return nil, err
 	}
 	defer func() { _ = tx.Rollback() }()
-	if _, err := validateSQLiteMemoWritePolicy(ctx, tx, *create.MemoID, create.Policy, nil); err != nil {
+	if create.Policy != nil {
+		if _, err := validateSQLiteMemoWritePolicy(ctx, tx, *create.MemoID, create.Policy, nil); err != nil {
+			return nil, err
+		}
+	}
+	if err := bumpMemoRevision(ctx, tx, *create.MemoID); err != nil {
 		return nil, err
 	}
 	attachment, err := insertSQLiteAttachment(ctx, tx, create)
@@ -206,10 +211,7 @@ func (d *DB) ListAttachments(ctx context.Context, find *store.FindAttachment) ([
 }
 
 func (d *DB) UpdateAttachment(ctx context.Context, update *store.UpdateAttachment) error {
-	if update.Policy == nil {
-		return applySQLiteAttachmentUpdate(ctx, d.db, update)
-	}
-	if update.MemoID != nil {
+	if update.Policy != nil && update.MemoID != nil {
 		return store.ErrMemoMutationConflict
 	}
 	attachmentIDs := []int32{update.ID}
@@ -218,25 +220,58 @@ func (d *DB) UpdateAttachment(ctx context.Context, update *store.UpdateAttachmen
 		return err
 	}
 	defer func() { _ = tx.Rollback() }()
-	actor, err := requireSQLiteActiveMemoActor(ctx, tx, update.Policy.ActorUserID)
+	var memoIDs []int32
+	if update.Policy != nil {
+		actor, err := requireSQLiteActiveMemoActor(ctx, tx, update.Policy.ActorUserID)
+		if err != nil {
+			return err
+		}
+		attachments, err := listSQLiteAttachmentSnapshots(ctx, tx, attachmentIDs)
+		if err != nil {
+			return err
+		}
+		memoIDs, err = store.ValidateAttachmentMutationTargets(update.Policy.ActorUserID, actor.Admin, attachmentIDs, attachments)
+		if err != nil {
+			return err
+		}
+		if err := authorizeSQLiteAttachmentMutation(ctx, tx, update.Policy.ActorUserID, actor.Admin, memoIDs, nil, d.profile != nil && d.profile.Personal); err != nil {
+			return err
+		}
+	}
+	prior, err := lockAttachmentMemoID(ctx, tx, update.ID)
+	if errors.Is(err, sql.ErrNoRows) {
+		if update.Policy == nil {
+			return nil
+		}
+		return store.ErrMemoMutationConflict
+	}
 	if err != nil {
 		return err
 	}
-	attachments, err := listSQLiteAttachmentSnapshots(ctx, tx, attachmentIDs)
-	if err != nil {
-		return err
-	}
-	memoIDs, err := store.ValidateAttachmentMutationTargets(update.Policy.ActorUserID, actor.Admin, attachmentIDs, attachments)
-	if err != nil {
-		return err
-	}
-	if err := authorizeSQLiteAttachmentMutation(ctx, tx, update.Policy.ActorUserID, actor.Admin, memoIDs, nil, d.profile != nil && d.profile.Personal); err != nil {
-		return err
+	if update.Policy != nil && (prior.Valid != (len(memoIDs) > 0) || (prior.Valid && prior.Int32 != memoIDs[0])) {
+		return store.ErrMemoMutationConflict
 	}
 	if err := applySQLiteAttachmentUpdate(ctx, tx, update); err != nil {
 		return err
 	}
+	if prior.Valid {
+		if err := bumpMemoRevision(ctx, tx, prior.Int32); err != nil {
+			return err
+		}
+	}
+	if update.MemoID != nil && (!prior.Valid || prior.Int32 != *update.MemoID) {
+		if err := bumpMemoRevision(ctx, tx, *update.MemoID); err != nil {
+			return err
+		}
+	}
 	return tx.Commit()
+}
+
+// lockAttachmentMemoID reads the note link inside the attachment write transaction.
+func lockAttachmentMemoID(ctx context.Context, tx *sql.Tx, attachmentID int32) (sql.NullInt32, error) {
+	var memoID sql.NullInt32
+	err := tx.QueryRowContext(ctx, `SELECT memo_id FROM attachment WHERE id = ?`, attachmentID).Scan(&memoID)
+	return memoID, err
 }
 
 func applySQLiteAttachmentUpdate(ctx context.Context, executor dbExecutor, update *store.UpdateAttachment) error {
@@ -297,12 +332,24 @@ func (d *DB) DeleteAttachments(ctx context.Context, deletes []*store.DeleteAttac
 	defer func() { _ = tx.Rollback() }()
 	stmt := "DELETE FROM `attachment` WHERE `id` = ?"
 	for _, delete := range deletes {
+		memoID, err := lockAttachmentMemoID(ctx, tx, delete.ID)
+		if errors.Is(err, sql.ErrNoRows) {
+			continue
+		}
+		if err != nil {
+			return err
+		}
 		result, err := tx.ExecContext(ctx, stmt, delete.ID)
 		if err != nil {
 			return err
 		}
 		if _, err := result.RowsAffected(); err != nil {
 			return err
+		}
+		if memoID.Valid {
+			if err := bumpMemoRevision(ctx, tx, memoID.Int32); err != nil {
+				return err
+			}
 		}
 	}
 

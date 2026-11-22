@@ -23,7 +23,7 @@ func (d *DB) CreateMemo(ctx context.Context, create *store.Memo) (*store.Memo, e
 	if err := validatePostgresMemoCreate(ctx, tx, create); err != nil {
 		return nil, err
 	}
-	if err := insertPostgresMemo(ctx, tx, create); err != nil {
+	if err := insertPostgresMemo(ctx, tx, create, false); err != nil {
 		return nil, err
 	}
 	if err := tx.Commit(); err != nil {
@@ -32,8 +32,8 @@ func (d *DB) CreateMemo(ctx context.Context, create *store.Memo) (*store.Memo, e
 	return create, nil
 }
 
-func insertPostgresMemo(ctx context.Context, tx *sql.Tx, create *store.Memo) error {
-	fields := []string{"uid", "creator_id", "content", "visibility", "payload", "space_id"}
+func insertPostgresMemo(ctx context.Context, tx *sql.Tx, create *store.Memo, preserveInitialState bool) error {
+	fields := []string{"uid", "creator_id", "content", "visibility", "payload", "space_id", "creation_request_digest"}
 	payload := "{}"
 	if create.Payload != nil {
 		payloadBytes, err := protojson.Marshal(create.Payload)
@@ -42,7 +42,12 @@ func insertPostgresMemo(ctx context.Context, tx *sql.Tx, create *store.Memo) err
 		}
 		payload = string(payloadBytes)
 	}
-	args := []any{create.UID, create.CreatorID, create.Content, create.Visibility, payload, create.SpaceID}
+	args := []any{create.UID, create.CreatorID, create.Content, create.Visibility, payload, create.SpaceID, create.CreationRequestDigest}
+
+	if preserveInitialState {
+		fields = append(fields, "row_status", "pinned")
+		args = append(args, create.RowStatus, create.Pinned)
+	}
 
 	// Add custom timestamps if provided
 	if create.CreatedTs != 0 {
@@ -54,12 +59,13 @@ func insertPostgresMemo(ctx context.Context, tx *sql.Tx, create *store.Memo) err
 		args = append(args, create.UpdatedTs)
 	}
 
-	stmt := "INSERT INTO memo (" + strings.Join(fields, ", ") + ") VALUES (" + placeholders(len(args)) + ") RETURNING id, created_ts, updated_ts, row_status"
+	stmt := "INSERT INTO memo (" + strings.Join(fields, ", ") + ") VALUES (" + placeholders(len(args)) + ") RETURNING id, created_ts, updated_ts, row_status, revision"
 	if err := tx.QueryRowContext(ctx, stmt, args...).Scan(
 		&create.ID,
 		&create.CreatedTs,
 		&create.UpdatedTs,
 		&create.RowStatus,
+		&create.Revision,
 	); err != nil {
 		return err
 	}
@@ -229,6 +235,7 @@ func (d *DB) ListMemos(ctx context.Context, find *store.FindMemo) ([]*store.Memo
 			WHERE parent_relation.memo_id = memo.id AND parent_relation.type = 'COMMENT'
 			ORDER BY parent_memo.id LIMIT 1) AS parent_uid`,
 	}
+	fields = append(fields, "memo.revision", "memo.creation_request_digest")
 	if !find.ExcludeContent {
 		fields = append(fields, `memo.content AS content`)
 	}
@@ -269,6 +276,8 @@ func (d *DB) ListMemos(ctx context.Context, find *store.FindMemo) ([]*store.Memo
 			&memo.SpaceID,
 			&memo.DeletedTs,
 			&memo.ParentUID,
+			&memo.Revision,
+			&memo.CreationRequestDigest,
 		}
 		if !find.ExcludeContent {
 			dests = append(dests, &memo.Content)
@@ -325,7 +334,7 @@ func (d *DB) CountUserMemos(ctx context.Context, creatorID int32) (int64, error)
 
 func (d *DB) UpdateMemo(ctx context.Context, update *store.UpdateMemo) error {
 	if update.Policy == nil {
-		return applyMemoUpdate(ctx, d.db, update)
+		return applyMemoUpdate(ctx, d.db, update, false)
 	}
 	tx, err := d.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -335,7 +344,7 @@ func (d *DB) UpdateMemo(ctx context.Context, update *store.UpdateMemo) error {
 	if _, err := validatePostgresMemoWritePolicy(ctx, tx, update.ID, update.Policy, update); err != nil {
 		return err
 	}
-	if err := applyMemoUpdate(ctx, tx, update); err != nil {
+	if err := applyMemoUpdate(ctx, tx, update, false); err != nil {
 		return err
 	}
 	return tx.Commit()
