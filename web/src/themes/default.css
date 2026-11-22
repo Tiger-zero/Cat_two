@@ -28,8 +28,8 @@
       --mu-control-edge: #7f897f;
       --mu-line: #dce5db;
       --mu-overlay: rgb(20 32 25 / 34%);
-      --mu-text: #1e2a23;
-      --mu-text-secondary: #536358;
+      --mu-text: #000000;
+      --mu-text-secondary: var(--mu-text);
       --mu-text-disabled: #59695e;
       --mu-primary: #1e6749;
       --mu-primary-hover: #17563a;
@@ -50,7 +50,7 @@
     }
 
     [data-theme="dark"] {
-      --mu-canvas: #141a17;
+      --mu-canvas: #121212;
       --mu-surface: #202823;
       --mu-well: #28332c;
       --mu-hover: #2d3931;
@@ -61,8 +61,8 @@
       --mu-control-edge: #69796e;
       --mu-line: #344239;
       --mu-overlay: rgb(5 9 6 / 64%);
-      --mu-text: #edf4ed;
-      --mu-text-secondary: #adbcb1;
+      --mu-text: #ffffff;
+      --mu-text-secondary: var(--mu-text);
       --mu-text-disabled: #a4b1a8;
       --mu-primary: #87d6ad;
       --mu-primary-hover: #a7e6c5;

@@ -293,6 +293,8 @@ func (s *APIService) NewHandler(ctx context.Context) (http.Handler, error) {
 		switch {
 		case requestPath == "/api/sse" && r.Method == http.MethodGet:
 			sseMux.ServeHTTP(w, r)
+		case s.personalMode() && requestPath == sessionActivityPath:
+			s.recordSessionActivity(w, r, authorizer)
 		case requestPath == "/api/trash" || strings.HasPrefix(requestPath, "/api/trash/"):
 			trashHandler.ServeHTTP(w, r)
 		case s.Profile.Personal && (requestPath == "/api/mcpConnections" || strings.HasPrefix(requestPath, "/api/mcpConnections/")):
@@ -381,6 +383,9 @@ func gatewayIncomingHeaderMatcher(key string) (string, bool) {
 func gatewayOutgoingHeaderMatcher(key string) (string, bool) {
 	if strings.EqualFold(key, "Set-Cookie") {
 		return "Set-Cookie", true
+	}
+	if strings.EqualFold(key, sessionIdleExpiryHeader) {
+		return sessionIdleExpiryHeader, true
 	}
 	return runtime.MetadataHeaderPrefix + key, true
 }

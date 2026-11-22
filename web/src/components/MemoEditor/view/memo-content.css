@@ -1,3 +1,9 @@
+@media (forced-colors: none) {
+  html:is([data-theme="light"], [data-theme="dark"]) main .memo-content-root {
+    --memos-tag-text: #5783f7;
+  }
+}
+
 .memo-content-root.mbe-root :where(h1, h2, h3) {
   font-weight: 700;
   text-wrap: balance;

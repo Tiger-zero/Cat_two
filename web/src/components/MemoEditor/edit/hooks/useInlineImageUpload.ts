@@ -1,6 +1,7 @@
 import { uniqBy } from "lodash-es";
 import { type RefObject, useCallback, useEffect, useRef, useState } from "react";
 import { v4 as uuidv4 } from "uuid";
+import { recordMemoEditingActivity } from "@/lib/memo-editing-activity";
 import { showErrorToast } from "@/lib/toast";
 import type { Attachment } from "@/types/proto/api/attachment_service_pb";
 import { isImage } from "@/utils/attachment";
@@ -203,14 +204,16 @@ export const useInlineImageUpload = (editorRef: RefObject<EditorController | nul
 
   const insertLocalImages = useCallback(
     (localFiles: LocalFile[], position?: EditorPosition | null) => {
-      if (getState().ui.isLoading.saving) return;
+      if (getState().ui.isLoading.saving) return false;
       const editor = editorRef.current;
       const job = createJob(localFiles);
-      if (!editor || !job) return;
+      if (!editor || !job) return false;
       jobsRef.current.set(job.id, job);
       syncJobState();
       editor.createUploadAnchor(descriptorFor(job, "uploading"), position);
+      recordMemoEditingActivity();
       void runJob(job.id);
+      return true;
     },
     [descriptorFor, editorRef, getState, runJob, syncJobState],
   );

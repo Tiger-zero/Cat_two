@@ -10,6 +10,8 @@ import type { EditorController } from "@/components/MemoEditor/edit/types/editor
 import type { UploadAnchorDescriptor } from "@/components/MemoEditor/edit/uploadAnchors";
 import { AttachmentSchema } from "@/types/proto/api/attachment_service_pb";
 
+const recordEditing = vi.hoisted(() => vi.fn());
+vi.mock("@/lib/memo-editing-activity", () => ({ recordMemoEditingActivity: recordEditing }));
 vi.mock("@/utils/i18n", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/utils/i18n")>()),
   useTranslate: () => (key: string) => key,
@@ -45,6 +47,7 @@ const makeController = () => {
 
 describe("useInlineImageUpload", () => {
   beforeEach(() => {
+    recordEditing.mockClear();
     vi.restoreAllMocks();
   });
 
@@ -58,8 +61,10 @@ describe("useInlineImageUpload", () => {
 
     const position = { blockId: "b1", offset: 7 };
     act(() => result.current.insertLocalImages([localImage("first.png"), localImage("second.png")], position));
+    expect(recordEditing).toHaveBeenCalledOnce();
 
     await waitFor(() => expect(controller.resolveUploadAnchor).toHaveBeenCalledTimes(1));
+    expect(recordEditing).toHaveBeenCalledOnce();
     expect(controller.createUploadAnchor).toHaveBeenCalledWith(expect.any(Object), position);
     expect(controller.resolveUploadAnchor).toHaveBeenCalledWith(
       expect.any(String),

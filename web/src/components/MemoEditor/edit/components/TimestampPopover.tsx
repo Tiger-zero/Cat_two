@@ -2,6 +2,7 @@ import { Field, Input, Popover } from "@usememos/ui";
 import { type FC, useRef, useState } from "react";
 import { MEMO_TIME_CONTROL_CLASSES } from "@/components/MemoView/constants";
 import i18n from "@/i18n";
+import { recordMemoEditingActivity } from "@/lib/memo-editing-activity";
 import { APP_DATE_TIME_FORMAT, inAppTimeZone, parseAppDateTime } from "@/lib/time-zone";
 import { useTranslate } from "@/utils/i18n";
 import { useEditorContext, useEditorSelector } from "../state";
@@ -63,26 +64,23 @@ export const TimestampPopover: FC = () => {
 
   if (!createTime) return <span className="shrink-0 whitespace-nowrap mu-caption text-mu-text-secondary select-none">{nowLabel()}</span>;
 
+  const setTimestamp = (field: "createTime" | "updateTime", date: Date) => {
+    const current = getState();
+    if (current.ui.isLoading.saving) return;
+    const previous = current.timestamps[field];
+    dispatch(actions.setTimestamps({ [field]: date }));
+    // Explicitly selecting the calendar default makes that time fixed at save.
+    if (previous === current.calendarDefault || previous?.getTime() !== date.getTime()) recordMemoEditingActivity();
+  };
+
   return (
     <Popover.Root>
       <Popover.Trigger disabled={saving} render={<button type="button" className={MEMO_TIME_CONTROL_CLASSES} />}>
         {formatDate(createTime)}
       </Popover.Trigger>
       <Popover.Popup align="start" className="w-auto">
-        <TimestampInput
-          label={t("common.created-at")}
-          date={createTime}
-          onChange={(d) => {
-            if (!getState().ui.isLoading.saving) dispatch(actions.setTimestamps({ createTime: d }));
-          }}
-        />
-        <TimestampInput
-          label={t("common.last-updated-at")}
-          date={updateTime}
-          onChange={(d) => {
-            if (!getState().ui.isLoading.saving) dispatch(actions.setTimestamps({ updateTime: d }));
-          }}
-        />
+        <TimestampInput label={t("common.created-at")} date={createTime} onChange={(date) => setTimestamp("createTime", date)} />
+        <TimestampInput label={t("common.last-updated-at")} date={updateTime} onChange={(date) => setTimestamp("updateTime", date)} />
       </Popover.Popup>
     </Popover.Root>
   );

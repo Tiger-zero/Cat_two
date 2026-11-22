@@ -1,9 +1,18 @@
 import { Code, ConnectError } from "@connectrpc/connect";
 import { useQueryClient } from "@tanstack/react-query";
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
-import { accessSessionID, clearAccessToken, endAccessSession, getAccessToken, onAccessSessionEnd } from "@/auth-state";
-import { authServiceClient, refreshAccessToken, userServiceClient } from "@/connect";
+import {
+  type AccessSessionEndReason,
+  accessSessionID,
+  clearAccessToken,
+  endAccessSession,
+  getAccessToken,
+  onAccessSessionEnd,
+} from "@/auth-state";
+import { authServiceClient, isSessionIdleExpiredError, refreshAccessToken, userServiceClient } from "@/connect";
 import { userKeys } from "@/hooks/useUserQueries";
+import { monitorIdleSession } from "@/lib/session-idle";
+import { ROUTES } from "@/router/routes";
 import type {
   User,
   UserSetting_EditorSetting,
@@ -11,6 +20,7 @@ import type {
   UserSetting_TagsSetting,
   UserSetting_WebhooksSetting,
 } from "@/types/proto/api/user_service_pb";
+import { AUTH_REASON_IDLE_SESSION, AUTH_REASON_PARAM } from "@/utils/redirect-safety";
 
 interface AuthState {
   currentUser: User | undefined;
@@ -25,6 +35,7 @@ interface AuthState {
   isUserSettingsInitialized: boolean;
   isInitialized: boolean;
   isLoading: boolean;
+  sessionEndReason?: AccessSessionEndReason;
 }
 
 interface AuthContextValue extends AuthState {
@@ -68,13 +79,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(
     () =>
-      onAccessSessionEnd(() => {
+      onAccessSessionEnd((sessionEndReason) => {
         initialization.current++;
-        setState(UNAUTHENTICATED_STATE);
+        setState({ ...UNAUTHENTICATED_STATE, sessionEndReason });
         queryClient.clear();
       }),
     [queryClient],
   );
+  useEffect(monitorIdleSession, []);
 
   const fetchUserSettings = useCallback(async (userName: string) => {
     const initializedAt = initialization.current;
@@ -116,11 +128,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // This handles PWA isolated storage scenarios (e.g., iOS Safari) where localStorage
     // may be empty but a valid HTTP-only refresh token cookie still exists.
     // getAccessToken() returns a cached token or loads from localStorage if valid.
-    if (!getAccessToken()) {
+    const onAuthRoute = window.location.pathname === ROUTES.AUTH || window.location.pathname.startsWith(`${ROUTES.AUTH}/`);
+    let sessionEndReason: AccessSessionEndReason | undefined;
+    if (onAuthRoute && new URLSearchParams(window.location.search).get(AUTH_REASON_PARAM) === AUTH_REASON_IDLE_SESSION) {
+      sessionEndReason = AUTH_REASON_IDLE_SESSION;
+    }
+    if (!getAccessToken() && !sessionEndReason) {
       try {
         await refreshAccessToken();
-      } catch {
-        // Refresh failed - no valid session
+      } catch (error) {
+        if (isSessionIdleExpiredError(error)) sessionEndReason = AUTH_REASON_IDLE_SESSION;
       }
     }
 
@@ -129,7 +146,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // If we still don't have a token after refresh attempt, skip getCurrentUser call
     // to avoid unnecessary network request for unauthenticated users.
     if (!getAccessToken()) {
-      setState(UNAUTHENTICATED_STATE);
+      setState({ ...UNAUTHENTICATED_STATE, sessionEndReason });
       return;
     }
 
@@ -148,6 +165,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setState((prev) => ({
         ...prev,
         currentUser,
+        sessionEndReason: undefined,
         isIdentityInitialized: true,
       }));
 

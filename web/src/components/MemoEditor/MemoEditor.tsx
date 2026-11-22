@@ -2,6 +2,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { type ReactNode, Suspense, useCallback, useEffect, useState } from "react";
 import useCurrentUser from "@/hooks/useCurrentUser";
 import { memoDetailQueryOptions, useMemoByName, useUpdateMemo } from "@/hooks/useMemoQueries";
+import { recordMemoEditingActivity } from "@/lib/memo-editing-activity";
 import type { MemoSuggestion } from "@/lib/memo-suggestions";
 import { showErrorToast, toast } from "@/lib/toast";
 import { cn } from "@/lib/utils";
@@ -121,8 +122,10 @@ const MemoEditorView = ({ name, compact, parentPage, className, contentClassName
   const { mutate: updateMemo } = useUpdateMemo(name);
   if (!memo) return null;
 
-  const handleTaskToggle = (content: string) =>
+  const handleTaskToggle = (content: string) => {
+    recordMemoEditingActivity();
     updateMemo({ update: { name, content }, updateMask: ["content", "update_time"], expectedRevision: memo.revision });
+  };
 
   return (
     <MemoContentView

@@ -140,7 +140,11 @@ const applyLink = (editor: Editor, href: string): boolean => {
  * editor mounts, and calls after it is destroyed do nothing. The editor does
  * not emit a change for a replaced document, so `onReplace` reports it.
  */
-export function createController(getEditor: EditorGetter, onReplace: (markdown: string) => void): EditorController {
+export function createController(
+  getEditor: EditorGetter,
+  onReplace: (markdown: string) => void,
+  onUploadInserted?: (before: string, after: string) => void,
+): EditorController {
   const anchors = new Map<string, Widget>();
   const currentTags = (editor: Editor) => collectTags(memoBlocks(editor));
 
@@ -213,7 +217,10 @@ export function createController(getEditor: EditorGetter, onReplace: (markdown: 
         // The anchor sits after its block; an empty block gives its place to the content.
         const block = editor.state.doc.blocks.find((candidate) => candidate.id === widget.blockId);
         const at = block && isEmptyParagraph(block) ? { blockId: block.id, offset: 0 } : widget;
-        editor.commands.insertMarkdown(markdown, { at, block: true });
+        const before = editor.getMarkdown();
+        if (editor.commands.insertMarkdown(markdown, { at, block: true })) {
+          onUploadInserted?.(before, editor.getMarkdown());
+        }
         editor.commands.focus();
         editor.commands.scrollIntoView();
       }

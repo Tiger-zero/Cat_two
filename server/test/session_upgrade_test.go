@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -28,8 +29,9 @@ func TestPersonalLegacySessionUpgradesOnRefresh(t *testing.T) {
 	require.NoError(t, err)
 	legacyRefresh, expiry, err := auth.GenerateRefreshToken(admin.ID, legacyID, secret)
 	require.NoError(t, err)
+	legacyCreatedAt := time.Now().Add(-5 * time.Minute).UTC()
 	require.NoError(t, instance.server.Store.AddUserRefreshToken(ctx, admin.ID, &storepb.RefreshTokensUserSetting_RefreshToken{
-		TokenId: legacyID, ExpiresAt: timestamppb.New(expiry),
+		TokenId: legacyID, ExpiresAt: timestamppb.New(expiry), CreatedAt: timestamppb.New(legacyCreatedAt),
 	}))
 	me, err := http.NewRequestWithContext(ctx, http.MethodGet, instance.baseURL+"/api/auth/me", nil)
 	require.NoError(t, err)
@@ -51,6 +53,11 @@ func TestPersonalLegacySessionUpgradesOnRefresh(t *testing.T) {
 	payload, err := io.ReadAll(response.Body)
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, response.StatusCode, "%s", payload)
+	require.Equal(t, legacyCreatedAt.Add(store.UserSessionIdleTimeout).Format(time.RFC3339Nano), response.Header.Get("X-Memos-Session-Idle-Expires-At"))
+	stored, err := instance.server.Store.GetUserRefreshTokens(ctx, admin.ID)
+	require.NoError(t, err)
+	require.Len(t, stored, 1)
+	require.Equal(t, legacyCreatedAt, stored[0].GetLastEditAt().AsTime())
 	var upgraded struct{ AccessToken string }
 	require.NoError(t, json.Unmarshal(payload, &upgraded))
 	claims, err := auth.ParseAccessTokenV2(upgraded.AccessToken, secret)

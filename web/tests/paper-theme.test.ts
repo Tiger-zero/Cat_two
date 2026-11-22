@@ -148,6 +148,13 @@ describe.each(["light", "dark"])("%s theme", (theme) => {
     expect(contrastRatio(cssColor("mu-control-edge"), cssColor(background))).toBeGreaterThanOrEqual(3);
   });
 
+  it("uses pure black or white text on the theme's canvas", () => {
+    const expectedText = theme === "light" ? "#000000" : "#ffffff";
+    expect(cssColor("mu-text")).toBe(expectedText);
+    expect(cssColor("mu-text-secondary")).toBe(expectedText);
+    expect(cssColor("mu-canvas")).toBe(theme === "light" ? "#f3f5f0" : "#121212");
+  });
+
   it("keeps the requested selected-row and composer colors", () => {
     expect(cssColor("memos-sidebar-selected")).toBe("#397354");
     expect(cssColor("memos-composer-focus")).toBe("#30cf79");

@@ -9,8 +9,10 @@ import { ListMemosResponseSchema, type Memo, MemoSchema } from "@/types/proto/ap
 
 const state = vi.hoisted(() => ({ currentUser: undefined as { name: string; role?: string } | undefined }));
 const api = vi.hoisted(() => ({ getMemo: vi.fn(), updateMemo: vi.fn() }));
+const recordEditing = vi.hoisted(() => vi.fn());
 
 vi.mock("@/connect", () => ({ memoServiceClient: api }));
+vi.mock("@/lib/memo-editing-activity", () => ({ recordMemoEditingActivity: recordEditing }));
 vi.mock("@/hooks/useCurrentUser", () => ({ default: () => state.currentUser }));
 vi.mock("@/contexts/AuthContext", () => ({ useAuth: () => ({ userTagsSetting: undefined }) }));
 vi.mock("@/contexts/ViewContext", () => ({ useLinkPreviewEnabled: () => false }));
@@ -52,6 +54,7 @@ describe("MemoEditor in view mode", () => {
     expect(container.querySelector("h1")).toHaveTextContent("Title");
     expect(container.querySelector("[data-memo-name]")).toHaveAttribute("data-memo-name", "memos/one");
     expect(api.getMemo).not.toHaveBeenCalled();
+    expect(recordEditing).not.toHaveBeenCalled();
   });
 
   it("fetches a memo no query holds", async () => {
@@ -78,6 +81,7 @@ describe("MemoEditor in view mode", () => {
     });
 
     await waitFor(() => expect(api.updateMemo).toHaveBeenCalledOnce());
+    expect(recordEditing).toHaveBeenCalledOnce();
     const [{ memo: sent, updateMask }] = api.updateMemo.mock.calls[0];
     expect(sent.content).toBe("- [x] First\n- [x] Second");
     expect(updateMask.paths).toEqual(["content", "update_time"]);
@@ -94,5 +98,6 @@ describe("MemoEditor in view mode", () => {
     const { container } = renderMemo("memos/one");
 
     expect(container.querySelector("input.mbe-checkbox")).toBeDisabled();
+    expect(recordEditing).not.toHaveBeenCalled();
   });
 });

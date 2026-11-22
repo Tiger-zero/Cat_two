@@ -44,6 +44,13 @@ describe("<SignIn>", () => {
     expect(screen.queryByRole("link", { name: "common.sign-up" })).not.toBeInTheDocument();
   });
 
+  it("announces an idle session expiry and preserves the destination for re-login", () => {
+    renderPage("/auth?reason=idle-session&redirect=%2Fmemos%2Fexample");
+
+    expect(screen.getByRole("status")).toHaveTextContent("auth.session-idle-expired");
+    expect(screen.getByTestId("password-sign-in")).toHaveTextContent("/memos/example");
+  });
+
   it("offers the administrator sign-in route when password sign-in is disabled for members", () => {
     generalSetting.disallowPasswordAuth = true;
     renderPage();

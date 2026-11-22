@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	storepb "github.com/usememos/memos/proto/gen/store"
 	"github.com/usememos/memos/server/auth"
@@ -113,7 +114,9 @@ func TestLoginBlocklistPaginationAndAdminAuthorization(t *testing.T) {
 	legacyUser, err := inst.server.Store.CreateUser(ctx, &store.User{Username: "legacy-viewer", Role: store.RoleUser})
 	require.NoError(t, err)
 	const sessionID = "legacy-viewer-session"
-	require.NoError(t, inst.server.Store.AddUserRefreshToken(ctx, legacyUser.ID, &storepb.RefreshTokensUserSetting_RefreshToken{TokenId: "legacy-viewer-credential", SessionId: sessionID}))
+	require.NoError(t, inst.server.Store.AddUserRefreshToken(ctx, legacyUser.ID, &storepb.RefreshTokensUserSetting_RefreshToken{
+		TokenId: "legacy-viewer-credential", SessionId: sessionID, CreatedAt: timestamppb.Now(),
+	}))
 	legacyToken, _, err := auth.GenerateSessionAccessToken(legacyUser, sessionID, "", []byte(inst.server.Secret))
 	require.NoError(t, err)
 	code, _ := inst.do(t, http.MethodGet, loginBlocklistPath, legacyToken, nil)

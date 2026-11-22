@@ -11,6 +11,8 @@ AI 客户端用 MCP 查找、整理和写回笔记。脚本、附件传输及回
 
 网页使用 Connect `AuthService`。对应的 REST 路径为 `POST /api/auth/signin`、`POST /api/auth/refresh`、`GET /api/auth/me` 和 `POST /api/auth/signout`。Connect 与 REST 调用同一会话实现，共用密码校验、刷新 Cookie 和会话撤销。 [认证协议](../../../../proto/api/auth_service.proto) · [Connect 入口](../../../../server/api/connect_services.go) · [会话实现](../../../../server/api/auth_service_session.go)
 
+网页在编辑时向 `POST /api/session/activity` 上报活动，接口需要活跃的登录会话并返回 `idleExpiresAt`。服务端以最近一次登录或编辑活动后的 45 分钟作为空闲期限，刷新 Cookie 或访问令牌不会顺延此期限。过期后原会话无法再次上报活动。 [会话持久化](../../../../store/user_session.go)
+
 ## MCP 查找与共同创作
 
 用 `tools/list` 发现实际工具及 JSON Schema，以 `auth_get_current_user` 核对账号。服务器仅提供工具能力。工具返回 `isError` 时按失败处理，成功时读取 `structuredContent`。 [服务实现](../../../../server/mcp/service.go) · [工具说明](../../../../server/mcp/README.md#tool-surface)

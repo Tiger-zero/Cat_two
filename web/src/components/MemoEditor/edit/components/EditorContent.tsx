@@ -1,5 +1,6 @@
 import { forwardRef } from "react";
-import Editor from "../Editor";
+import { recordMemoEditingActivity } from "@/lib/memo-editing-activity";
+import Editor, { type BackgroundContentChange } from "../Editor";
 import { useEditorContext, useEditorSelector } from "../state";
 import type { EditorContentProps } from "../types";
 import type { EditorController } from "../types/editorController";
@@ -14,14 +15,17 @@ import type { EditorController } from "../types/editorController";
  */
 export const EditorContent = forwardRef<EditorController, EditorContentProps>(({ placeholder, sourceMode, onSubmit, onFiles }, ref) => {
   const isSourceMode = sourceMode.isSourceMode;
-  const { actions, dispatch } = useEditorContext();
+  const { actions, dispatch, getState } = useEditorContext();
   const content = useEditorSelector((s) => s.content);
   const isFocusMode = useEditorSelector((s) => s.ui.isFocusMode);
   const isSaving = useEditorSelector((s) => s.ui.isLoading.saving);
   const attachments = useEditorSelector((s) => s.metadata.attachments);
 
-  const handleContentChange = (content: string) => {
+  const handleContentChange = (content: string, background?: BackgroundContentChange) => {
+    const previous = getState().content;
+    if (previous === content) return;
     dispatch(actions.updateContent(content));
+    if (background !== "replace" && background?.before !== previous) recordMemoEditingActivity();
   };
 
   return (

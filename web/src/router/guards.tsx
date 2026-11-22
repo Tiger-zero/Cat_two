@@ -24,12 +24,12 @@ export const RequireFullInitializationRoute = () => {
  * query parameter, so they return to the intended page after signing in.
  */
 export const RequireAuthRoute = () => {
-  const currentUser = useCurrentUser();
+  const { currentUser, sessionEndReason } = useAuth();
   const location = useLocation();
 
   if (!currentUser) {
     const redirect = `${location.pathname}${location.search}${location.hash}`;
-    return <Navigate to={buildAuthRoute({ redirect })} replace />;
+    return <Navigate to={buildAuthRoute({ redirect, reason: sessionEndReason })} replace />;
   }
 
   return <Outlet />;

@@ -23,7 +23,10 @@ import (
 	"github.com/usememos/memos/store"
 )
 
-const refreshSessionIDHeader = "x-memos-session-id"
+const (
+	refreshSessionIDHeader  = "x-memos-session-id"
+	sessionIdleExpiryHeader = "X-Memos-Session-Idle-Expires-At"
+)
 
 func (s *APIService) doSignIn(ctx context.Context, user *store.User, revision string) (string, time.Time, error) {
 	// Generate refresh token
@@ -46,6 +49,9 @@ func (s *APIService) doSignIn(ctx context.Context, user *store.User, revision st
 		CreatedAt:  timestamppb.Now(),
 		ClientInfo: clientInfo,
 	}
+	if s.personalMode() {
+		refreshTokenRecord.LastEditAt = refreshTokenRecord.CreatedAt
+	}
 	if err := s.Store.AddUserRefreshToken(ctx, user.ID, refreshTokenRecord); err != nil {
 		slog.Error("failed to store refresh token", "error", err)
 		return "", time.Time{}, status.Error(codes.Internal, "failed to store refresh token")
@@ -55,6 +61,11 @@ func (s *APIService) doSignIn(ctx context.Context, user *store.User, revision st
 	refreshCookie := s.buildRefreshTokenCookie(ctx, refreshToken, refreshExpiresAt)
 	if err := SetResponseHeader(ctx, "Set-Cookie", refreshCookie); err != nil {
 		return "", time.Time{}, status.Errorf(codes.Internal, "failed to set refresh token cookie: %v", err)
+	}
+	if s.personalMode() {
+		if err := setSessionIdleExpiryHeader(ctx, store.UserSessionIdleExpiresAt(refreshTokenRecord)); err != nil {
+			return "", time.Time{}, err
+		}
 	}
 
 	return accessToken, accessExpiresAt, nil
@@ -109,6 +120,9 @@ func (s *APIService) RefreshToken(ctx context.Context, _ *apipb.RefreshTokenRequ
 	authenticator := auth.NewAuthenticator(s.Store, s.Secret)
 	user, oldSession, err := authenticator.AuthenticateRefreshSession(ctx, refreshToken)
 	if err != nil {
+		if errors.Is(err, auth.ErrSessionIdleExpired) {
+			return nil, status.Error(codes.Unauthenticated, auth.ErrSessionIdleExpired.Error())
+		}
 		return nil, status.Errorf(codes.Unauthenticated, "invalid refresh token: %v", err)
 	}
 	sessionID := oldSession.StableSessionID()
@@ -139,7 +153,7 @@ func (s *APIService) RefreshToken(ctx context.Context, _ *apipb.RefreshTokenRequ
 		CreatedAt:  timestamppb.Now(),
 		ClientInfo: clientInfo,
 	}
-	rotated, err := s.Store.RotateUserRefreshToken(ctx, user.ID, oldSession.TokenID, newRefreshTokenRecord)
+	rotated, idleExpiresAt, err := s.Store.RotateUserRefreshToken(ctx, user.ID, oldSession.TokenID, newRefreshTokenRecord)
 	if err != nil {
 		slog.Error("failed to rotate refresh token", "error", err)
 		return nil, status.Error(codes.Internal, "failed to rotate refresh token")
@@ -153,12 +167,27 @@ func (s *APIService) RefreshToken(ctx context.Context, _ *apipb.RefreshTokenRequ
 	if err := SetResponseHeader(ctx, "Set-Cookie", newRefreshCookie); err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to set refresh token cookie: %v", err)
 	}
+	if s.personalMode() {
+		if err := setSessionIdleExpiryHeader(ctx, idleExpiresAt); err != nil {
+			return nil, err
+		}
+	}
 	// --- End Rotation ---
 
 	return &apipb.RefreshTokenResponse{
 		AccessToken:           accessToken,
 		AccessTokenExpireTime: timestamppb.New(expiresAt),
 	}, nil
+}
+
+func setSessionIdleExpiryHeader(ctx context.Context, deadline time.Time) error {
+	if deadline.IsZero() {
+		return nil
+	}
+	if err := SetResponseHeader(ctx, sessionIdleExpiryHeader, deadline.UTC().Format(time.RFC3339Nano)); err != nil {
+		return status.Error(codes.Internal, "failed to set the session inactivity deadline")
+	}
+	return nil
 }
 
 func refreshTokenFromContext(ctx context.Context) string {

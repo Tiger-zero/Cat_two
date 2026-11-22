@@ -3,6 +3,7 @@ import { type FocusEvent, Suspense, useCallback, useEffect, useRef, useState } f
 import { DrawingSheet } from "@/components/DrawingSheet";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSourceMode } from "@/hooks/useSourceMode";
+import { recordMemoEditingActivity } from "@/lib/memo-editing-activity";
 import { showErrorToast, toast } from "@/lib/toast";
 import { cn } from "@/lib/utils";
 import { useTranslate } from "@/utils/i18n";
@@ -294,7 +295,8 @@ export const EditSession: React.FC<EditSessionProps> = ({
       const localFiles = toLocalFiles(files, { createBlobUrl, saveMediaMetadata });
       const { inline, attachments } = placement.inline ? splitInlineLocalFiles(localFiles) : { inline: [], attachments: localFiles };
       attachments.forEach((file) => dispatch(actions.addLocalFile(file)));
-      if (placement.inline) inlineImageUpload.insertLocalImages(inline, placement.position);
+      const inserted = placement.inline && inlineImageUpload.insertLocalImages(inline, placement.position);
+      if (!inserted && attachments.length > 0) recordMemoEditingActivity();
     },
     [actions, createBlobUrl, dispatch, getState, inlineImageUpload.insertLocalImages, saveMediaMetadata],
   );
@@ -388,7 +390,10 @@ export const EditSession: React.FC<EditSessionProps> = ({
           <AudioRecorderPanel
             audioRecorder={{ status: audioRecorder.status, elapsedSeconds: audioRecorder.elapsedSeconds }}
             mediaStream={audioRecorder.recordingStream}
-            onStop={audioRecorder.stopRecording}
+            onStop={() => {
+              recordMemoEditingActivity();
+              audioRecorder.stopRecording();
+            }}
             onCancel={handleCancelAudioRecording}
           />
         )}

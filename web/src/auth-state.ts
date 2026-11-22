@@ -1,3 +1,5 @@
+import { AUTH_REASON_IDLE_SESSION } from "@/utils/redirect-safety";
+
 // Access token storage using localStorage for persistence across tabs and sessions.
 // Tokens are cleared on logout or expiry.
 let accessToken: string | null = null;
@@ -7,6 +9,7 @@ let signedOutInThisTab = false;
 const TOKEN_KEY = "memos_access_token";
 const EXPIRES_KEY = "memos_token_expires_at";
 const SIGNED_OUT_SESSION_KEY = "memos_signed_out_session";
+const IDLE_SIGNED_OUT_SESSION_KEY = "memos_idle_signed_out_session";
 
 // BroadcastChannel lets tabs share freshly-refreshed tokens so that only one
 // tab needs to hit the refresh endpoint. When another tab successfully refreshes
@@ -20,10 +23,21 @@ const TOKEN_CHANNEL_NAME = "memos_token_sync";
 export const REQUEST_TOKEN_EXPIRY_BUFFER_MS = 30 * 1000;
 export const FOCUS_TOKEN_EXPIRY_BUFFER_MS = 2 * 60 * 1000;
 
-type TokenBroadcastMessage = { token: string; expiresAt: string } | { signedOutSession: string };
+export type AccessSessionEndReason = typeof AUTH_REASON_IDLE_SESSION;
+type TokenBroadcastMessage = { token: string; expiresAt: string } | { signedOutSession: string; reason?: AccessSessionEndReason };
 
 const signedOutSessions = new Set<string>();
-const sessionEndListeners = new Set<() => void>();
+const sessionEndListeners = new Set<(reason?: AccessSessionEndReason) => void>();
+const tokenChangeListeners = new Set<() => void>();
+
+function notifyTokenChange(): void {
+  for (const listener of tokenChangeListeners) listener();
+}
+
+export function onAccessTokenChange(listener: () => void): () => void {
+  tokenChangeListeners.add(listener);
+  return () => tokenChangeListeners.delete(listener);
+}
 
 export function accessSessionID(token: string | null): string {
   const encoded = token?.split(".")[1];
@@ -57,7 +71,7 @@ function hasEnded(sessionID: string): boolean {
   }
 }
 
-function applySessionEnd(sessionID: string): void {
+function applySessionEnd(sessionID: string, reason?: AccessSessionEndReason): void {
   if (!sessionID) return;
   signedOutSessions.add(sessionID);
   let endedHere = accessSessionID(accessToken) === sessionID;
@@ -75,7 +89,8 @@ function applySessionEnd(sessionID: string): void {
     signedOutInThisTab = true;
     accessToken = null;
     tokenExpiresAt = null;
-    for (const listener of sessionEndListeners) listener();
+    for (const listener of sessionEndListeners) listener(reason);
+    notifyTokenChange();
   }
 }
 
@@ -89,7 +104,7 @@ function getTokenChannel(): BroadcastChannel | null {
       const message = event.data;
       if (!message) return;
       if ("signedOutSession" in message) {
-        applySessionEnd(message.signedOutSession);
+        applySessionEnd(message.signedOutSession, message.reason);
         return;
       }
       const { token, expiresAt } = message;
@@ -98,6 +113,7 @@ function getTokenChannel(): BroadcastChannel | null {
         // fire our own refresh request.
         accessToken = token;
         tokenExpiresAt = new Date(expiresAt);
+        notifyTokenChange();
       }
     };
   } catch {
@@ -111,11 +127,19 @@ function getTokenChannel(): BroadcastChannel | null {
 // before any token refresh can occur in any tab.
 getTokenChannel();
 window.addEventListener("storage", (event) => {
-  if (event.key === SIGNED_OUT_SESSION_KEY && event.newValue) applySessionEnd(event.newValue);
+  if (event.key === SIGNED_OUT_SESSION_KEY && event.newValue) {
+    let reason: AccessSessionEndReason | undefined;
+    try {
+      if (localStorage.getItem(IDLE_SIGNED_OUT_SESSION_KEY) === event.newValue) reason = AUTH_REASON_IDLE_SESSION;
+    } catch {
+      // BroadcastChannel also carries the reason when storage access fails.
+    }
+    applySessionEnd(event.newValue, reason);
+  }
 });
 
 /** Subscribe to sign-out in other same-origin tabs for this session. */
-export function onAccessSessionEnd(listener: () => void): () => void {
+export function onAccessSessionEnd(listener: (reason?: AccessSessionEndReason) => void): () => void {
   sessionEndListeners.add(listener);
   return () => sessionEndListeners.delete(listener);
 }
@@ -146,6 +170,18 @@ export const getAccessToken = (): string | null => {
   return accessToken;
 };
 
+/** An expired access token still identifies the session behind its refresh cookie. */
+export function getAccessSessionToken(): string | null {
+  const token = getAccessToken();
+  if (token || signedOutInThisTab) return token;
+  try {
+    const stored = localStorage.getItem(TOKEN_KEY);
+    return hasEnded(accessSessionID(stored)) ? null : stored;
+  } catch {
+    return null;
+  }
+}
+
 // Refresh waiters need the shared token even when they have an older cached
 // token and the asynchronous BroadcastChannel notification has not arrived.
 export function adoptSharedAccessToken(previousToken: string | null): boolean {
@@ -157,6 +193,7 @@ export function adoptSharedAccessToken(previousToken: string | null): boolean {
       if (expiresAt.getTime() > Date.now()) {
         accessToken = storedToken;
         tokenExpiresAt = expiresAt;
+        notifyTokenChange();
         return true;
       }
     }
@@ -187,6 +224,7 @@ export const setAccessToken = (token: string | null, expiresAt?: Date): void => 
     // localStorage might not be available (e.g., in some privacy modes)
     console.warn("Failed to write to localStorage:", e);
   }
+  notifyTokenChange();
 };
 
 export const isTokenExpired = (bufferMs: number = REQUEST_TOKEN_EXPIRY_BUFFER_MS): boolean => {
@@ -221,25 +259,27 @@ export const clearAccessToken = (): void => {
   } catch (e) {
     console.warn("Failed to clear localStorage:", e);
   }
+  notifyTokenChange();
 };
 
 // A signed-out tab needs an explicit sign-in before it may refresh again.
 export const mayRefreshAccessSession = (): boolean => !signedOutInThisTab;
 
 /** Clear a confirmed logout without disturbing a newer or different session. */
-export function endAccessSession(token: string | null): void {
+export function endAccessSession(token: string | null, reason?: AccessSessionEndReason): void {
   const sessionID = accessSessionID(token);
   if (!sessionID) {
     if (isSameAccessSession(token, accessToken)) {
       clearAccessToken();
       signedOutInThisTab = true;
-      for (const listener of sessionEndListeners) listener();
+      for (const listener of sessionEndListeners) listener(reason);
     }
     return;
   }
-  applySessionEnd(sessionID);
-  getTokenChannel()?.postMessage({ signedOutSession: sessionID } satisfies TokenBroadcastMessage);
+  applySessionEnd(sessionID, reason);
+  getTokenChannel()?.postMessage({ signedOutSession: sessionID, ...(reason ? { reason } : {}) } satisfies TokenBroadcastMessage);
   try {
+    if (reason === AUTH_REASON_IDLE_SESSION) localStorage.setItem(IDLE_SIGNED_OUT_SESSION_KEY, sessionID);
     localStorage.setItem(SIGNED_OUT_SESSION_KEY, sessionID);
   } catch {
     // BroadcastChannel still delivers the same logout when storage is disabled.

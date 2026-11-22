@@ -12,7 +12,10 @@ const clients = vi.hoisted(() => ({
 vi.mock("@/auth-state", () => ({
   clearAccessToken: vi.fn(),
   onAccessSessionEnd: () => () => undefined,
+  onAccessTokenChange: () => () => undefined,
   getAccessToken: () => (authState.hasToken ? "token" : undefined),
+  getAccessSessionToken: () => null,
+  accessSessionID: () => "",
 }));
 
 vi.mock("@/connect", () => ({

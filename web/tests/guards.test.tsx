@@ -2,16 +2,25 @@ import { render, screen } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { AccessSessionEndReason } from "@/auth-state";
 
 vi.mock("@/hooks/useCurrentUser", () => ({
   __esModule: true,
   default: vi.fn(),
 }));
 
-const initialization = vi.hoisted(() => ({ auth: true, instance: true }));
+const initialization = vi.hoisted(() => ({
+  auth: true,
+  instance: true,
+  sessionEndReason: undefined as AccessSessionEndReason | undefined,
+}));
 
 vi.mock("@/contexts/AuthContext", () => ({
-  useAuth: () => ({ isInitialized: initialization.auth }),
+  useAuth: () => ({
+    isInitialized: initialization.auth,
+    currentUser: mockedUseCurrentUser(),
+    sessionEndReason: initialization.sessionEndReason,
+  }),
 }));
 
 vi.mock("@/contexts/InstanceContext", () => ({
@@ -37,6 +46,7 @@ const renderAt = (initialEntry: string, children: ReactNode) =>
 beforeEach(() => {
   initialization.auth = true;
   initialization.instance = true;
+  initialization.sessionEndReason = undefined;
 });
 
 describe("initialization guards", () => {
@@ -101,6 +111,26 @@ describe("RequireAuthRoute", () => {
     );
 
     expect(screen.getByTestId("location").textContent).toBe("/auth?redirect=%2Fsetting%3Ftab%3Dpins%23latest");
+  });
+
+  it("preserves the idle-expiry reason along with the return location", () => {
+    mockedUseCurrentUser.mockReturnValue(undefined);
+    initialization.sessionEndReason = "idle-session";
+
+    renderAt(
+      "/setting",
+      <Routes>
+        <Route element={<RequireAuthRoute />}>
+          <Route path="/setting" element={<div>protected</div>} />
+        </Route>
+        <Route path="/auth" element={<LocationProbe />} />
+      </Routes>,
+    );
+
+    const url = new URL(screen.getByTestId("location").textContent ?? "", "http://localhost");
+    expect(url.pathname).toBe("/auth");
+    expect(url.searchParams.get("reason")).toBe("idle-session");
+    expect(url.searchParams.get("redirect")).toBe("/setting");
   });
 });
 

@@ -6,6 +6,8 @@ import { createInitialState, EditorProvider } from "@/components/MemoEditor/edit
 import { EditorToolbar } from "@/components/MemoEditor/edit/Toolbar/EditorToolbar";
 import type { EditorController, EditorSelection } from "@/components/MemoEditor/edit/types/editorController";
 
+const recordEditing = vi.hoisted(() => vi.fn());
+vi.mock("@/lib/memo-editing-activity", () => ({ recordMemoEditingActivity: recordEditing }));
 vi.mock("@/components/MemoEditor/edit/Toolbar/InsertMenu", () => ({ default: () => null }));
 vi.mock("@/hooks/useUserQueries", () => ({
   useTagCounts: () => ({ data: { "work/planning": 2, home: 1 } }),
@@ -53,8 +55,61 @@ function select(editor: EditorController, anchor: EditorSelection["anchor"], foc
 }
 
 describe("composer formatting toolbar", () => {
-  beforeEach(() => vi.spyOn(window, "scrollBy").mockImplementation(() => {}));
+  beforeEach(() => {
+    recordEditing.mockClear();
+    vi.spyOn(window, "scrollBy").mockImplementation(() => {});
+  });
   afterEach(() => vi.restoreAllMocks());
+
+  it.each([false, true])("reports document changes but leaves focus and draft restoration inactive (source: %s)", async (source) => {
+    const { editor, button } = setup("restored draft", source);
+    const text = screen.getByRole("textbox");
+    select(editor, { block: 0, offset: 1 });
+    fireEvent.keyDown(text, { key: "ArrowRight" });
+    act(() => editor.setMarkdown("loaded"));
+    expect(recordEditing).not.toHaveBeenCalled();
+
+    select(editor, { block: 0, offset: 6 });
+    fireEvent(text, new InputEvent("beforeinput", { bubbles: true, cancelable: true, inputType: "insertText", data: " note" }));
+    await waitFor(() => expect(recordEditing).toHaveBeenCalledTimes(1));
+
+    select(editor, { block: 0, offset: 0 }, { block: 0, offset: 6 });
+    fireEvent.click(button("Bold"));
+    await waitFor(() => expect(recordEditing).toHaveBeenCalledTimes(2));
+  });
+
+  it("ignores background image insertion and counts typing batched with a later upload", async () => {
+    const { editor } = setup("draft");
+    const text = screen.getByRole("textbox");
+    const insertUploadedImage = (id: string) => {
+      editor.createUploadAnchor({
+        id,
+        status: "uploading",
+        completed: 0,
+        total: 1,
+        message: "Uploading",
+        retryLabel: "Retry",
+        keepLabel: "Cancel",
+      });
+      editor.resolveUploadAnchor(id, `![image](/file/attachments/${id})`);
+    };
+
+    await act(async () => {
+      insertUploadedImage("first");
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    });
+    expect(editor.getMarkdown()).toContain("/file/attachments/first");
+    expect(recordEditing).not.toHaveBeenCalled();
+
+    select(editor, { block: 0, offset: 5 });
+    act(() => {
+      fireEvent(text, new InputEvent("beforeinput", { bubbles: true, cancelable: true, inputType: "insertText", data: " edit" }));
+      insertUploadedImage("second");
+    });
+    await waitFor(() => expect(recordEditing).toHaveBeenCalledOnce());
+    expect(editor.getMarkdown()).toContain("draft edit");
+    expect(editor.getMarkdown()).toContain("/file/attachments/second");
+  });
 
   it.each([false, true])("starts and completes consecutive tags within prose (source: %s)", async (isSourceMode) => {
     const { editor } = setup("Keepword safe.", isSourceMode);

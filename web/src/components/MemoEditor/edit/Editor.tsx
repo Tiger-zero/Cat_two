@@ -11,12 +11,14 @@ import type { EditorController } from "./types/editorController";
 import "./editor.css";
 import { buildEditorExtensions, type EditorFileOrigin } from "./extensions";
 
+export type BackgroundContentChange = "replace" | { before: string };
+
 interface EditorProps {
   className: string;
   /** The document. The editor applies a value only when it is not one the editor emitted itself. */
   value: string;
   placeholder: string;
-  onContentChange: (content: string) => void;
+  onContentChange: (content: string, background?: BackgroundContentChange) => void;
   onFiles: (files: File[], origin: EditorFileOrigin) => void;
   /** Invoked by the in-editor save shortcut (Cmd/Ctrl+Enter). */
   onSubmit: () => void;
@@ -46,10 +48,14 @@ const Editor = forwardRef(function Editor(props: EditorProps, ref: React.Forward
   // a render React discards never leaves its callbacks behind.
   const onContentChangeRef = useRef(onContentChange);
   const onFilesRef = useRef(onFiles);
+  const pendingUpload = useRef<{ before: string; after: string } | null>(null);
   useLayoutEffect(() => {
     onContentChangeRef.current = onContentChange;
     onFilesRef.current = onFiles;
   });
+  useLayoutEffect(() => {
+    pendingUpload.current = null;
+  }, [value]);
   // A user can only author their own memos. Reuse the current-user stats query
   // instead of fetching and aggregating every user's tags for autocomplete.
   const { data: tagData } = useTagCounts(true);
@@ -60,7 +66,16 @@ const Editor = forwardRef(function Editor(props: EditorProps, ref: React.Forward
     () =>
       createController(
         () => editorRef.current,
-        (markdown) => onContentChangeRef.current(markdown),
+        (markdown) => {
+          pendingUpload.current = null;
+          onContentChangeRef.current(markdown, "replace");
+        },
+        (before, after) => {
+          // The editor coalesces changes into one frame. Preserve the document
+          // before the first upload so typing in that frame still counts.
+          const previous = pendingUpload.current;
+          pendingUpload.current = { before: previous?.after === before ? previous.before : before, after };
+        },
       ),
     [],
   );
@@ -90,7 +105,15 @@ const Editor = forwardRef(function Editor(props: EditorProps, ref: React.Forward
           editorRef={editorRef}
           value={value}
           editable={!readOnly}
-          onChange={onContentChange}
+          onChange={(markdown) => {
+            const upload = pendingUpload.current;
+            pendingUpload.current = null;
+            if (upload?.after === markdown) {
+              onContentChange(markdown, { before: upload.before });
+            } else {
+              onContentChange(markdown);
+            }
+          }}
           onSubmit={onSubmit}
           placeholder={placeholder}
           mode={mode}

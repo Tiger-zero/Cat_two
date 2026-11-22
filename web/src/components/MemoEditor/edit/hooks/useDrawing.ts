@@ -2,6 +2,7 @@ import type { Scene } from "@usememos/canvas";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { fetchDrawingFile, readDrawing } from "@/components/DrawingSheet";
 import useCurrentUser from "@/hooks/useCurrentUser";
+import { recordMemoEditingActivity } from "@/lib/memo-editing-activity";
 import { showErrorToast } from "@/lib/toast";
 import { useTranslate } from "@/utils/i18n";
 import { canManageAttachment } from "@/utils/user";
@@ -104,6 +105,7 @@ export const useDrawing = (toLocalFile: (file: File) => LocalFile) => {
         dispatch(actions.addLocalFile(localFile));
       }
       dispatch(actions.setAttachmentOrder(order));
+      recordMemoEditingActivity();
       setSession(undefined);
     },
     [actions, dispatch, getState, session, toLocalFile],

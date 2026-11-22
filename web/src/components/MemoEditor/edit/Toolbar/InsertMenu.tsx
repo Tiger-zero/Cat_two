@@ -1,8 +1,8 @@
 import { Button, Menu, Spinner, Tooltip } from "@usememos/ui";
-import { uniqBy } from "lodash-es";
 import { CodeXmlIcon, ImageIcon, LinkIcon, Maximize2Icon, MicIcon, PaletteIcon, PaperclipIcon, PlusIcon } from "lucide-react";
 import { useCallback, useRef, useState } from "react";
 import { LinkMemoDialog } from "@/components/MemoMetadata";
+import { recordMemoEditingActivity } from "@/lib/memo-editing-activity";
 import type { MemoRelation } from "@/types/proto/api/memo_service_pb";
 import { useTranslate } from "@/utils/i18n";
 import { useFileUpload, useLinkMemo } from "../hooks";
@@ -22,6 +22,7 @@ const InsertMenu = (props: InsertMenuProps) => {
   const { fileInputRef, selectingFlag, handleFileInputChange, handleUploadClick } = useFileUpload((newFiles: LocalFile[]) => {
     if (getState().ui.isLoading.saving) return;
     newFiles.forEach((file) => dispatch(actions.addLocalFile(file)));
+    if (newFiles.length > 0) recordMemoEditingActivity();
   });
 
   const linkMemo = useLinkMemo({
@@ -29,7 +30,11 @@ const InsertMenu = (props: InsertMenuProps) => {
     currentMemoName: props.memoName,
     existingRelations: relations,
     onAddRelation: (relation: MemoRelation) => {
-      dispatch(actions.setMetadata({ relations: uniqBy([...relations, relation], (r) => r.relatedMemo?.name) }));
+      const current = getState().metadata.relations;
+      if (!current.some((item) => item.relatedMemo?.name === relation.relatedMemo?.name)) {
+        dispatch(actions.setMetadata({ relations: [...current, relation] }));
+        recordMemoEditingActivity();
+      }
       setLinkDialogOpen(false);
     },
   });

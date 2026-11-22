@@ -9,6 +9,7 @@ import { attachmentKeys } from "@/hooks/useAttachmentQueries";
 import { memoDetailQueryOptions, useCreateMemo, useUpdateMemo } from "@/hooks/useMemoQueries";
 import { userKeys } from "@/hooks/useUserQueries";
 import { handleError } from "@/lib/error";
+import { recordMemoEditingActivity } from "@/lib/memo-editing-activity";
 import { showErrorToast, toast } from "@/lib/toast";
 import type { Attachment } from "@/types/proto/api/attachment_service_pb";
 import { type Memo, MemoSchema } from "@/types/proto/api/memo_service_pb";
@@ -75,6 +76,7 @@ export function useMemoSave({
       return;
     }
 
+    recordMemoEditingActivity();
     dispatch(actions.setLoading("saving", true));
 
     // Files that finished uploading, keyed by preview URL. If the save fails

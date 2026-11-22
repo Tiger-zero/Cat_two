@@ -7,6 +7,7 @@ import { buildAuthRoute, isPublicRoute } from "./redirect-safety";
 // `redirectOnAuthFailure` lives here; pure logic lives in `./redirect-safety`.
 export {
   AUTH_AUTO_SIGN_IN_PARAM,
+  AUTH_REASON_IDLE_SESSION,
   AUTH_REASON_PARAM,
   AUTH_REASON_PROTECTED_MEMO,
   AUTH_REASON_SIGNUPS_CLOSED,

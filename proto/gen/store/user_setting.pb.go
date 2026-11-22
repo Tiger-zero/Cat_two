@@ -618,7 +618,10 @@ type RefreshTokensUserSetting_RefreshToken struct {
 	// Optional description
 	Description string `protobuf:"bytes,5,opt,name=description,proto3" json:"description,omitempty"`
 	// Stable ID of the browser session across refresh-token rotations.
-	SessionId     string `protobuf:"bytes,6,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	SessionId string `protobuf:"bytes,6,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	// Most recent accepted edit activity, initialized at sign-in. Older
+	// sessions use created_at until the first edit or rotation.
+	LastEditAt    *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=last_edit_at,json=lastEditAt,proto3" json:"last_edit_at,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -693,6 +696,13 @@ func (x *RefreshTokensUserSetting_RefreshToken) GetSessionId() string {
 		return x.SessionId
 	}
 	return ""
+}
+
+func (x *RefreshTokensUserSetting_RefreshToken) GetLastEditAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.LastEditAt
+	}
+	return nil
 }
 
 type RefreshTokensUserSetting_ClientInfo struct {
@@ -979,9 +989,9 @@ const file_store_user_setting_proto_rawDesc = "" +
 	"\x04tags\x18\x01 \x03(\v2&.memos.store.TagsUserSetting.TagsEntryR\x04tags\x1aU\n" +
 	"\tTagsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x122\n" +
-	"\x05value\x18\x02 \x01(\v2\x1c.memos.store.UserTagMetadataR\x05value:\x028\x01\"\xc3\x04\n" +
+	"\x05value\x18\x02 \x01(\v2\x1c.memos.store.UserTagMetadataR\x05value:\x028\x01\"\x81\x05\n" +
 	"\x18RefreshTokensUserSetting\x12Y\n" +
-	"\x0erefresh_tokens\x18\x01 \x03(\v22.memos.store.RefreshTokensUserSetting.RefreshTokenR\rrefreshTokens\x1a\xb3\x02\n" +
+	"\x0erefresh_tokens\x18\x01 \x03(\v22.memos.store.RefreshTokensUserSetting.RefreshTokenR\rrefreshTokens\x1a\xf1\x02\n" +
 	"\fRefreshToken\x12\x19\n" +
 	"\btoken_id\x18\x01 \x01(\tR\atokenId\x129\n" +
 	"\n" +
@@ -992,7 +1002,9 @@ const file_store_user_setting_proto_rawDesc = "" +
 	"clientInfo\x12 \n" +
 	"\vdescription\x18\x05 \x01(\tR\vdescription\x12\x1d\n" +
 	"\n" +
-	"session_id\x18\x06 \x01(\tR\tsessionId\x1a\x95\x01\n" +
+	"session_id\x18\x06 \x01(\tR\tsessionId\x12<\n" +
+	"\flast_edit_at\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\n" +
+	"lastEditAt\x1a\x95\x01\n" +
 	"\n" +
 	"ClientInfo\x12\x1d\n" +
 	"\n" +
@@ -1074,14 +1086,15 @@ var file_store_user_setting_proto_depIdxs = []int32{
 	15, // 13: memos.store.RefreshTokensUserSetting.RefreshToken.expires_at:type_name -> google.protobuf.Timestamp
 	15, // 14: memos.store.RefreshTokensUserSetting.RefreshToken.created_at:type_name -> google.protobuf.Timestamp
 	11, // 15: memos.store.RefreshTokensUserSetting.RefreshToken.client_info:type_name -> memos.store.RefreshTokensUserSetting.ClientInfo
-	15, // 16: memos.store.PersonalAccessTokensUserSetting.PersonalAccessToken.expires_at:type_name -> google.protobuf.Timestamp
-	15, // 17: memos.store.PersonalAccessTokensUserSetting.PersonalAccessToken.created_at:type_name -> google.protobuf.Timestamp
-	15, // 18: memos.store.PersonalAccessTokensUserSetting.PersonalAccessToken.last_used_at:type_name -> google.protobuf.Timestamp
-	19, // [19:19] is the sub-list for method output_type
-	19, // [19:19] is the sub-list for method input_type
-	19, // [19:19] is the sub-list for extension type_name
-	19, // [19:19] is the sub-list for extension extendee
-	0,  // [0:19] is the sub-list for field type_name
+	15, // 16: memos.store.RefreshTokensUserSetting.RefreshToken.last_edit_at:type_name -> google.protobuf.Timestamp
+	15, // 17: memos.store.PersonalAccessTokensUserSetting.PersonalAccessToken.expires_at:type_name -> google.protobuf.Timestamp
+	15, // 18: memos.store.PersonalAccessTokensUserSetting.PersonalAccessToken.created_at:type_name -> google.protobuf.Timestamp
+	15, // 19: memos.store.PersonalAccessTokensUserSetting.PersonalAccessToken.last_used_at:type_name -> google.protobuf.Timestamp
+	20, // [20:20] is the sub-list for method output_type
+	20, // [20:20] is the sub-list for method input_type
+	20, // [20:20] is the sub-list for extension type_name
+	20, // [20:20] is the sub-list for extension extendee
+	0,  // [0:20] is the sub-list for field type_name
 }
 
 func init() { file_store_user_setting_proto_init() }

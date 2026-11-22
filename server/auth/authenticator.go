@@ -29,6 +29,9 @@ type Authenticator struct {
 	secret string
 }
 
+// ErrSessionIdleExpired means a verified web session outlasted its edit deadline.
+var ErrSessionIdleExpired = errors.New("session idle expired")
+
 // NewAuthenticator creates a new Authenticator instance.
 func NewAuthenticator(store *store.Store, secret string) *Authenticator {
 	return &Authenticator{
@@ -82,13 +85,20 @@ func (a *Authenticator) resolveAccessToken(ctx context.Context, accessToken stri
 	if claims.SessionRevision != factor.SessionRevision {
 		return nil, nil
 	}
+	var idleExpiresAt time.Time
 	if claims.SessionID != "" {
-		active, err := a.store.IsUserSessionActive(ctx, userID, claims.SessionID)
+		active, deadline, err := a.store.IsUserSessionActive(ctx, userID, claims.SessionID)
 		if err != nil {
 			return nil, errors.Wrap(err, "failed to check access token session")
 		}
 		if !active {
+			if !deadline.IsZero() {
+				return nil, ErrSessionIdleExpired
+			}
 			return nil, nil
+		}
+		if a.store.IsPersonalMode() {
+			idleExpiresAt = deadline
 		}
 	}
 
@@ -101,6 +111,7 @@ func (a *Authenticator) resolveAccessToken(ctx context.Context, accessToken stri
 			Status:          claims.Status,
 			SessionRevision: claims.SessionRevision,
 			SessionID:       claims.SessionID,
+			IdleExpiresAt:   idleExpiresAt,
 		},
 	}, nil
 }
@@ -136,8 +147,12 @@ func (a *Authenticator) AuthenticateRefreshSession(ctx context.Context, refreshT
 	}
 
 	// Check token not expired
-	if token.ExpiresAt != nil && token.ExpiresAt.AsTime().Before(time.Now()) {
+	now := time.Now()
+	if token.ExpiresAt != nil && !token.ExpiresAt.AsTime().After(now) {
 		return nil, nil, errors.New("refresh token expired")
+	}
+	if a.store.IsPersonalMode() && !store.UserSessionIdleExpiresAt(token).After(now) {
+		return nil, nil, ErrSessionIdleExpired
 	}
 
 	// Get user
@@ -223,7 +238,11 @@ func (a *Authenticator) resolveBearer(ctx context.Context, token string, trackPA
 	}
 
 	if !strings.HasPrefix(token, PersonalAccessTokenPrefix) {
-		return a.resolveAccessToken(ctx, token)
+		result, err := a.resolveAccessToken(ctx, token)
+		if errors.Is(err, ErrSessionIdleExpired) {
+			return nil, nil
+		}
+		return result, err
 	}
 
 	// Personal Access Token. A rejected token yields no identity and no error; a
@@ -274,6 +293,9 @@ func (a *Authenticator) AuthenticateToUser(ctx context.Context, authHeader, cook
 	if cookieHeader != "" {
 		if refreshToken := ExtractRefreshTokenFromCookie(cookieHeader); refreshToken != "" {
 			user, _, err := a.AuthenticateByRefreshToken(ctx, refreshToken)
+			if errors.Is(err, ErrSessionIdleExpired) {
+				return nil, nil
+			}
 			return user, err
 		}
 	}

@@ -54,6 +54,7 @@
     "login-ip-blocked": "此 IP 地址已被封禁，需由管理员手动解除后才能登录。",
     "new-password": "新密码",
     "repeat-new-password": "重复新密码",
+    "session-idle-expired": "超过 45 分钟未编辑笔记，请重新登录。",
     "setup-description": "为此实例创建管理员账号。",
     "setup-title": "初始化实例",
     "show-password": "显示密码",

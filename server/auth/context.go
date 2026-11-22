@@ -3,6 +3,7 @@ package auth
 import (
 	"context"
 	"strings"
+	"time"
 
 	"github.com/usememos/memos/store"
 )
@@ -74,6 +75,7 @@ type UserClaims struct {
 	Status          string
 	SessionRevision string
 	SessionID       string
+	IdleExpiresAt   time.Time
 }
 
 // GetUserClaims retrieves the user claims from context.

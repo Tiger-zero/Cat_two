@@ -54,6 +54,7 @@
     "login-ip-blocked": "Sign-in from this IP address is blocked until an administrator unblocks it.",
     "new-password": "New password",
     "repeat-new-password": "Repeat the new password",
+    "session-idle-expired": "You haven’t edited a note for 45 minutes. Please sign in again.",
     "setup-description": "Create the administrator account for this instance.",
     "setup-title": "Set up your instance",
     "show-password": "Show password",

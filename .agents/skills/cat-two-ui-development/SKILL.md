@@ -19,7 +19,7 @@ Cat_two 是单账户自托管笔记。以桌面浏览器里的记录、检索和
 ## 桌面骨架、主题与侧栏
 
 - `RootLayout` 管理居中的桌面工作区、侧栏、路由内容及全局弹窗。侧栏默认 320px，拖动分隔线调整，双击复位。键盘聚焦分隔线后可用方向键调整，Home 和 End 可到达宽度边界。宽度偏好保存在当前浏览器，渲染会按窗口限宽。常规单列和多列工作区上限为 1064px 和 1280px，自动列或全宽由显示设置决定。 [页面骨架](../../../web/src/layouts/RootLayout.tsx) · [侧栏宽度](../../../web/src/components/AppSidebar/useSidebarWidth.ts) · [调整手柄](../../../web/src/components/AppSidebar/SidebarResizeHandle.tsx)
-- 主题偏好支持浅色、深色、跟随系统和纸张。跟随系统时先解析实际配色，再设置 `<html data-theme>`。浅色用暖灰绿画布与暖白卡片，深色用近黑墨绿侧栏、炭绿画布与浅色正文。笔记正文统一 15px 字号和 26px 行高，拉丁字符与数字优先使用内置 Barlow，中文使用平台字体回退。纸张主题沿用暖棕色配对。 [配色表](references/desktop-visual-design.md#cat_two-主题) · [默认主题](../../../web/src/themes/default.css) · [正文排版](../../../web/src/components/MemoEditor/README.md)
+- 主题偏好支持浅色、深色、跟随系统和纸张。跟随系统时先解析实际配色，再设置 `<html data-theme>`。浅色用暖灰绿画布、暖白卡片和纯黑字，深色用 `#121212` 画布、近黑墨绿侧栏、炭绿卡片和纯白字。笔记正文统一 15px 字号和 26px 行高，拉丁字符与数字优先使用内置 Barlow，中文使用平台字体回退。纸张主题沿用暖棕色配对。 [配色表](references/desktop-visual-design.md#cat_two-主题) · [默认主题](../../../web/src/themes/default.css) · [正文排版](../../../web/src/components/MemoEditor/README.md)
 - 左侧看板使用内收的独立滚动面板，与右侧工作区留出 24px 至 32px 间隔。账户、统计、日历、标签与回收站处于同一滚动区域。默认宽度下，区块间距为 28px，统计数字用 24px，日历放入内层面板。桌面标签行高 38px、间距 6px，回收站紧随最后一个标签，保持同样的间距。置顶标签区与普通标签之间有分隔，展开的标签树有层级引导线。 [侧栏](../../../web/src/components/AppSidebar/AppSidebar.tsx) · [侧栏间距](../../../web/src/components/AppSidebar/sidebar-layout.ts)
 - 侧栏统计显示当前账户的未归档笔记数、不同标签路径数和记录天数。复用侧栏的统计查询，随笔记变更更新，并独立于列表筛选和排序。日期展示、日历方格、按日筛选和记录天数都以 `Asia/Shanghai` 为准。 [统计组件](../../../web/src/components/AppSidebar/CollectionStats.tsx) · [统计查询](../../../web/src/hooks/useFilteredMemoStats.ts) · [时区逻辑](../../../web/src/lib/time-zone.ts)
 - 浅色与深色中，标签的置顶、树形和列表选中行使用 `#397354` 背景和白字，回收站选中使用同一行样式。纸张模式使用自身的强调色。标签计数在鼠标进入标签区或键盘焦点进入区内时可见，辅助技术仍可读取。打开回收站时右侧切换为已删除的笔记，左侧保留归档或未归档的来源及日历、标签。点日期或标签返回相应列表筛选。 [标签](../../../web/src/components/AppSidebar/TagsSection.tsx) · [统一行状态](../../../web/src/components/AppSidebar/SidebarRow.tsx) · [回收站](../../../web/src/pages/Trash.tsx)
@@ -28,10 +28,12 @@ Cat_two 是单账户自托管笔记。以桌面浏览器里的记录、检索和
 ## 笔记列表与编辑器
 
 - 首页复用 `PagedMemoList` 的 `renderStickyHeader`，桌面滚动时保留顶部列表菜单、搜索入口和新笔记输入框。「全部笔记」标题沿用 17px 和字重 700。常规单列中，编辑器、筛选和卡片之间保持 16px 的间距。调整单列、双列、三列或自动列时，复用现有可用宽度计算，保留加载、翻页、紧凑模式和列宽不足时的回退。 [首页](../../../web/src/pages/Home.tsx) · [列表菜单](../../../web/src/components/MemoFeedMenu.tsx) · [分页列表](../../../web/src/components/PagedMemoList/PagedMemoList.tsx)
+- 浅色和深色的笔记阅读区默认标签用 `#5783F7` 字色与主题标签底色。编辑器使用主题的编辑色，自定义标签沿用用户配置。 [阅读区字色](../../../web/src/components/MemoEditor/view/memo-content.css) · [标签配色](../../../web/src/lib/markdownStyles.ts)
 - 日历旁的显示设置弹层以侧栏触发器为锚点，使用 `positionMethod="fixed"`。在两列模式打开弹层后滚动右侧列表，验证弹层相对触发器保持稳定。滚动左侧时，右侧笔记位置也应保持稳定。保留侧栏的稳定滚动槽与滚动边界。 [显示设置弹层](../../../web/src/components/MemoDisplaySettingMenu.tsx) · [侧栏滚动](../../../web/src/components/AppSidebar/AppSidebar.tsx)
 - 首页从右侧输入框创建。桌面默认高度紧凑，聚焦后展开，浅色与深色的聚焦边框统一用 `rgb(48, 207, 121)`。失焦后收起，长内容在书写框内部滚动。右侧仍能在读到较早笔记时直接记录。 [输入框布局](../../../web/src/components/MemoEditor/edit/editor.css) · [首页入口](../../../web/src/pages/Home.tsx)
 - 通过 `MemoEditor` 看笔记、编辑和新建，已有笔记传资源名，新笔记传草稿种子。富文本与 Markdown 源码共用正文、格式操作、链接校验和渲染绑定。从底部「＋ → Markdown 模式」切换，格式快捷按钮和「更多格式」保持在输入区域下方。样式由共享主题、扩展或外层容器提供。 [编辑器结构](../../../web/src/components/MemoEditor/README.md) · [Markdown 主题](../../../web/src/lib/memo-markdown.ts) · [支持的格式](../cat-two-product-development/SKILL.md#支持的内容格式)
 - 从侧栏选择日期后，新建时带入该日。筛选变更时沿用现有的时间与草稿身份规则。保存失败后保留草稿和已经上传的附件，重试复用该次请求所用的创建 ID。编辑冲突时提示复核，并保留原草稿和待传文件。成功后复用现有缓存更新与恢复路径。 [保存逻辑](../../../web/src/components/MemoEditor/edit/hooks/useMemoSave.ts) · [已有笔记查询](../../../web/src/hooks/useMemoQueries.ts)
+- 从登录或最后一次笔记编辑开始计时，45 分钟无编辑时转到登录页。正文输入、格式、附件与待办更改属于编辑，同会话的多标签页共享期限。渲染、自动保存本地草稿、打开编辑器、浏览和后台同步均不计为编辑。重新登录后沿用已有草稿恢复流程。 [网页登录会话](../../../web/src/auth-state.ts)
 
 ## 设置和反馈
 

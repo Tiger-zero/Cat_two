@@ -90,6 +90,9 @@ message RefreshTokensUserSetting {
     string description = 5;
     // Stable ID of the browser session across refresh-token rotations.
     string session_id = 6;
+    // Most recent accepted edit activity, initialized at sign-in. Older
+    // sessions use created_at until the first edit or rotation.
+    google.protobuf.Timestamp last_edit_at = 7;
   }
 
   message ClientInfo {

@@ -12,6 +12,7 @@ import (
 	"github.com/usememos/memos/internal/clientip"
 	"github.com/usememos/memos/internal/ratelimit"
 	apipb "github.com/usememos/memos/proto/gen/api"
+	"github.com/usememos/memos/server/auth"
 	"github.com/usememos/memos/store"
 )
 
@@ -38,6 +39,11 @@ func (s *APIService) GetCurrentUser(ctx context.Context, _ *apipb.GetCurrentUser
 			return nil, status.Errorf(codes.Internal, "failed to clear auth cookies: %v", err)
 		}
 		return nil, status.Errorf(codes.Unauthenticated, "user not found")
+	}
+	if claims := auth.GetUserClaims(ctx); claims != nil {
+		if err := setSessionIdleExpiryHeader(ctx, claims.IdleExpiresAt); err != nil {
+			return nil, err
+		}
 	}
 
 	return &apipb.GetCurrentUserResponse{
