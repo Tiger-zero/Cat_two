@@ -4,7 +4,8 @@ Color and font tokens come from `@usememos/ui` (read `web/node_modules/@usememos
 then its color.md). Every token is a CSS variable named `--mu-<name>`; the Tailwind utilities for them
 carry an `mu-` prefix (`bg-mu-surface`, `text-mu-text-secondary`).
 
-- **Light** pairs a gray-green canvas and warm white surfaces with dark green actions.
+- **Light** pairs a gray-green canvas and warm white shared surfaces with dark green actions.
+  The desktop home sidebar, account panel, calendar, composer, and note cards use `#FFFFFF`.
   **Dark** uses `#121212` for the canvas, sidebar and shared surfaces, with lighter green actions.
   Both use the same component roles and are selected by `data-theme="light" | "dark"` on `<html>`.
   `utils/theme.ts` sets the attribute from the saved preference (`default`, `default-dark`, `paper` or

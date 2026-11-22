@@ -15,6 +15,7 @@ import useCurrentUser from "@/hooks/useCurrentUser";
 import { useMemoSuggestions } from "@/hooks/useMemoSuggestions";
 import { MAX_SELECTED_MEMO_EXPORT } from "@/lib/memo-export";
 import { buildMemoCreatorFilter, extractMemoIdFromName } from "@/lib/resource-names";
+import { cn } from "@/lib/utils";
 import { State } from "@/types/proto/api/common_pb";
 import { Memo } from "@/types/proto/api/memo_service_pb";
 import { useTranslate } from "@/utils/i18n";
@@ -73,7 +74,7 @@ const Home = () => {
                 memo={memo}
                 showPinned
                 compact={compact}
-                className={checked ? "border-mu-accent" : undefined}
+                className={cn("md:light:bg-white", checked && "border-mu-accent")}
               />
             );
             if (!selectedNames || memo.creator !== user?.name) return memoView;
@@ -109,7 +110,7 @@ const Home = () => {
                 <MemoEditor
                   draft={{ scope: "home", createTime: defaultCreateTime }}
                   expandOnFocus
-                  className="memo-list-gap"
+                  className="memo-list-gap md:light:bg-white"
                   placeholder={t("editor.any-thoughts")}
                   suggestions={suggestions}
                 />

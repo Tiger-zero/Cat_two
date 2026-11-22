@@ -19,7 +19,7 @@ Cat_two 是单账户自托管笔记。以桌面浏览器里的记录、检索和
 ## 桌面骨架、主题与侧栏
 
 - `RootLayout` 管理居中的桌面工作区、侧栏、路由内容及全局弹窗。侧栏默认 320px，拖动分隔线调整，双击复位。键盘聚焦分隔线后可用方向键调整，Home 和 End 可到达宽度边界。宽度偏好保存在当前浏览器，渲染会按窗口限宽。常规单列和多列工作区上限为 1064px 和 1280px，自动列或全宽由显示设置决定。 [页面骨架](../../../web/src/layouts/RootLayout.tsx) · [侧栏宽度](../../../web/src/components/AppSidebar/useSidebarWidth.ts) · [调整手柄](../../../web/src/components/AppSidebar/SidebarResizeHandle.tsx)
-- 主题偏好支持浅色、深色、跟随系统和纸张。跟随系统时先解析实际配色，再设置 `<html data-theme>`。浅色用暖灰绿画布、暖白卡片和纯黑字。深色用纯白字，画布、侧栏、搜索按钮、编辑器、笔记卡片和设置面板共用 `#121212` 底色。笔记正文统一 15px 字号和 26px 行高，拉丁字符与数字优先使用内置 Barlow，中文使用平台字体回退。纸张主题沿用暖棕色配对。 [配色表](references/desktop-visual-design.md#cat_two-主题) · [默认主题](../../../web/src/themes/default.css) · [正文排版](../../../web/src/components/MemoEditor/README.md)
+- 主题偏好支持浅色、深色、跟随系统和纸张。跟随系统时先解析实际配色，再设置 `<html data-theme>`。浅色用暖灰绿画布和纯黑字，桌面首页的侧栏、账号面板、日历、输入框和笔记卡片采用 `#FFFFFF`。深色用纯白字，画布、侧栏、搜索按钮、编辑器、笔记卡片和设置面板共用 `#121212` 底色。笔记正文统一 15px 字号和 26px 行高，拉丁字符与数字优先使用内置 Barlow，中文使用平台字体回退。纸张主题沿用暖棕色配对。 [配色表](references/desktop-visual-design.md#cat_two-主题) · [默认主题](../../../web/src/themes/default.css) · [正文排版](../../../web/src/components/MemoEditor/README.md)
 - 左侧看板使用内收的独立滚动面板，与右侧工作区留出 24px 至 32px 间隔。账户、统计、日历、标签与回收站处于同一滚动区域。默认宽度下，区块间距为 28px，统计数字用 24px，日历放入内层面板。桌面标签行高 38px、间距 6px，回收站紧随最后一个标签，保持同样的间距。置顶标签区与普通标签之间有分隔，展开的标签树有层级引导线。 [侧栏](../../../web/src/components/AppSidebar/AppSidebar.tsx) · [侧栏间距](../../../web/src/components/AppSidebar/sidebar-layout.ts)
 - 侧栏统计显示当前账户的未归档笔记数、不同标签路径数和记录天数。复用侧栏的统计查询，随笔记变更更新，并独立于列表筛选和排序。日期展示、日历方格、按日筛选和记录天数都以 `Asia/Shanghai` 为准。 [统计组件](../../../web/src/components/AppSidebar/CollectionStats.tsx) · [统计查询](../../../web/src/hooks/useFilteredMemoStats.ts) · [时区逻辑](../../../web/src/lib/time-zone.ts)
 - 浅色与深色中，标签的置顶、树形和列表选中行使用 `#397354` 背景和白字，回收站选中使用同一行样式。纸张模式使用自身的强调色。标签计数在鼠标进入标签区或键盘焦点进入区内时可见，辅助技术仍可读取。打开回收站时右侧切换为已删除的笔记，左侧保留归档或未归档的来源及日历、标签。点日期或标签返回相应列表筛选。 [标签](../../../web/src/components/AppSidebar/TagsSection.tsx) · [统一行状态](../../../web/src/components/AppSidebar/SidebarRow.tsx) · [回收站](../../../web/src/pages/Trash.tsx)
@@ -38,6 +38,7 @@ Cat_two 是单账户自托管笔记。以桌面浏览器里的记录、检索和
 ## 设置和反馈
 
 - 账户菜单从全局页面骨架打开设置弹窗，使用设置自身的左侧分区、右侧内容和滚动。通过 `settingSections.ts` 注册栏目和权限范围，管理员配置归入管理员分区。点关闭按钮或按 Esc 时保留笔记区域的浏览位置、筛选与草稿。从菜单打开时，关闭后返还焦点。旧版 `/setting#分区` 链接沿用相应兼容入口。 [设置弹窗](../../../web/src/components/Settings/SettingsDialog.tsx) · [栏目注册](../../../web/src/components/Settings/settingSections.ts)
+- 设置左侧当前项与标签共用 `SidebarRow` 的选中样式。浅色和深色均使用 `#397354` 底色、白色文字和白色图标，纸张模式使用自身的选中色。 [设置导航](../../../web/src/components/Settings/SettingsContent.tsx) · [统一行状态](../../../web/src/components/AppSidebar/SidebarRow.tsx)
 - 设置使用 `SettingSection`、`SettingGroup`、`SettingListItem` 组织标题、分组、字段与说明。采用现有的加载、空态和重试样式，错误反馈放在发生的位置。字段校验放在字段下方，使用 `Field.Error` 与 `useFieldErrors`。通用操作失败走 `showErrorToast`。敏感连接设置使用掩码输入，只显示已配置状态，留空按对应接口规则保留旧值。 [设置字段](../../../web/src/components/Settings/SettingList.tsx) · [通知](../../../web/src/components/Settings/NotificationSection.tsx) · [网络](../../../web/src/components/Settings/NetworkSection.tsx) · [错误反馈](../../../web/src/lib/toast.ts)
 - 企业微信的复制入口优先显示服务端保存的公网回调地址，其次显示实例级默认值。配置来自局域网且未提供公网地址时，显示输入与保存入口。验收覆盖带端口的保存与复制、清空后恢复默认值和错误提示。 [通知设置](../../../web/src/components/Settings/NotificationSection.tsx)
 

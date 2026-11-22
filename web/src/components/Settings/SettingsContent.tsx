@@ -29,7 +29,7 @@ export default function SettingsContent({ initialSection }: { initialSection: st
         key={section.key}
         icon={section.icon}
         label={t(section.labelKey)}
-        state={section.key === activeSection.key ? "current" : "idle"}
+        state={section.key === activeSection.key ? "checked" : "idle"}
         onClick={() => setSelectedKey(section.key)}
       />
     ));

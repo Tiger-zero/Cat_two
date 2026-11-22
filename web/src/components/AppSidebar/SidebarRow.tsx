@@ -56,8 +56,8 @@ export const ScopePanelRowIcon = ({ icon: Icon, className }: { icon: LucideIcon;
 );
 
 /**
- * Navigation and settings use the theme's current surface. Selected tags and the trash row
- * use the same green fill across themes.
+ * Navigation pills use the theme's current surface. Selected tags, settings items, and
+ * the trash row share the sidebar selection colors.
  */
 export type SidebarRowState = "idle" | "current" | "checked";
 

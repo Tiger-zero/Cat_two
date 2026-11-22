@@ -199,6 +199,7 @@ const AppSidebar = ({ className, mobile = false }: { className?: string; mobile?
   const hasCollection = showArchived || routeKind === "home" || inTrash;
   const collectionScope = showArchived ? "archived" : "home";
   const desktopCollection = !mobile && hasCollection;
+  const desktopHomeCollection = desktopCollection && !showArchived;
   const collectionDestination = inTrash ? (showArchived ? ROUTES.ARCHIVED : ROUTES.HOME) : undefined;
   const trashState = inTrash ? "checked" : "idle";
   const { setMobileOpen } = useAppSidebar();
@@ -209,6 +210,7 @@ const AppSidebar = ({ className, mobile = false }: { className?: string; mobile?
         mobile
           ? "bg-mu-canvas"
           : "@container/sidebar overflow-x-hidden overflow-y-auto overscroll-y-contain bg-(--memos-sidebar) [scrollbar-gutter:stable]",
+        desktopHomeCollection && "light:bg-white light:[&_.memos-panel]:bg-white",
         className,
       )}
     >
@@ -217,6 +219,7 @@ const AppSidebar = ({ className, mobile = false }: { className?: string; mobile?
           className={cn(
             "flex min-w-0 items-center justify-between gap-2",
             !mobile && "rounded-mu-lg border border-mu-line/75 bg-mu-surface/65 p-1.5 dark:bg-mu-surface",
+            desktopHomeCollection && "light:bg-white",
           )}
         >
           <AccountMenu className={cn("min-w-0", !mobile && "flex-1")} size="header" />
