@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"log/slog"
 
 	"golang.org/x/crypto/bcrypt"
 	"google.golang.org/grpc/codes"
@@ -16,6 +17,9 @@ import (
 
 const (
 	unmatchedUsernameAndPasswordError = "unmatched username and password"
+	// The same bcrypt cost is used for nonexistent users and accounts with no
+	// password, to avoid an immediate error disclosing account existence.
+	missingLoginPasswordHash = "$2a$10$OqBAbicTtlqj7Ry4b2CdXuCS4h/XjER3XjisYnM6wHzvo2OCChRji"
 )
 
 // GetCurrentUser returns the authenticated user's information.
@@ -53,12 +57,25 @@ func (s *APIService) GetCurrentUser(ctx context.Context, _ *apipb.GetCurrentUser
 func (s *APIService) SignIn(ctx context.Context, request *apipb.SignInRequest) (*apipb.SignInResponse, error) {
 	var existingUser *store.User
 
-	// Rate limits run before any lookup or hashing so a flood costs nothing.
+	// The blocklist and rate limits run before any user lookup or hashing.
 	// Each attempt reserves its units up front, so concurrent attempts cannot
 	// share one remaining unit; a successful attempt gives them back below.
 	// The account key is the submitted name whether or not it exists, so the
 	// limit cannot be used to learn which accounts are real.
 	clientIP := clientip.FromContext(ctx)
+	loginIP := ""
+	if s.personalMode() {
+		loginIP = canonicalLoginIP(clientIP)
+	}
+	if loginIP != "" {
+		blocked, err := s.Store.IsLoginIPBlocked(ctx, loginIP)
+		if err != nil {
+			return nil, status.Error(codes.Unavailable, "login protection is currently unavailable")
+		}
+		if blocked {
+			return nil, blockedLoginIPError()
+		}
+	}
 	attempt, err := s.reserveSignIn(clientIP, request.GetPasswordCredentials().GetUsername())
 	if err != nil {
 		return nil, err
@@ -77,12 +94,24 @@ func (s *APIService) SignIn(ctx context.Context, request *apipb.SignInRequest) (
 			attempt.succeeded()
 			return nil, status.Errorf(codes.Internal, "failed to get user, error: %v", err)
 		}
-		if user == nil {
-			return nil, status.Errorf(codes.InvalidArgument, unmatchedUsernameAndPasswordError)
+		hash := missingLoginPasswordHash
+		if user != nil && user.PasswordHash != "" {
+			hash = user.PasswordHash
 		}
-		// Compare the stored hashed password, with the hashed version of the password that was received.
-		if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(passwordCredentials.Password)); err != nil {
-			return nil, status.Errorf(codes.InvalidArgument, unmatchedUsernameAndPasswordError)
+		match := bcrypt.CompareHashAndPassword([]byte(hash), []byte(passwordCredentials.Password)) == nil
+		if user == nil || user.PasswordHash == "" || !match {
+			if loginIP != "" {
+				_, blocked, err := s.Store.RecordLoginIPFailure(ctx, loginIP, loginIPFailureLimit)
+				if err != nil {
+					attempt.succeeded()
+					return nil, status.Error(codes.Unavailable, "login protection is currently unavailable")
+				}
+				if blocked {
+					slog.InfoContext(ctx, "login IP blocked after failed passwords", "ip", loginIP)
+					return nil, blockedLoginIPError()
+				}
+			}
+			return nil, status.Error(codes.InvalidArgument, unmatchedUsernameAndPasswordError)
 		}
 		instanceGeneralSetting, err := s.Store.GetInstanceGeneralSetting(ctx)
 		if err != nil {
@@ -118,7 +147,7 @@ func (s *APIService) SignIn(ctx context.Context, request *apipb.SignInRequest) (
 	}
 	if existingUser.RowStatus == store.Archived {
 		attempt.succeeded()
-		return nil, status.Errorf(codes.PermissionDenied, "user has been archived with username %s", existingUser.Username)
+		return nil, status.Error(codes.PermissionDenied, "user has been archived")
 	}
 
 	revision, err := s.verifySignInTwoFactor(ctx, existingUser, request.GetPasswordCredentials().GetOtpCode())
@@ -131,6 +160,15 @@ func (s *APIService) SignIn(ctx context.Context, request *apipb.SignInRequest) (
 		return nil, err
 	}
 	attempt.succeeded()
+	if loginIP != "" {
+		blocked, err := s.Store.ClearLoginIPFailures(ctx, loginIP)
+		if err != nil {
+			return nil, status.Error(codes.Unavailable, "login protection is currently unavailable")
+		}
+		if blocked {
+			return nil, blockedLoginIPError()
+		}
+	}
 	accessToken, accessExpiresAt, err := s.doSignIn(ctx, existingUser, revision)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to sign in: %v", err)

@@ -34,6 +34,15 @@ CREATE TABLE user_totp (
   attempt_window_ts BIGINT NOT NULL
 );
 
+-- login_ip_attempt
+CREATE TABLE login_ip_attempt (
+  ip VARCHAR(45) COLLATE "C" NOT NULL PRIMARY KEY,
+  failure_count INTEGER NOT NULL,
+  blocked_ts BIGINT
+);
+
+CREATE INDEX idx_login_ip_attempt_blocked ON login_ip_attempt (ip) WHERE blocked_ts IS NOT NULL;
+
 -- mcp_connection
 CREATE TABLE mcp_connection (
   id TEXT COLLATE "C" NOT NULL PRIMARY KEY,

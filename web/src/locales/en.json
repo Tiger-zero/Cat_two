@@ -51,6 +51,7 @@
     "create-your-account": "Create your account",
     "hide-password": "Hide password",
     "incorrect-credentials": "Incorrect username or password.",
+    "login-ip-blocked": "Sign-in from this IP address is blocked until an administrator unblocks it.",
     "new-password": "New password",
     "repeat-new-password": "Repeat the new password",
     "setup-description": "Create the administrator account for this instance.",
@@ -507,6 +508,21 @@
     "unarchived": "Unarchived"
   },
   "setting": {
+    "security": {
+      "label": "Security",
+      "blocklist": "IP blocklist",
+      "description": "IP addresses stay blocked after repeated failed sign-in attempts until you unblock them here.",
+      "loading": "Loading blocked IP addresses…",
+      "empty": "No blocked IP addresses.",
+      "load-error": "Could not load blocked IP addresses.",
+      "blocked-at": "Blocked at {{time}} (UTC+8)",
+      "unblock": "Unblock",
+      "unblock-ip": "Unblock {{ip}}",
+      "unblock-title": "Unblock {{ip}}?",
+      "unblock-description": "This IP address can try to sign in again.",
+      "unblocked": "Unblocked {{ip}}",
+      "unblock-error": "Could not unblock this IP address. Try again."
+    },
     "access-token": {
       "access-token-copied-to-clipboard": "Access token copied to clipboard",
       "access-token-deleted": "Access token `{{description}}` deleted",

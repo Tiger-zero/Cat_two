@@ -105,6 +105,13 @@ type Driver interface {
 	// failed, including a stored row that cannot be decoded.
 	GetUserByPATHash(ctx context.Context, tokenHash string) (*PATQueryResult, error)
 
+	// Persistent login attempts and manual IP blocks.
+	IsLoginIPBlocked(ctx context.Context, ip string) (bool, error)
+	RecordLoginIPFailure(ctx context.Context, ip string, limit int, nowTs int64) (count int, blocked bool, err error)
+	ClearLoginIPFailures(ctx context.Context, ip string) (blocked bool, err error)
+	ListBlockedLoginIPs(ctx context.Context, afterIP string, limit int) ([]*BlockedLoginIP, error)
+	UnblockLoginIP(ctx context.Context, ip string) (bool, error)
+
 	// MCP connection requests and authorization states.
 	CreateMCPConnection(ctx context.Context, connection *MCPConnection) error
 	ListMCPConnections(ctx context.Context, userID int32) ([]*MCPConnection, error)

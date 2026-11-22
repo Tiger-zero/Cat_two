@@ -50,6 +50,15 @@ CREATE TABLE mcp_connection (
 
 CREATE INDEX idx_mcp_connection_user_created ON mcp_connection (user_id, created_ts, id);
 
+-- login_ip_attempt
+CREATE TABLE login_ip_attempt (
+  ip TEXT NOT NULL PRIMARY KEY,
+  failure_count INTEGER NOT NULL CHECK (failure_count > 0),
+  blocked_ts BIGINT
+);
+
+CREATE INDEX idx_login_ip_attempt_blocked_ip ON login_ip_attempt (ip) WHERE blocked_ts IS NOT NULL;
+
 -- user_setting
 CREATE TABLE user_setting (
   user_id INTEGER NOT NULL,

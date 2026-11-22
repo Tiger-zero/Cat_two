@@ -39,8 +39,8 @@ const fill = () => {
   fireEvent.click(screen.getByRole("button", { name: "common.sign-in" }));
 };
 
-function totpError(reason: string) {
-  const error = new ConnectError("Authenticator verification required", Code.InvalidArgument);
+function errorWithReason(reason: string, code = Code.InvalidArgument) {
+  const error = new ConnectError(reason, code);
   const value = new BinaryWriter().tag(1, 2).string(reason).finish();
   error.details.push({ type: "google.rpc.ErrorInfo", value });
   return error;
@@ -83,6 +83,18 @@ describe("<PasswordSignInForm>", () => {
     expect(screen.getByLabelText("common.password")).not.toHaveAttribute("aria-invalid", "true");
   });
 
+  it("shows the manual unblock notice when the IP is blocked during sign-in", async () => {
+    signIn.mockRejectedValue(errorWithReason("LOGIN_IP_BLOCKED", Code.PermissionDenied));
+    render(<PasswordSignInForm />);
+
+    fill();
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("auth.login-ip-blocked");
+    expect(screen.getByLabelText("common.password")).not.toHaveAttribute("aria-invalid", "true");
+    expect(initialize).not.toHaveBeenCalled();
+    expect(setAccessToken).not.toHaveBeenCalled();
+  });
+
   it("reveals and hides the password", () => {
     render(<PasswordSignInForm />);
     const password = screen.getByLabelText("common.password");
@@ -96,8 +108,8 @@ describe("<PasswordSignInForm>", () => {
 
   it("signs in only after the server accepts a fresh verification code", async () => {
     signIn
-      .mockRejectedValueOnce(totpError("TOTP_REQUIRED"))
-      .mockRejectedValueOnce(totpError("TOTP_INVALID"))
+      .mockRejectedValueOnce(errorWithReason("TOTP_REQUIRED"))
+      .mockRejectedValueOnce(errorWithReason("TOTP_INVALID"))
       .mockResolvedValueOnce({ accessToken: "verified-access" });
     render(<PasswordSignInForm redirectPath="/memos/example" />);
 
@@ -132,7 +144,7 @@ describe("<PasswordSignInForm>", () => {
   });
 
   it("cancels a challenged sign-in without retaining the password", async () => {
-    signIn.mockRejectedValueOnce(totpError("TOTP_REQUIRED"));
+    signIn.mockRejectedValueOnce(errorWithReason("TOTP_REQUIRED"));
     render(<PasswordSignInForm />);
     fill();
 

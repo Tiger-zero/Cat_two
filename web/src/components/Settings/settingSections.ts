@@ -6,6 +6,7 @@ import {
   KeyRoundIcon,
   type LucideIcon,
   Settings2Icon,
+  ShieldIcon,
   SquarePenIcon,
   TagsIcon,
   UserIcon,
@@ -18,6 +19,7 @@ import MemoExportSection from "@/components/Settings/MemoExportSection";
 import MyAccountSection from "@/components/Settings/MyAccountSection";
 import PreferencesSection from "@/components/Settings/PreferencesSection";
 import ResourceStatsSection from "@/components/Settings/ResourceStatsSection";
+import SecuritySection from "@/components/Settings/SecuritySection";
 import StorageSection from "@/components/Settings/StorageSection";
 import TagsSection from "@/components/Settings/TagsSection";
 import { InstanceSetting_Key } from "@/types/proto/api/instance_service_pb";
@@ -29,6 +31,7 @@ export type SettingSectionKey =
   | "preference"
   | "editor"
   | "system"
+  | "security"
   | "storage"
   | "tags"
   | "resource-stats";
@@ -79,6 +82,13 @@ export const SETTINGS_SECTIONS: SettingSectionDefinition[] = [
     labelKey: "setting.system.label",
     icon: Settings2Icon,
     component: InstanceSection,
+  },
+  {
+    key: "security",
+    scope: "admin",
+    labelKey: "setting.security.label",
+    icon: ShieldIcon,
+    component: SecuritySection,
   },
   {
     key: "tags",

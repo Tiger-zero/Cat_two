@@ -15,6 +15,11 @@
 - Docker 运行层更新至受支持的 Alpine 3.24，构建时升级系统包。AMD64 候选的 zlib 和 OpenSSL 已达到 Alpine 安全库列出的修复版本，ARM64 核对官方软件包索引。 [Dockerfile](../../../../scripts/Dockerfile) · [Alpine 安全数据库](https://secdb.alpinelinux.org/)
 - 后端、核心及 SQLite 存储的竞态测试通过。两份 Compose 验证了默认端口映射及本机绑定、HTTPS 基址、代理 IP 配置。用本轮源码、发布模式网页资源和升级后的运行层组装本地 AMD64 候选，在独立卷验证新装、重建及从 `0.08` 升级后的笔记读写。公网入口仍需按实际域名、防火墙和代理验收。 [冒烟测试](../../../../scripts/release_smoke_test.sh) · [部署说明](../../../../README.md#在公网部署)
 
+### 登录页检查与 IP 黑名单
+
+- 用独立实例和虚构凭据核对公开页面、实例资料、用户接口和错误响应。未观察到管理员用户名、邮箱、密码、密码哈希或签名密钥对匿名调用者可见。账号不存在与密码错误返回一致，并对缺少密码哈希的账号执行同成本的 bcrypt 校验。登录及续期拒绝不可信浏览器来源，REST 用标准 HttpOnly Cookie 返回刷新令牌。旧 `Grpc-Metadata-Cookie` 续期请求仍可在未提供标准 Cookie 时使用。 [隐私与 Cookie 回归](../../../../server/test/login_privacy_test.go)
+- SQLite 架构升至 `26.11.7`。IPv4 和 IPv6 地址统一规范化，连续 6 次密码失败后持久化封禁。完成登录清除未达阈值的计数。验收覆盖重启、并发计数、IPv6、分页、变造代理头、PAT 和非管理员拦截。真实 Chromium 验证先保留管理员会话，再由另一会话触发封禁、从安全设置解除及重新登录。 [黑名单回归](../../../../server/test/login_blocklist_test.go) · [部署主机恢复](../../../../README.md#登录防护和-ip-解封)
+
 ## 2026-11-21（上海时间）
 
 本次复盘核对到 GitHub `main` 提交 `86dcec0ea`。Docker Hub 的 `latest` 指向 `0.06`，源码为 `53968a153`。

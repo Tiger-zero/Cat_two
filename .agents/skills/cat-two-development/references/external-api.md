@@ -4,6 +4,7 @@ AI 客户端用 MCP 查找、整理和写回笔记。脚本、附件传输及回
 
 ## 凭据和可见性
 
+- **登录防护** 同一 IP 连续 6 次密码验证失败会被禁止发起新的登录。第 6 次及之后的登录请求返回 `403` 和 `LOGIN_IP_BLOCKED`。登录和续期用标准 `Set-Cookie` 和 `Cookie` 处理刷新令牌。黑名单由管理员会话在网页中维护。 [解封说明](../../../../README.md#登录防护和-ip-解封)
 - **MCP** 连接到 `/mcp`，使用 Streamable HTTP，在每次请求发送 `Authorization: Bearer <MCP 连接令牌>`。在「设置 → MCP 和 API」创建，支持 7 天（默认）、14 天、1 个日历年或永久。到期或删除后下一次请求会被拒绝。连接管理的 `/api/mcpConnections` 要求网页登录会话。 [连接说明](../../../../server/mcp/README.md#connecting-a-client) · [管理权限](../../../../server/api/mcp_connection_handler.go)
 - **REST** 在同一设置页创建个人访问令牌（PAT），发送 `Authorization: Bearer <PAT>`，先用 `GET /api/auth/me` 核对归属。PAT 的权限按持有账户及各接口的权限检查决定，目前无逐令牌的只读、按笔记或按标签授权范围。可为各集成单独发放和撤销令牌。密码修改需要交互会话。MCP 连接令牌仅用于 `/mcp`。 [PAT 字段](../../../../proto/api/user_service.proto) · [认证](../../../../server/auth/authenticator.go) · [密码修改约束](../../../../server/api/user_service.go)
 - **数据** 仅活跃的笔记作者可读写其笔记。REST 和 MCP 返回的笔记可见性为 `PRIVATE`，旧链接无法分享笔记。笔记链接 `/memos/<uid>` 仍要求登录并核对作者。匿名接口以 ACL 为准，例如实例概况可匿名读取。上游定义里仍保留部分已停用的空间、身份提供方和 Webhook 路由，个人模式调用会返回 `UNIMPLEMENTED`。 [笔记权限](../../../../core/access/memo.go) · [匿名路由](../../../../server/api/acl_config.go) · [停用路由](../../../../server/api/retired_modules.go)

@@ -187,6 +187,10 @@ func (s *APIService) NewHandler(ctx context.Context) (http.Handler, error) {
 			// are refused. Failing closed keeps a routing gap from becoming an
 			// access-control gap.
 			procedure, _ := routeResolver.resolveRequest(r)
+			if rejectsAuthBrowserOrigin(r, procedure, s.Profile.InstanceURL) {
+				writeGatewayStatusError(w, status.Error(codes.PermissionDenied, authBrowserOriginError))
+				return
+			}
 			var result *auth.AuthResult
 			if request, ok := ctx.Value(mcpUserContextKey{}).(mcpAPIRequest); ok {
 				// Compare with the binding the gateway actually matched. An
@@ -216,6 +220,12 @@ func (s *APIService) NewHandler(ctx context.Context) (http.Handler, error) {
 			if result != nil {
 				r = r.WithContext(auth.ApplyToContext(ctx, result))
 			}
+			// A real browser cookie takes precedence over the older gateway
+			// metadata header. Do not depend on header iteration order.
+			if len(r.Header.Values("Cookie")) != 0 && len(r.Header.Values(gatewayMetadataCookieHeader)) != 0 {
+				r = r.Clone(r.Context())
+				r.Header.Del(gatewayMetadataCookieHeader)
+			}
 			r.Body = http.MaxBytesReader(w, r.Body, requestBodyLimit(procedure))
 
 			next(w, r, pathParams)
@@ -228,6 +238,7 @@ func (s *APIService) NewHandler(ctx context.Context) (http.Handler, error) {
 		runtime.WithMiddlewares(gatewayAuthMiddleware),
 		runtime.WithErrorHandler(gatewayErrorHandler),
 		runtime.WithIncomingHeaderMatcher(gatewayIncomingHeaderMatcher),
+		runtime.WithOutgoingHeaderMatcher(gatewayOutgoingHeaderMatcher),
 	)
 	if err := apipb.RegisterInstanceServiceHandlerServer(ctx, gwMux, s); err != nil {
 		return nil, err
@@ -281,6 +292,7 @@ func (s *APIService) NewHandler(ctx context.Context) (http.Handler, error) {
 	RegisterSSERoutes(sseMux, s.SSEHub, s.Store, s.Secret)
 	trashHandler := s.newMemoTrashHandler(authorizer)
 	mcpConnectionHandler := s.newMCPConnectionHandler(authorizer)
+	loginBlocklistHandler := s.newLoginBlocklistHandler(authorizer)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if _, authenticatedMCP := r.Context().Value(mcpUserContextKey{}).(mcpAPIRequest); authenticatedMCP {
 			gwMux.ServeHTTP(w, r)
@@ -297,11 +309,18 @@ func (s *APIService) NewHandler(ctx context.Context) (http.Handler, error) {
 			trashHandler.ServeHTTP(w, r)
 		case s.Profile.Personal && (requestPath == "/api/mcpConnections" || strings.HasPrefix(requestPath, "/api/mcpConnections/")):
 			mcpConnectionHandler.ServeHTTP(w, r)
+		case s.personalMode() && (requestPath == loginBlocklistPath || strings.HasPrefix(requestPath, loginBlocklistPath+"/")):
+			loginBlocklistHandler.ServeHTTP(w, r)
 		case strings.HasPrefix(requestPath, "/api/v1/"):
 			removedAPIVersionHandler(false).ServeHTTP(w, r)
 		case strings.HasPrefix(requestPath, "/memos.api.v1."):
 			removedAPIVersionHandler(true).ServeHTTP(w, r)
 		case strings.HasPrefix(requestPath, "/memos.api."):
+			if r.Method == http.MethodPost && rejectsAuthBrowserOrigin(r, r.URL.Path, s.Profile.InstanceURL) && connectErrors.IsSupported(r) {
+				setAPIResponseNoStoreHeaders(w.Header())
+				_ = connectErrors.Write(w, r, connect.NewError(connect.CodePermissionDenied, errors.New(authBrowserOriginError)))
+				return
+			}
 			// Unary interceptors run after Connect buffers and decodes a
 			// message. Gate the largest request before that work and let the
 			// interceptor recheck the credentials before serving it.
@@ -353,13 +372,27 @@ func newProfileRateLimiter(profile *profile.Profile) ratelimit.Limiter {
 	return ratelimit.NewMemoryLimiter(ratelimit.DefaultPolicy())
 }
 
-// gatewayIncomingHeaderMatcher forwards the challenge token to metadata on top
-// of the gateway's default set.
+const gatewayMetadataCookieHeader = runtime.MetadataHeaderPrefix + "Cookie"
+
+// gatewayIncomingHeaderMatcher forwards the challenge token and the headers
+// used to read a refresh cookie and determine its security attributes.
 func gatewayIncomingHeaderMatcher(key string) (string, bool) {
-	if http.CanonicalHeaderKey(key) == challengeTokenHeader {
+	switch http.CanonicalHeaderKey(key) {
+	case challengeTokenHeader:
 		return challengeTokenMetadataKey, true
+	case "Cookie", "Origin", "X-Forwarded-Proto", "Forwarded":
+		return strings.ToLower(key), true
 	}
 	return runtime.DefaultHeaderMatcher(key)
+}
+
+// Set-Cookie is a browser-managed header. Prefixing it as ordinary gRPC
+// metadata would expose the refresh token to scripts and leave it unstored.
+func gatewayOutgoingHeaderMatcher(key string) (string, bool) {
+	if strings.EqualFold(key, "Set-Cookie") {
+		return "Set-Cookie", true
+	}
+	return runtime.MetadataHeaderPrefix + key, true
 }
 
 // gatewayErrorHandler adds the rate-limit header fields to a refusal before

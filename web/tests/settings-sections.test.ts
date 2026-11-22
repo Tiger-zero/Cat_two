@@ -18,6 +18,7 @@ describe("settings sections", () => {
     expect(DEFAULT_SETTING_SECTION).toBe("my-account");
     expect(SETTINGS_SECTIONS.filter((section) => section.scope === "admin").map((section) => section.key)).toEqual([
       "system",
+      "security",
       "storage",
       "resource-stats",
     ]);

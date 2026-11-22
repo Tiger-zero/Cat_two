@@ -35,6 +35,13 @@ CREATE TABLE user_totp (
   FOREIGN KEY (user_id) REFERENCES `user`(id) ON DELETE CASCADE
 );
 
+-- login_ip_attempt
+CREATE TABLE login_ip_attempt (
+  ip VARCHAR(45) CHARACTER SET ascii COLLATE ascii_bin NOT NULL PRIMARY KEY,
+  failure_count INTEGER NOT NULL,
+  blocked_ts BIGINT
+) ENGINE=InnoDB;
+
 -- mcp_connection
 CREATE TABLE mcp_connection (
   id VARBINARY(64) NOT NULL PRIMARY KEY,

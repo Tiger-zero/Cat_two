@@ -51,6 +51,7 @@
     "create-your-account": "创建您的账户",
     "hide-password": "隐藏密码",
     "incorrect-credentials": "用户名或密码错误。",
+    "login-ip-blocked": "此 IP 地址已被封禁，需由管理员手动解除后才能登录。",
     "new-password": "新密码",
     "repeat-new-password": "重复新密码",
     "setup-description": "为此实例创建管理员账号。",
@@ -455,6 +456,21 @@
     "back-to-top": "回到顶部"
   },
   "setting": {
+    "security": {
+      "label": "安全",
+      "blocklist": "黑名单 IP",
+      "description": "多次登录失败的 IP 地址会一直封禁，直至在此手动解除。",
+      "loading": "正在加载黑名单 IP…",
+      "empty": "暂无被封禁的 IP 地址。",
+      "load-error": "无法加载黑名单 IP。",
+      "blocked-at": "封禁时间 {{time}}（北京时间）",
+      "unblock": "解除封禁",
+      "unblock-ip": "解除封禁 {{ip}}",
+      "unblock-title": "解除对 {{ip}} 的封禁？",
+      "unblock-description": "该 IP 地址将可以再次尝试登录。",
+      "unblocked": "已解除对 {{ip}} 的封禁",
+      "unblock-error": "无法解除对该 IP 地址的封禁，请重试。"
+    },
     "my-account": {
       "label": "我的账号"
     },

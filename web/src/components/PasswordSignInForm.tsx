@@ -68,7 +68,11 @@ function PasswordSignInForm({ redirectPath }: PasswordSignInFormProps) {
         setChallengeToken(null);
         setChallengeResetKey((key) => key + 1);
       }
-      if (hasErrorReason(err, "TOTP_REQUIRED")) {
+      if (hasConnectCode(err, Code.PermissionDenied) && hasErrorReason(err, "LOGIN_IP_BLOCKED")) {
+        setNeedsCode(false);
+        setCode("");
+        setError({ message: t("auth.login-ip-blocked"), field: "form" });
+      } else if (hasErrorReason(err, "TOTP_REQUIRED")) {
         setNeedsCode(true);
         setCode("");
       } else if (hasErrorReason(err, "TOTP_INVALID")) {

@@ -112,7 +112,7 @@ func init() {
 	rootCmd.Version = version.GetCurrentVersion()
 	rootCmd.SetVersionTemplate("{{.Version}}\n")
 
-	rootCmd.AddCommand(versionCmd, newTwoFactorCommand())
+	rootCmd.AddCommand(versionCmd, newTwoFactorCommand(), newLoginBlocklistCommand())
 }
 
 func runServer() error {

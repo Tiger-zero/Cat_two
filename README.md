@@ -2,7 +2,7 @@
 
 Cat_two 是面向个人使用的自托管笔记应用。通过网页记录 Markdown 笔记和附件，按日期、标签或关键词找回内容。笔记仅限创建者登录后访问。默认使用 Docker Compose 和 SQLite，可部署在 NAS 上。界面默认是简体中文，网页时间和日历按上海时区显示。
 
-[部署服务端](#部署服务端) · [在 NAS 上部署](#在-nas-上部署) · [在公网部署](#在公网部署) · [Telegram 和企业微信收件](#telegram-和企业微信收件) · [备份和升级](#备份和升级) · [重置两步验证](#重置两步验证) · [连接 Codex](#连接-codex) · [外部接口](.agents/skills/cat-two-development/references/external-api.md) · [功能与实现](.agents/skills/cat-two-development/references/product-guide.md)
+[部署服务端](#部署服务端) · [在 NAS 上部署](#在-nas-上部署) · [在公网部署](#在公网部署) · [登录防护和 IP 解封](#登录防护和-ip-解封) · [Telegram 和企业微信收件](#telegram-和企业微信收件) · [备份和升级](#备份和升级) · [重置两步验证](#重置两步验证) · [连接 Codex](#连接-codex) · [外部接口](.agents/skills/cat-two-development/references/external-api.md) · [功能与实现](.agents/skills/cat-two-development/references/product-guide.md)
 
 ## 部署服务端
 
@@ -128,6 +128,18 @@ CAT_TWO_WECOM_USER_ID=填你的企业微信成员账号
 ```
 
 使用普通 Compose 时运行 `docker compose up -d`，使用 NAS 配置时运行 `docker compose -f compose.nas.yaml up -d`。查看对应项目的 `cat-two` 容器日志，可确认渠道是否启用。若企业微信回调验证失败，先核对 HTTPS 回调路径、Token、EncodingAESKey 和 NAS 系统时间。
+
+## 登录防护和 IP 解封
+
+同一 IP 连续 6 次密码验证失败时会被禁止发起新的登录。不存在的账号也会计入该 IP 的连续失败次数。完成一次登录会清除尚未封禁的失败记录。封禁持久保存，重启后仍然有效，直到管理员手动解除。共享同一公网 IP 的设备会受到同一条封禁。反向代理后部署时，按公网部署说明配置可信代理，让应用能区分客户端 IP。
+
+已登录的管理员可以在「设置 → 安全 → 黑名单 IP」查看封禁时间并解除。若当前所有浏览器都无法登录，可在部署主机上用正在运行的 Compose 项目解封指定地址。将示例 IP 换成实际被封禁的地址，应用日志中会记录该地址。
+
+```sh
+docker compose exec cat-two /usr/local/memos/memos login-blocklist remove --ip 203.0.113.42
+```
+
+在 NAS 上使用 `compose.nas.yaml` 的实例，执行同一条命令时在 `compose` 后加 `-f compose.nas.yaml`。
 
 ## 两步验证
 

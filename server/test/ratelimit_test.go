@@ -15,7 +15,7 @@ import (
 // wire, which only a booted server can: HTTP 429, Retry-After and the IETF
 // RateLimit fields, and an ErrorInfo detail with reason RATE_LIMITED, from
 // both the gRPC gateway and the Connect handler. The sign-in address budget
-// counts failures for an unknown user, so no password hashing is involved.
+// counts failures even for a name that has no account.
 func TestStartupRateLimitOnBothTransports(t *testing.T) {
 	ctx := context.Background()
 	inst := bootInstance(ctx, t, instanceOptions{instanceURL: "http://127.0.0.1", rateLimit: true})
@@ -99,11 +99,9 @@ func TestStartupRateLimitOnBothTransports(t *testing.T) {
 	}
 	require.ElementsMatch(t, []string{"google.rpc.ErrorInfo", "google.rpc.RetryInfo"}, connectTypes)
 
-	// A forged forwarding header from an untrusted peer does not open a fresh
-	// budget. The test client connects from loopback, which the default
-	// trusted-proxy set includes, so the forged header must name a trusted
-	// address to be walked past and still land on the peer.
-	forged := post("/api/auth/signin", nextBody(), map[string]string{"X-Forwarded-For": "10.0.0.9"})
+	// With no trusted proxies configured, a forged forwarding header cannot
+	// move the loopback client into another address's budget.
+	forged := post("/api/auth/signin", nextBody(), map[string]string{"X-Forwarded-For": "203.0.113.5"})
 	defer forged.Body.Close()
 	require.Equal(t, http.StatusTooManyRequests, forged.StatusCode)
 }
