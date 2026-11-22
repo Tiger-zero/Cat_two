@@ -6,8 +6,8 @@ import (
 	"io"
 	"net/http"
 	"slices"
-	"strconv"
 	"strings"
+	"time"
 
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"google.golang.org/grpc/codes"
@@ -15,6 +15,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	"github.com/usememos/memos/core/memopayload"
+	"github.com/usememos/memos/filter"
 	markdownparser "github.com/usememos/memos/markdown/parser"
 	"github.com/usememos/memos/store"
 )
@@ -23,7 +24,10 @@ func (s *APIService) registerMemoTagRoutes(mux *runtime.ServeMux) error {
 	if err := mux.HandlePath(http.MethodPost, "/api/tags/rename", s.renameMemoTag); err != nil {
 		return err
 	}
-	return mux.HandlePath(http.MethodPost, "/api/tags/normalize", s.normalizeMemoTags)
+	if err := mux.HandlePath(http.MethodPost, "/api/tags/normalize", s.normalizeMemoTags); err != nil {
+		return err
+	}
+	return mux.HandlePath(http.MethodPost, "/api/tags/delete", s.deleteMemoTag)
 }
 
 func validTagPath(tag string) bool {
@@ -56,7 +60,7 @@ func (s *APIService) renameMemoTag(w http.ResponseWriter, r *http.Request, _ map
 		writeGatewayStatusError(w, status.Error(codes.InvalidArgument, "enter a valid tag path outside the original branch"))
 		return
 	}
-	s.applyTagEdit(w, r, "tag in ["+strconv.Quote(oldTag)+"]", func(content []byte) (string, error) {
+	s.applyTagEdit(w, r, filter.TagBranchExpression(oldTag), func(content []byte) (string, error) {
 		return s.MarkdownService.RenameTagBranch(content, oldTag, newTag)
 	})
 }
@@ -65,7 +69,44 @@ func (s *APIService) normalizeMemoTags(w http.ResponseWriter, r *http.Request, _
 	s.applyTagEdit(w, r, "", s.MarkdownService.NormalizeTagWhitespace)
 }
 
+func (s *APIService) deleteMemoTag(w http.ResponseWriter, r *http.Request, _ map[string]string) {
+	var request struct {
+		TagName string `json:"tagName"`
+		Mode    string `json:"mode"`
+	}
+	decoder := json.NewDecoder(r.Body)
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&request); err != nil || decoder.Decode(new(any)) != io.EOF {
+		writeGatewayStatusError(w, status.Error(codes.InvalidArgument, "expected tag deletion request"))
+		return
+	}
+	tag := tagPathInput(request.TagName)
+	if !validTagPath(tag) {
+		writeGatewayStatusError(w, status.Error(codes.InvalidArgument, "enter a valid tag path"))
+		return
+	}
+	branchFilter := filter.TagBranchExpression(tag)
+	switch request.Mode {
+	case "remove":
+		s.applyTagEdit(w, r, branchFilter, func(content []byte) (string, error) {
+			return s.MarkdownService.RemoveTagBranch(content, tag)
+		})
+	case "trash":
+		s.applyTagMutation(w, r, func(ctx context.Context, userID int32) (int, error) {
+			return s.trashOwnTaggedMemos(ctx, userID, branchFilter)
+		})
+	default:
+		writeGatewayStatusError(w, status.Error(codes.InvalidArgument, "choose remove or trash for tag deletion"))
+	}
+}
+
 func (s *APIService) applyTagEdit(w http.ResponseWriter, r *http.Request, filter string, edit func([]byte) (string, error)) {
+	s.applyTagMutation(w, r, func(ctx context.Context, userID int32) (int, error) {
+		return s.editOwnMemoTags(ctx, userID, filter, edit)
+	})
+}
+
+func (s *APIService) applyTagMutation(w http.ResponseWriter, r *http.Request, mutate func(context.Context, int32) (int, error)) {
 	ctx := r.Context()
 	user, err := s.fetchCurrentUser(ctx)
 	if err != nil {
@@ -76,7 +117,7 @@ func (s *APIService) applyTagEdit(w http.ResponseWriter, r *http.Request, filter
 		writeGatewayStatusError(w, status.Error(codes.Unauthenticated, "authentication required"))
 		return
 	}
-	count, err := s.editOwnMemoTags(ctx, user.ID, filter, edit)
+	count, err := mutate(ctx, user.ID)
 	if count > 0 {
 		s.SSEHub.publishMemoChanged()
 	}
@@ -86,6 +127,25 @@ func (s *APIService) applyTagEdit(w http.ResponseWriter, r *http.Request, filter
 	}
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]int{"updatedCount": count})
+}
+
+func (s *APIService) trashOwnTaggedMemos(ctx context.Context, userID int32, filter string) (int, error) {
+	memos, err := s.Store.ListMemos(ctx, &store.FindMemo{
+		CreatorID: &userID, Filters: []string{filter}, ExcludeContent: true, ExcludeComments: true,
+	})
+	if err != nil {
+		return 0, err
+	}
+	now := time.Now().Unix()
+	for index, memo := range memos {
+		_, err := s.Store.ApplyMemoTrash(ctx, &store.MemoTrashMutation{
+			MemoID: memo.ID, ActorUserID: userID, Action: store.MemoTrashMove, NowTs: now, ExpectedRevision: &memo.Revision,
+		})
+		if err != nil {
+			return index, err
+		}
+	}
+	return len(memos), nil
 }
 
 func (s *APIService) editOwnMemoTags(ctx context.Context, userID int32, filter string, edit func([]byte) (string, error)) (int, error) {
@@ -139,6 +199,7 @@ func (s *APIService) editMemoTags(ctx context.Context, memo *store.Memo, edit fu
 		MemoID:              memo.ID,
 		MemoCreatorID:       memo.CreatorID,
 		ExpectedMemoContent: memo.Content,
+		ExpectedRevision:    &memo.Revision,
 		MemoUpdate:          &store.UpdateMemo{ID: memo.ID, Content: &next.Content, Payload: next.Payload, UpdatedTs: &memo.UpdatedTs},
 		Policy:              s.memoWritePolicy(memo.CreatorID, false),
 	})

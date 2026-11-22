@@ -71,8 +71,8 @@ function MemoFeedMenu({ canExport, selectedCount, exporting, onBeginSelection, o
   ];
 
   return (
-    <div className="mb-[var(--memos-list-gap,0.75rem)] flex w-full flex-col gap-2">
-      <div className="flex min-w-0 items-center justify-between gap-2">
+    <div className="memo-list-gap flex w-full flex-col gap-2">
+      <div className="flex min-w-0 items-center justify-between gap-3 border-b border-mu-line/75 pb-2.5">
         <h1 className="min-w-0">
           <Menu.Root>
             <Menu.Trigger
@@ -140,7 +140,13 @@ function MemoFeedMenu({ canExport, selectedCount, exporting, onBeginSelection, o
             </Menu.Popup>
           </Menu.Root>
         </h1>
-        <Button variant="neutral" icon={<SearchIcon />} aria-label={t("memo-feed.search")} onClick={() => setQuickFindOpen(true)}>
+        <Button
+          variant="neutral"
+          icon={<SearchIcon />}
+          aria-label={t("memo-feed.search")}
+          className="rounded-mu-lg"
+          onClick={() => setQuickFindOpen(true)}
+        >
           <span className="hidden sm:inline">{t("memo-feed.search")}</span>
         </Button>
       </div>

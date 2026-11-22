@@ -134,8 +134,8 @@ function MemoDisplaySettingMenu({ anchor }: Props) {
               className={cn(
                 buttonClasses({ variant: "ghost", iconOnly: true }),
                 "w-auto rounded-s-none px-1.5 hover:bg-mu-hover data-popup-open:[&_svg]:rotate-180",
-                "light:text-mu-accent light:hover:bg-mu-accent/10 light:data-popup-open:bg-mu-accent/10",
-                "dark:text-mu-accent dark:hover:bg-mu-accent/10 dark:data-popup-open:bg-mu-accent/10",
+                "light:text-mu-primary light:hover:bg-mu-primary/10 light:data-popup-open:bg-mu-primary/10",
+                "dark:text-mu-primary dark:hover:bg-mu-primary/10 dark:data-popup-open:bg-mu-primary/10",
               )}
             />
           }

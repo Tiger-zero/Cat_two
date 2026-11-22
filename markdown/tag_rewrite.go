@@ -54,6 +54,19 @@ func (s *service) RenameTagBranch(content []byte, oldTag, newTag string) (string
 	})
 }
 
+// RemoveTagBranch removes recognized tags in a slash-delimited branch.
+func (s *service) RemoveTagBranch(content []byte, branch string) (string, error) {
+	root, err := s.parse(content)
+	if err != nil {
+		return "", err
+	}
+	prefix := branch + "/"
+	return rewriteMemoTags(content, root, func(tag *mast.TagNode) (string, bool) {
+		value := string(tag.Tag)
+		return "", value == branch || strings.HasPrefix(value, prefix)
+	})
+}
+
 // NormalizeTagWhitespace repairs spaced hierarchy separators in recognized tags.
 func (s *service) NormalizeTagWhitespace(content []byte) (string, error) {
 	root, _ := s.parseSource(content, nil, extensions.AllowSpacedTagSeparators)
@@ -87,7 +100,13 @@ func rewriteMemoTags(content []byte, root gast.Node, replace func(*mast.TagNode)
 			return gast.WalkContinue, nil
 		}
 		if replacement, changed := replace(tag); changed {
-			edits = append(edits, sourceEdit{tag.Pos(), tag.Pos() + len(tag.Source), replacement})
+			end := tag.Pos() + len(tag.Source)
+			// Remove the following separator along with a deleted tag. Otherwise
+			// a line of several removed tags can leave an indented code block.
+			if replacement == "" && end < len(content) && (content[end] == ' ' || content[end] == '\t') {
+				end++
+			}
+			edits = append(edits, sourceEdit{tag.Pos(), end, replacement})
 		}
 		return gast.WalkContinue, nil
 	}); err != nil {

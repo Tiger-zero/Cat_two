@@ -41,6 +41,8 @@ type MemoTrashMutation struct {
 	ActorUserID int32
 	Action      MemoTrashAction
 	NowTs       int64
+	// ExpectedRevision guards actions based on a previously read memo snapshot.
+	ExpectedRevision *int64
 }
 
 // Cutoff returns the last deletion timestamp that is no longer restorable.
@@ -49,9 +51,12 @@ func (m *MemoTrashMutation) Cutoff() int64 {
 }
 
 // ValidateMemoTrashState checks the locked memo row before a transition.
-func ValidateMemoTrashState(m *MemoTrashMutation, creatorID int32, deletedTs *int64, isTrashRoot bool) error {
+func ValidateMemoTrashState(m *MemoTrashMutation, creatorID int32, revision int64, deletedTs *int64, isTrashRoot bool) error {
 	if m.ActorUserID != 0 && m.ActorUserID != creatorID {
 		return ErrMemoPermissionDenied
+	}
+	if m.ExpectedRevision != nil && *m.ExpectedRevision != revision {
+		return ErrMemoRevisionConflict
 	}
 	if m.Action == MemoTrashMove {
 		if deletedTs != nil {

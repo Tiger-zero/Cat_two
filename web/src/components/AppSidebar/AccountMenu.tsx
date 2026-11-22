@@ -35,7 +35,7 @@ export default function AccountMenu({ className, size = "md" }: { className?: st
         aria-label={`${t("common.account-menu")}: ${accountLabel ?? t("common.memos")}`}
         title={accountLabel}
         className={cn(
-          "memos-brand-trigger text-start transition-colors hover:bg-mu-hover/65 border border-transparent mu-focus focus-visible:border-mu-focus",
+          "memos-brand-trigger border border-transparent text-start transition-colors hover:bg-mu-hover/65 mu-focus focus-visible:border-mu-focus data-popup-open:bg-mu-hover/75",
           sidebarSurfaceVariants({ role: size === "header" ? "headerBrand" : "mobileBrand" }),
           className,
         )}

@@ -30,10 +30,11 @@ func (d *DB) ApplyMemoTrash(ctx context.Context, mutation *store.MemoTrashMutati
 	}
 
 	var creatorID int32
+	var revision int64
 	var deletedTs *int64
 	var isTrashRoot bool
-	err = tx.QueryRowContext(ctx, `SELECT creator_id, deleted_ts, `+memoTrashRootPredicate+` FROM memo WHERE id = ? FOR UPDATE`, mutation.MemoID).Scan(
-		&creatorID, &deletedTs, &isTrashRoot,
+	err = tx.QueryRowContext(ctx, `SELECT creator_id, revision, deleted_ts, `+memoTrashRootPredicate+` FROM memo WHERE id = ? FOR UPDATE`, mutation.MemoID).Scan(
+		&creatorID, &revision, &deletedTs, &isTrashRoot,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, store.ErrMemoMutationConflict
@@ -41,7 +42,7 @@ func (d *DB) ApplyMemoTrash(ctx context.Context, mutation *store.MemoTrashMutati
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to read memo recycle-bin state")
 	}
-	if err := store.ValidateMemoTrashState(mutation, creatorID, deletedTs, isTrashRoot); err != nil {
+	if err := store.ValidateMemoTrashState(mutation, creatorID, revision, deletedTs, isTrashRoot); err != nil {
 		return nil, err
 	}
 

@@ -5,18 +5,21 @@ import { describe, expect, it } from "vitest";
 
 // Read from disk: Vitest replaces CSS imports, `?raw` included, with empty strings.
 const paper = readFileSync(resolve(import.meta.dirname, "../src/themes/paper.css"), "utf8");
+const defaults = readFileSync(resolve(import.meta.dirname, "../src/themes/default.css"), "utf8");
 
-/** The custom properties Paper declares, with `var()` references resolved. */
-const declarations = (() => {
-  const raw = new Map<string, string>();
-  const block = paper.slice(paper.indexOf("{") + 1, paper.lastIndexOf("}"));
-  for (const line of block.split(";")) {
-    const match = line.trim().match(/^(--mu-[\w-]+):\s*(.+)$/s);
-    if (match) raw.set(match[1], match[2].trim());
-  }
-  const resolve = (value: string): string => value.replace(/var\((--mu-[\w-]+)\)/g, (_, name) => resolve(raw.get(name) ?? ""));
-  return new Map([...raw].map(([name, value]) => [name, resolve(value)]));
-})();
+const themeColors = (stylesheet: string, theme: string) => {
+  const declarations = [...stylesheet.matchAll(/([^{}]+)\{([^{}]+)\}/g)]
+    .filter(([, selector]) => selector.includes(`[data-theme="${theme}"]`))
+    .flatMap(([, , block]) =>
+      [...block.matchAll(/(--(?:mu|memos)-[\w-]+):\s*([^;]+);/g)].map(([, name, value]) => [name, value.trim()] as const),
+    );
+  const raw = new Map(declarations);
+  const resolveReferences = (value: string): string =>
+    value.replace(/var\((--(?:mu|memos)-[\w-]+)\)/g, (_, name) => resolveReferences(raw.get(name) ?? ""));
+  return new Map([...raw].map(([name, value]) => [name, resolveReferences(value)]));
+};
+
+const declarations = themeColors(paper, "paper");
 
 const token = (name: string): string => {
   const value = declarations.get(`--mu-${name}`);
@@ -45,9 +48,10 @@ const luminanceFromOklch = (l: number, c: number, hDegrees: number): number => {
 };
 
 const luminance = (color: string): number => {
-  const hex = color.match(/^#([0-9a-f]{6})$/i);
+  const hex = color.match(/^#([0-9a-f]{3}|[0-9a-f]{6})$/i);
   if (hex) {
-    const n = Number.parseInt(hex[1], 16);
+    const digits = hex[1];
+    const n = Number.parseInt(digits.length === 3 ? [...digits].map((digit) => digit.repeat(2)).join("") : digits, 16);
     return luminanceFromRgb(((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255);
   }
   const oklch = color.match(/^oklch\(\s*([\d.]+)\s+([\d.]+)\s+([\d.]+)\s*\)$/);
@@ -55,10 +59,12 @@ const luminance = (color: string): number => {
   throw new Error(`Opaque hex or oklch expected for a text pair, got ${color}`);
 };
 
-const contrast = (text: string, background: string): number => {
-  const [light, dark] = [luminance(token(text)), luminance(token(background))].sort((a, b) => b - a);
+const contrastRatio = (text: string, background: string): number => {
+  const [light, dark] = [luminance(text), luminance(background)].sort((a, b) => b - a);
   return (light + 0.05) / (dark + 0.05);
 };
+
+const contrast = (text: string, background: string): number => contrastRatio(token(text), token(background));
 
 describe("Paper theme", () => {
   it("sets every theme token", () => {
@@ -106,5 +112,44 @@ describe("Paper theme", () => {
     ["on-danger", "danger-key"],
   ])("keeps %s on %s at 4.5:1 or more", (text, background) => {
     expect(contrast(text, background)).toBeGreaterThanOrEqual(4.5);
+  });
+});
+
+describe.each(["light", "dark"])("%s theme", (theme) => {
+  const colors = themeColors(defaults, theme);
+  const cssColor = (name: string): string => {
+    const value = colors.get(`--${name}`);
+    if (!value) throw new Error(`${theme} does not set --${name}`);
+    return value;
+  };
+
+  it.each([
+    ["mu-text", "mu-canvas"],
+    ["mu-text", "mu-surface"],
+    ["mu-text-secondary", "mu-surface"],
+    ["mu-text-secondary", "memos-sidebar"],
+    ["mu-text-secondary", "mu-selected"],
+    ["mu-on-primary", "mu-primary"],
+    ["mu-on-primary", "mu-primary-hover"],
+    ["mu-primary", "mu-selected"],
+    ["mu-accent", "mu-surface"],
+    ["memos-tag-text", "memos-tag-bg"],
+    ["memos-tag-text", "memos-tag-hover"],
+    ["memos-on-sidebar-selected", "memos-sidebar-selected"],
+    ["mu-text-secondary", "memos-activity-empty"],
+    ["mu-text", "memos-activity-low"],
+    ["mu-text", "memos-activity-medium"],
+    [theme === "dark" ? "mu-on-primary" : "mu-text", "memos-activity-high"],
+  ])("keeps %s on %s readable", (text, background) => {
+    expect(contrastRatio(cssColor(text), cssColor(background))).toBeGreaterThanOrEqual(4.5);
+  });
+
+  it.each(["mu-canvas", "mu-surface"])("keeps control borders visible against %s", (background) => {
+    expect(contrastRatio(cssColor("mu-control-edge"), cssColor(background))).toBeGreaterThanOrEqual(3);
+  });
+
+  it("keeps the requested selected-row and composer colors", () => {
+    expect(cssColor("memos-sidebar-selected")).toBe("#397354");
+    expect(cssColor("memos-composer-focus")).toBe("#30cf79");
   });
 });

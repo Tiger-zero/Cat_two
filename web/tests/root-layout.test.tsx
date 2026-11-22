@@ -148,7 +148,7 @@ describe("RootLayout shell", () => {
   });
 
   it.each([
-    { path: "/", preferences: {}, width: "max-w-5xl" },
+    { path: "/", preferences: {}, width: "max-w-[66.5rem]" },
     { path: "/", preferences: { maxColumns: 3 }, width: "max-w-7xl" },
     { path: "/", preferences: { fullWidth: true }, width: undefined },
     { path: "/", preferences: { maxColumns: 0 }, width: undefined },

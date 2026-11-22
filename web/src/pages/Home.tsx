@@ -61,7 +61,7 @@ const Home = () => {
   };
 
   return (
-    <div className="w-full min-h-full bg-mu-canvas text-mu-text">
+    <div className="min-h-full w-full bg-mu-canvas pb-8 text-mu-text md:pt-5">
       <WelcomeGuideDialog open={welcomeGuide.open} onOpenChange={welcomeGuide.onOpenChange} />
       <NewMemoProvider>
         <PagedMemoList
@@ -109,7 +109,7 @@ const Home = () => {
                 <MemoEditor
                   draft={{ scope: "home", createTime: defaultCreateTime }}
                   expandOnFocus
-                  className="memo-list-gap md:px-5 md:pt-4"
+                  className="memo-list-gap"
                   placeholder={t("editor.any-thoughts")}
                   suggestions={suggestions}
                 />

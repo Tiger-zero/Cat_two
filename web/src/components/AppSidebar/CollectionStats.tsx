@@ -20,14 +20,23 @@ const CollectionStats = ({ summary, loading, desktop }: Props) => {
     <section aria-label={t("common.statistics")} aria-busy={loading}>
       <dl
         className={cn(
-          "grid grid-cols-3 divide-x divide-mu-line/70 rounded-mu-lg border border-mu-line/70 bg-mu-surface dark:bg-mu-canvas",
-          desktop ? "py-3" : "py-2.5",
+          "grid grid-cols-3 divide-x divide-mu-line/70",
+          desktop
+            ? "border-b border-mu-line/65 pt-1 pb-4"
+            : "rounded-mu-lg border border-mu-line/70 bg-mu-surface py-2.5 dark:bg-mu-canvas",
         )}
       >
         {metrics.map(({ label, value }) => (
-          <div key={label} className={cn("flex min-w-0 flex-col", desktop ? "gap-1 px-3" : "gap-0.5 px-2.5")}>
+          <div key={label} className={cn("flex min-w-0 flex-col gap-0.5 px-2.5", desktop && "gap-1 first:ps-2")}>
             <dt className="mu-caption text-mu-text-secondary">{label}</dt>
-            <dd className="mu-label text-mu-text tabular-nums wrap-anywhere">{value === undefined ? "—" : value.toLocaleString()}</dd>
+            <dd
+              className={cn(
+                "text-mu-text tabular-nums wrap-anywhere",
+                desktop ? "-order-1 mu-heading font-semibold @min-[284px]/sidebar:text-2xl @min-[284px]/sidebar:leading-tight" : "mu-label",
+              )}
+            >
+              {value === undefined ? "—" : value.toLocaleString()}
+            </dd>
           </div>
         ))}
       </dl>

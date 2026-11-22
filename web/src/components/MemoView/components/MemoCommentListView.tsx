@@ -13,6 +13,7 @@ import { extractMemoIdFromName } from "@/lib/resource-names";
 import { cn } from "@/lib/utils";
 import { useTranslate } from "@/utils/i18n";
 import UserAvatar from "../../UserAvatar";
+import { MEMO_CARD_GUTTER_CLASSES } from "../constants";
 import { useMemoViewContext, useMemoViewDerived } from "../MemoViewContext";
 import { createMemoNavigationState } from "../navigation";
 
@@ -45,7 +46,11 @@ const MemoCommentListView: React.FC = () => {
   }
 
   return (
-    <section ref={viewportRef} aria-label={t("memo.comment.self")} className="border-t border-mu-line px-4 py-1">
+    <section
+      ref={viewportRef}
+      aria-label={t("memo.comment.self")}
+      className={cn("border-t border-mu-line/75 py-1.5", MEMO_CARD_GUTTER_CLASSES)}
+    >
       <div className={cn(METADATA_ROW_LIST_CLASSES, "gap-0", PREVIEW_MIN_HEIGHT_CLASSES[Math.min(commentAmount, COMMENT_PREVIEW_LIMIT)])}>
         {displayedComments.map((comment) => {
           const uid = extractMemoIdFromName(comment.name);

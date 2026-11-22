@@ -1,5 +1,5 @@
 import { Button, Tooltip } from "@usememos/ui";
-import { CircleAlertIcon } from "lucide-react";
+import { CircleAlertIcon, HashIcon } from "lucide-react";
 import { type FC, useId } from "react";
 import { useTranslate } from "@/utils/i18n";
 import { primaryModifierGlyph } from "@/utils/platform";
@@ -77,7 +77,7 @@ export const EditorToolbar: FC<EditorToolbarProps> = ({
   return (
     // md controls with mu-compact: 14px labels and 16px icons at 28px, the sidebar's height.
     // The portaled menus use the regular md row.
-    <div className="mu-compact flex w-full min-w-0 flex-wrap items-center justify-between gap-x-2 gap-y-1">
+    <div className="mu-compact flex w-full min-w-0 flex-wrap items-center justify-between gap-x-2 gap-y-1 border-t border-mu-line/75 pt-2">
       <div className="flex min-w-0 flex-wrap items-center gap-1">
         <InsertMenu
           isUploading={isUploading}
@@ -89,6 +89,22 @@ export const EditorToolbar: FC<EditorToolbarProps> = ({
           onInsertImages={onInsertImages}
           onDrawingClick={onDrawingClick}
         />
+        <Tooltip.Root>
+          <Tooltip.Trigger
+            render={
+              <Button
+                type="button"
+                variant="ghost"
+                icon={<HashIcon />}
+                aria-label={t("editor.insert-menu.insert-tag")}
+                disabled={isSaving || isRestoringDraft}
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={() => editorRef.current?.startTag()}
+              />
+            }
+          />
+          <Tooltip.Popup>{t("editor.insert-menu.insert-tag")}</Tooltip.Popup>
+        </Tooltip.Root>
         <FormattingControls editorRef={editorRef} disabled={isSaving} sourceMode={sourceMode.isSourceMode} />
       </div>
 

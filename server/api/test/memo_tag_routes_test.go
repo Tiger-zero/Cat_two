@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -126,4 +127,60 @@ func TestMemoTagEditsThroughREST(t *testing.T) {
 	require.ElementsMatch(t, []string{"2027", "2027/08"}, normalized.GetTags())
 	requireMemo(otherOwnerToken, otherMemo, otherMemo.GetContent())
 	requireCount(request(http.MethodPost, "/api/tags/normalize", ownerToken, nil), 0)
+
+	remove := map[string]string{"tagName": "#2027/09", "mode": "remove"}
+	require.Equal(t, http.StatusUnauthorized, request(http.MethodPost, "/api/tags/delete", "", remove).Code)
+	require.Equal(t, http.StatusBadRequest, request(http.MethodPost, "/api/tags/delete", ownerToken, map[string]string{"tagName": "2027/09", "mode": "purge"}).Code)
+	require.Equal(t, http.StatusBadRequest, request(http.MethodPost, "/api/tags/delete", ownerToken, map[string]string{"tagName": "not a tag", "mode": "remove"}).Code)
+	archivedChild := requireMemoResponse(request(http.MethodPatch, "/api/"+mergedChild.GetName()+"?updateMask=state", ownerToken, map[string]string{"state": "ARCHIVED"}))
+	requireCount(request(http.MethodPost, "/api/tags/delete", ownerToken, remove), 3)
+	removed := requireMemo(ownerToken, merged, "Keep this note.\n\n`#2027/08` is code.")
+	require.Empty(t, removed.GetTags())
+	require.NotEqual(t, merged.GetRevision(), removed.GetRevision())
+	removedChild := requireMemo(ownerToken, archivedChild, "Child ")
+	require.Equal(t, apipb.State_ARCHIVED, removedChild.GetState())
+	require.Empty(t, removedChild.GetTags())
+	requireMemo(ownerToken, unrelated, unrelated.GetContent())
+	requireMemo(otherOwnerToken, otherMemo, otherMemo.GetContent())
+	requireCount(request(http.MethodPost, "/api/tags/delete", ownerToken, remove), 0)
+
+	attachment := new(apipb.Attachment)
+	createdFile := request(http.MethodPost, "/api/attachments", ownerToken, map[string]string{
+		"filename": "tag-test.txt", "type": "text/plain", "content": "ZmlsZQ==",
+	})
+	require.Equal(t, http.StatusOK, createdFile.Code, "%s", createdFile.Body)
+	require.NoError(t, protojson.Unmarshal(createdFile.Body.Bytes(), attachment))
+	root := requireMemoResponse(request(http.MethodPost, "/api/memos", ownerToken, map[string]any{
+		"content":     "Parent #recycle/project",
+		"attachments": []map[string]string{{"name": attachment.GetName()}},
+	}))
+	reply := requireMemoResponse(request(http.MethodPost, "/api/"+root.GetName()+"/comments", ownerToken, map[string]string{"content": "Reply"}))
+	nested := requireMemoResponse(request(http.MethodPost, "/api/"+reply.GetName()+"/comments", ownerToken, map[string]string{"content": "Nested reply"}))
+	root = requireMemoResponse(request(http.MethodPatch, "/api/"+root.GetName()+"?updateMask=state", ownerToken, map[string]string{"state": "ARCHIVED"}))
+	stillOutside := createMemo(ownerToken, "Different #recycle-bin")
+	otherOwnerMatching := createMemo(otherOwnerToken, "Different owner #recycle/project")
+	trash := map[string]string{"tagName": "recycle", "mode": "trash"}
+	requireCount(request(http.MethodPost, "/api/tags/delete", ownerToken, trash), 1)
+	for _, memo := range []*apipb.Memo{root, reply, nested} {
+		require.Equal(t, http.StatusNotFound, request(http.MethodGet, "/api/"+memo.GetName(), ownerToken, nil).Code)
+	}
+	requireMemo(ownerToken, stillOutside, stillOutside.GetContent())
+	requireMemo(otherOwnerToken, otherOwnerMatching, otherOwnerMatching.GetContent())
+	requireCount(request(http.MethodPost, "/api/tags/delete", ownerToken, trash), 0)
+	restorePath := "/api/trash/" + strings.TrimPrefix(root.GetName(), "memos/") + "/restore"
+	require.Equal(t, http.StatusNoContent, request(http.MethodPost, restorePath, ownerToken, nil).Code)
+	restored := requireMemo(ownerToken, root, root.GetContent())
+	require.Equal(t, apipb.State_ARCHIVED, restored.GetState())
+	require.ElementsMatch(t, []string{"recycle", "recycle/project"}, restored.GetTags())
+	require.Len(t, restored.GetAttachments(), 1)
+	require.Equal(t, attachment.GetName(), restored.GetAttachments()[0].GetName())
+	requireMemo(ownerToken, reply, reply.GetContent())
+	requireMemo(ownerToken, nested, nested.GetContent())
+	removeRestored := map[string]string{"tagName": "recycle", "mode": "remove"}
+	requireCount(request(http.MethodPost, "/api/tags/delete", ownerToken, removeRestored), 1)
+	untagged := requireMemo(ownerToken, restored, "Parent ")
+	require.Equal(t, apipb.State_ARCHIVED, untagged.GetState())
+	require.Empty(t, untagged.GetTags())
+	require.Len(t, untagged.GetAttachments(), 1)
+	require.Equal(t, attachment.GetName(), untagged.GetAttachments()[0].GetName())
 }

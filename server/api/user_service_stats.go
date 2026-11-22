@@ -9,6 +9,7 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
+	"github.com/usememos/memos/core/memopayload"
 	apipb "github.com/usememos/memos/proto/gen/api"
 	"github.com/usememos/memos/store"
 )
@@ -141,7 +142,7 @@ func (s *APIService) ListUserStats(ctx context.Context, request *apipb.ListUserS
 
 			// Count tags and other properties
 			if memo.Payload != nil {
-				incrementTagCounts(stats.TagCounts, memo.Payload.Tags)
+				memopayload.CountTagBranches(stats.TagCounts, memo.Payload.Tags)
 				if memo.Payload.Property != nil {
 					if memo.Payload.Property.HasLink {
 						stats.MemoTypeStats.LinkCount++
@@ -258,7 +259,7 @@ func (s *APIService) GetUserStats(ctx context.Context, request *apipb.GetUserSta
 			updatedTimestamps = append(updatedTimestamps, timestamppb.New(time.Unix(memo.UpdatedTs, 0)))
 			// Count different memo types based on content.
 			if memo.Payload != nil {
-				incrementTagCounts(tagCount, memo.Payload.Tags)
+				memopayload.CountTagBranches(tagCount, memo.Payload.Tags)
 				if memo.Payload.Property != nil {
 					if memo.Payload.Property.HasLink {
 						linkCount++
@@ -306,16 +307,4 @@ func (s *APIService) GetUserStats(ctx context.Context, request *apipb.GetUserSta
 	}
 
 	return userStats, nil
-}
-
-// incrementTagCounts counts each distinct tag at most once for one memo payload.
-func incrementTagCounts(counts map[string]int32, tags []string) {
-	seen := make(map[string]struct{}, len(tags))
-	for _, tag := range tags {
-		if _, ok := seen[tag]; ok {
-			continue
-		}
-		seen[tag] = struct{}{}
-		counts[tag]++
-	}
 }

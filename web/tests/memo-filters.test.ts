@@ -47,8 +47,27 @@ describe("memo filters", () => {
       includePinned: true,
     });
     expect(combineCELFilters('space == "spaces/product"', filter)).toBe(
-      '(space == "spaces/product") && ((creator == "users/steven") && (content.contains("plan") || pinned) && (tag in ["work"]))',
+      '(space == "spaces/product") && ((creator == "users/steven") && (content.contains("plan") || pinned) && ("work" in tags || tags.exists(t, t.startsWith("work/"))))',
     );
+  });
+
+  it("searches a tag's exact path and its slash-delimited descendants using literal values", () => {
+    const tag = '工作_%/"QA"';
+    expect(buildMemoFilter({ filters: [{ factor: "tagSearch", value: tag }], includePinned: false })).toBe(
+      `(${JSON.stringify(tag)} in tags || tags.exists(t, t.startsWith(${JSON.stringify(`${tag}/`)})))`,
+    );
+  });
+
+  it("combines untagged notes with a text query", () => {
+    expect(
+      buildMemoFilter({
+        filters: [
+          { factor: "untagged", value: "" },
+          { factor: "contentSearch", value: "plan" },
+        ],
+        includePinned: false,
+      }),
+    ).toBe('(size(tags) == 0) && (content.contains("plan"))');
   });
   it("maps property filter factors to their CEL flags", () => {
     expect(

@@ -62,6 +62,9 @@ type Service interface {
 	// RenameTagBranch renames oldTag and its slash-delimited descendants in content.
 	RenameTagBranch(content []byte, oldTag, newTag string) (string, error)
 
+	// RemoveTagBranch removes a tag and its slash-delimited descendants from content.
+	RemoveTagBranch(content []byte, branch string) (string, error)
+
 	// NormalizeTagWhitespace removes horizontal whitespace around tag hierarchy separators.
 	NormalizeTagWhitespace(content []byte) (string, error)
 

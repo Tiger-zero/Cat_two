@@ -1,9 +1,11 @@
 import {
   type Block,
   commands,
+  containerContent,
   divider,
   type Editor,
   emptyTable,
+  formatAt,
   getBlock,
   inlineText,
   isCollapsed,
@@ -18,6 +20,7 @@ import { MEMO_MARKDOWN, MEMO_SYNTAX, parseMemoAst } from "@/lib/memo-ast";
 import { collectTags, parseMemoMarkdown } from "@/lib/memo-markdown";
 import { isAllowedLinkUrl } from "@/lib/url-policy";
 import { isCompleteTagValue } from "@/utils/tag-grammar";
+import { sourceTagContext } from "./extensions";
 import type { EditorController, EditorFormat } from "./types/editorController";
 import { renderUploadAnchor } from "./uploadAnchors";
 
@@ -27,6 +30,33 @@ type EditorGetter = () => Editor | null;
 const live = (getEditor: EditorGetter): Editor | null => {
   const editor = getEditor();
   return editor && !editor.isDestroyed ? editor : null;
+};
+
+const startTag = (editor: Editor): boolean => {
+  if (editor.isComposing || !editor.isEditable) return false;
+  const { focus } = editor.getSelection();
+  const block = getBlock(editor.state.doc, focus.blockId);
+  const content = containerContent(block, focus.cell);
+  if (!content) return false;
+
+  if (editor.mode === "source") {
+    if (sourceTagContext(editor.getMarkdown(), focus.offset) !== "prose") return false;
+  } else {
+    const format = formatAt(content, focus.offset);
+    const marks = editor.state.storedMarks ?? format.marks;
+    if (isPlainTextBlock(block) || format.link || marks.includes("code") || marks.includes("html")) return false;
+  }
+
+  // insertToken does not consume selected text, and makes room on both sides.
+  // Stay before its trailing separator so the user can type the tag name.
+  if (!editor.commands.insertToken("#")) return false;
+  const end = editor.getSelection().focus;
+  const at = { ...end, offset: end.offset - 1 };
+  editor.setSelection({ anchor: at, focus: at });
+  editor.commands.focus();
+  editor.commands.scrollIntoView();
+  editor.suggestion.open("tags");
+  return true;
 };
 
 /**
@@ -149,6 +179,10 @@ export function createController(getEditor: EditorGetter, onReplace: (markdown: 
     hasChecklist: () => {
       const editor = live(getEditor);
       return editor ? memoBlocks(editor).some((block) => block.type === "listItem" && block.listType === "task") : false;
+    },
+    startTag: () => {
+      const editor = live(getEditor);
+      return Boolean(editor && startTag(editor));
     },
     insertTag: (tag) => {
       const editor = live(getEditor);

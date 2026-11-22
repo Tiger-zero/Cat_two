@@ -320,11 +320,13 @@ func TestPersonalMCPNoteDiscovery(t *testing.T) {
 		{"wrong-tag", "2026-11-21T04:00:00Z", query + " #杂项" + undecidedTask},
 		{"wrong-query", "2026-11-21T04:00:00Z", "查询 AXx #项目/发布" + undecidedTask},
 		{"foreign", "2026-11-21T04:00:00Z", query + " #项目/外部 #Team/ReleaseExternal" + undecidedTask},
+		{"untagged", "2026-11-21T04:00:00Z", query + " \\#正文 `#代码`"},
+		{"foreign-untagged", "2026-11-21T04:00:00Z", query},
 		{"archived", "2026-11-21T04:00:00Z", query + " #项目/归档 #Team/ReleaseArchived" + undecidedTask},
 		{"trashed", "2026-11-21T04:00:00Z", query + " #项目/回收 #Team/ReleaseTrashed" + undecidedTask},
 	} {
 		token := ownerToken
-		if memo.id == "foreign" {
+		if memo.id == "foreign" || memo.id == "foreign-untagged" {
 			token = foreignToken
 		}
 		status, body := inst.do(t, http.MethodPost, "/api/memos?memoId="+memo.id, token, map[string]string{
@@ -355,7 +357,7 @@ func TestPersonalMCPNoteDiscovery(t *testing.T) {
 
 	t.Run("search", func(t *testing.T) {
 		args := map[string]any{
-			"query": query, "tag": "#项目", "startDate": "2026-11-21", "endDate": "2026-11-21", "orderBy": "create_time asc", "pageSize": 1,
+			"query": query, "tag": "#项目", "hasTags": true, "startDate": "2026-11-21", "endDate": "2026-11-21", "orderBy": "create_time asc", "pageSize": 1,
 		}
 		type result struct {
 			Memos         []struct{ Name, CreateTime string }
@@ -387,6 +389,10 @@ func TestPersonalMCPNoteDiscovery(t *testing.T) {
 			require.Len(t, filtered.Memos, 1, "hasIncompleteTasks=%v", tc.incomplete)
 			require.Equal(t, tc.name, filtered.Memos[0].Name)
 		}
+		var untagged result
+		call(t, "memo_search", map[string]any{"query": query, "hasTags": false}, &untagged)
+		require.Len(t, untagged.Memos, 1)
+		require.Equal(t, "memos/untagged", untagged.Memos[0].Name)
 	})
 
 	t.Run("batch get", func(t *testing.T) {

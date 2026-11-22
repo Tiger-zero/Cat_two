@@ -22,6 +22,22 @@ func TestRenameTagBranch(t *testing.T) {
 		"`#year/08/day` [#year/08](https://example.com) ![#year/08](image.png)", renamed)
 }
 
+func TestRemoveTagBranch(t *testing.T) {
+	svc := NewService(WithTagExtension())
+	const content = "#project/now #project/now/one #project/now/two #project/now/three #project/later\n\n" +
+		"Words #project/now kept [#project/now](example.png), ![#project/now](image.png) and `#project/now`.\n\n" +
+		"#Project/now #project/nowish #project\n\n```md\n#project/now\n```"
+	const expected = "#project/later\n\n" +
+		"Words kept [#project/now](example.png), ![#project/now](image.png) and `#project/now`.\n\n" +
+		"#Project/now #project/nowish #project\n\n```md\n#project/now\n```"
+	removed, err := svc.RemoveTagBranch([]byte(content), "project/now")
+	require.NoError(t, err)
+	require.Equal(t, expected, removed)
+	again, err := svc.RemoveTagBranch([]byte(removed), "project/now")
+	require.NoError(t, err)
+	require.Equal(t, expected, again)
+}
+
 func TestNormalizeTagWhitespace(t *testing.T) {
 	svc := NewService(WithTagExtension(), WithMentionExtension())
 	for _, tt := range []struct {

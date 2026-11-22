@@ -16,6 +16,7 @@ import LinkMetadataCard from "./LinkMetadataCard";
 import { type LinkCardMount, linkCardsExtension } from "./linkCards";
 import { useSearchMatchHighlight } from "./useSearchMatchHighlight";
 import { useTagNavigation } from "./useTagNavigation";
+import "./memo-content.css";
 
 export interface MemoContentViewProps {
   content: string;

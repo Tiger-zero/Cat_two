@@ -12,7 +12,7 @@ import {
 const expression = 'tags.exists(t, t.contains("50%, café & C++"))\n || space == null';
 
 const Harness = () => {
-  const { filters, setFilters } = useMemoFilterContext();
+  const { filters, setFilters, addFilter, removeFiltersByFactor } = useMemoFilterContext();
   const location = useLocation();
   return (
     <div>
@@ -20,6 +20,12 @@ const Harness = () => {
       <output data-testid="url">{location.search}</output>
       <button type="button" onClick={() => setFilters([{ factor: "celSearch", value: expression }])}>
         Search CEL
+      </button>
+      <button type="button" onClick={() => addFilter({ factor: "tagSearch", value: "work" })}>
+        Select work
+      </button>
+      <button type="button" onClick={() => removeFiltersByFactor("untagged")}>
+        Clear untagged
       </button>
     </div>
   );
@@ -86,5 +92,37 @@ describe("MemoFilterProvider", () => {
     expect(parseFilterQuery("contentSearch:https://example.com:8080/path")).toEqual([
       { factor: "contentSearch", value: "https://example.com:8080/path" },
     ]);
+  });
+
+  it("restores and clears untagged from the archived URL alongside the current date", async () => {
+    const router = createMemoryRouter(
+      [
+        {
+          path: "*",
+          element: (
+            <MemoFilterProvider>
+              <Harness />
+            </MemoFilterProvider>
+          ),
+        },
+      ],
+      { initialEntries: ["/archived?filter=displayTime%3A2026-11-21%2Cuntagged%3A"] },
+    );
+    const rendered = render(<RouterProvider router={router} />);
+    expect(screen.getByTestId("filters")).toHaveTextContent('"untagged"');
+    fireEvent.click(screen.getByRole("button", { name: "Clear untagged" }));
+    expect(screen.getByTestId("filters")).not.toHaveTextContent('"untagged"');
+    expect(router.state.location.pathname + router.state.location.search).toBe("/archived?filter=displayTime%3A2026-11-21");
+
+    await act(() => router.navigate("/archived?filter=untagged%3A"));
+    fireEvent.click(screen.getByRole("button", { name: "Select work" }));
+    expect(screen.getByTestId("filters")).not.toHaveTextContent('"untagged"');
+    expect(router.state.location.pathname + router.state.location.search).toBe("/archived?filter=tagSearch%3Awork");
+    rendered.unmount();
+  });
+
+  it("restores the last chosen tag mode from contradictory URL facets", () => {
+    expect(parseFilterQuery("tagSearch:work,untagged:")).toEqual([{ factor: "untagged", value: "" }]);
+    expect(parseFilterQuery("untagged:,tagSearch:work")).toEqual([{ factor: "tagSearch", value: "work" }]);
   });
 });

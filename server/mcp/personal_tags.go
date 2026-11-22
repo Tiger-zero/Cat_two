@@ -10,6 +10,7 @@ import (
 	"github.com/pkg/errors"
 	"golang.org/x/text/cases"
 
+	"github.com/usememos/memos/core/memopayload"
 	"github.com/usememos/memos/server/api"
 )
 
@@ -31,7 +32,7 @@ type personalTagSearchInput struct {
 type personalTag struct {
 	Path      string `json:"path"`
 	Parent    string `json:"parent,omitempty"`
-	MemoCount int    `json:"memoCount"`
+	MemoCount int32  `json:"memoCount"`
 }
 
 type personalTagResults struct {
@@ -74,8 +75,8 @@ func listPersonalTags(ctx context.Context, apiService *api.APIService, query str
 		pageSize = defaultTagPageSize
 	}
 
-	counts := make(map[string]int)
-	err := apiService.VisitOwnMemoTags(ctx, func(tags []string) { countMemoTagPaths(counts, tags) })
+	counts := make(map[string]int32)
+	err := apiService.VisitOwnMemoTags(ctx, func(tags []string) { memopayload.CountTagBranches(counts, tags) })
 	if err != nil {
 		return personalTagResults{}, errors.Wrap(err, "failed to list tags")
 	}
@@ -103,24 +104,4 @@ func listPersonalTags(ctx context.Context, apiService *api.APIService, query str
 		result.NextOffset = end
 	}
 	return result, nil
-}
-
-func countMemoTagPaths(counts map[string]int, tags []string) {
-	seen := make(map[string]struct{}, len(tags))
-	for _, path := range tags {
-		// New payloads already record ancestor paths. Expanding them also
-		// handles older payloads, while seen keeps branches from double-counting.
-		for path != "" {
-			if _, exists := seen[path]; exists {
-				break
-			}
-			seen[path] = struct{}{}
-			counts[path]++
-			index := strings.LastIndexByte(path, '/')
-			if index < 0 {
-				break
-			}
-			path = path[:index]
-		}
-	}
 }

@@ -151,7 +151,8 @@ describe("App sidebar", () => {
     const primaryNavigation = screen.getByRole("navigation", { name: "common.primary-navigation" });
     const search = within(primaryNavigation).getByRole("button", { name: "common.search" });
 
-    expect(header).toHaveClass("h-13", "px-3");
+    expect(header).toHaveClass("pt-5", "pb-4", "px-3");
+    expect(account.parentElement).toHaveClass("rounded-mu-lg", "border");
     expect(account).toHaveTextContent("test");
     expect(account).toHaveClass("min-w-0", "h-9", "gap-2", "px-2");
     expect(account).not.toHaveClass("px-1");
@@ -277,7 +278,7 @@ describe("App sidebar", () => {
     expect(sidebar).toContainElement(trash);
     expect(tags.compareDocumentPosition(trash) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(trash.parentElement).not.toHaveClass("border-t");
-    expect(statistics.parentElement).toHaveClass("gap-6");
+    expect(statistics.parentElement).toHaveClass("gap-7");
     expect(tags.closest("[data-sidebar-collection-list]")).not.toBeNull();
     expect(calendar.closest("[data-sidebar-collection-list]")).toBeNull();
     const counts = within(statistics).getAllByRole("definition");
@@ -333,7 +334,7 @@ describe("App sidebar", () => {
     const trash = screen.getByRole("link", { name: "trash.title" });
     fireEvent.click(trash);
     expect(trash).toHaveAttribute("aria-current", "page");
-    expect(trash).toHaveClass("bg-[#397354]", "text-white");
+    expect(trash).toHaveClass("bg-(--memos-sidebar-selected)", "text-(--memos-on-sidebar-selected)");
     expect(screen.getByText("Calendar")).toBe(calendar);
     expect(screen.getByText("Tags")).toBe(tags);
     expect(filteredStatsHook).toHaveBeenLastCalledWith(expect.objectContaining({ context }));

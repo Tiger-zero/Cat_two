@@ -29,4 +29,16 @@ describe("tag tree", () => {
       amount: 2,
     });
   });
+
+  it("sorts sibling paths by name with numeric prefixes regardless of their counts", () => {
+    const tree = buildTagTree([
+      ["20_projects/10_misc", 30],
+      ["3_personal", 5],
+      ["20_projects/1_work", 1],
+      ["01_inbox", 1],
+    ]);
+
+    expect(tree.map((tag) => tag.key)).toEqual(["01_inbox", "3_personal", "20_projects"]);
+    expect(tree[2].subTags.map((tag) => tag.key)).toEqual(["1_work", "10_misc"]);
+  });
 });

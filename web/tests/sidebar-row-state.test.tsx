@@ -17,7 +17,7 @@ const tokens = (classes: string) => classes.split(" ");
 describe("sidebar selected grammar", () => {
   it("uses a green fill for a checked tag and the theme surface for current navigation", () => {
     expect(tokens(sidebarRowStateClasses("current"))).toContain("bg-mu-hover");
-    expect(tokens(sidebarRowStateClasses("checked"))).toContain("bg-[#397354]");
+    expect(tokens(sidebarRowStateClasses("checked"))).toContain("bg-(--memos-sidebar-selected)");
     // Selection never changes weight, so labels do not shift.
     for (const state of ["idle", "current", "checked"] as const) {
       expect(tokens(sidebarRowStateClasses(state))).not.toContain("font-medium");
@@ -30,9 +30,9 @@ describe("sidebar selected grammar", () => {
     const row = screen.getByRole("button", { name: "work4" });
     expect(row).toHaveAttribute("data-checked");
     expect(row).toHaveAttribute("aria-pressed", "true");
-    expect(row).toHaveClass("bg-[#397354]", "text-white");
-    expect(row.querySelector("svg")).toHaveClass("group-data-checked:text-white");
-    expect(screen.getByText("4")).toHaveClass("group-data-checked:text-white");
+    expect(row).toHaveClass("bg-(--memos-sidebar-selected)", "text-(--memos-on-sidebar-selected)");
+    expect(row.querySelector("svg")).toHaveClass("group-data-checked:text-(--memos-on-sidebar-selected)");
+    expect(screen.getByText("4")).toHaveClass("group-data-checked:text-(--memos-on-sidebar-selected)");
   });
 
   it("fills the selected tag row", () => {
@@ -50,7 +50,7 @@ describe("sidebar selected grammar", () => {
     expect(treeItem).not.toHaveAttribute("data-checked");
     fireEvent.click(row);
     expect(treeItem).toHaveAttribute("data-checked");
-    expect(treeItem).toHaveClass("bg-[#397354]", "text-white");
+    expect(treeItem).toHaveClass("bg-(--memos-sidebar-selected)", "text-(--memos-on-sidebar-selected)");
     expect(row).toHaveAttribute("aria-pressed", "true");
   });
 

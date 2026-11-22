@@ -4,6 +4,7 @@ import { cn } from "@/lib/utils";
 
 /** The id of the enclosing SettingGroup's title, so a SettingList inside it is named by that title. */
 export const SettingGroupTitleContext = createContext<string | undefined>(undefined);
+const SETTING_PANEL_CLASSES = "memos-panel bg-mu-canvas/45 shadow-none";
 
 interface SettingListProps {
   children: ReactNode;
@@ -17,7 +18,7 @@ export const SettingList = ({ children, ...props }: SettingListProps) => {
   const groupTitleId = useContext(SettingGroupTitleContext);
   const labelledBy = props["aria-labelledby"] ?? (props["aria-label"] ? undefined : groupTitleId);
   return (
-    <List.Root {...props} aria-labelledby={labelledBy} className="memos-panel">
+    <List.Root {...props} aria-labelledby={labelledBy} className={SETTING_PANEL_CLASSES}>
       {children}
     </List.Root>
   );
@@ -78,7 +79,7 @@ interface SettingPanelProps {
  */
 export const SettingPanel = ({ children, header, footer }: SettingPanelProps) => {
   return (
-    <div className="memos-panel">
+    <div className={SETTING_PANEL_CLASSES}>
       {header && <div className="border-b border-mu-line px-4 py-2">{header}</div>}
       <div className="px-4 py-3">{children}</div>
       {footer && <div className="border-t border-mu-line px-4 py-2">{footer}</div>}

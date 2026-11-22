@@ -1,5 +1,5 @@
 import { Button, Dialog, Spinner } from "@usememos/ui";
-import { XIcon } from "lucide-react";
+import { Settings2Icon, XIcon } from "lucide-react";
 import { Suspense, useRef } from "react";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { useAppSidebar } from "@/contexts/AppSidebarContext";
@@ -41,12 +41,17 @@ export default function SettingsDialog() {
         sheet={false}
         initialFocus={closeRef}
         finalFocus={settingsReturnFocus}
-        className="flex h-[min(44rem,calc(100dvh-2rem))] w-[min(62rem,calc(100vw-2rem))] flex-col"
+        className="h-[min(46rem,calc(100dvh-3rem))] w-[min(66rem,calc(100vw-2rem))] bg-mu-surface"
       >
-        <div className="flex shrink-0 items-center justify-between gap-4 border-b border-mu-line/70 px-4 py-2.5 sm:px-5">
-          <Dialog.Title className="mu-label text-mu-text">{t("common.settings")}</Dialog.Title>
+        <header className="flex shrink-0 items-center justify-between gap-4 border-b border-mu-line/70 px-4 py-3 sm:px-6">
+          <div className="flex min-w-0 items-center gap-3">
+            <span className="grid size-8 shrink-0 place-items-center rounded-mu-lg bg-mu-selected text-mu-primary" aria-hidden="true">
+              <Settings2Icon className="mu-icon" />
+            </span>
+            <Dialog.Title className="mu-title">{t("common.settings")}</Dialog.Title>
+          </div>
           <Dialog.Close render={<Button ref={closeRef} variant="ghost" size="sm" icon={<XIcon />} aria-label={t("common.close")} />} />
-        </div>
+        </header>
         <Suspense
           fallback={
             <div className="grid flex-1 place-items-center" aria-busy="true">

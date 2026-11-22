@@ -354,10 +354,8 @@ export const EditSession: React.FC<EditSessionProps> = ({
         onFocusCapture={canExpandComposer ? handleComposerFocus : undefined}
         onBlurCapture={canExpandComposer ? handleComposerBlur : undefined}
         className={cn(
-          "group w-full flex flex-col justify-between items-start gap-2",
-          // A card that is the frame already supplies the background, border and padding; a session floating over the page in
-          // focus mode always brings its own. The bottom is 16px like the sides: the toolbar's
-          // hard edge needs more room than the text's soft top.
+          "group flex w-full flex-col items-start justify-between gap-2",
+          // A card is the frame of an in-place edit. Focus mode brings its own frame.
           (!frameless || isFocusMode) && cn("relative", COMPOSER_PANEL_CLASSES),
           isFocusMode && cn(FOCUS_MODE_STYLES.container.base, FOCUS_MODE_STYLES.container.spacing),
           !isFocusMode && className,

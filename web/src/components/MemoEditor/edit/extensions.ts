@@ -1,5 +1,15 @@
-import { type Extension, fileHandler, matchToken, type SuggestionAllowContext, scanTags, suggestion } from "@usememos/editor";
+import {
+  type Extension,
+  fileHandler,
+  lineTable,
+  matchToken,
+  type SuggestionAllowContext,
+  scanTags,
+  sourceRange,
+  suggestion,
+} from "@usememos/editor";
 import { emoji } from "@usememos/editor/emoji";
+import { parseMemoAst, visitWithSource } from "@/lib/memo-ast";
 import type { EditorPosition } from "./types/editorController";
 
 /** The gesture that handed files to the editor: a drop lands at a document position, a paste has none. */
@@ -40,13 +50,44 @@ export const rankTags = (tags: readonly string[], query: string): string[] => {
     .map(({ tag }) => tag);
 };
 
+/** The Markdown context at the insertion point, using the same parse as the memo renderer. */
+export const sourceTagContext = (markdown: string, offset: number): "literal" | "heading-marker" | "prose" => {
+  const lines = lineTable(markdown);
+  let context: "literal" | "heading-marker" | "prose" = "prose";
+  visitWithSource(parseMemoAst(markdown), (node, content) => {
+    if (context === "literal") return;
+    if (node.type === "codeBlock" && node.lines) {
+      if (offset >= lines.starts[node.lines.start - 1] && offset <= lines.ends[node.lines.end - 1]) context = "literal";
+    } else if ((node.type === "raw" || node.type === "htmlBlock") && node.source) {
+      const { from, to } = sourceRange(lines, node.source, { from: 0, to: node.value.length });
+      if (offset >= from && offset <= to) context = "literal";
+    } else if (
+      content &&
+      (node.type === "code" || node.type === "link" || node.type === "image" || node.type === "html" || node.type === "token") &&
+      node.pos
+    ) {
+      const { from, to } = sourceRange(lines, content, node.pos);
+      if (offset > from && offset < to) context = "literal";
+    } else if (node.type === "heading" && !node.setext && node.source?.lines[0]) {
+      const { line, offset: contentOffset } = node.source.lines[0];
+      const start = lines.starts[line - 1];
+      if (offset >= start && offset < start + contentOffset) context = "heading-marker";
+    }
+  });
+  return context;
+};
+
 /**
  * Where the tag popup may open. Not inside code or links, where `#` is literal,
  * and not for a bare `#` at the start of a line, which is more likely the start
  * of a heading. Ctrl+Space still opens it there.
  */
-export const allowTagSuggestion = ({ excluded, explicit, query, textBefore }: SuggestionAllowContext): boolean => {
-  if (excluded) return false;
+export const allowTagSuggestion = ({ excluded, explicit, query, textBefore, mode, editor, from }: SuggestionAllowContext): boolean => {
+  if (excluded) {
+    // A bare hash followed by the toolbar's separator looks like an ATX heading
+    // until a tag is entered. An explicit request can complete that marker.
+    return explicit && mode === "source" && query === "" && sourceTagContext(editor.getMarkdown(), from) === "heading-marker";
+  }
   if (explicit) return true;
   return !(query === "" && /(^|\n)[ \t]*$/.test(textBefore));
 };

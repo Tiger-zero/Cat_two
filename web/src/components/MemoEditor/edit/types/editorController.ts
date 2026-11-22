@@ -44,6 +44,8 @@ export interface EditorController {
   getTags(): string[];
   /** Whether the document contains a Markdown checklist item, checked or unchecked. */
   hasChecklist(): boolean;
+  /** Start a new tag at the caret, keeping any selected text, and open tag suggestions. */
+  startTag(): boolean;
   /** Insert a tag at the caret without replacing selected text, then advance the caret. Returns whether it was inserted. */
   insertTag(tag: string): boolean;
   /** Shows an upload placeholder after the block at `position` (default: the caret's block). */

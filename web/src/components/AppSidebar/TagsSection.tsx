@@ -1,13 +1,14 @@
 import { Button, Menu, Tooltip } from "@usememos/ui";
-import { HashIcon, ListTreeIcon, MoreHorizontalIcon, PencilIcon, PinIcon, PinOffIcon } from "lucide-react";
+import { uniqBy } from "lodash-es";
+import { HashIcon, ListTreeIcon, MoreHorizontalIcon, PencilIcon, PinIcon, PinOffIcon, Trash2Icon } from "lucide-react";
 import { forwardRef, type ReactNode, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { getFilterSearch, replaceFiltersByFactor, useMemoFilterContext } from "@/contexts/MemoFilterContext";
+import { getFilterSearch, getMemoFilterKey, replaceFiltersByFactor, useMemoFilterContext } from "@/contexts/MemoFilterContext";
 import { useLocalStorage, useOverflowTitle } from "@/hooks";
 import useCurrentUser from "@/hooks/useCurrentUser";
 import { cn } from "@/lib/utils";
 import { useTranslate } from "@/utils/i18n";
-import TagTree, { TAG_ROW_COUNT_CLASSES, tagRowAriaLabel } from "../TagTree";
+import TagTree, { compareTagNames, TAG_ROW_COUNT_CLASSES, tagRowAriaLabel } from "../TagTree";
 import {
   SIDEBAR_ROW_BOX_CLASSES,
   SIDEBAR_ROW_LABEL_CLASSES,
@@ -17,6 +18,7 @@ import {
 } from "./SidebarRow";
 import SidebarSection from "./SidebarSection";
 import { SIDEBAR_LIST_GAP_CLASSES, SIDEBAR_PINNED_TAGS_DIVIDER_CLASSES } from "./sidebar-layout";
+import TagDeleteDialog from "./TagDeleteDialog";
 import TagRenameDialog from "./TagRenameDialog";
 
 interface Props {
@@ -34,7 +36,7 @@ const TagPath = forwardRef<HTMLSpanElement, { tag: string }>(({ tag }, ref) => {
     <span ref={ref} className="min-w-0 flex-1 truncate text-start">
       {segments.map((segment, index) => (
         <span key={`${segment}-${index}`}>
-          {index > 0 && <span className="px-0.5 text-mu-text-secondary group-data-checked:text-white">/</span>}
+          {index > 0 && <span className="px-0.5 text-mu-text-secondary group-data-checked:text-(--memos-on-sidebar-selected)">/</span>}
           {segment}
         </span>
       ))}
@@ -81,19 +83,23 @@ const FlatTagRow = ({ tag, amount, active, ariaLabel, onClick, pinned, actions }
 };
 
 const NO_PINS: string[] = [];
+const isInTagBranch = (path: string, root: string) => path === root || path.startsWith(`${root}/`);
 
 const TagsSectionForAccount = ({ tagCount, onSelect, destination, scope, account }: Props & { account?: string }) => {
   const t = useTranslate();
   const navigate = useNavigate();
-  const { filters, setFilters } = useMemoFilterContext();
+  const { filters, removeFilter, setFilters } = useMemoFilterContext();
   const [treeMode, setTreeMode] = useLocalStorage<boolean>("tag-view-as-tree", true);
   const [pinnedPaths, setPinnedPaths] = useLocalStorage<string[]>(`memos-pinned-tags:${account ?? "guest"}`, NO_PINS);
   const pins = account && Array.isArray(pinnedPaths) ? pinnedPaths : NO_PINS;
   const pinnedSet = new Set(pins);
-  const [renameTarget, setRenameTarget] = useState<string>();
+  const [tagAction, setTagAction] = useState<{ tag: string; action: "rename" | "delete" }>();
   const activeTags = new Set(filters.filter((filter) => filter.factor === "tagSearch").map((filter) => filter.value));
   const activeTag = activeTags.values().next().value as string | undefined;
-  const tags = useMemo(() => Object.entries(tagCount).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])), [tagCount]);
+  const tags = useMemo(() => {
+    const entries = Object.entries(tagCount);
+    return treeMode ? entries : entries.sort(([left], [right]) => compareTagNames(left, right));
+  }, [tagCount, treeMode]);
 
   if (tags.length === 0) {
     return null;
@@ -117,10 +123,19 @@ const TagsSectionForAccount = ({ tagCount, onSelect, destination, scope, account
   };
 
   const handleRenamed = (oldName: string, newName: string) => {
-    const renamePath = (path: string) =>
-      path === oldName || path.startsWith(`${oldName}/`) ? `${newName}${path.slice(oldName.length)}` : path;
+    const renamePath = (path: string) => (isInTagBranch(path, oldName) ? `${newName}${path.slice(oldName.length)}` : path);
     setPinnedPaths((saved) => (Array.isArray(saved) ? Array.from(new Set(saved.map(renamePath))) : NO_PINS));
-    setFilters(filters.map((filter) => (filter.factor === "tagSearch" ? { ...filter, value: renamePath(filter.value) } : filter)));
+    setFilters(
+      uniqBy(
+        filters.map((filter) => (filter.factor === "tagSearch" ? { ...filter, value: renamePath(filter.value) } : filter)),
+        getMemoFilterKey,
+      ),
+    );
+  };
+
+  const handleDeleted = (tag: string) => {
+    setPinnedPaths((saved) => (Array.isArray(saved) ? saved.filter((path) => !isInTagBranch(path, tag)) : NO_PINS));
+    removeFilter((filter) => filter.factor === "tagSearch" && isInTagBranch(filter.value, tag));
   };
 
   const renderActions = (tag: string) => {
@@ -135,7 +150,7 @@ const TagsSectionForAccount = ({ tagCount, onSelect, destination, scope, account
               variant="ghost"
               size="xs"
               icon={<MoreHorizontalIcon />}
-              className="group-data-checked:text-white group-data-checked:hover:bg-white/15"
+              className="in-[[data-sidebar-collection-list]]:opacity-0 group-hover:opacity-100 group-has-[:focus-visible]:opacity-100 focus-visible:opacity-100 data-popup-open:opacity-100 group-data-checked:text-(--memos-on-sidebar-selected) group-data-checked:hover:bg-(--memos-on-sidebar-selected)/15"
             />
           }
         />
@@ -143,8 +158,11 @@ const TagsSectionForAccount = ({ tagCount, onSelect, destination, scope, account
           <Menu.Item icon={pinned ? <PinOffIcon /> : <PinIcon />} onClick={() => togglePin(tag)}>
             {t(pinned ? "common.unpin" : "common.pin")}
           </Menu.Item>
-          <Menu.Item icon={<PencilIcon />} onClick={() => setRenameTarget(tag)}>
+          <Menu.Item icon={<PencilIcon />} onClick={() => setTagAction({ tag, action: "rename" })}>
             {t("setting.tags.rename")}
+          </Menu.Item>
+          <Menu.Item icon={<Trash2Icon />} onClick={() => setTagAction({ tag, action: "delete" })}>
+            {t("common.delete")}
           </Menu.Item>
         </Menu.Popup>
       </Menu.Root>
@@ -220,12 +238,15 @@ const TagsSectionForAccount = ({ tagCount, onSelect, destination, scope, account
           {flatTags.map(([tag, amount]) => flatRow(tag, amount))}
         </>
       )}
-      {renameTarget && account && (
+      {tagAction?.action === "rename" && account && (
         <TagRenameDialog
-          oldName={renameTarget}
-          onClose={() => setRenameTarget(undefined)}
-          onRenamed={(name) => handleRenamed(renameTarget, name)}
+          oldName={tagAction.tag}
+          onClose={() => setTagAction(undefined)}
+          onRenamed={(name) => handleRenamed(tagAction.tag, name)}
         />
+      )}
+      {tagAction?.action === "delete" && account && (
+        <TagDeleteDialog tagName={tagAction.tag} onClose={() => setTagAction(undefined)} onDeleted={() => handleDeleted(tagAction.tag)} />
       )}
     </SidebarSection>
   );

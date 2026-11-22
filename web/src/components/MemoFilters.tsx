@@ -34,6 +34,10 @@ const FILTER_CONFIGS: Record<FilterFactor, FilterConfig> = {
     icon: HashIcon,
     getLabel: (value) => value,
   },
+  untagged: {
+    icon: HashIcon,
+    getLabel: (_, t) => t("memo.filters.untagged"),
+  },
   source: {
     icon: ListFilterIcon,
     getLabel: (value, t) => t(value === "web" ? "memo-feed.source-web" : "memo-feed.source-unknown"),

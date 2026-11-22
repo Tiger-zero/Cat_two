@@ -114,11 +114,16 @@ func TestMemoRevisionTracksBindingsAndLifecycle(t *testing.T) {
 	}))
 	require.EqualValues(t, 4, readRevision(store.MemoTrashExclude))
 	now := time.Now().Unix()
-	trash := store.MemoTrashMutation{MemoID: memo.ID, ActorUserID: owner.ID, Action: store.MemoTrashMove, NowTs: now}
+	trash := store.MemoTrashMutation{MemoID: memo.ID, ActorUserID: owner.ID, Action: store.MemoTrashMove, NowTs: now, ExpectedRevision: new(int64(3))}
+	_, err = ts.ApplyMemoTrash(ctx, &trash)
+	require.ErrorIs(t, err, store.ErrMemoRevisionConflict)
+	require.EqualValues(t, 4, readRevision(store.MemoTrashExclude))
+	trash.ExpectedRevision = new(int64(4))
 	_, err = ts.ApplyMemoTrash(ctx, &trash)
 	require.NoError(t, err)
 	require.EqualValues(t, 5, readRevision(store.MemoTrashOnly))
 	trash.Action = store.MemoTrashRestore
+	trash.ExpectedRevision = nil
 	_, err = ts.ApplyMemoTrash(ctx, &trash)
 	require.NoError(t, err)
 	require.EqualValues(t, 6, readRevision(store.MemoTrashExclude))

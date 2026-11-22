@@ -1,29 +1,42 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { authenticatedFetch } from "@/connect";
+import { trashQueryKey } from "@/lib/trash";
+import { attachmentKeys } from "./useAttachmentQueries";
 import { memoKeys } from "./useMemoQueries";
 import { userKeys } from "./useUserQueries";
 
-type TagEdit = { kind: "rename"; oldName: string; newName: string } | { kind: "normalize" };
+export type TagDeleteMode = "remove" | "trash";
+
+type TagEdit =
+  | { kind: "rename"; oldName: string; newName: string }
+  | { kind: "delete"; tagName: string; mode: TagDeleteMode }
+  | { kind: "normalize" };
 
 export function useEditTags() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (edit: TagEdit): Promise<number> => {
-      const response = await authenticatedFetch(`/api/tags/${edit.kind}`, {
+    mutationFn: async ({ kind, ...payload }: TagEdit): Promise<number> => {
+      const response = await authenticatedFetch(`/api/tags/${kind}`, {
         method: "POST",
-        ...(edit.kind === "rename" && {
+        ...(kind !== "normalize" && {
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ oldName: edit.oldName, newName: edit.newName }),
+          body: JSON.stringify(payload),
         }),
       });
       const result = (await response.json().catch(() => undefined)) as { message?: string; updatedCount?: number } | undefined;
       if (!response.ok || typeof result?.updatedCount !== "number") throw new Error(result?.message);
       return result.updatedCount;
     },
-    onSettled: async () => {
+    onSettled: async (_, _error, edit) => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: memoKeys.all }),
         queryClient.invalidateQueries({ queryKey: userKeys.stats() }),
+        ...(edit.kind === "delete" && edit.mode === "trash"
+          ? [
+              queryClient.invalidateQueries({ queryKey: trashQueryKey }),
+              queryClient.invalidateQueries({ queryKey: attachmentKeys.lists() }),
+            ]
+          : []),
       ]);
     },
   });

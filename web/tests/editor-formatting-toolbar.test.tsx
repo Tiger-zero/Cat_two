@@ -8,7 +8,7 @@ import type { EditorController, EditorSelection } from "@/components/MemoEditor/
 
 vi.mock("@/components/MemoEditor/edit/Toolbar/InsertMenu", () => ({ default: () => null }));
 vi.mock("@/hooks/useUserQueries", () => ({
-  useTagCounts: () => ({ data: {} }),
+  useTagCounts: () => ({ data: { "work/planning": 2, home: 1 } }),
   useUsersByUsernames: () => ({ data: undefined }),
   userDetailQueryOptions: () => ({}),
 }));
@@ -55,6 +55,66 @@ function select(editor: EditorController, anchor: EditorSelection["anchor"], foc
 describe("composer formatting toolbar", () => {
   beforeEach(() => vi.spyOn(window, "scrollBy").mockImplementation(() => {}));
   afterEach(() => vi.restoreAllMocks());
+
+  it.each([false, true])("starts and completes consecutive tags within prose (source: %s)", async (isSourceMode) => {
+    const { editor } = setup("Keepword safe.", isSourceMode);
+    const tag = screen.getByRole("button", { name: "Insert tag" });
+    select(editor, { block: 0, offset: 1 }, { block: 0, offset: 4 });
+
+    expect(fireEvent.mouseDown(tag)).toBe(false);
+    fireEvent.click(tag);
+    expect(editor.getSelection()?.focus.offset).toBe(6);
+    expect(editor.hasFocus()).toBe(true);
+    fireEvent.click(await screen.findByRole("option", { name: "#work/planning" }));
+    expect(editor.getMarkdown()).toBe("Keep #work/planning word safe.");
+
+    fireEvent.click(tag);
+    fireEvent.click(await screen.findByRole("option", { name: "#home" }));
+    expect(editor.getMarkdown()).toBe("Keep #work/planning #home word safe.");
+
+    fireEvent.click(tag);
+    fireEvent.click(await screen.findByRole("option", { name: "#work/planning" }));
+    expect(editor.getMarkdown()).toBe("Keep #work/planning #home #work/planning word safe.");
+    expect(editor.getTags()).toEqual(["work/planning", "home"]);
+  });
+
+  it.each([false, true])("opens existing tag suggestions in a new memo (source: %s)", async (isSourceMode) => {
+    const { editor } = setup("", isSourceMode);
+    const tag = screen.getByRole("button", { name: "Insert tag" });
+
+    fireEvent.click(tag);
+    fireEvent.click(await screen.findByRole("option", { name: "#work/planning" }));
+    expect(editor.getMarkdown().trimEnd()).toBe("#work/planning");
+  });
+
+  it.each([false, true])("accepts a new nested tag typed before existing text (source: %s)", (isSourceMode) => {
+    const { editor } = setup("Existing text", isSourceMode);
+    select(editor, { block: 0, offset: 0 });
+    fireEvent.click(screen.getByRole("button", { name: "Insert tag" }));
+    fireEvent(
+      screen.getByRole("textbox"),
+      new InputEvent("beforeinput", { bubbles: true, cancelable: true, inputType: "insertText", data: "随手记/日常" }),
+    );
+
+    expect(editor.getMarkdown()).toBe("#随手记/日常 Existing text");
+    expect(editor.getTags()).toEqual(["随手记/日常"]);
+  });
+
+  it.each([
+    { markdown: "Before `code` after", offset: 9, source: false },
+    { markdown: "Before `code` after", offset: 10, source: true },
+    { markdown: "Before [link](https://example.com) after", offset: 9, source: false },
+    { markdown: "Before [link](https://example.com) after", offset: 22, source: true },
+    { markdown: "```\ncode\n```", offset: 2, source: false },
+    { markdown: "```\ncode\n```", offset: 6, source: true },
+  ])("keeps literal Markdown intact at the caret (source: $source, input: $markdown)", ({ markdown, offset, source }) => {
+    const { editor } = setup(markdown, source);
+    select(editor, { block: 0, offset });
+
+    fireEvent.click(screen.getByRole("button", { name: "Insert tag" }));
+    expect(editor.getMarkdown()).toBe(markdown);
+    expect(screen.queryByRole("listbox")).toBeNull();
+  });
 
   it.each([false, true])("toggles bold across a backwards selection and restores editor focus (source: %s)", (isSourceMode) => {
     const { container, editor, button } = setup("Keep bold word.", isSourceMode);

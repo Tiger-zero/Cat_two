@@ -1,0 +1,9 @@
+.memo-content-root.mbe-root :where(h1, h2, h3) {
+  font-weight: 700;
+  text-wrap: balance;
+}
+
+.memo-content-root.mbe-root :where(blockquote:not([data-callout])) {
+  border-inline-start-width: 2px;
+  border-inline-start-color: var(--mu-edge);
+}

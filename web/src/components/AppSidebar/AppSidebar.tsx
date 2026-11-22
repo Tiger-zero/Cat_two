@@ -19,7 +19,7 @@ import { useTranslate } from "@/utils/i18n";
 import AccountMenu from "./AccountMenu";
 import CollectionStats from "./CollectionStats";
 import { getSidebarRouteKind } from "./routes";
-import { SIDEBAR_ROW_CLASSES, SIDEBAR_ROW_SELECTION_CLASSES, SidebarRowIconSlot, sidebarRowStateClasses } from "./SidebarRow";
+import { SIDEBAR_ROW_CLASSES, SidebarRowIconSlot, sidebarRowStateAttributes, sidebarRowStateClasses } from "./SidebarRow";
 import SidebarSection, { SIDEBAR_SECTION_STACK_CLASSES } from "./SidebarSection";
 import {
   SIDEBAR_LEADING_SLOT_CLASSES,
@@ -44,9 +44,16 @@ const CollectionSidebarContent = ({ context, desktop, destination }: { context: 
   });
 
   return (
-    <div className={cn(SIDEBAR_SECTION_STACK_CLASSES, desktop && "gap-6")}>
+    <div className={cn(SIDEBAR_SECTION_STACK_CLASSES, desktop && "gap-7")}>
       {context === "home" && currentUser && <CollectionStats summary={summary} loading={loading} desktop={desktop} />}
-      <SidebarSection ariaLabel={t("common.calendar")}>
+      <SidebarSection
+        ariaLabel={t("common.calendar")}
+        className={
+          desktop
+            ? "[&_.memos-panel]:bg-mu-surface/75 [&_.memos-panel]:py-3 [&_.memos-panel]:shadow-none @min-[284px]/sidebar:[&_.memos-panel]:px-3"
+            : undefined
+        }
+      >
         <StatisticsView statisticsData={statistics} destination={destination} onDateSelect={() => setMobileOpen(false)} />
       </SidebarSection>
       <div className="contents" data-sidebar-collection-list={desktop || undefined}>
@@ -96,8 +103,7 @@ interface NavPillProps {
 
 /**
  * The compact navigator is intentionally horizontal. Its 16px glyph plus 6px padding
- * on each side makes the collapsed control an exact 28px square, the same box as the
- * header's compose control. Expanding the label only opens the text track, so the
+ * on each side makes the collapsed control a 28px square. Expanding the label opens the text track, so the
  * artwork and surface never jump.
  *
  * Actions are separated by 2px; icons and labels by 6px. Below a 230px row the current
@@ -191,25 +197,35 @@ const AppSidebar = ({ className, mobile = false }: { className?: string; mobile?
   const collectionScope = showArchived ? "archived" : "home";
   const desktopCollection = !mobile && hasCollection;
   const collectionDestination = inTrash ? (showArchived ? ROUTES.ARCHIVED : ROUTES.HOME) : undefined;
+  const trashState = inTrash ? "checked" : "idle";
   const { setMobileOpen } = useAppSidebar();
   return (
     <aside
       className={cn(
-        "memos-sidebar mu-compact flex h-full w-full select-none flex-col bg-mu-canvas text-mu-text-secondary",
-        !mobile && "overflow-x-hidden overflow-y-auto overscroll-y-contain border-e-4 border-transparent [scrollbar-gutter:stable]",
+        "memos-sidebar mu-compact flex h-full w-full select-none flex-col text-mu-text-secondary",
+        mobile
+          ? "bg-mu-canvas"
+          : "@container/sidebar overflow-x-hidden overflow-y-auto overscroll-y-contain bg-(--memos-sidebar) [scrollbar-gutter:stable]",
         className,
       )}
     >
-      <div data-sidebar-header className={cn("flex h-13 shrink-0 items-center justify-between gap-2", SIDEBAR_RAIL_CLASSES)}>
-        <AccountMenu className="min-w-0" size="header" />
-        {!mobile && <ThemeToggle />}
+      <div data-sidebar-header className={cn("shrink-0", mobile ? "py-2" : "pt-5 pb-4", SIDEBAR_RAIL_CLASSES)}>
+        <div
+          className={cn(
+            "flex min-w-0 items-center justify-between gap-2",
+            !mobile && "rounded-mu-lg border border-mu-line/75 bg-mu-surface/65 p-1.5",
+          )}
+        >
+          <AccountMenu className={cn("min-w-0", !mobile && "flex-1")} size="header" />
+          {!mobile && <ThemeToggle />}
+        </div>
       </div>
       <GlobalNavigation calendarActive={routeKind === "home"} showDisplayOptions={hasCollection && !showArchived} />
-      <div className={cn("mx-3 border-t border-mu-line/70", desktopCollection ? "mt-3" : "mt-2")} />
+      {mobile && <div className="mx-3 mt-2 border-t border-mu-line/70" />}
       <div
         className={cn(
           mobile ? "min-h-0 flex-1 overflow-y-auto overflow-x-hidden pb-3" : "shrink-0",
-          desktopCollection ? "pt-3" : "pt-2",
+          desktopCollection ? "pt-5" : "pt-2",
           SIDEBAR_RAIL_CLASSES,
         )}
       >
@@ -220,13 +236,14 @@ const AppSidebar = ({ className, mobile = false }: { className?: string; mobile?
         ) : null}
       </div>
       {currentUser && (
-        <div className={cn("shrink-0", mobile ? "border-t border-mu-line/70 py-2" : "pt-1 pb-4", SIDEBAR_RAIL_CLASSES)}>
+        <div className={cn("shrink-0", mobile ? "border-t border-mu-line/70 py-2" : "pt-1.5 pb-5", SIDEBAR_RAIL_CLASSES)}>
           <Link
             to={ROUTES.TRASH}
             state={showArchived ? { trashFrom: ROUTES.ARCHIVED } : undefined}
             onClick={() => setMobileOpen(false)}
             aria-current={inTrash ? "page" : undefined}
-            className={cn(SIDEBAR_ROW_CLASSES, !mobile && "h-8", inTrash ? SIDEBAR_ROW_SELECTION_CLASSES : sidebarRowStateClasses())}
+            {...sidebarRowStateAttributes(trashState)}
+            className={cn(SIDEBAR_ROW_CLASSES, !mobile && "h-9.5 rounded-mu-lg", sidebarRowStateClasses(trashState))}
           >
             <SidebarRowIconSlot icon={Trash2Icon} />
             <span className="truncate">{t("trash.title")}</span>

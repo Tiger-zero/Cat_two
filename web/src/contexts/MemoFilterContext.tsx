@@ -4,6 +4,7 @@ import { useLocation, useSearchParams } from "react-router-dom";
 
 export type FilterFactor =
   | "tagSearch"
+  | "untagged"
   | "source"
   | "contentSearch"
   | "celSearch"
@@ -22,10 +23,20 @@ export interface MemoFilter {
 
 export const getMemoFilterKey = (filter: MemoFilter): string => `${filter.factor}:${filter.value}`;
 
+/** The most recently applied tag mode wins when a URL or filter change contains both kinds. */
+const normalizeTagFilters = (filters: MemoFilter[]): MemoFilter[] => {
+  const last = filters.findLastIndex((filter) => filter.factor === "tagSearch" || filter.factor === "untagged");
+  if (last === -1) return filters;
+  if (filters[last].factor === "untagged") {
+    return filters.filter((filter, index) => (filter.factor !== "untagged" && filter.factor !== "tagSearch") || index === last);
+  }
+  return filters.filter((filter) => filter.factor !== "untagged");
+};
+
 export const parseFilterQuery = (query: string | null): MemoFilter[] => {
   if (!query) return [];
   try {
-    return query.split(",").flatMap((filterStr) => {
+    const filters = query.split(",").flatMap((filterStr) => {
       const separatorIndex = filterStr.indexOf(":");
       const factor = separatorIndex === -1 ? filterStr : filterStr.slice(0, separatorIndex);
       if (factor === "property.hasLocation" || factor === "visibility") return [];
@@ -33,10 +44,11 @@ export const parseFilterQuery = (query: string | null): MemoFilter[] => {
       return [
         {
           factor: factor as FilterFactor,
-          value: decodeURIComponent(value || ""),
+          value: factor === "untagged" ? "" : decodeURIComponent(value || ""),
         },
       ];
     });
+    return normalizeTagFilters(filters);
   } catch {
     return [];
   }
@@ -55,10 +67,8 @@ export const getFilterSearch = (filters: MemoFilter[]): string => {
 /** Search filters carry the user's query itself (plain words or a CEL expression), as opposed to facets. */
 export const isSearchFilter = (filter: MemoFilter): boolean => filter.factor === "contentSearch" || filter.factor === "celSearch";
 
-export const replaceFiltersByFactor = (filters: MemoFilter[], factor: FilterFactor, replacements: MemoFilter[]): MemoFilter[] => [
-  ...filters.filter((filter) => filter.factor !== factor),
-  ...replacements,
-];
+export const replaceFiltersByFactor = (filters: MemoFilter[], factor: FilterFactor, replacements: MemoFilter[]): MemoFilter[] =>
+  normalizeTagFilters([...filters.filter((filter) => filter.factor !== factor), ...replacements]);
 
 interface MemoFilterContextValue {
   filters: MemoFilter[];
@@ -123,11 +133,11 @@ export function MemoFilterProvider({ children }: { children: ReactNode }) {
   const getFiltersByFactor = useCallback((factor: FilterFactor) => filters.filter((f) => f.factor === factor), [filters]);
 
   const setFilters = useCallback((newFilters: MemoFilter[]) => {
-    setFiltersState(newFilters);
+    setFiltersState(normalizeTagFilters(newFilters));
   }, []);
 
   const addFilter = useCallback((filter: MemoFilter) => {
-    setFiltersState((prev) => uniqBy([...prev, filter], getMemoFilterKey));
+    setFiltersState((prev) => uniqBy(normalizeTagFilters([...prev, filter]), getMemoFilterKey));
   }, []);
 
   const removeFilter = useCallback((predicate: (f: MemoFilter) => boolean) => {

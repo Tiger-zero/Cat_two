@@ -2,21 +2,18 @@ import { menuClasses } from "@usememos/ui";
 import { cva } from "class-variance-authority";
 
 /**
- * The sidebar is drawn on one shared rail: inset surfaces start 12px from the shell,
- * visible artwork starts at 20px, and first-level labels start at 44px. The full-bleed
- * footer action pads its content directly onto those same rails. Rows reserve a 20px
+ * Sidebar surfaces share an inset that narrows with the desktop rail. Rows reserve a 20px
  * artwork column. The sidebar carries the package's `mu-compact`, so its md rows and
- * controls are 28px tall. The desktop collection lists use the standard 32px md height,
- * and compact navigation is a 28px square like the header's compose control.
+ * controls are 28px tall. Desktop collection lists use roomier 38px rows.
  */
-export const SIDEBAR_RAIL_CLASSES = "px-3";
+export const SIDEBAR_RAIL_CLASSES = "px-3 @max-[245px]/sidebar:px-1.5 @min-[245px]/sidebar:px-4 @min-[284px]/sidebar:px-5";
 // Content rows reserve 20px so 16px icons and 20px marks share a stable label rail.
 export const SIDEBAR_LEADING_SLOT_CLASSES = "flex size-5 shrink-0 items-center justify-center";
 // Compact nav uses the visible 16px glyph itself as the cell, keeping 6px x/y padding.
 export const SIDEBAR_NAV_LEADING_SLOT_CLASSES = "flex size-4 shrink-0 items-center justify-center";
-export const SIDEBAR_LIST_GAP_CLASSES = "gap-0.5 in-[[data-sidebar-collection-list]]:gap-1";
+export const SIDEBAR_LIST_GAP_CLASSES = "gap-0.5 in-[[data-sidebar-collection-list]]:gap-1.5";
 export const SIDEBAR_PINNED_TAGS_DIVIDER_CLASSES =
-  "mb-1 border-b border-mu-line pb-1 in-[[data-sidebar-collection-list]]:mb-2 in-[[data-sidebar-collection-list]]:pb-2";
+  "mb-1 border-b border-mu-line pb-1 in-[[data-sidebar-collection-list]]:mb-3 in-[[data-sidebar-collection-list]]:pb-3";
 
 /**
  * Brand controls hug their content, ordinary rows fill the inset rail, and the account
@@ -28,7 +25,7 @@ export const SIDEBAR_PINNED_TAGS_DIVIDER_CLASSES =
 export const sidebarSurfaceVariants = cva("min-w-0 items-center", {
   variants: {
     role: {
-      row: "mu-s-md flex h-(--mu-row-height) w-full gap-1 rounded-(--mu-row-radius) px-2 mu-body in-[[data-sidebar-collection-list]]:h-8",
+      row: "mu-s-md flex h-(--mu-row-height) w-full gap-1 rounded-(--mu-row-radius) px-2 mu-body in-[[data-sidebar-collection-list]]:h-9.5 in-[[data-sidebar-collection-list]]:rounded-mu-lg",
       navPill: "mu-s-md relative flex h-(--mu-row-height) shrink-0 rounded-(--mu-row-radius) px-1.5",
       headerBrand: "flex h-9 max-w-full gap-2 rounded-mu-md px-2",
       mobileBrand: "flex h-9 max-w-full gap-1.5 rounded-mu-md px-1",

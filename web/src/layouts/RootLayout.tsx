@@ -83,13 +83,17 @@ const RootLayoutContent = () => {
   return (
     <div
       ref={shellRef}
-      className={cn("mx-auto flex min-h-full w-full bg-mu-canvas", limitShell && (maxColumns === 1 ? "max-w-5xl" : "max-w-7xl"))}
+      className={cn(
+        "mx-auto flex min-h-full w-full bg-mu-canvas md:gap-6 md:px-4 lg:gap-8 lg:px-6",
+        limitShell && (maxColumns === 1 ? "max-w-[66.5rem]" : "max-w-7xl"),
+      )}
       style={{ [SIDEBAR_WIDTH_VAR]: `${sidebarWidth}px` } as CSSProperties}
     >
       {md && (
-        <div className="sticky top-0 z-30 h-dvh w-(--app-sidebar-width) shrink-0 self-start border-e border-mu-line/70">
-          <AppSidebar />
+        <div className="sticky top-4 z-30 mt-4 h-[calc(100dvh-2rem)] w-(--app-sidebar-width) shrink-0 self-start">
+          <AppSidebar className="rounded-mu-xl border border-mu-line/75" />
           <SidebarResizeHandle
+            appearance="grip"
             width={sidebarWidth}
             minWidth={minWidth}
             maxWidth={maxWidth}

@@ -18,7 +18,7 @@ AI 客户端用 MCP 查找、整理和写回笔记。脚本、附件传输及回
 | 工具 | 参数和范围 |
 | --- | --- |
 | `auth_get_current_user` | 空对象 `{}`。 |
-| `memo_search` | 搜索未归档的主笔记。`query` 是忽略大小写的字面子串，`tag` 含下级标签。可同时传 `startDate`、`endDate`（上海时区创建日期，`YYYY-MM-DD`，含当天）、`hasIncompleteTasks`、`hasAttachments`、`pinned`（布尔值）及 `creationChannel`（`web`、`telegram`、`browser_extension`、`wechat`、`unknown`）。`orderBy` 支持 `create_time` 或 `update_time` 加 `asc` 或 `desc`，默认 `create_time desc`。每页 1 至 50 条，默认 20。 |
+| `memo_search` | 搜索未归档的主笔记。`query` 是忽略大小写的字面子串，`tag` 含下级标签。`hasTags` 按有无标签筛选。可同时传 `startDate`、`endDate`（上海时区创建日期，`YYYY-MM-DD`，含当天）、`hasIncompleteTasks`、`hasAttachments`、`pinned`（布尔值）及 `creationChannel`（`web`、`telegram`、`browser_extension`、`wechat`、`unknown`）。`orderBy` 支持 `create_time` 或 `update_time` 加 `asc` 或 `desc`，默认 `create_time desc`。每页 1 至 50 条，默认 20。 |
 | `memo_list_memos` | 按 REST 列表的 `filter`、`state`、`orderBy`、`pageSize`、`pageToken` 查询。可列归档笔记，兼容缺少 `memo_search` 的镜像。 |
 | `memo_batch_get` | `names` 接受 1 至 50 个 `memos/<uid>` 字符串。返回 `memos`（含修订号）和 `unavailable`，支持已归档正文。每批正文合计最多 4 MiB，超出时拆分请求。找不到的、其他人所有的和回收站里的名称都会进入 `unavailable`。 |
 | `memo_get_memo` | 传 `{"memo":"memos/<uid>"}` 读取正文和附件元数据。也可用于旧镜像逐条读取。 |
@@ -49,7 +49,8 @@ AI 客户端用 MCP 查找、整理和写回笔记。脚本、附件传输及回
 ## 统计和标签
 
 - 日历与侧栏使用 Connect `UserService.ListUserStats` 取得授权的时间戳和标签统计，在网页按 `Asia/Shanghai` 聚合。REST 对应 `GET /api/users/<username>/stats`，也可用 `users/-` 作为父资源，仍按调用者可见性检查。`GetUserStats` 对应 `GET /api/users/<username>:getStats`。 [统计协议](../../../../proto/api/user_service.proto) · [权限与查询](../../../../server/api/user_service_stats.go) · [日期聚合](../../../../web/src/hooks/useFilteredMemoStats.ts)
-- 标签改名和路径清理由自定义 REST 路由处理。用 `POST /api/tags/rename` 提交 `oldName` 和 `newName`，用 `POST /api/tags/normalize` 清理斜杠两侧的空格。操作范围为当前账户的笔记，返回 `updatedCount`。外部 MCP 工具提供标签树和搜索。 [标签写入](../../../../server/api/memo_tag_routes.go) · [MCP 标签工具](#mcp-查找与共同创作)
+- `POST /api/tags/rename` 接收 `oldName` 和 `newName`，按完整路径移动分支。`POST /api/tags/delete` 接收 `tagName` 及 `mode`。`remove` 从正文移除该分支的标签，`trash` 将匹配的笔记移入回收站。`POST /api/tags/normalize` 整理斜杠两侧的空格。操作限定当前账户，成功时返回 `updatedCount`。 [标签写入](../../../../server/api/memo_tag_routes.go)
+- Web、REST 和 MCP 的分支统计对每篇笔记只计一次，并兼容缺少父路径的旧索引。查找无标签笔记使用 REST 的 `size(tags) == 0`，或给 MCP `memo_search` 传 `hasTags: false`。 [分支计数](../../../../core/memopayload/tags.go) · [MCP 标签工具](#mcp-查找与共同创作)
 
 ## 变更通知和收件
 

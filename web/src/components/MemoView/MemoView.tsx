@@ -11,7 +11,7 @@ import { lazyWithReload } from "@/utils/lazy";
 import { canManageMemo } from "@/utils/user";
 import { MemoBody, MemoCommentListView, MemoHeader } from "./components";
 import MemoPinnedMark from "./components/MemoPinnedMark";
-import { MEMO_CARD_BASE_CLASSES, MEMO_CARD_CONTENT_CLASSES } from "./constants";
+import { MEMO_CARD_BASE_CLASSES, MEMO_CARD_CONTENT_CLASSES, MEMO_CARD_FRAME_CLASSES } from "./constants";
 import { useImagePreview } from "./hooks";
 import { computeCommentAmount, MemoViewContext } from "./MemoViewContext";
 import { isMemoDetailPath, resolveMemoParentPage } from "./navigation";
@@ -172,7 +172,11 @@ const MemoView = forwardRef<MemoViewHandle, MemoViewProps>((props, ref) => {
 
   const article = (
     <article
-      className={cn(showCommentPreview ? MEMO_CARD_CONTENT_CLASSES : MEMO_CARD_BASE_CLASSES, "group/memo", className)}
+      className={cn(
+        showCommentPreview ? MEMO_CARD_CONTENT_CLASSES : MEMO_CARD_BASE_CLASSES,
+        "group/memo mu-focus",
+        !showCommentPreview && className,
+      )}
       ref={cardRef}
       tabIndex={readonly ? -1 : 0}
     >
@@ -203,7 +207,7 @@ const MemoView = forwardRef<MemoViewHandle, MemoViewProps>((props, ref) => {
   );
 
   const memoDisplay = showCommentPreview ? (
-    <div className="memos-panel memo-list-gap w-full">
+    <div className={cn(MEMO_CARD_FRAME_CLASSES, className)}>
       {article}
       <MemoCommentListView />
     </div>

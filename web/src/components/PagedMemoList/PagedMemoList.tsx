@@ -301,8 +301,10 @@ const PagedMemoList = (props: Props) => {
         >
           {stickyHeader && (
             <div
+              data-slot="memo-stream-toolbar"
               className={cn(
                 "mx-auto flex w-full flex-col md:sticky md:top-0 md:z-40 md:-mt-3 md:bg-mu-canvas md:pt-3 md:[overflow-anchor:none]",
+                "md:after:pointer-events-none md:after:absolute md:after:inset-x-0 md:after:-bottom-1 md:after:h-1 md:after:bg-linear-to-b md:after:from-mu-canvas md:after:to-transparent",
                 useGrid && "md:[--memos-list-gap:0.75rem]",
               )}
               style={stickyHeaderMaxWidth === undefined ? undefined : { maxWidth: stickyHeaderMaxWidth }}

@@ -4,7 +4,8 @@ import { MemoryRouter, useLocation } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { SIDEBAR_ROW_BOX_CLASSES, SIDEBAR_ROW_COUNT_RAIL_CLASSES, SIDEBAR_ROW_SLOT_CLASSES } from "@/components/AppSidebar/SidebarRow";
 import TagsSection from "@/components/AppSidebar/TagsSection";
-import { MemoFilterProvider, parseFilterQuery } from "@/contexts/MemoFilterContext";
+import { getFilterSearch, MemoFilterProvider, parseFilterQuery } from "@/contexts/MemoFilterContext";
+import { trashQueryKey } from "@/lib/trash";
 
 const mocks = vi.hoisted(() => ({ account: "users/alice", authenticatedFetch: vi.fn(), toast: vi.fn() }));
 vi.mock("@/hooks/useCurrentUser", () => ({ default: () => ({ name: mocks.account }) }));
@@ -21,6 +22,8 @@ describe("TagsSection", () => {
   beforeEach(() => {
     localStorage.clear();
     mocks.account = "users/alice";
+    mocks.authenticatedFetch.mockReset();
+    mocks.toast.mockClear();
   });
 
   it("keeps the title count-free and uses the shared section action grammar", () => {
@@ -112,6 +115,26 @@ describe("TagsSection", () => {
     expect(count).toHaveClass(...SIDEBAR_ROW_COUNT_RAIL_CLASSES.split(" "));
   });
 
+  it("sorts unpinned tags by name with numbered prefixes and keeps pin order", () => {
+    localStorage.setItem("tag-view-as-tree", "false");
+    localStorage.setItem("memos-pinned-tags:users/alice", '["z","a"]');
+    render(
+      <MemoryRouter>
+        <MemoFilterProvider>
+          <TagsSection tagCount={{ b: 10, "10_archives": 32, "02_notes": 1, a: 24, z: 2, "01_work": 2 }} scope="home" />
+        </MemoFilterProvider>
+      </MemoryRouter>,
+    );
+    expect(screen.getAllByRole("button", { name: /^#/ }).map((button) => button.getAttribute("aria-label")?.split(",")[0])).toEqual([
+      "#z",
+      "#a",
+      "#01_work",
+      "#02_notes",
+      "#10_archives",
+      "#b",
+    ]);
+  });
+
   it("moves a nested pin above the ordinary tree, restores it per account, and unpins it", async () => {
     const tags = () => (
       <MemoryRouter>
@@ -199,5 +222,45 @@ describe("TagsSection", () => {
     });
     expect(localStorage.getItem("memos-pinned-tags:users/alice")).toBe('["2027/09"]');
     expect(mocks.toast).toHaveBeenCalledWith({ title: "setting.tags.updated-notes", type: "success" });
+  });
+
+  it.each(["remove", "trash"] as const)("deletes a tag branch with %s and retains other filters and pins", async (mode) => {
+    localStorage.setItem("memos-pinned-tags:users/alice", '["work","work/daily","work-old","personal"]');
+    mocks.authenticatedFetch.mockResolvedValue(Response.json({ updatedCount: 2 }));
+    const queryClient = new QueryClient();
+    queryClient.setQueryData(trashQueryKey, []);
+    const filters = [
+      { factor: "displayTime", value: "2027-08-01" },
+      { factor: "tagSearch", value: "work/daily" },
+      { factor: "tagSearch", value: "work-old" },
+    ] as const;
+    render(
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter initialEntries={[`/${getFilterSearch([...filters])}`]}>
+          <MemoFilterProvider>
+            <TagsSection tagCount={{ work: 2, "work/daily": 1, "work-old": 3, personal: 1 }} scope="home" />
+            <FilterQuery />
+          </MemoFilterProvider>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "setting.tags.actions #work" }));
+    fireEvent.click(await screen.findByRole("menuitem", { name: "common.delete" }));
+    const dialog = within(await screen.findByRole("alertdialog", { name: "setting.tags.delete-title #work" }));
+    expect(dialog.getByRole("radio", { name: "setting.tags.delete-remove" })).toBeChecked();
+    expect(dialog.getByRole("radio", { name: "setting.tags.delete-trash" })).not.toBeChecked();
+    expect(mocks.authenticatedFetch).not.toHaveBeenCalled();
+    if (mode === "trash") fireEvent.click(dialog.getByRole("radio", { name: "setting.tags.delete-trash" }));
+    fireEvent.click(dialog.getByRole("button", { name: mode === "trash" ? "setting.tags.delete-trash" : "setting.tags.delete-remove" }));
+
+    await waitFor(() => expect(selectedFilters()).toEqual([filters[0], filters[2]]));
+    expect(mocks.authenticatedFetch).toHaveBeenCalledWith("/api/tags/delete", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ tagName: "work", mode }),
+    });
+    expect(localStorage.getItem("memos-pinned-tags:users/alice")).toBe('["work-old","personal"]');
+    expect(queryClient.getQueryState(trashQueryKey)?.isInvalidated).toBe(mode === "trash");
   });
 });

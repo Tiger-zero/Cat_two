@@ -41,7 +41,11 @@ export const buildMemoFilter = ({
     } else if (filter.factor === "celSearch") {
       conditions.push(filter.value);
     } else if (filter.factor === "tagSearch") {
-      conditions.push(`tag in [${escapeFilterValue(filter.value)}]`);
+      conditions.push(
+        `${escapeFilterValue(filter.value)} in tags || tags.exists(t, t.startsWith(${escapeFilterValue(`${filter.value}/`)}))`,
+      );
+    } else if (filter.factor === "untagged") {
+      conditions.push("size(tags) == 0");
     } else if (filter.factor === "source" && (filter.value === "web" || filter.value === "unknown")) {
       conditions.push(`creation_channel == ${escapeFilterValue(filter.value)}`);
     } else if (filter.factor === "pinned") {

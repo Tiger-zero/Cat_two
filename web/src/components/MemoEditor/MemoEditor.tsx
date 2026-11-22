@@ -162,8 +162,10 @@ const MemoEditorDraft = ({ draft, ...editing }: MemoEditorDraftProps) => {
   // session takes its place.
   const fallback = editing.frameless ? null : (
     <div aria-hidden className={cn("flex w-full flex-col gap-2", COMPOSER_PANEL_CLASSES, editing.className)}>
-      <div className="memo-text w-full text-mu-text-secondary">{editing.placeholder ?? " "}</div>
-      <div className="h-9 w-full" />
+      <div className={cn("memo-text w-full text-mu-text-secondary", editing.expandOnFocus && "md:min-h-9")}>
+        {editing.placeholder ?? " "}
+      </div>
+      <div className="h-[37px] w-full border-t border-mu-line/75" />
     </div>
   );
   return (

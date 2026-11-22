@@ -25,7 +25,9 @@ describe("type roles", () => {
     // A new use is fine when it is one of those roles: add it here. Page titles use `mu-heading`,
     // section titles `mu-label`, body text `mu-body`.
     expect(filesUsing(/\bmu-title\b/)).toEqual([
+      "components/AppSidebar/QuickFindDialog.tsx",
       "components/MemoActionMenu/MemoShareImagePreview.tsx",
+      "components/Settings/SettingsDialog.tsx",
       "components/WelcomeGuide/WelcomeGuideDialog.tsx",
     ]);
   });

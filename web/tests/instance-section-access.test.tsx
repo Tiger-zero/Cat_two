@@ -95,7 +95,7 @@ describe("<InstanceSection> access setting", () => {
   it("orders general settings before administrator access and custom styles", () => {
     render(<InstanceSection />);
 
-    const groupHeadings = screen.getAllByRole("heading", { level: 4 });
+    const groupHeadings = screen.getAllByRole("heading", { level: 2 });
     expect(groupHeadings.map((heading) => heading.textContent)).toEqual([
       "common.basic",
       "setting.instance.access-title",
@@ -103,7 +103,7 @@ describe("<InstanceSection> access setting", () => {
     ]);
 
     const weekStartDay = screen.getByText("setting.instance.week-start-day");
-    const accessHeading = screen.getByRole("heading", { level: 4, name: "setting.instance.access-title" });
+    const accessHeading = screen.getByRole("heading", { level: 2, name: "setting.instance.access-title" });
     expect(weekStartDay.compareDocumentPosition(accessHeading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(screen.queryByPlaceholderText("setting.system.additional-script-placeholder")).not.toBeInTheDocument();
   });

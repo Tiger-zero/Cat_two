@@ -15,9 +15,8 @@ export const SIDEBAR_ROW_BOX_CLASSES = `${sidebarSurfaceVariants({ role: "row" }
 export const SIDEBAR_ROW_CLASSES = `${SIDEBAR_ROW_BOX_CLASSES} border border-transparent mu-focus focus-visible:border-mu-focus`;
 
 export const SIDEBAR_ROW_ICON_CLASSES =
-  // The md row's 16px icon at the md stroke, beside its 14px label, in the row's own muted ink.
-  "mu-icon me-auto shrink-0 group-data-checked:text-white";
-const SIDEBAR_ROW_COUNT_CLASSES = "mu-caption tabular-nums text-mu-text-secondary group-data-checked:text-white";
+  "mu-icon me-auto shrink-0 text-mu-text-secondary/80 group-data-checked:text-(--memos-on-sidebar-selected)";
+const SIDEBAR_ROW_COUNT_CLASSES = "mu-caption tabular-nums text-mu-text-secondary group-data-checked:text-(--memos-on-sidebar-selected)";
 
 /**
  * The focusable body of a split row — rows whose box is a wrapper carrying other controls
@@ -34,7 +33,7 @@ export const SIDEBAR_ROW_LABEL_CLASSES = `flex h-full min-w-0 flex-1 items-cente
 export const SIDEBAR_ROW_SLOT_CLASSES = SIDEBAR_LEADING_SLOT_CLASSES;
 
 /** A slot that is itself a control (disclosure, row menu): same box plus the hover chip. */
-export const SIDEBAR_ROW_SLOT_BUTTON_CLASSES = `${SIDEBAR_ROW_SLOT_CLASSES} relative rounded hover:bg-mu-hover group-data-checked:hover:bg-white/15 after:absolute after:-inset-0.5 after:content-[''] border border-transparent mu-focus focus-visible:border-mu-focus`;
+export const SIDEBAR_ROW_SLOT_BUTTON_CLASSES = `${SIDEBAR_ROW_SLOT_CLASSES} relative rounded hover:bg-mu-hover group-data-checked:hover:bg-(--memos-on-sidebar-selected)/15 after:absolute after:-inset-0.5 after:content-[''] border border-transparent mu-focus focus-visible:border-mu-focus`;
 
 /** Trailing rail for counts, wide enough that digits align down the list. */
 export const SIDEBAR_ROW_COUNT_RAIL_CLASSES = `${SIDEBAR_ROW_COUNT_CLASSES} min-w-[3ch] shrink-0 text-end`;
@@ -63,12 +62,12 @@ export const ScopePanelRowIcon = ({ icon: Icon, className }: { icon: LucideIcon;
 export type SidebarRowState = "idle" | "current" | "checked";
 
 const SIDEBAR_ROW_HOVER_CLASSES = "hover:bg-mu-hover/65 hover:text-mu-text";
-export const SIDEBAR_ROW_SELECTION_CLASSES = "bg-[#397354] text-white";
+const SIDEBAR_ROW_SELECTION_CLASSES = "bg-(--memos-sidebar-selected) text-(--memos-on-sidebar-selected)";
 
 export const sidebarRowStateClasses = (state: SidebarRowState = "idle") => {
   // Selection never changes weight (the type rules), so labels do not shift: fill and color carry it.
   if (state === "current")
-    return "bg-mu-hover text-mu-text light:bg-mu-selected light:text-mu-accent dark:bg-mu-selected dark:text-mu-accent";
+    return "bg-mu-hover text-mu-text light:bg-mu-selected light:text-mu-primary dark:bg-mu-selected dark:text-mu-primary";
   if (state === "checked") return SIDEBAR_ROW_SELECTION_CLASSES;
   return `text-mu-text-secondary ${SIDEBAR_ROW_HOVER_CLASSES}`;
 };
@@ -100,7 +99,9 @@ const SidebarRow = ({ state = "idle", icon: Icon, label, count, onClick, trailin
       {label}
     </span>
     {count != null && count > 0 && (
-      <span className={cn(SIDEBAR_ROW_COUNT_RAIL_CLASSES, state === "current" && "light:text-mu-accent dark:text-mu-accent")}>{count}</span>
+      <span className={cn(SIDEBAR_ROW_COUNT_RAIL_CLASSES, state === "current" && "light:text-mu-primary dark:text-mu-primary")}>
+        {count}
+      </span>
     )}
     {trailing}
   </button>

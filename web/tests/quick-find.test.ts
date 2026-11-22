@@ -98,4 +98,16 @@ describe("Quick Find", () => {
       { factor: "displayTime", value: "2026-08-02" },
     ]);
   });
+
+  it("takes untagged and the current date/text search into the selected collection", () => {
+    const result = resolveQuickFindSubmission("/", "fresh plan", scopedFilters, "text", "archived", true);
+    const url = new URL(result.destination!, "https://memos.test");
+    expect(url.pathname).toBe("/archived");
+    expect(parseFilterQuery(url.searchParams.get("filter"))).toEqual([
+      { factor: "displayTime", value: "2026-08-03" },
+      { factor: "contentSearch", value: "fresh" },
+      { factor: "contentSearch", value: "plan" },
+      { factor: "untagged", value: "" },
+    ]);
+  });
 });

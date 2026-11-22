@@ -27,7 +27,7 @@
 @custom-variant light (&:where([data-theme="light"], [data-theme="light"] *));
 
 @utility memos-panel {
-  @apply rounded-mu-xl border border-mu-line bg-mu-surface;
+  @apply rounded-mu-2xl border border-mu-line bg-mu-surface;
   box-shadow: var(--memos-panel-shadow, none);
 }
 
@@ -44,9 +44,16 @@
 
 @layer base {
   :root {
+    --memos-sidebar: var(--mu-canvas);
+    --memos-sidebar-selected: var(--mu-primary);
+    --memos-on-sidebar-selected: var(--mu-on-primary);
+    --memos-composer-focus: var(--mu-focus);
+    --memos-tag-bg: var(--mu-selected);
+    --memos-tag-hover: var(--mu-hover);
+    --memos-tag-text: var(--mu-text);
     --memos-note-font: "Barlow", "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", "Noto Sans SC", Helvetica, Arial, sans-serif;
-    --memos-note-font-size: 14px;
-    --memos-note-line-height: 25.2px;
+    --memos-note-font-size: 15px;
+    --memos-note-line-height: 26px;
   }
 
   .memos-theme-changing,

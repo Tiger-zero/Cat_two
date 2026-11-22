@@ -57,9 +57,7 @@ const MemoHeader: React.FC<MemoHeaderProps> = ({ timeDisplay = "relative", showC
   if (isEditing) return null;
 
   return (
-    // A fixed 24px row, the height of its action squares, so the card's top edge never
-    // moves with what the header happens to show.
-    <div className="flex h-6 w-full items-center justify-between gap-2">
+    <div className="flex min-h-6 w-full items-center justify-between gap-2">
       <div className="flex min-w-0 flex-1 items-center gap-2">
         {/* The time stays visible while the creator can shrink and truncate. */}
         <div data-slot="memo-header-meta" className="flex min-w-0 items-center gap-1.5 overflow-hidden">

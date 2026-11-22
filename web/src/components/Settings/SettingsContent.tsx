@@ -1,6 +1,6 @@
 import { useLayoutEffect, useRef, useState } from "react";
 import SidebarRow from "@/components/AppSidebar/SidebarRow";
-import SidebarSection, { SIDEBAR_SECTION_STACK_CLASSES } from "@/components/AppSidebar/SidebarSection";
+import SidebarSection from "@/components/AppSidebar/SidebarSection";
 import useCurrentUser from "@/hooks/useCurrentUser";
 import { User_Role } from "@/types/proto/api/user_service_pb";
 import { useTranslate } from "@/utils/i18n";
@@ -35,12 +35,12 @@ export default function SettingsContent({ initialSection }: { initialSection: st
     ));
 
   return (
-    <div className="grid min-h-0 flex-1 grid-cols-[min(34%,13rem)_minmax(0,1fr)]">
+    <div className="grid min-h-0 flex-1 grid-cols-[min(34%,14rem)_minmax(0,1fr)]">
       <nav
         aria-label={t("common.settings")}
-        className="flex min-h-0 flex-col overflow-y-auto overscroll-contain border-e border-mu-line/70 bg-mu-well/55 p-3 sm:p-4"
+        className="min-h-0 overflow-y-auto overscroll-contain border-e border-mu-line/70 bg-[color:var(--memos-sidebar,var(--mu-canvas))] px-2 py-4 sm:px-4 sm:py-6"
       >
-        <div className={SIDEBAR_SECTION_STACK_CLASSES}>
+        <div className="flex flex-col gap-5">
           <SidebarSection label={t("common.basic")}>{renderSections(basicSections)}</SidebarSection>
           {isAdmin && <SidebarSection label={t("common.admin")}>{renderSections(adminSections)}</SidebarSection>}
         </div>
@@ -48,7 +48,7 @@ export default function SettingsContent({ initialSection }: { initialSection: st
       <section
         ref={contentRef}
         aria-label={t(activeSection.labelKey)}
-        className="min-h-0 min-w-0 overflow-y-auto overscroll-contain px-4 pt-5 pb-6 sm:px-7 sm:pt-6 sm:pb-8"
+        className="min-h-0 min-w-0 overflow-y-auto overscroll-contain px-4 py-6 sm:px-8 sm:py-8 lg:px-10"
       >
         <ActiveSection key={activeSection.key} />
       </section>

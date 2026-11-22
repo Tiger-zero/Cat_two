@@ -45,6 +45,12 @@ interface TagTreeExpansion {
 
 const EMPTY_EXPANSION: TagTreeExpansion = { expanded: [] };
 
+const tagNameCollator = new Intl.Collator(undefined, { numeric: true });
+
+export function compareTagNames(left: string, right: string): number {
+  return tagNameCollator.compare(left, right) || (left < right ? -1 : Number(left > right));
+}
+
 /** One announcement for a tag row in either layout, so tree and flat mode never drift apart. */
 export const tagRowAriaLabel = (t: ReturnType<typeof useTranslate>, tag: string, amount?: number) =>
   amount === undefined ? `#${tag}` : `#${tag}, ${t("setting.tags.used-count", { count: amount })}`;
@@ -59,7 +65,7 @@ export const buildTagTree = (tagAmounts: [tag: string, amount: number][]) => {
     subTags: [],
   };
 
-  for (const [tag, amount] of [...tagAmounts].sort(([left], [right]) => left.localeCompare(right))) {
+  for (const [tag, amount] of [...tagAmounts].sort(([left], [right]) => compareTagNames(left, right))) {
     const segments = tag.split("/");
     let parent = root;
     let path = "";
@@ -117,7 +123,7 @@ const Chevron = ({ open, className }: { open: boolean; className?: string }) => 
     aria-hidden="true"
     className={cn(
       "mu-icon-sm",
-      "me-auto shrink-0 text-mu-text-secondary/70 transition-transform group-data-checked:text-white",
+      "me-auto shrink-0 text-mu-text-secondary/70 transition-transform group-data-checked:text-(--memos-on-sidebar-selected)",
       open ? "rotate-90" : "rtl:rotate-180",
       className,
     )}

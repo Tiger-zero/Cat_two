@@ -47,11 +47,11 @@ A reducer (`edit/state/reducer.ts`) drives an external store; consumers subscrib
 
 ### The editor contract
 
-`edit/types/editorController.ts` defines `EditorController`: document access (`getMarkdown`, `setMarkdown`, `insertMarkdown`), selection and focus, formatting and checklist commands, the upload-anchor group, `getTags`, `hasChecklist` and `insertTag`. The chrome uses this interface. `edit/controller.ts` implements it over the live editor. Calls before mount or after destroy do nothing.
+`edit/types/editorController.ts` defines `EditorController`: document access (`getMarkdown`, `setMarkdown`, `insertMarkdown`), selection and focus, formatting and checklist commands, the upload-anchor group, `getTags`, `hasChecklist`, `startTag` and `insertTag`. The chrome uses this interface. `edit/controller.ts` implements it over the live editor. Calls before mount or after destroy do nothing.
 
 ### Formatting and source mode
 
-The toolbar beneath the editor offers bold, italic, bulleted list, numbered list and code block. **More formatting** offers paragraph and headings, strikethrough, inline code, blockquote, tasks, tables, dividers and links. The controls apply to the current selection or block and return focus to the editor. Rich text also shows active formatting and provides the editor's floating selection toolbar, slash menu, block handle and link card.
+The toolbar beneath the editor offers tag insertion, bold, italic, bulleted list, numbered list and code block. **Insert tag** puts `#` at the caret in prose, spaces it from neighbouring text, keeps selected text and opens existing tag suggestions. Continue typing to write a new tag. The button works in rich text and Markdown mode. **More formatting** offers paragraph and headings, strikethrough, inline code, blockquote, tasks, tables, dividers and links. The formatting controls apply to the current selection or block and return focus to the editor. Rich text also shows active formatting and provides the editor's floating selection toolbar, slash menu, block handle and link card.
 
 Markdown mode opens from the ＋ menu and shows the entire memo as syntax-highlighted Markdown in the body font. `useSourceMode` (`@/hooks/useSourceMode`) shares the account's `EDITOR` user setting (`source_mode`) with Settings → Editor. A switch applies immediately, preserves the memo text and reverts if saving the preference fails. In Markdown mode the composer controls and formatting shortcuts edit the Markdown text. The `#tag` and `:emoji` popups work in both modes, and the checklist chip uses the same `toggleTaskList` command to toggle the caret's line. The controller parses the memo to read its tags and checklist items.
 

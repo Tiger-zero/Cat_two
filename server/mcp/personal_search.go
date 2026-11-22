@@ -11,6 +11,7 @@ import (
 	"github.com/pkg/errors"
 	"google.golang.org/protobuf/proto"
 
+	"github.com/usememos/memos/filter"
 	apipb "github.com/usememos/memos/proto/gen/api"
 	"github.com/usememos/memos/store"
 )
@@ -23,6 +24,7 @@ const (
 type memoSearchInput struct {
 	Query              string `json:"query,omitempty" jsonschema:"Case-insensitive literal substring of the Markdown content. Omit to list without a text filter."`
 	Tag                string `json:"tag,omitempty" jsonschema:"Tag path, with or without a leading #. Matches this tag and its descendants."`
+	HasTags            *bool  `json:"hasTags,omitempty" jsonschema:"Whether the memo has any tags. Set false to find untagged notes."`
 	StartDate          string `json:"startDate,omitempty" jsonschema:"Inclusive first creation date in Asia/Shanghai (YYYY-MM-DD)."`
 	EndDate            string `json:"endDate,omitempty" jsonschema:"Inclusive last creation date in Asia/Shanghai (YYYY-MM-DD)."`
 	HasIncompleteTasks *bool  `json:"hasIncompleteTasks,omitempty" jsonschema:"Whether the memo contains unchecked tasks."`
@@ -88,8 +90,14 @@ func (input memoSearchInput) listArguments() (map[string]any, error) {
 		if tag == "" {
 			return nil, errors.New("tag must contain a tag path")
 		}
-		// Older payloads may record a child without its implied ancestors.
-		filters = append(filters, "("+strconv.Quote(tag)+" in tags || tags.exists(t, t.startsWith("+strconv.Quote(tag+"/")+")))")
+		filters = append(filters, filter.TagBranchExpression(tag))
+	}
+	if input.HasTags != nil {
+		if *input.HasTags {
+			filters = append(filters, "size(tags) > 0")
+		} else {
+			filters = append(filters, "size(tags) == 0")
+		}
 	}
 	if input.HasIncompleteTasks != nil {
 		filters = append(filters, "has_incomplete_tasks == "+strconv.FormatBool(*input.HasIncompleteTasks))

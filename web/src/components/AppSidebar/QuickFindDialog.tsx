@@ -1,9 +1,15 @@
 import { Button, Dialog, Input, Textarea, Toggle, ToggleGroup, Tooltip } from "@usememos/ui";
-import { CornerDownLeftIcon, SearchIcon } from "lucide-react";
-import { type ChangeEvent, type FormEvent, type KeyboardEvent, useEffect, useId, useState } from "react";
+import { CornerDownLeftIcon, HashIcon, SearchIcon, XIcon } from "lucide-react";
+import { type ChangeEvent, type FormEvent, type KeyboardEvent, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useAppSidebar } from "@/contexts/AppSidebarContext";
-import { getFilterSearch, isSearchFilter, type MemoFilter, useMemoFilterContext } from "@/contexts/MemoFilterContext";
+import {
+  getFilterSearch,
+  isSearchFilter,
+  type MemoFilter,
+  replaceFiltersByFactor,
+  useMemoFilterContext,
+} from "@/contexts/MemoFilterContext";
 import useCurrentUser from "@/hooks/useCurrentUser";
 import { type MemoScope, resolveMemoScope } from "@/lib/memo-collection";
 import { ROUTES } from "@/router/routes";
@@ -52,9 +58,11 @@ export const resolveQuickFindSubmission = (
   currentFilters: MemoFilter[],
   mode: QuickFindMode,
   scope = resolveMemoScope(pathname),
+  untagged = false,
 ): QuickFindSubmission => {
   const routePolicy = getRouteActionPolicy(pathname);
-  const filters = buildQuickFindFilters(query, currentFilters, routePolicy.searchScope !== "all", mode);
+  const searchFilters = buildQuickFindFilters(query, currentFilters, routePolicy.searchScope !== "all", mode);
+  const filters = untagged ? replaceFiltersByFactor(searchFilters, "untagged", [{ factor: "untagged", value: "" }]) : searchFilters;
   const target =
     scope === resolveMemoScope(pathname) ? routePolicy.searchDestination : scope === "archived" ? ROUTES.ARCHIVED : ROUTES.HOME;
   return {
@@ -74,6 +82,8 @@ const QuickFindDialog = () => {
   const [mode, setMode] = useState<QuickFindMode>("text");
   const [scope, setScope] = useState<MemoScope>(() => resolveMemoScope(pathname));
   const [autoFocusField, setAutoFocusField] = useState(true);
+  const fieldRef = useRef<HTMLInputElement | HTMLTextAreaElement>(null);
+  const previousMode = useRef(mode);
   const hintId = useId();
   const effectiveScope = currentUser ? scope : "home";
   const scopeLabel = t(effectiveScope === "archived" ? "common.archived" : "common.memos");
@@ -90,8 +100,14 @@ const QuickFindDialog = () => {
     setQuery(active.query);
   }, [filters, quickFindOpen]);
 
-  const submitQuery = () => {
-    const submission = resolveQuickFindSubmission(pathname, query, filters, mode, effectiveScope);
+  useLayoutEffect(() => {
+    const changedMode = previousMode.current !== mode;
+    previousMode.current = mode;
+    if (quickFindOpen && changedMode && autoFocusField) fieldRef.current?.focus();
+  }, [autoFocusField, mode, quickFindOpen]);
+
+  const submitQuery = (untagged = false) => {
+    const submission = resolveQuickFindSubmission(pathname, query, filters, mode, effectiveScope, untagged);
 
     if (submission.destination) {
       navigate(submission.destination);
@@ -117,7 +133,9 @@ const QuickFindDialog = () => {
   };
 
   const fieldProps = {
-    autoFocus: autoFocusField,
+    ref: (element: HTMLInputElement | HTMLTextAreaElement | null) => {
+      fieldRef.current = element;
+    },
     value: query,
     onChange: (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => setQuery(event.target.value),
     onKeyDown: handleKeyDown,
@@ -129,14 +147,18 @@ const QuickFindDialog = () => {
       <Dialog.Popup
         variant="bare"
         sheet={false}
-        className="w-lg self-start mt-[max(0px,calc(12vh-var(--mu-space-6)))] sm:mt-[max(0px,calc(16vh-var(--mu-space-6)))]"
+        initialFocus={fieldRef}
+        className="w-xl self-start bg-mu-surface mt-[max(0px,calc(12vh-var(--mu-space-6)))] sm:mt-[max(0px,calc(16vh-var(--mu-space-6)))]"
       >
-        <Dialog.Title className="mu-visually-hidden">{t("common.search")}</Dialog.Title>
+        <header className="flex items-center justify-between gap-3 px-5 pt-4 pb-3 sm:px-6">
+          <Dialog.Title className="mu-title">{t("common.search")}</Dialog.Title>
+          <Dialog.Close render={<Button variant="ghost" size="sm" icon={<XIcon />} aria-label={t("common.close")} />} />
+        </header>
         <Dialog.Description className="mu-visually-hidden">
           {t("common.search")} {scopeLabel}
         </Dialog.Description>
         <form onSubmit={handleSubmit}>
-          <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b border-mu-line/50 px-4 py-2">
+          <div className="mx-5 flex flex-wrap items-center justify-between gap-x-3 gap-y-2 rounded-mu-lg border border-mu-line/65 bg-mu-canvas/65 p-1.5 sm:mx-6">
             {currentUser ? (
               <ToggleGroup
                 size="sm"
@@ -150,7 +172,7 @@ const QuickFindDialog = () => {
                 <Toggle value="archived">{t("common.archived")}</Toggle>
               </ToggleGroup>
             ) : (
-              <span className="mu-caption text-mu-text-secondary">{scopeLabel}</span>
+              <span className="px-2 mu-caption text-mu-text-secondary">{scopeLabel}</span>
             )}
             <ToggleGroup
               size="sm"
@@ -170,7 +192,7 @@ const QuickFindDialog = () => {
             </ToggleGroup>
           </div>
           {mode === "cel" ? (
-            <div className="space-y-3 p-4">
+            <div className="space-y-3 px-5 py-4 sm:px-6">
               <Textarea
                 {...fieldProps}
                 rows={3}
@@ -186,7 +208,7 @@ const QuickFindDialog = () => {
                     href="https://usememos.com/docs/usage/shortcuts#filter-expression-syntax"
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-block underline underline-offset-2 hover:text-mu-text"
+                    className="inline-block rounded-mu-sm border border-transparent mu-focus underline underline-offset-2 hover:text-mu-text"
                   >
                     {t("search.syntax-help")}
                   </a>
@@ -197,7 +219,7 @@ const QuickFindDialog = () => {
               </div>
             </div>
           ) : (
-            <div className="px-4 py-3">
+            <div className="px-5 py-4 sm:px-6">
               <Input
                 {...fieldProps}
                 prefix={<SearchIcon />}
@@ -216,6 +238,11 @@ const QuickFindDialog = () => {
               />
             </div>
           )}
+          <div className="flex items-center border-t border-mu-line/65 bg-mu-canvas/65 px-5 py-2.5 sm:px-6">
+            <Button type="button" variant="ghost" size="sm" icon={<HashIcon />} onClick={() => submitQuery(true)}>
+              {t("memo.filters.untagged")}
+            </Button>
+          </div>
         </form>
       </Dialog.Popup>
     </Dialog.Root>

@@ -5,7 +5,7 @@ description: 设计、实现和验收 Cat_two 桌面网页界面。用于桌面�
 
 # Cat_two 界面开发
 
-Cat_two 是单账户自托管笔记。以桌面浏览器里的记录、检索和整理流程作为界面设计与验收范围。参考其他应用时，提取交互需求和布局问题，沿用 Cat_two 的组件、主题和状态管理，保持产品自己的界面。用户要求先确认预览时，以当前 Cat_two 页面制作预览，确认后再修改源码。 [项目开发](../cat-two-development/SKILL.md) · [产品开发](../cat-two-product-development/SKILL.md)
+Cat_two 是单账户自托管笔记。以桌面浏览器里的记录、检索和整理流程作为界面设计与验收范围。参考其他应用时，提取交互需求和布局问题，沿用 Cat_two 的组件、主题和状态管理，保持产品自己的界面。用户要求先确认预览时，以当前 Cat_two 页面制作预览，确认后再修改源码。 [桌面设计与配色](references/desktop-visual-design.md) · [项目开发](../cat-two-development/SKILL.md) · [产品开发](../cat-two-product-development/SKILL.md)
 
 ## 设计系统与实现约定
 
@@ -18,11 +18,12 @@ Cat_two 是单账户自托管笔记。以桌面浏览器里的记录、检索和
 
 ## 桌面骨架、主题与侧栏
 
-- `RootLayout` 管理居中的桌面工作区、侧栏、路由内容及全局弹窗。侧栏默认 280px，拖动分隔线调整，双击复位。键盘聚焦分隔线后可用方向键调整，Home 和 End 可到达宽度边界。宽度偏好保存在当前浏览器，渲染会按窗口限宽。常规单列和多列分别沿用工作区的 `max-w-5xl` 与 `max-w-7xl`，自动列或全宽由现有显示设置决定。 [页面骨架](../../../web/src/layouts/RootLayout.tsx) · [侧栏宽度](../../../web/src/components/AppSidebar/useSidebarWidth.ts) · [调整手柄](../../../web/src/components/AppSidebar/SidebarResizeHandle.tsx)
-- 主题偏好支持浅色、深色、跟随系统和纸张。跟随系统时先解析实际配色，再设置 `<html data-theme>`。深色侧栏为黑底白字，主区域使用炭灰画布与卡片层次。浅色普通标签用近黑色，浅色日历低活跃度方格用 `rgb(185, 248, 207)`。笔记正文统一 14px 字号和 25.2px 行高，拉丁字符与数字优先使用内置 Barlow，中文使用平台字体回退。纸张主题沿用完整主题令牌和对比度测试。 [默认主题](../../../web/src/themes/default.css) · [纸张主题](../../../web/src/themes/paper.css) · [正文排版](../../../web/src/components/MemoEditor/README.md)
-- 左侧看板在固定的视口框内独立纵滚。账户、统计、日历、标签与回收站处于同一滚动区域。统计、日历和标签区块之间用 24px 间隔，桌面标签行间距为 4px，回收站紧随最后一个标签，保持同样的间距。置顶标签区与普通标签之间保留分隔，展开的标签树有层级引导线。 [侧栏](../../../web/src/components/AppSidebar/AppSidebar.tsx) · [侧栏间距](../../../web/src/components/AppSidebar/sidebar-layout.ts)
+- `RootLayout` 管理居中的桌面工作区、侧栏、路由内容及全局弹窗。侧栏默认 320px，拖动分隔线调整，双击复位。键盘聚焦分隔线后可用方向键调整，Home 和 End 可到达宽度边界。宽度偏好保存在当前浏览器，渲染会按窗口限宽。常规单列和多列工作区上限为 1064px 和 1280px，自动列或全宽由显示设置决定。 [页面骨架](../../../web/src/layouts/RootLayout.tsx) · [侧栏宽度](../../../web/src/components/AppSidebar/useSidebarWidth.ts) · [调整手柄](../../../web/src/components/AppSidebar/SidebarResizeHandle.tsx)
+- 主题偏好支持浅色、深色、跟随系统和纸张。跟随系统时先解析实际配色，再设置 `<html data-theme>`。浅色用暖灰绿画布与暖白卡片，深色用近黑墨绿侧栏、炭绿画布与浅色正文。笔记正文统一 15px 字号和 26px 行高，拉丁字符与数字优先使用内置 Barlow，中文使用平台字体回退。纸张主题沿用暖棕色配对。 [配色表](references/desktop-visual-design.md#cat_two-主题) · [默认主题](../../../web/src/themes/default.css) · [正文排版](../../../web/src/components/MemoEditor/README.md)
+- 左侧看板使用内收的独立滚动面板，与右侧工作区留出 24px 至 32px 间隔。账户、统计、日历、标签与回收站处于同一滚动区域。默认宽度下，区块间距为 28px，统计数字用 24px，日历放入内层面板。桌面标签行高 38px、间距 6px，回收站紧随最后一个标签，保持同样的间距。置顶标签区与普通标签之间有分隔，展开的标签树有层级引导线。 [侧栏](../../../web/src/components/AppSidebar/AppSidebar.tsx) · [侧栏间距](../../../web/src/components/AppSidebar/sidebar-layout.ts)
 - 侧栏统计显示当前账户的未归档笔记数、不同标签路径数和记录天数。复用侧栏的统计查询，随笔记变更更新，并独立于列表筛选和排序。日期展示、日历方格、按日筛选和记录天数都以 `Asia/Shanghai` 为准。 [统计组件](../../../web/src/components/AppSidebar/CollectionStats.tsx) · [统计查询](../../../web/src/hooks/useFilteredMemoStats.ts) · [时区逻辑](../../../web/src/lib/time-zone.ts)
-- 标签的置顶、树形和列表选中行使用 `rgb(57, 115, 84)`（`#397354`）背景和白字，回收站选中使用同一行样式。标签计数在鼠标进入标签区或键盘焦点进入区内时可见，辅助技术仍可读取。打开回收站时右侧切换为已删除的笔记，左侧保留归档或未归档的来源及日历、标签。点日期或标签返回相应列表筛选。 [标签](../../../web/src/components/AppSidebar/TagsSection.tsx) · [统一行状态](../../../web/src/components/AppSidebar/SidebarRow.tsx) · [回收站](../../../web/src/pages/Trash.tsx)
+- 浅色与深色中，标签的置顶、树形和列表选中行使用 `#397354` 背景和白字，回收站选中使用同一行样式。纸张模式使用自身的强调色。标签计数在鼠标进入标签区或键盘焦点进入区内时可见，辅助技术仍可读取。打开回收站时右侧切换为已删除的笔记，左侧保留归档或未归档的来源及日历、标签。点日期或标签返回相应列表筛选。 [标签](../../../web/src/components/AppSidebar/TagsSection.tsx) · [统一行状态](../../../web/src/components/AppSidebar/SidebarRow.tsx) · [回收站](../../../web/src/pages/Trash.tsx)
+- 普通标签按名称排序，保留置顶顺序。标签行菜单用确认弹窗区分仅移除标签和把笔记移入回收站。搜索弹窗提供可移除的「无标签」筛选，使用它时清除具体标签选择。 [标签菜单](../../../web/src/components/AppSidebar/TagsSection.tsx) · [搜索弹窗](../../../web/src/components/AppSidebar/QuickFindDialog.tsx)
 
 ## 笔记列表与编辑器
 

@@ -137,19 +137,37 @@ func TestGetUserStats_TagCountPreservesExactIdentity(t *testing.T) {
 		},
 	})
 	require.NoError(t, err)
+	_, err = ts.Store.CreateMemo(ctx, &store.Memo{
+		UID:        "legacy-tag-stats-memo",
+		CreatorID:  user.ID,
+		Content:    "Only child paths present in the old payload",
+		Visibility: store.Public,
+		Payload: &storepb.MemoPayload{
+			Tags: []string{"book/history/local", "book/biography"},
+		},
+	})
+	require.NoError(t, err)
 
 	response, err := ts.Service.GetUserStats(userCtx, &apipb.GetUserStatsRequest{
 		Name: fmt.Sprintf("users/%s", user.Username),
 	})
 	require.NoError(t, err)
-	require.Equal(t, map[string]int32{
-		"book":         1,
-		"book/fiction": 1,
-		"Work":         1,
-		"work":         1,
-		composedTag:    1,
-		decomposedTag:  1,
-	}, response.TagCounts)
+	want := map[string]int32{
+		"book":               2,
+		"book/fiction":       1,
+		"book/history":       1,
+		"book/history/local": 1,
+		"book/biography":     1,
+		"Work":               1,
+		"work":               1,
+		composedTag:          1,
+		decomposedTag:        1,
+	}
+	require.Equal(t, want, response.TagCounts)
+	listed, err := ts.Service.ListUserStats(userCtx, &apipb.ListUserStatsRequest{Parent: fmt.Sprintf("users/%s", user.Username)})
+	require.NoError(t, err)
+	require.Len(t, listed.UserStats, 1)
+	require.Equal(t, want, listed.UserStats[0].TagCounts)
 }
 
 func TestGetUserStats_MemoUpdatedTimestamps(t *testing.T) {

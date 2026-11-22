@@ -37,14 +37,14 @@ describe("useSidebarWidth", () => {
     expect(result.current.maxWidth).toBe(SIDEBAR_MAX_WIDTH);
   });
 
-  it("restores a persisted width on the first render", () => {
-    localStorage.setItem(STORAGE_KEY, "312");
+  it("restores a persisted width from before the wider default on the first render", () => {
+    localStorage.setItem(STORAGE_KEY, "280");
 
     const { result } = renderHook(() => useSidebarWidth());
 
     // Read synchronously in the state initializer, so the stored width is the first painted
     // width rather than a correction applied after the default flashes.
-    expect(result.current.width).toBe(312);
+    expect(result.current.width).toBe(280);
   });
 
   it("persists a committed width", () => {

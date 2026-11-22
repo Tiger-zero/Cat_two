@@ -55,6 +55,7 @@ describe("Quick Find navigation", () => {
     state.currentUser = { name: "users/alice" };
     state.filters = [];
     state.setFilters.mockClear();
+    state.removeFilter.mockClear();
   });
 
   const renderSearch = (initialEntry = "/") => {
@@ -76,6 +77,20 @@ describe("Quick Find navigation", () => {
   };
   const openQuickFind = () => fireEvent.click(screen.getByRole("button", { name: "Open Quick Find" }));
 
+  it("focuses the query on open and returns to the trigger when dismissed", async () => {
+    renderSearch();
+    const trigger = screen.getByRole("button", { name: "Open Quick Find" });
+    act(() => trigger.focus());
+    fireEvent.click(trigger);
+
+    const dialog = within(await screen.findByRole("dialog", { name: "common.search" }));
+    expect(dialog.getByRole("textbox")).toHaveFocus();
+    fireEvent.click(dialog.getByRole("button", { name: "common.close" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(trigger).toHaveFocus();
+    expect(state.setFilters).not.toHaveBeenCalled();
+  });
+
   it("submits a text query from the input's search action", async () => {
     renderSearch();
     openQuickFind();
@@ -84,6 +99,29 @@ describe("Quick Find navigation", () => {
 
     expect(state.setFilters).toHaveBeenCalledWith([{ factor: "contentSearch", value: "roadmap" }]);
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+  });
+
+  it.each(["/", "/archived"])("applies untagged in %s while preserving the date and typed search", async (pathname) => {
+    const date = { factor: "displayTime", value: "2026-11-21" } as const;
+    state.filters = [date, { factor: "tagSearch", value: "work" }, { factor: "contentSearch", value: "old" }];
+    const router = renderSearch(pathname);
+    openQuickFind();
+    fireEvent.change(await screen.findByRole("textbox"), { target: { value: "roadmap" } });
+    fireEvent.click(screen.getByRole("button", { name: "memo.filters.untagged" }));
+
+    expect(router.state.location.pathname).toBe(pathname);
+    expect(state.setFilters).toHaveBeenCalledWith([date, { factor: "contentSearch", value: "roadmap" }, { factor: "untagged", value: "" }]);
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+  });
+
+  it("renders untagged as a removable facet", () => {
+    const date = { factor: "displayTime", value: "2026-11-21" } as const;
+    state.filters = [{ factor: "untagged", value: "" }, date];
+    renderSearch("/archived");
+    expect(screen.getByText("memo.filters.untagged")).toBeInTheDocument();
+    fireEvent.click(screen.getAllByRole("button", { name: "memo.filters.remove" })[0]);
+    const predicate = state.removeFilter.mock.calls[0][0];
+    expect(state.filters.filter((filter) => !predicate(filter))).toEqual([date]);
   });
 
   it("preserves the draft when changing modes and submits CEL with Enter", async () => {
