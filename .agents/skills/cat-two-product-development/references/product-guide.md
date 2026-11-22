@@ -1,14 +1,14 @@
 # Cat_two 功能与实现
 
-Cat_two 是面向单账户使用的自托管笔记应用，通过 Docker 部署，在桌面浏览器中使用，默认用 SQLite。旧版本遗留的笔记、附件和关联数据按原所有者保留。此页按仓库当前源码记录产品行为。核对在用镜像时，读取实例 `/api/instance/profile` 的 `version` 和 `commit`，再查看镜像标签对应的源码。 [部署与镜像说明](../../../../README.md)
+Cat_two 是面向单账户使用的自托管笔记应用，通过 Docker 部署，在桌面浏览器中使用，默认用 SQLite。旧版本遗留的笔记、附件和关联数据按原所有者保留。此页按仓库当前源码记录产品行为。核对在用镜像时，读取实例 `/api/instance/profile` 的 `version` 和 `commit`，再查看镜像标签对应的源码。 [部署与维护](deployment.md)
 
 ## 网页里的功能
 
-- 「设置 → 安全 → 黑名单 IP」供管理员查看连续输错密码后被禁止登录的 IP、封禁时间及解除入口。封禁随 SQLite 保存。 [登录规则和主机解封](../../../../README.md#登录防护和-ip-解封)
+- 「设置 → 安全 → 黑名单 IP」供管理员查看连续输错密码后被禁止登录的 IP、封禁时间及解除入口。封禁随 SQLite 保存。 [登录规则和主机解封](deployment.md#登录防护和-ip-解封)
 
 | 功能 | 当前用法 | 代码入口 |
 | --- | --- | --- |
-| 登录和安全 | 首次启动按页面引导创建管理员，随后关闭网页注册。在「系统」修改密码，在「我的账户」启用验证器两步验证。丢失验证器时按 README 从运行中的容器恢复。 | [登录与会话](external-api.md#凭据和可见性) · [账户服务](../../../../server/api/user_service.go) · [恢复步骤](../../../../README.md#重置两步验证) |
+| 登录和安全 | 首次启动按页面引导创建管理员，随后关闭网页注册。在「系统」修改密码，在「我的账户」启用验证器两步验证。丢失验证器时可从运行中的容器恢复。 | [登录与会话](external-api.md#凭据和可见性) · [账户服务](../../../../server/api/user_service.go) · [恢复步骤](deployment.md#重置两步验证) |
 | 日历和笔记列表 | 「日历」打开笔记列表。点侧栏日期筛选当天，选中日期后新笔记带上该日，点筛选标签的「×」清除。同一天更改搜索或标签时，手动设置的笔记时间会保留。日历、时间显示和日期筛选用 `Asia/Shanghai`。旧按日链接会转到当前列表。 | [首页](../../../../web/src/pages/Home.tsx) · [日期工具](../../../../web/src/lib/calendar-utils.ts) · [旧日历链接](../../../../web/src/router/LegacyCalendarRedirect.tsx) |
 | 侧栏统计 | 首页日历上方显示当前账户的未归档笔记数、不同的标签路径数和记录天数。记录天数按上海时区的笔记创建日期去重。统计复用侧栏查询，随笔记变更更新，独立于当前筛选和日历排序设置。 | [统计查询](../../../../web/src/hooks/useFilteredMemoStats.ts) · [统计接口](external-api.md#统计和标签) |
 | 搜索和筛选 | 在搜索面板选择「未归档」或「归档」，可按关键词、CEL 或「无标签」筛选。日期和可组合的筛选随检索保留。「全部笔记」可按创建时间或更新时间排序、筛选来源及多选导出。网页创建记为「网页端」，旧笔记缺少来源时显示「未记录」。旧 `/views` 链接会打开笔记列表。 | [搜索](../../../../web/src/components/AppSidebar/QuickFindDialog.tsx) · [列表菜单](../../../../web/src/components/MemoFeedMenu.tsx) · [CEL](../../../../filter/README.md) |
@@ -48,16 +48,16 @@ flowchart LR
 
 ## 数据、备份和升级
 
-- Docker 和 NAS 共用一份 Compose，默认将 `cat_two_data` 命名卷挂载到 `/var/opt/memos`。NAS 可以直接替换服务的挂载源，指向宿主机绝对路径。升级时备份实际数据源、保留项目和挂载，并确保运行身份可读写。 [Compose 配置](../../../../compose.yaml) · [备份和升级](../../../../README.md#备份和升级)
+- Docker 和 NAS 共用一份 Compose，默认将 `cat_two_data` 命名卷挂载到 `/var/opt/memos`。NAS 可以直接替换服务的挂载源，指向宿主机绝对路径。升级时备份实际数据源、保留项目和挂载，并确保运行身份可读写。 [Compose 配置](../../../../compose.yaml) · [备份和升级](deployment.md#备份和升级)
 - 「设置 → 存储」集中显示数据目录和使用量。笔记正文保存在 `notes/` 的 Markdown 文件，新附件保存在 `assets/`。SQLite 管理账户、笔记元数据、标签、引用和搜索索引。通过应用、REST 或 MCP 修改内容，由应用一并更新文件和索引。 [存储设置](../../../../web/src/components/Settings/StorageSection.tsx)
-- 完整实例备份使用一致性快照，或先停止服务再复制数据目录和部署配置。同一次备份的 SQLite 和文件目录一起恢复。旧 SQLite 附件和 S3 对象在升级时写入 `assets/`，原本地附件继续从原路径读取。升级前也备份独立目录和旧对象存储，保留 S3 读取凭据直到迁移成功。用备份副本和独立 Compose 项目验证恢复。 [恢复操作](../../../../README.md#备份和升级)
+- 完整实例备份使用一致性快照，或先停止服务再复制数据目录和部署配置。同一次备份的 SQLite 和文件目录一起恢复。旧 SQLite 附件和 S3 对象在升级时写入 `assets/`，原本地附件继续从原路径读取。升级前也备份独立目录和旧对象存储，保留 S3 读取凭据直到迁移成功。用备份副本和独立 Compose 项目验证恢复。 [恢复操作](deployment.md#备份和升级)
 - 多选可导出最多 100 条笔记，也可在「设置 → 导出和导入」导出整个账户的笔记。ZIP 含 Markdown、笔记元数据和可归档附件。导入时先预演，可保留现有、覆盖或创建副本。完成后根据逐项报告检查附件、引用、评论和归档状态。[导入导出](../../../../web/src/components/Settings/MemoExportSection.tsx) · [归档格式](../../../../core/memoexport/format.go)
 - ZIP 导入可恢复同一作者的归档笔记及评论层级。新导出的 ZIP 原样存储附件数据，易压缩文件较多时归档可能变大。导入仍会检查解压大小和压缩比，已经超出限制的旧 ZIP 仍需从原实例重新导出。覆盖导入时，归档未携带的笔记引用仍保留。 [评论规则](../../../../store/memo_comment.go) · [ZIP 读写](../../../../core/memoexport/) · [导入实现](../../../../server/api/user_service_memo_import.go)
 
 ## 外部集成
 
-- 对外 REST 路由、MCP 工具参数、凭据的权限、分页和写回 Markdown 的约定集中维护在外部接口参考。 [外部接口](external-api.md) · [公网部署](../../../../README.md#在公网部署)
-- 「设置 → 通知」可分别启用 Telegram Bot 私聊和企业微信自建应用，接收指定发件人的文本。消息写成管理员的私有笔记并自动标记 `#Telegram` 或 `#微信`，保存成功后原会话收到 `Yes!`。通过「设置 → 网络」可为 Telegram 轮询和回复指定代理。保存设置后立即生效，配置随数据卷保留。 [配置说明](../../../../README.md#telegram-和企业微信收件) · [代理说明](../../../../README.md#telegram-网络代理) · [笔记写入](../../../../server/api/memo_capture.go)
+- 对外 REST 路由、MCP 工具参数、凭据的权限、分页和写回 Markdown 的约定集中维护在外部接口参考。 [外部接口](external-api.md) · [公网部署](deployment.md#在公网部署)
+- 「设置 → 通知」可分别启用 Telegram Bot 私聊和企业微信自建应用，接收指定发件人的文本。消息写成管理员的私有笔记并自动标记 `#Telegram` 或 `#微信`，保存成功后原会话收到 `Yes!`。通过「设置 → 网络」可为 Telegram 轮询和回复指定代理。保存设置后立即生效，配置随数据卷保留。 [配置说明](deployment.md#telegram-和企业微信收件) · [代理说明](deployment.md#telegram-网络代理) · [笔记写入](../../../../server/api/memo_capture.go)
 
 在「设置 → MCP 和 API」管理连接。普通 PAT 用于 REST。专用 MCP 令牌创建后可通过 Streamable HTTP 调用 `/mcp`，有效期为 7 天（默认）、14 天、1 个日历年或永久。令牌可选只读或读写，默认读写。到期或删除连接后，下一次请求被拒绝。设置会显示权限、首次连接的客户端 IP 和令牌到期时间。 [API](../../../../proto/api/README.md) · [接入 Codex](../../../../plugins/cat-two-notes/README.md#连接-nas)
 
@@ -71,4 +71,4 @@ flowchart LR
 
 旧镜像可用工具发现结果选择原有查询和逐条读取工具。参数、结果分页和兼容用法见工具说明。[MCP 参数与范围](../../../../server/mcp/README.md#tool-surface) · [笔记工作流](../../../../plugins/cat-two-notes/skills/organize-notes/SKILL.md)
 
-开发、测试和镜像发布流程见总体开发 Skill 和 README。 [总体开发](../../cat-two-development/SKILL.md) · [构建和发布镜像](../../../../README.md#构建和发布镜像)
+开发、测试和镜像发布流程见项目开发文档。 [总体开发](../../cat-two-development/SKILL.md) · [镜像构建与发布](../../cat-two-development/references/container-release.md)

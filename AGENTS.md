@@ -5,7 +5,7 @@ repo. If a fact here conflicts with source files or CI config, trust the source 
 
 ## Project Snapshot
 
-Cat_two is a self-hosted personal note-taking app based on Fumos and Memos.
+Cat_two is a self-hosted personal note-taking app based on Memos.
 
 - Backend: Go 1.27.4, net/http, Connect RPC, gRPC-Gateway, Protocol Buffers.
 - Frontend: React 19, TypeScript 7, Vite 8, Tailwind CSS v4, `@usememos/ui` on Base UI, React Query v5.

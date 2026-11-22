@@ -4,7 +4,7 @@ AI 客户端用 MCP 查找、整理和写回笔记。脚本、附件传输及回
 
 ## 凭据和可见性
 
-- **登录防护** 同一 IP 连续 6 次密码验证失败会被禁止发起新的登录。第 6 次及之后的登录请求返回 `403` 和 `LOGIN_IP_BLOCKED`。登录和续期用标准 `Set-Cookie` 和 `Cookie` 处理刷新令牌。每次登录有独立会话 ID，退出或撤销该会话后，后续请求会拒绝其访问和刷新凭据。黑名单由管理员会话在网页中维护。 [解封说明](../../../../README.md#登录防护和-ip-解封)
+- **登录防护** 同一 IP 连续 6 次密码验证失败会被禁止发起新的登录。第 6 次及之后的登录请求返回 `403` 和 `LOGIN_IP_BLOCKED`。登录和续期用标准 `Set-Cookie` 和 `Cookie` 处理刷新令牌。每次登录有独立会话 ID，退出或撤销该会话后，后续请求会拒绝其访问和刷新凭据。黑名单由管理员会话在网页中维护。 [解封说明](deployment.md#登录防护和-ip-解封)
 - **MCP** 连接到 `/mcp`，使用 Streamable HTTP，在每次请求发送 `Authorization: Bearer <MCP 连接令牌>`。在「设置 → MCP 和 API」创建，支持 7 天（默认）、14 天、1 个日历年或永久。创建时可选 `read_only` 或 `read_write`，默认和旧连接为读写。到期或删除后下一次请求会被拒绝。连接管理的 `/api/mcpConnections` 要求网页登录会话。 [连接说明](../../../../server/mcp/README.md#connecting-a-client) · [管理权限](../../../../server/api/mcp_connection_handler.go)
 - **REST** 在同一设置页创建个人访问令牌（PAT），发送 `Authorization: Bearer <PAT>`，先用 `GET /api/auth/me` 核对归属。PAT 的权限按持有账户及各接口的权限检查决定，目前无逐令牌的只读、按笔记或按标签授权范围。可为各集成单独发放和撤销令牌。密码修改需要交互会话。MCP 连接令牌仅用于 `/mcp`。 [PAT 字段](../../../../proto/api/user_service.proto) · [认证](../../../../server/auth/authenticator.go) · [密码修改约束](../../../../server/api/user_service.go)
 - **数据** 仅活跃的笔记作者可读写其笔记。REST 和 MCP 返回的笔记可见性为 `PRIVATE`，旧链接无法分享笔记。笔记链接 `/memos/<uid>` 仍要求登录并核对作者。匿名接口以 ACL 为准，例如实例概况可匿名读取。上游定义里仍保留部分已停用的空间、身份提供方和 Webhook 路由，个人模式调用会返回 `UNIMPLEMENTED`。 [笔记权限](../../../../core/access/memo.go) · [匿名路由](../../../../server/api/acl_config.go) · [停用路由](../../../../server/api/retired_modules.go)
@@ -57,11 +57,11 @@ AI 客户端用 MCP 查找、整理和写回笔记。脚本、附件传输及回
 ## 变更通知和收件
 
 - 需要即时刷新时，使用 Bearer 认证连接 `GET /api/sse`。收到 `{"type":"memo.changed"}` 后通过列表或详情重新读取。通知只包含事件类型。SSE 只发送连接期间的事件，断线重连后重新查询。个人模式停用了通用出站 Webhook 管理和发送。 [SSE 路由](../../../../server/api/sse_handler.go) · [事件定义](../../../../server/api/sse_hub.go) · [Webhook 发送限制](../../../../server/api/memo_service_webhooks.go)
-- Telegram Bot 私聊使用长轮询，企业微信自建应用使用 `/integrations/wecom` 接收签名加密回调。启用前按部署说明配置发件人。接入只保存纯文本，由唯一活跃管理员持有，加入渠道标签，按消息 ID 去重，成功后回复 `Yes!`。日常 AI 或浏览器集成可直接用 MCP 或 REST 写入。 [收件配置](../../../../README.md#telegram-和企业微信收件) · [写入与去重](../../../../server/api/memo_capture.go)
+- Telegram Bot 私聊使用长轮询，企业微信自建应用使用 `/integrations/wecom` 接收签名加密回调。启用前按部署说明配置发件人。接入只保存纯文本，由唯一活跃管理员持有，加入渠道标签，按消息 ID 去重，成功后回复 `Yes!`。日常 AI 或浏览器集成可直接用 MCP 或 REST 写入。 [收件配置](deployment.md#telegram-和企业微信收件) · [写入与去重](../../../../server/api/memo_capture.go)
 - 「通知」和「网络」使用 `/api/notificationSettings` 和 `/api/networkSettings` 的 `GET` 与 `PATCH`，要求活跃的管理员网页登录会话。读取返回启用状态、来源、渠道标识及凭据是否已设置。代理 URL 和渠道密钥为只写字段，更新时留空保留旧值。 [设置接口](../../../../server/api/capture_settings.go)
 - 企业微信配置中的 `wecom.callbackUrl` 是可读的手动公网地址。`PATCH` 省略该字段时保留原值，传空字符串时清除。`wecomDefaultCallbackUrl` 来自符合格式的实例公网域名。两者都支持 HTTP 或 HTTPS 和显式端口，填写裸域名时默认使用 HTTPS。保存只校验格式，公网连通性以企业微信后台的 GET 验证为准。 [地址格式](../../../../core/messagecapture/wecom_callback.go) · [接收消息与事件](https://developer.work.weixin.qq.com/document/path/90238)
 - 通知更新提交一条渠道，`telegram` 用 `enabled`、`userId` 和 `botToken`，`wecom` 用 `enabled`、`corpId`、`agentId`、`userId`、`callbackToken` 和 `encodingAesKey`。首次保存前各渠道读取容器环境，手动启停按保存值生效。企业微信回调路径由通知设置返回。 [通知配置](../../../../core/messagecapture/configuration.go)
-- 网络更新提交 `enabled` 和可选的 `proxyUrl`，接受 HTTP、HTTPS、SOCKS5 和 SOCKS5H。代理用于 Telegram 轮询和回复。未保存时遵循容器的环境代理与 `NO_PROXY`，保存为停用时直连。 [代理规则](../../../../core/messagecapture/network.go) · [部署配置](../../../../README.md#telegram-网络代理)
+- 网络更新提交 `enabled` 和可选的 `proxyUrl`，接受 HTTP、HTTPS、SOCKS5 和 SOCKS5H。代理用于 Telegram 轮询和回复。未保存时遵循容器的环境代理与 `NO_PROXY`，保存为停用时直连。 [代理规则](../../../../core/messagecapture/network.go) · [部署配置](deployment.md#telegram-网络代理)
 
 ## 共创能力演进
 

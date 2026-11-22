@@ -9,16 +9,16 @@
 ### 对外接口与公网加固
 
 - 整理 REST、MCP、文件下载、回收站、ZIP、SSE 和消息回调的实际入口。记录 PAT、MCP 连接令牌和网页登录的权限边界、分页规则、Markdown 写回和重试。 [外部接口](../../cat-two-product-development/references/external-api.md)
-- 会话刷新令牌按单实例 SQLite 部署原子轮换，凭据变更以数据库为准。HTTPS 公网配置强制使用安全 Cookie，安全上下文的多标签页串行刷新。附件读权限前置，Connect 大上传先验证身份，个人 MCP 上限调为 16 MiB。企业微信握手只返回经过验证的挑战。代理信任默认关闭，公网文档给出 HTTPS 回源和本机绑定。 [公网部署](../../../../README.md#在公网部署)
+- 会话刷新令牌按单实例 SQLite 部署原子轮换，凭据变更以数据库为准。HTTPS 公网配置强制使用安全 Cookie，安全上下文的多标签页串行刷新。附件读权限前置，Connect 大上传先验证身份，个人 MCP 上限调为 16 MiB。企业微信握手只返回经过验证的挑战。代理信任默认关闭，公网文档给出 HTTPS 回源和本机绑定。 [公网部署](../../cat-two-product-development/references/deployment.md#在公网部署)
 - 用 `govulncheck` v1.10.0 扫描 Go 的 Linux AMD64 生产构建及原 `0.08` 发布产物，漏洞库快照为 2026-11-11。报告的 `GO-2026-5932` 涉及 `golang.org/x/crypto/openpgp`。用生产构建标签核对当前和 `0.08` 源码的依赖闭包，两者均未引入该包。发布二进制剥离符号，二进制扫描精度限于模块。 [Go 公告](https://pkg.go.dev/vuln/GO-2026-5932)
 - 更新前端依赖锁。`pnpm audit --prod` 从 21 条降至 0 条，完整 `pnpm audit` 从 57 条降至 0 条。冻结安装、类型和样式检查、前端构建通过。补齐测试临时目录遗漏的共享夹具后，涉及的测试复测通过，两轮覆盖 1,346 项。Chromium 本机安全上下文中的两个标签页共享会话时只发起一次刷新。 [前端依赖](../../../../web/package.json) · [刷新测试](../../../../web/tests/session-refresh.test.ts)
 - Docker 运行层更新至受支持的 Alpine 3.24，构建时升级系统包。AMD64 候选的 zlib 和 OpenSSL 已达到 Alpine 安全库列出的修复版本，ARM64 核对官方软件包索引。 [Dockerfile](../../../../scripts/Dockerfile) · [Alpine 安全数据库](https://secdb.alpinelinux.org/)
-- 后端、核心及 SQLite 存储的竞态测试通过。两份 Compose 验证了默认端口映射及本机绑定、HTTPS 基址、代理 IP 配置。用本轮源码、发布模式网页资源和升级后的运行层组装本地 AMD64 候选，在独立卷验证新装、重建及从 `0.08` 升级后的笔记读写。公网入口仍需按实际域名、防火墙和代理验收。 [冒烟测试](../../../../scripts/release_smoke_test.sh) · [部署说明](../../../../README.md#在公网部署)
+- 后端、核心及 SQLite 存储的竞态测试通过。两份 Compose 验证了默认端口映射及本机绑定、HTTPS 基址、代理 IP 配置。用本轮源码、发布模式网页资源和升级后的运行层组装本地 AMD64 候选，在独立卷验证新装、重建及从 `0.08` 升级后的笔记读写。公网入口仍需按实际域名、防火墙和代理验收。 [冒烟测试](../../../../scripts/release_smoke_test.sh) · [部署说明](../../cat-two-product-development/references/deployment.md#在公网部署)
 
 ### 登录页检查与 IP 黑名单
 
 - 用独立实例和虚构凭据核对公开页面、实例资料、用户接口和错误响应。未观察到管理员用户名、邮箱、密码、密码哈希或签名密钥对匿名调用者可见。账号不存在与密码错误返回一致，并对缺少密码哈希的账号执行同成本的 bcrypt 校验。登录及续期拒绝不可信浏览器来源，REST 用标准 HttpOnly Cookie 返回刷新令牌。旧 `Grpc-Metadata-Cookie` 续期请求仍可在未提供标准 Cookie 时使用。 [隐私与 Cookie 回归](../../../../server/test/login_privacy_test.go)
-- SQLite 架构升至 `26.11.7`。IPv4 和 IPv6 地址统一规范化，连续 6 次密码失败后持久化封禁。完成登录清除未达阈值的计数。验收覆盖重启、并发计数、IPv6、分页、变造代理头、PAT 和非管理员拦截。真实 Chromium 验证先保留管理员会话，再由另一会话触发封禁、从安全设置解除及重新登录。 [黑名单回归](../../../../server/test/login_blocklist_test.go) · [部署主机恢复](../../../../README.md#登录防护和-ip-解封)
+- SQLite 架构升至 `26.11.7`。IPv4 和 IPv6 地址统一规范化，连续 6 次密码失败后持久化封禁。完成登录清除未达阈值的计数。验收覆盖重启、并发计数、IPv6、分页、变造代理头、PAT 和非管理员拦截。真实 Chromium 验证先保留管理员会话，再由另一会话触发封禁、从安全设置解除及重新登录。 [黑名单回归](../../../../server/test/login_blocklist_test.go) · [部署主机恢复](../../cat-two-product-development/references/deployment.md#登录防护和-ip-解封)
 
 ### 镜像 0.09
 
@@ -28,19 +28,25 @@
 
 17:28 发布 Docker Hub `0.10`。`0.10`、`latest` 和 `sha-0b9398d506e9b12d0895221fe7f203d7c57ab148` 共用镜像索引 `sha256:0edd2cbbe7fa6ed9da0211e528c49a1ddfb34aef87dc8f27da03bd16fe508e0b`。Linux AMD64 与 ARM64 均对应提交 `0b9398d50`。本版包含本地笔记和附件迁移、会话及 MCP 加固、可重试的笔记写入、通知与 Telegram 代理设置，以及开发 Skill 拆分。 [源码](https://github.com/Tiger-zero/Cat_two/commit/0b9398d506e9b12d0895221fe7f203d7c57ab148) · [发布](https://github.com/Tiger-zero/Cat_two/actions/runs/45007206189) · [Docker Hub](https://hub.docker.com/r/tiger2896/cat_two/tags?name=0.10)
 
-用正式 AMD64 镜像和独立 SQLite 卷验证新装、容器重建和从 `0.09` 升级。Chromium 核对实例提交、通知配置、代理认证及配置持久化，并用签名加密的企业微信模拟消息验证笔记写入和 `Yes!` 回复。 [升级与备份](../../../../README.md#备份和升级)
+用正式 AMD64 镜像和独立 SQLite 卷验证新装、容器重建和从 `0.09` 升级。Chromium 核对实例提交、通知配置、代理认证及配置持久化，并用签名加密的企业微信模拟消息验证笔记写入和 `Yes!` 回复。 [升级与备份](../../cat-two-product-development/references/deployment.md#备份和升级)
 
 ### 镜像 0.11
 
 17:56 发布 Docker Hub `0.11`。`0.11`、`latest` 和 `sha-6b4bfd7631d7041823c594f7eb9e5f70124aa014` 共用镜像索引 `sha256:44aa6dee8549aff23246f1e3457413c48261d229436724d6c8b6675b04ab05a8`。Linux AMD64 与 ARM64 均对应提交 `6b4bfd763`。本版支持在企业微信通知设置中保存和复制带端口的公网回调地址。 [源码](https://github.com/Tiger-zero/Cat_two/commit/6b4bfd7631d7041823c594f7eb9e5f70124aa014) · [发布](https://github.com/Tiger-zero/Cat_two/actions/runs/45009583745) · [Docker Hub](https://hub.docker.com/r/tiger2896/cat_two/tags?name=0.11)
 
-正式 AMD64 镜像通过独立 SQLite 卷的新装、重建和从 `0.10` 升级验证。Chromium 核对镜像提交、局域网 IP 提示、带端口的 HTTPS 地址保存与重启保留，并用模拟企业微信请求验证签名 GET 挑战和 POST 收件。 [企业微信配置](../../../../README.md#企业微信自建应用)
+正式 AMD64 镜像通过独立 SQLite 卷的新装、重建和从 `0.10` 升级验证。Chromium 核对镜像提交、局域网 IP 提示、带端口的 HTTPS 地址保存与重启保留，并用模拟企业微信请求验证签名 GET 挑战和 POST 收件。 [企业微信配置](../../cat-two-product-development/references/deployment.md#企业微信自建应用)
 
 ### 镜像 0.12
 
 18:44 核对 Docker Hub `0.12`、`latest` 和 `sha-7e7a961553981644edaa3ccb68c04b73346696dd`。三个标签使用同一镜像索引 `sha256:9825a6f0f6259bd954388b3c8dde403e6ac4058179b7d6bec230f5af72a4cdfb`，Linux AMD64 和 ARM64 的镜像配置均对应提交 `7e7a96155`。桌面主题覆盖浅色、深色、纸张和跟随系统，侧栏默认宽 320px，同版包含多级标签管理及无标签筛选。 [设计方案](../../cat-two-ui-development/references/desktop-visual-design.md) · [源码](https://github.com/Tiger-zero/Cat_two/commit/7e7a961553981644edaa3ccb68c04b73346696dd) · [发布](https://github.com/Tiger-zero/Cat_two/actions/runs/45013388369) · [Docker Hub](https://hub.docker.com/r/tiger2896/cat_two/tags?name=0.12)
 
 1431 项前端测试与 SQLite 后端 CI 通过。正式 AMD64 镜像通过独立 SQLite 卷新装、重建和从 `0.11` 升级。Chromium 在 1024px 和 1440px 桌面窗口核对主题、侧栏宽度及独立滚动、固定编辑器、双列日历弹层、搜索和设置交互，并保存笔记后读回。 [前端检查](https://github.com/Tiger-zero/Cat_two/actions/runs/45013388066) · [后端检查](https://github.com/Tiger-zero/Cat_two/actions/runs/45013230016)
+
+### 镜像 0.14
+
+21:30 发布 Docker Hub `0.14`。编号、`latest` 和 `sha-65c54c8b75ab11b94f01d89af0b338cf6eb04e3a` 指向同一索引 `sha256:cdf7c36c53f5c96848ca65818a0170b131e73681fda99bd701ecbe11822f6322`，AMD64 与 ARM64 均对应提交 `65c54c8b7`。新版包含 `#121212` 深色面板和 Node.js 24 CI 工具链更新。 [发布](https://github.com/Tiger-zero/Cat_two/actions/runs/45027528075) · [Docker Hub](https://hub.docker.com/r/tiger2896/cat_two/tags?name=0.14)
+
+正式 AMD64 镜像通过独立 SQLite 卷新装、重建及从 `0.13` 升级。Chromium 确认深色侧栏、编辑器、笔记、搜索按钮和设置面板的底色，并对照浅色和纸张主题。前端和 Proto CI 均通过。 [前端检查](https://github.com/Tiger-zero/Cat_two/actions/runs/45027528175) · [Proto 检查](https://github.com/Tiger-zero/Cat_two/actions/runs/45027528087)
 
 ## 2026-11-21（上海时间）
 
@@ -61,7 +67,7 @@
 ### 个人账户与两步验证
 
 - 15:23 首次注册创建管理员，随后关闭网页注册，停用空间等设置模块，同时保留旧账户对其已有笔记、附件和关联数据的权限。新增可选 TOTP，覆盖动态码登录、防重放和恢复后旧会话失效。21:39 写明 Cat_two 的单账户范围和独立演进原则。移植需求时从 Cat_two 的正常入口追到权限、数据和升级路径。 [个人模式和 TOTP](https://github.com/Tiger-zero/Cat_two/commit/51bfcff31) · [单账户范围](https://github.com/Tiger-zero/Cat_two/commit/86dcec0ea)
-- 15:25–15:36 更新 SSE 测试和部署、备份及两步验证恢复说明。依赖数据库会话版本的 SSE 测试需启动服务并等到响应头再断开。丢失验证器时，可在运行中的容器执行 `/usr/local/memos/memos two-factor reset --username <用户名>`，再用原密码登录并重新绑定。由宿主机操作时沿用真实部署的 Compose 文件、项目与环境。 [SSE 测试](https://github.com/Tiger-zero/Cat_two/commit/636a14e45) · [恢复说明](https://github.com/Tiger-zero/Cat_two/commit/4232a6a58) · [当前命令](../../../../README.md#重置两步验证)
+- 15:25–15:36 更新 SSE 测试和部署、备份及两步验证恢复说明。依赖数据库会话版本的 SSE 测试需启动服务并等到响应头再断开。丢失验证器时，可在运行中的容器执行 `/usr/local/memos/memos two-factor reset --username <用户名>`，再用原密码登录并重新绑定。由宿主机操作时沿用真实部署的 Compose 文件、项目与环境。 [SSE 测试](https://github.com/Tiger-zero/Cat_two/commit/636a14e45) · [恢复说明](https://github.com/Tiger-zero/Cat_two/commit/4232a6a58) · [当前命令](../../cat-two-product-development/references/deployment.md#重置两步验证)
 
 ### Codex 插件与 MCP
 
@@ -92,7 +98,7 @@
 - `0.06` 发布前两次候选取消。第一次四驱动的 `TestMigrationRejectsUnsupportedSchema/calver-newer` 仍把 `26.11.4` 当作未来版本，MySQL 另在 `TestMCPConnectionStore` 的账号删除遇到 `1615`。
   将夹具改为按嵌入的当前版本计算下一修订，并限制事务重试只处理该错误。第二次并行迁移仍使 MySQL 最后一条带级联的账号删除语句重试耗尽，故将这条固定 SQL 改为直接执行，参数使用已解码的整数账号 ID。MySQL 全量以 8 个并发通过。
   [修复夹具](https://github.com/Tiger-zero/Cat_two/commit/8d8868c67) · [删除修复](https://github.com/Tiger-zero/Cat_two/commit/53968a153) · [首次日志](https://github.com/Tiger-zero/Cat_two/actions/runs/44895305239/job/136819563071) · [复测日志](https://github.com/Tiger-zero/Cat_two/actions/runs/44896373212/job/136822797176) · [候选一](https://github.com/Tiger-zero/Cat_two/actions/runs/44895938286) · [候选二](https://github.com/Tiger-zero/Cat_two/actions/runs/44896373037)
-- 发版核验编号、`latest`、对应 SHA 标签及平台清单，从独立卷验证旧版本升级和数据回读。以 Git、Actions、注册表及实际实例分别核对源码、检查、镜像和部署。NAS 升级后可用 `/api/instance/profile` 的 `commit` 对照镜像。 [发布工作流](../../../../.github/workflows/cat-two-container.yml) · [部署说明](../../../../README.md#备份和升级)
+- 发版核验编号、`latest`、对应 SHA 标签及平台清单，从独立卷验证旧版本升级和数据回读。以 Git、Actions、注册表及实际实例分别核对源码、检查、镜像和部署。NAS 升级后可用 `/api/instance/profile` 的 `commit` 对照镜像。 [发布工作流](../../../../.github/workflows/cat-two-container.yml) · [部署说明](../../cat-two-product-development/references/deployment.md#备份和升级)
 
 ### P1 与 P2 修复
 
@@ -121,14 +127,14 @@
 - **2026-11-22 00:56**　将设置移到笔记页上方的独立弹窗，左侧选择分区，右侧单独滚动。旧 `/setting#分区` 链接登录后在首页打开对应分区。桌面浅色和深色核对草稿、筛选和笔记滚动位置、嵌套的 MCP 弹窗及关闭后的焦点。前端静态检查、1,361 项测试和生产构建通过。 [设置弹窗](../../../../web/src/components/Settings/SettingsDialog.tsx)
 - **2026-11-22 01:13**　回收站保留进入前的日历和标签，点日期或标签回到对应列表。选中标签及回收站行统一用 `RGB(57, 115, 84)`。移除保存视图的界面、REST、Connect 和 MCP 工具，旧 `/views` 链接跳到首页，旧 SQLite 记录随升级保留。浅色和深色桌面验证侧栏滚动、标签选择、恢复笔记及归档返回。前端静态检查、1,342 项测试、生产构建及 SQLite 和服务端回归验证通过。 [功能说明](../../cat-two-product-development/references/product-guide.md#网页里的功能) · [API 变更](../../../../proto/api/CHANGELOG.md)
 - **2026-11-22 01:21**　核对 Docker Hub `0.08`、`latest` 和提交标签及 AMD64、ARM64 两种平台。正式镜像通过从 `0.07` 升级的独立 SQLite 测试，旧笔记可读、新笔记可写，旧视图记录保留。Chromium 核对设置弹窗、回收站侧栏和标签颜色。 [发布记录](development-log.md#2026-11-22上海时间)
-- **2026-11-22 09:50**　接入 Telegram Bot 私聊长轮询和企业微信自建应用加密回调，限定部署配置的发件人。文本写成私有笔记，附 `#Telegram` 或 `#微信`、来源标记及实时列表刷新。按消息 ID 去重，覆盖重复投递、已有编辑和回收站。模拟 Bot API、加密回调到 SQLite、服务端回归、竞态测试、静态检查和两份 Compose 校验通过。 [收件配置](../../../../README.md#telegram-和企业微信收件)
-- **2026-11-22 09:56**　Telegram 和企业微信成功保存笔记后回复 `Yes!`。Telegram 在原私聊回复，临时拒绝时限内重试一次，回复失败时继续收件。企业微信直接返回签名加密的确认。重复投递按消息 ID 去重。模拟 Bot API、企业微信回调到 SQLite、收件竞态测试和静态检查通过。 [收件说明](../../../../README.md#telegram-和企业微信收件)
+- **2026-11-22 09:50**　接入 Telegram Bot 私聊长轮询和企业微信自建应用加密回调，限定部署配置的发件人。文本写成私有笔记，附 `#Telegram` 或 `#微信`、来源标记及实时列表刷新。按消息 ID 去重，覆盖重复投递、已有编辑和回收站。模拟 Bot API、加密回调到 SQLite、服务端回归、竞态测试、静态检查和两份 Compose 校验通过。 [收件配置](../../cat-two-product-development/references/deployment.md#telegram-和企业微信收件)
+- **2026-11-22 09:56**　Telegram 和企业微信成功保存笔记后回复 `Yes!`。Telegram 在原私聊回复，临时拒绝时限内重试一次，回复失败时继续收件。企业微信直接返回签名加密的确认。重复投递按消息 ID 去重。模拟 Bot API、企业微信回调到 SQLite、收件竞态测试和静态检查通过。 [收件说明](../../cat-two-product-development/references/deployment.md#telegram-和企业微信收件)
 - **2026-11-22 10:20**　整理 AI 共创所用的 REST、MCP、文件和事件接口及凭据范围。修复会话并发轮换、PAT 撤销记录、附件匿名探测和企业微信握手权限，收紧请求体、代理信任和浏览器来源。更新前端依赖与 Alpine 运行层。SQLite、服务端竞态、前端构建和两份 Compose 配置验证通过。 [外部接口](../../cat-two-product-development/references/external-api.md) · [安全复盘](development-log.md#对外接口与公网加固)
-- **2026-11-22 10:40**　检查匿名登录页面和相关接口的账号及凭据可见性。统一账号不存在与密码错误的 bcrypt 开销，限制登录与续期的浏览器来源，修正 REST 刷新 Cookie。连续 6 次密码失败持久封禁 IP，在「设置 → 安全」或部署主机解封。SQLite 迁移、重启、接口授权和 Chromium 六次失败到解封的流程通过，前端 1,350 项测试及生产构建通过。 [登录防护](../../../../README.md#登录防护和-ip-解封)
+- **2026-11-22 10:40**　检查匿名登录页面和相关接口的账号及凭据可见性。统一账号不存在与密码错误的 bcrypt 开销，限制登录与续期的浏览器来源，修正 REST 刷新 Cookie。连续 6 次密码失败持久封禁 IP，在「设置 → 安全」或部署主机解封。SQLite 迁移、重启、接口授权和 Chromium 六次失败到解封的流程通过，前端 1,350 项测试及生产构建通过。 [登录防护](../../cat-two-product-development/references/deployment.md#登录防护和-ip-解封)
 - **2026-11-22 10:49**　核对 Docker Hub `0.09`、`latest` 和提交标签均对应 `1071616d`，包含 AMD64 与 ARM64。用正式 AMD64 镜像通过新装、容器重建及从 `0.08` 升级的 SQLite 笔记读写验证。 [发布记录](development-log.md#镜像-009)
-- **2026-11-22 10:54**　合并 Docker 和 NAS 的 Compose。默认命名卷和 `PUID=1000`、`PGID=10`，支持自定义运行身份、沿用 `MEMOS_UID/GID` 及通过 `CAT_TWO_DATA_DIR` 绑定 NAS 原目录。用正式 `0.09` 镜像验证新装、自定义身份及两类旧部署重建后的笔记和附件。 [Compose](../../../../compose.yaml) · [切换说明](../../../../README.md#备份和升级)
-- **2026-11-22 11:04**　将 Compose 示例改为直接编辑镜像、端口、挂载和 PUID/PGID，补充中文注释，把反向代理和消息收件参数放到可选容器环境说明。用 `0.09` 验证默认命名卷、旧 NAS 路径和端口切换、笔记和附件读回，以及可选容器环境生效。同步更新工作流校验和部署文档。 [Compose](../../../../compose.yaml) · [切换说明](../../../../README.md#备份和升级)
-- **2026-11-22 11:34**　合并「存储」与「资源」，使用磁盘 Markdown 正文和本地附件，迁移旧 SQLite 和 S3 附件。验证 SQLite 迁移、失败重试、跨库隔离、附件权限和长中文文件名。前端 1,354 项测试和生产构建通过，用本地 AMD64 容器核对新装、从 `0.09` 升级及重建，用 Chromium 核对旧设置链接和统计展示。 [功能说明](../../cat-two-product-development/references/product-guide.md#数据备份和升级) · [备份和升级](../../../../README.md#备份和升级)
+- **2026-11-22 10:54**　合并 Docker 和 NAS 的 Compose。默认命名卷和 `PUID=1000`、`PGID=10`，支持自定义运行身份、沿用 `MEMOS_UID/GID` 及通过 `CAT_TWO_DATA_DIR` 绑定 NAS 原目录。用正式 `0.09` 镜像验证新装、自定义身份及两类旧部署重建后的笔记和附件。 [Compose](../../../../compose.yaml) · [切换说明](../../cat-two-product-development/references/deployment.md#备份和升级)
+- **2026-11-22 11:04**　将 Compose 示例改为直接编辑镜像、端口、挂载和 PUID/PGID，补充中文注释，把反向代理和消息收件参数放到可选容器环境说明。用 `0.09` 验证默认命名卷、旧 NAS 路径和端口切换、笔记和附件读回，以及可选容器环境生效。同步更新工作流校验和部署文档。 [Compose](../../../../compose.yaml) · [切换说明](../../cat-two-product-development/references/deployment.md#备份和升级)
+- **2026-11-22 11:34**　合并「存储」与「资源」，使用磁盘 Markdown 正文和本地附件，迁移旧 SQLite 和 S3 附件。验证 SQLite 迁移、失败重试、跨库隔离、附件权限和长中文文件名。前端 1,354 项测试和生产构建通过，用本地 AMD64 容器核对新装、从 `0.09` 升级及重建，用 Chromium 核对旧设置链接和统计展示。 [功能说明](../../cat-two-product-development/references/product-guide.md#数据备份和升级) · [备份和升级](../../cat-two-product-development/references/deployment.md#备份和升级)
 - **2026-11-22 11:34**　复核网页登录、笔记创建和并发编辑、MCP 令牌及内部调用。记录登录页脚本、会话撤销、创建幂等、导入事务、修订号、MCP 权限与限流的修改方案和验收方式。 [代码审计](code-audit-2026-11-22.md)
 - **2026-11-22 16:38**　落实登录、笔记和 MCP 审计修复。停用自定义脚本并启用 CSP，按会话撤销访问及刷新凭据。笔记创建支持幂等重试，编辑以修订号防止覆盖，ZIP 导入把置顶和归档并入保存事务。MCP 增加只读权限、鉴权前限流和批读上限，复用 Web、REST 和 Connect 的笔记服务。Chromium 验证两步登录及拦截内联脚本，本地 AMD64 镜像从 `0.09` 升级后验证旧 Cookie、笔记与附件读写和会话撤销。 [修复验证](code-audit-2026-11-22.md#修复与验证--2026-11-22) · [外部接口](../../cat-two-product-development/references/external-api.md)
-- **2026-11-22 17:01**　新增管理员「通知」和「网络」设置。Telegram 与企业微信可独立配置和启停，首次保存前沿用相应容器环境。网络代理用于 Telegram 的轮询和回复，支持 HTTP、HTTPS、SOCKS5 和 SOCKS5H。保存后在运行中应用，凭据和代理 URL 经加密存入 SQLite，读取接口仅提供这些字段的配置状态。服务端竞态、SQLite、前端 1,365 项测试和生产构建通过。用 Chromium 和本地 AMD64 容器核对网页配置、代理认证、重建后的设置和企业微信加密回调写入笔记并回复 `Yes!`。 [配置说明](../../../../README.md#telegram-和企业微信收件) · [设置接口](../../cat-two-product-development/references/external-api.md)
+- **2026-11-22 17:01**　新增管理员「通知」和「网络」设置。Telegram 与企业微信可独立配置和启停，首次保存前沿用相应容器环境。网络代理用于 Telegram 的轮询和回复，支持 HTTP、HTTPS、SOCKS5 和 SOCKS5H。保存后在运行中应用，凭据和代理 URL 经加密存入 SQLite，读取接口仅提供这些字段的配置状态。服务端竞态、SQLite、前端 1,365 项测试和生产构建通过。用 Chromium 和本地 AMD64 容器核对网页配置、代理认证、重建后的设置和企业微信加密回调写入笔记并回复 `Yes!`。 [配置说明](../../cat-two-product-development/references/deployment.md#telegram-和企业微信收件) · [设置接口](../../cat-two-product-development/references/external-api.md)

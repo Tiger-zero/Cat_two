@@ -7,7 +7,7 @@ description: 开发 Cat_two 单账户笔记的功能和业务逻辑。用于笔�
 
 Cat_two 是单账户自托管笔记应用，用于记录、整理与同步笔记。写入以 Markdown 为正文格式，旧实例的笔记、附件、引用和评论继续按原作者校验。先从本项目的行为和代码定位改动，兼容已有数据和客户端。核对部署实例时，从 `GET /api/instance/profile` 获取 `version` 和 `commit`。 [功能与实现](references/product-guide.md) · [外部接口](references/external-api.md)
 
-仓库开发流程、SQLite 例行验证、部署和镜像交付使用总体开发 Skill。桌面布局、颜色、字体、编辑器控件和交互视觉验收使用 UI 开发 Skill。操作部署中的笔记或配置 Codex 时使用 MCP Skill。 [总体开发](../cat-two-development/SKILL.md) · [桌面 UI 开发](../cat-two-ui-development/SKILL.md) · [MCP 使用](../cat-two-mcp/SKILL.md)
+仓库开发流程、SQLite 例行验证和镜像交付使用总体开发 Skill。部署、升级和恢复见部署指南。桌面布局、颜色、字体、编辑器控件和交互视觉验收使用 UI 开发 Skill。操作部署中的笔记或配置 Codex 时使用 MCP Skill。 [总体开发](../cat-two-development/SKILL.md) · [部署与维护](references/deployment.md) · [桌面 UI 开发](../cat-two-ui-development/SKILL.md) · [MCP 使用](../cat-two-mcp/SKILL.md)
 
 ## 笔记标识与写入
 
@@ -31,16 +31,16 @@ Cat_two 是单账户自托管笔记应用，用于记录、整理与同步笔记
 ## 本地文件存储
 
 - 个人模式 SQLite 管理账户、笔记元数据、标签、引用、正文内容哈希和搜索所需的正文副本。应用从数据目录下的 `notes/` 读取并校验 Markdown 文件，新附件写入 `assets/`。文件发布成功后提交 SQLite 中的引用。通过应用、API 或 MCP 更新，保持文件、引用与搜索一致。 [正文文件](../../../store/memo_body.go) · [附件写入](../../../store/attachment_files.go)
-- 升级启动时迁移旧 SQLite 正文、数据库或 S3 附件，并继续读取原有本地附件路径。校验旧数据、归档、回收站、失败重试和重建。完整回滚和恢复时，使用同一时间点的数据库、文件目录和部署配置。 [附件迁移](../../../store/attachment_migration.go) · [备份和升级](../../../README.md#备份和升级)
+- 升级启动时迁移旧 SQLite 正文、数据库或 S3 附件，并继续读取原有本地附件路径。校验旧数据、归档、回收站、失败重试和重建。完整回滚和恢复时，使用同一时间点的数据库、文件目录和部署配置。 [附件迁移](../../../store/attachment_migration.go) · [备份和升级](references/deployment.md#备份和升级)
 
 ## 账户与集成
 
-- 首次设置创建唯一管理员，随后关闭网页注册。笔记和统计只对作者开放，旧资源按原所有者校验。网页登录、两步验证、Cookie 续期和退出以独立会话处理，同 IP 连续 6 次密码失败会持久封禁该地址。管理员可在「设置 → 安全」解封。 [登录与解封](../../../README.md#登录防护和-ip-解封) · [账户与可见性](references/external-api.md#凭据和可见性)
+- 首次设置创建唯一管理员，随后关闭网页注册。笔记和统计只对作者开放，旧资源按原所有者校验。网页登录、两步验证、Cookie 续期和退出以独立会话处理，同 IP 连续 6 次密码失败会持久封禁该地址。管理员可在「设置 → 安全」解封。 [登录与解封](references/deployment.md#登录防护和-ip-解封) · [账户与可见性](references/external-api.md#凭据和可见性)
 - 网页登录会话以登录或最近一次笔记编辑为起点。满 45 分钟未编辑后，浏览器提示重新登录，服务端拒绝旧会话的访问和续期。浏览、搜索、滚动、同步和令牌轮换均不延长此期限。 [会话记录](../../../store/user_session.go) · [网页续期](references/external-api.md#凭据和可见性)
-- REST 与文件服务支持相应权限的 Web 会话与 PAT。`/mcp` 使用专用令牌，校验有效期、撤销及读写范围。设置和管理接口按网页管理员会话授权。扩展 API 时核对实际启用的工具、数据归属、分页、写入重试、限流和被撤销会话。实时更新用 SSE，断线后重新读取。 [外部接口](references/external-api.md) · [MCP 协议](../../../server/mcp/README.md) · [公网部署](../../../README.md#在公网部署)
-- Telegram 私聊和企业微信自建应用只接收授权发件人的文本，通过消息 ID 去重，保存成管理员的私有笔记并添加 `#Telegram` 或 `#微信`。保存成功后在原会话回复 `Yes!`。企业微信走签名加密的 `/integrations/wecom` 回调，Telegram 主动轮询。 [收件部署](../../../README.md#telegram-和企业微信收件) · [写入和去重](../../../server/api/memo_capture.go)
-- 企业微信公网回调可在「设置 → 通知」单独保存。域名可带端口，默认用 HTTPS 并补齐 `/integrations/wecom`。已明确填写的 HTTP 或 HTTPS URL 保留协议与端口，公网入口把请求转发给固定回调路由。企业微信保存配置时发出验签解密的 GET 请求，之后用 POST 推送消息。 [部署示例](../../../README.md#企业微信自建应用) · [企业微信回调配置](https://developer.work.weixin.qq.com/document/path/90930)
-- 「设置 → 通知」可分别启停两条收件渠道。首次保存前各自沿用容器配置，保存后按渠道即时生效。令牌和密钥留空保留原值。「设置 → 网络」配置 Telegram 轮询和回复的出站代理，首次保存前遵循 `HTTPS_PROXY` 和 `NO_PROXY`，手动关闭后直连。渠道密钥和代理 URL 加密存入实例数据库，查询返回状态、渠道标识和凭据是否已设置。 [设置接口](../../../server/api/capture_settings.go) · [加密持久化](../../../core/messagecapture/repository.go) · [网络代理](../../../README.md#telegram-网络代理)
+- REST 与文件服务支持相应权限的 Web 会话与 PAT。`/mcp` 使用专用令牌，校验有效期、撤销及读写范围。设置和管理接口按网页管理员会话授权。扩展 API 时核对实际启用的工具、数据归属、分页、写入重试、限流和被撤销会话。实时更新用 SSE，断线后重新读取。 [外部接口](references/external-api.md) · [MCP 协议](../../../server/mcp/README.md) · [公网部署](references/deployment.md#在公网部署)
+- Telegram 私聊和企业微信自建应用只接收授权发件人的文本，通过消息 ID 去重，保存成管理员的私有笔记并添加 `#Telegram` 或 `#微信`。保存成功后在原会话回复 `Yes!`。企业微信走签名加密的 `/integrations/wecom` 回调，Telegram 主动轮询。 [收件部署](references/deployment.md#telegram-和企业微信收件) · [写入和去重](../../../server/api/memo_capture.go)
+- 企业微信公网回调可在「设置 → 通知」单独保存。域名可带端口，默认用 HTTPS 并补齐 `/integrations/wecom`。已明确填写的 HTTP 或 HTTPS URL 保留协议与端口，公网入口把请求转发给固定回调路由。企业微信保存配置时发出验签解密的 GET 请求，之后用 POST 推送消息。 [部署示例](references/deployment.md#企业微信自建应用) · [企业微信回调配置](https://developer.work.weixin.qq.com/document/path/90930)
+- 「设置 → 通知」可分别启停两条收件渠道。首次保存前各自沿用容器配置，保存后按渠道即时生效。令牌和密钥留空保留原值。「设置 → 网络」配置 Telegram 轮询和回复的出站代理，首次保存前遵循 `HTTPS_PROXY` 和 `NO_PROXY`，手动关闭后直连。渠道密钥和代理 URL 加密存入实例数据库，查询返回状态、渠道标识和凭据是否已设置。 [设置接口](../../../server/api/capture_settings.go) · [加密持久化](../../../core/messagecapture/repository.go) · [网络代理](references/deployment.md#telegram-网络代理)
 
 ## 支持的内容格式
 
