@@ -4,7 +4,7 @@ import { cn } from "@/lib/utils";
 
 /** The id of the enclosing SettingGroup's title, so a SettingList inside it is named by that title. */
 export const SettingGroupTitleContext = createContext<string | undefined>(undefined);
-const SETTING_PANEL_CLASSES = "memos-panel bg-mu-canvas/45 shadow-none";
+const SETTING_PANEL_CLASSES = "memos-panel bg-mu-canvas/45 shadow-none dark:bg-mu-surface";
 
 interface SettingListProps {
   children: ReactNode;

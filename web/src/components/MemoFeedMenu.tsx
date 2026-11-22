@@ -144,7 +144,7 @@ function MemoFeedMenu({ canExport, selectedCount, exporting, onBeginSelection, o
           variant="neutral"
           icon={<SearchIcon />}
           aria-label={t("memo-feed.search")}
-          className="rounded-mu-lg"
+          className="rounded-mu-lg dark:[--mu-key:var(--mu-canvas)]"
           onClick={() => setQuickFindOpen(true)}
         >
           <span className="hidden sm:inline">{t("memo-feed.search")}</span>

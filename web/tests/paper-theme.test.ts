@@ -155,6 +155,11 @@ describe.each(["light", "dark"])("%s theme", (theme) => {
     expect(cssColor("mu-canvas")).toBe(theme === "light" ? "#f3f5f0" : "#121212");
   });
 
+  it("uses the theme's sidebar and panel backgrounds", () => {
+    expect(cssColor("memos-sidebar")).toBe(theme === "light" ? "#eaf0e8" : "#121212");
+    expect(cssColor("mu-surface")).toBe(theme === "light" ? "#fefefa" : "#121212");
+  });
+
   it("keeps the requested selected-row and composer colors", () => {
     expect(cssColor("memos-sidebar-selected")).toBe("#397354");
     expect(cssColor("memos-composer-focus")).toBe("#30cf79");

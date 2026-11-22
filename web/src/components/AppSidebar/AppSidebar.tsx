@@ -50,7 +50,10 @@ const CollectionSidebarContent = ({ context, desktop, destination }: { context: 
         ariaLabel={t("common.calendar")}
         className={
           desktop
-            ? "[&_.memos-panel]:bg-mu-surface/75 [&_.memos-panel]:py-3 [&_.memos-panel]:shadow-none @min-[284px]/sidebar:[&_.memos-panel]:px-3"
+            ? cn(
+                "[&_.memos-panel]:bg-mu-surface/75 [&_.memos-panel]:py-3 [&_.memos-panel]:shadow-none",
+                "dark:[&_.memos-panel]:bg-mu-surface @min-[284px]/sidebar:[&_.memos-panel]:px-3",
+              )
             : undefined
         }
       >
@@ -213,7 +216,7 @@ const AppSidebar = ({ className, mobile = false }: { className?: string; mobile?
         <div
           className={cn(
             "flex min-w-0 items-center justify-between gap-2",
-            !mobile && "rounded-mu-lg border border-mu-line/75 bg-mu-surface/65 p-1.5",
+            !mobile && "rounded-mu-lg border border-mu-line/75 bg-mu-surface/65 p-1.5 dark:bg-mu-surface",
           )}
         >
           <AccountMenu className={cn("min-w-0", !mobile && "flex-1")} size="header" />

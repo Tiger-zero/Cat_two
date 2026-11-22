@@ -51,7 +51,7 @@
 
     [data-theme="dark"] {
       --mu-canvas: #121212;
-      --mu-surface: #202823;
+      --mu-surface: var(--mu-canvas);
       --mu-well: #28332c;
       --mu-hover: #2d3931;
       --mu-selected: #31493c;
@@ -70,7 +70,7 @@
       --mu-accent: #a0c7ee;
       --mu-selection: rgb(135 214 173 / 24%);
       --mu-focus-edge: var(--mu-control-edge);
-      --memos-sidebar: #0e1511;
+      --memos-sidebar: var(--mu-canvas);
       --memos-tag-bg: #294339;
       --memos-tag-hover: #325245;
       --memos-tag-text: #a8ddc1;

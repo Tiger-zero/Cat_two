@@ -5,8 +5,8 @@ then its color.md). Every token is a CSS variable named `--mu-<name>`; the Tailw
 carry an `mu-` prefix (`bg-mu-surface`, `text-mu-text-secondary`).
 
 - **Light** pairs a gray-green canvas and warm white surfaces with dark green actions.
-  **Dark** uses ink-green charcoal surfaces and lighter green actions. Both use the same component roles and are
-  selected by `data-theme="light" | "dark"` on `<html>`.
+  **Dark** uses `#121212` for the canvas, sidebar and shared surfaces, with lighter green actions.
+  Both use the same component roles and are selected by `data-theme="light" | "dark"` on `<html>`.
   `utils/theme.ts` sets the attribute from the saved preference (`default`, `default-dark`, `paper` or
   `system`, kept as they are in the account setting and in localStorage) and the OS scheme.
 - **Paper** (`paper.css`) is memos' app theme: a `[data-theme="paper"]` rule that must set every name in
