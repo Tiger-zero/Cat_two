@@ -233,18 +233,35 @@ func TestPersonalMCPConnectionImmediateAccess(t *testing.T) {
 		return result
 	}
 	const memoID = "integration-note"
-	call("memo_create_memo", map[string]any{
-		"memoId": memoID,
-		"body":   map[string]any{"content": "Written by an approved integration"},
-	})
-	note := call("memo_get_memo", map[string]any{"memo": memoID})
-	content, ok := note.StructuredContent.(map[string]any)
-	require.True(t, ok, "expected structured memo response")
-	require.Equal(t, "Written by an approved integration", content["content"])
-	call("memo_update_memo", map[string]any{
+	const originalContent = "Written by an approved integration"
+	const taggedContent = originalContent + "\n\n#MCP连接"
+	requireTaggedMemo := func(note *sdkmcp.CallToolResult) {
+		t.Helper()
+		content, ok := note.StructuredContent.(map[string]any)
+		require.True(t, ok, "expected structured memo response")
+		require.Equal(t, taggedContent, content["content"])
+		require.Equal(t, []any{"MCP连接"}, content["tags"])
+	}
+	createArgs := map[string]any{
+		"memoId": memoID, "idempotent": true,
+		"body": map[string]any{"content": originalContent},
+	}
+	requireTaggedMemo(call("memo_create_memo", createArgs))
+	requireTaggedMemo(call("memo_create_memo", createArgs))
+	requireTaggedMemo(call("memo_get_memo", map[string]any{"memo": memoID}))
+	requireTaggedMemo(call("memo_create_memo", map[string]any{
+		"memoId": "already-tagged-note",
+		"body":   map[string]any{"content": taggedContent},
+	}))
+	inst.requireMemo(t, pat.Token, memoID, taggedContent)
+	updated := call("memo_update_memo", map[string]any{
 		"memo": memoID,
 		"body": map[string]any{"content": "Updated by the integration"},
 	})
+	content, ok := updated.StructuredContent.(map[string]any)
+	require.True(t, ok, "expected structured memo response")
+	require.Equal(t, "Updated by the integration", content["content"])
+	require.Empty(t, content["tags"])
 	inaccessible, err := mcp.CallTool(ctx, &sdkmcp.CallToolParams{
 		Name: "memo_get_memo", Arguments: map[string]any{"memo": legacyMemoID},
 	})

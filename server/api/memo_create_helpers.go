@@ -12,8 +12,18 @@ import (
 
 	"github.com/usememos/memos/core/memopayload"
 	apipb "github.com/usememos/memos/proto/gen/api"
+	"github.com/usememos/memos/server/auth"
 	"github.com/usememos/memos/store"
 )
+
+const mcpConnectionTag = "MCP连接"
+
+type mcpMemoCreationContextKey struct{}
+
+// WithMCPMemoCreation marks a request dispatched by the in-process MCP tool handler.
+func WithMCPMemoCreation(ctx context.Context) context.Context {
+	return context.WithValue(ctx, mcpMemoCreationContextKey{}, true)
+}
 
 func mapMemoCreateError(err error, uid, operation string) error {
 	errMessage := err.Error()
@@ -89,7 +99,8 @@ func (s *APIService) saveNewMemo(ctx context.Context, user *store.User, input *a
 		}
 		parentID = &parent.ID
 	}
-	prepared, err := s.prepareMemoCreate(ctx, user, input, uid)
+	addConnectionTag := parent == nil && (auth.HasPersonalAccessToken(ctx) || ctx.Value(mcpMemoCreationContextKey{}) != nil)
+	prepared, err := s.prepareMemoCreate(ctx, user, input, uid, addConnectionTag)
 	if err == nil {
 		prepared.memo.CreationRequestDigest = digest
 		err = s.createMemoWithMutation(ctx, user, prepared.memo, parentID, prepared.attachments, prepared.requiredAttachmentIDs, prepared.referenceRelations, false)
@@ -116,7 +127,7 @@ type preparedMemoCreate struct {
 
 // prepareMemoCreate validates and prepares the fields shared by top-level
 // memo and comment creation. It does not write database or external state.
-func (s *APIService) prepareMemoCreate(ctx context.Context, user *store.User, input *apipb.Memo, uid string) (*preparedMemoCreate, error) {
+func (s *APIService) prepareMemoCreate(ctx context.Context, user *store.User, input *apipb.Memo, uid string, addConnectionTag bool) (*preparedMemoCreate, error) {
 	if user == nil || input == nil {
 		return nil, status.Error(codes.InvalidArgument, "memo is required")
 	}
@@ -146,6 +157,12 @@ func (s *APIService) prepareMemoCreate(ctx context.Context, user *store.User, in
 	}
 	if input.UpdateTime != nil && input.UpdateTime.IsValid() {
 		memo.UpdatedTs = input.UpdateTime.AsTime().Unix()
+	}
+	if addConnectionTag {
+		memo.Content, err = s.MarkdownService.EnsureTag(memo.Content, mcpConnectionTag)
+		if err != nil {
+			return nil, status.Error(codes.Internal, "failed to add memo connection tag")
+		}
 	}
 
 	if err := memopayload.RebuildMemoPayload(ctx, memo, s.MarkdownService); err != nil {

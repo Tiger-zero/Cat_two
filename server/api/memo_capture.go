@@ -65,14 +65,14 @@ func (s *APIService) CaptureMemo(ctx context.Context, channel, externalID, text 
 		Visibility:      apipb.Visibility_PRIVATE,
 		CreationChannel: channel,
 	}
-	prepared, err := s.prepareMemoCreate(ctx, owner, input, uid)
+	prepared, err := s.prepareMemoCreate(ctx, owner, input, uid, false)
 	if code := status.Code(err); code == codes.InvalidArgument || code == codes.FailedPrecondition {
 		// Transports carry text and cannot bind instance-managed attachments.
 		// Preserve source with indentation when copied markup requires a binding
 		// or contains an invalid managed image URL.
 		indent := strings.NewReplacer("\r\n", "\r\n    ", "\r", "\r    ", "\n", "\n    ")
 		input.Content = tag + "\n\n    " + indent.Replace(text)
-		prepared, err = s.prepareMemoCreate(ctx, owner, input, uid)
+		prepared, err = s.prepareMemoCreate(ctx, owner, input, uid, false)
 	}
 	if err != nil {
 		return err

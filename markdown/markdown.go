@@ -44,6 +44,9 @@ type Service interface {
 	// ExtractTags returns all #tags found in content
 	ExtractTags(content []byte) ([]string, error)
 
+	// EnsureTag adds a visible tag if the exact path is not already present.
+	EnsureTag(content, tag string) (string, error)
+
 	// ExtractProperties computes boolean properties
 	ExtractProperties(content []byte) (*storepb.MemoPayload_Property, error)
 

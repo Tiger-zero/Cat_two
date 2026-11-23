@@ -13,6 +13,7 @@ Cat_two 是单账户自托管笔记应用，用于记录、整理与同步笔记
 
 - 已有笔记用稳定的 `memos/<uid>` 资源名引用，详情页为 `/memos/<uid>`。创建可以省略 `memoId` 由服务端生成，或传 1 至 36 位字母、数字及中间的连字符。数据库内部 ID 仅供存储层使用。编辑、归档和恢复延用资源名。 [笔记协议](../../../proto/api/memo_service.proto) · [标识校验](../../../internal/identifier/resource_name.go)
 - Web、REST、Connect 和个人 MCP 复用笔记服务的作者权限和写入校验。新建时一并保存正文、附件绑定及引用。创建重试沿用显式 `memoId`、`idempotent: true` 和原请求字段。同一账号以相同请求重试返回成功创建的笔记，已被使用但不匹配的 ID 返回冲突。网断后保留创建快照和已上传文件，避免重复创建或上传。 [新建](../../../server/api/memo_create_helpers.go) · [编辑器保存](../../../web/src/components/MemoEditor/edit/hooks/useMemoSave.ts)
+- 通过个人 MCP 或个人访问令牌（PAT）新建笔记时，服务端在 Markdown 正文中添加 `#MCP连接`。正文已包含解析后路径完全匹配的标签时沿用原文。自动添加只在笔记新建时执行。 [令牌创建笔记](references/external-api.md#令牌创建笔记)
 - 更新使用读取时的 `revision` 作为 `expectedRevision`。`updateMask` 明确选中的字段，更新 `content` 时提交完整 Markdown。版本冲突时保留草稿和待上传附件，重新取回服务端内容后核对。局部修改继续尊重其他字段已有状态。 [更新协议](../../../proto/api/memo_service.proto) · [REST 和 MCP 示例](references/external-api.md)
 - 日期筛选、按日统计与 MCP 日期使用 `Asia/Shanghai`。日历选中的日期参与新建请求，手动设置的时间随原请求重试。标签路径用 `/` 分层，选父标签时纳入子路径。笔记列表支持关键词、CEL、来源筛选、排序和归档范围，使用稳定分页参数。 [日期工具](../../../web/src/lib/calendar-utils.ts) · [统计和标签接口](references/external-api.md#统计和标签) · [CEL](../../../filter/README.md)
 

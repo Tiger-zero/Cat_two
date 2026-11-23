@@ -104,6 +104,23 @@
 }
 
 @layer components {
+  @media (forced-colors: none) {
+    [data-theme="light"] body:has([data-home-workspace]) {
+      background-color: var(--memos-home-canvas);
+    }
+
+    [data-theme="light"] [data-home-workspace] {
+      --mu-canvas: var(--memos-home-canvas);
+    }
+
+    [data-theme="light"] [data-home-collection] {
+      --memos-activity-empty: #efefef;
+      --memos-activity-low: #c2e8d1;
+      --memos-activity-medium: var(--memos-activity-low);
+      --memos-activity-high: var(--memos-activity-low);
+    }
+  }
+
   /* Mermaid diagrams drawn by Pele take the theme's colors; a new scheme recolors them live. */
   .pele {
     --pele-bg: var(--mu-surface);

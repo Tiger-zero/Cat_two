@@ -1,6 +1,7 @@
 package markdown
 
 import (
+	"bytes"
 	"cmp"
 	"slices"
 	"strings"
@@ -11,6 +12,72 @@ import (
 	"github.com/usememos/memos/markdown/extensions"
 	"github.com/usememos/memos/markdown/parser"
 )
+
+// EnsureTag preserves the original Markdown and adds the tag as its own paragraph.
+func (s *service) EnsureTag(content, tag string) (string, error) {
+	paragraph := "#" + tag
+	if content == "" {
+		return paragraph, nil
+	}
+	withTag := content + "\n\n" + paragraph
+	source := []byte(withTag)
+	root, err := s.parse(source)
+	if err != nil {
+		return "", err
+	}
+	position := firstExactMemoTag(root, tag)
+	switch {
+	case position >= len(content):
+		return withTag, nil
+	case position >= 0:
+		return content, nil
+	}
+
+	// An open code fence or HTML block can absorb a final paragraph. Move the
+	// tag before the body, keeping any leading title as the first block.
+	if end := memoTitleEnd(root, source[:len(content)]); end > 0 {
+		return content[:end] + "\n" + paragraph + "\n\n" + content[end:], nil
+	}
+	return paragraph + "\n\n" + content, nil
+}
+
+func firstExactMemoTag(root gast.Node, path string) int {
+	position := -1
+	_ = gast.Walk(root, func(node gast.Node, entering bool) (gast.WalkStatus, error) {
+		if tag, ok := asMemoTagNode(node); entering && ok && string(tag.Tag) == path {
+			position = tag.Pos()
+			return gast.WalkStop, nil
+		}
+		return gast.WalkContinue, nil
+	})
+	return position
+}
+
+func memoTitleEnd(root gast.Node, source []byte) int {
+	heading, ok := root.FirstChild().(*gast.Heading)
+	if !ok || heading.Level != 1 || heading.Lines().Len() == 0 {
+		return 0
+	}
+	lines := heading.Lines()
+	start := lines.At(0).Start
+	lineStart := bytes.LastIndexByte(source[:start], '\n') + 1
+	end := lines.At(lines.Len() - 1).Stop
+	if end > 0 && source[end-1] != '\n' {
+		end = nextMarkdownLine(source, end)
+	}
+	// For a Setext title, the heading segments omit its underline.
+	if !bytes.HasPrefix(bytes.TrimLeft(source[lineStart:start], " \t"), []byte("#")) {
+		end = nextMarkdownLine(source, end)
+	}
+	return end
+}
+
+func nextMarkdownLine(source []byte, offset int) int {
+	if end := bytes.IndexByte(source[offset:], '\n'); end >= 0 {
+		return offset + end + 1
+	}
+	return len(source)
+}
 
 // RenameTag renames exact occurrences of oldTag to newTag in content.
 func (s *service) RenameTag(content []byte, oldTag, newTag string) (string, error) {

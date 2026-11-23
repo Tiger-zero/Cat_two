@@ -187,6 +187,9 @@ func newMCPToolHandler(execute toolExecutor, operation *registeredOperation) sdk
 		if request.Extra != nil {
 			authorization = request.Extra.Header.Get("Authorization")
 		}
+		if operation.OperationID == "MemoService_CreateMemo" {
+			ctx = api.WithMCPMemoCreation(ctx)
+		}
 		return execute(ctx, operation.Operation, arguments, authorization)
 	}
 }

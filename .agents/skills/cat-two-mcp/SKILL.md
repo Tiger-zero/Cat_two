@@ -21,4 +21,4 @@ description: >-
 
 工具列表支持时，用 `memo_search` 按关键词、标签或上海时区的创建日期筛选，用 `memo_batch_get` 读取多条已知笔记，用 `tag_tree` 和 `tag_search` 发现标签。较早的镜像可用 `memo_list_memos` 配合 `memo_get_memo`。 [MCP 工具说明](../../../server/mcp/README.md#tool-surface)
 
-同步总结时，将正文作为 Markdown 写入 `content`。标题、表格、任务列表、提示块等语法可查项目的格式清单。 [支持的内容格式](../cat-two-product-development/SKILL.md#支持的内容格式)
+同步总结时，将正文作为 Markdown 写入 `content`。通过 `memo_create_memo` 新建时，服务端添加 `#MCP连接`，正文已经包含同名标签时直接沿用。标题、表格、任务列表、提示块等语法可查项目的格式清单。 [令牌创建笔记](../cat-two-product-development/references/external-api.md#令牌创建笔记) · [支持的内容格式](../cat-two-product-development/SKILL.md#支持的内容格式)

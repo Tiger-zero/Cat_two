@@ -30,6 +30,12 @@ AI 客户端用 MCP 查找、整理和写回笔记。脚本、附件传输及回
 
 `memo_search` 和 `memo_list_memos` 查下一页时，把返回的 `nextPageToken` 作为 `pageToken` 并沿用查询条件与顺序。写回前展示完整 Markdown，取得用户确认。更新原笔记时使用读取结果中的 `revision`，发生冲突后重新读回并核对预览。创建请求响应中断时可用原 `memoId`、`idempotent` 和原始字段重试，匹配时返回已保存的记录。MCP 使用顶层参数，REST 使用查询参数。 [分页及写入工作流](../../../../plugins/cat-two-notes/skills/organize-notes/SKILL.md) · [新建参数](../../../../proto/api/memo_service.proto)
 
+## 令牌创建笔记
+
+通过 `memo_create_memo` 或使用个人访问令牌（PAT）调用笔记新建接口时，服务端将 `#MCP连接` 写入保存的 Markdown 正文。正文已经解析出路径恰为 `MCP连接` 的标签时沿用原文。幂等重试继续提交原请求字段及相同的 `memoId`，匹配时返回已保存的笔记。 [笔记新建入口](../../../../server/api/memo_service.go) · [创建重试](../../../../server/api/memo_create_helpers.go)
+
+该规则仅用于上述新建请求。网页登录创建沿用提交的正文，Telegram 和企业微信收件各自添加渠道标签。后续编辑可按普通标签修改或移除 `#MCP连接`，旧笔记正文按原样保留。可用侧栏标签筛选，或通过 MCP `memo_search` 的 `tag: "MCP连接"` 找到这类笔记。 [标签筛选](#统计和标签) · [收件渠道](#变更通知和收件)
+
 ## REST 笔记、附件和回收站
 
 用 JSON 的 camelCase 字段。正文是完整 Markdown 字符串 `content`，在正文里写 `#标签/子标签`、任务和链接。读取列表及详情时，用 `content` 作原文，`snippet` 是摘要。列表默认仅返回 `NORMAL` 主笔记，传 `state=ARCHIVED` 查看已归档的主笔记。 `pageSize` 默认 50、上限 1000，复用 `nextPageToken` 翻页。CEL 表达式放在 `filter`，例如 `has_incomplete_tasks && "项目/Cat_two" in tags`。 [笔记协议](../../../../proto/api/memo_service.proto) · [CEL 语法](../../../../filter/README.md) · [正文格式](../SKILL.md#支持的内容格式)

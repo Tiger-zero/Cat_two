@@ -73,3 +73,5 @@ Cat_two 是单账户、自托管的个人笔记应用。新实例首次设置时
 - **2026-11-22 22:00**　设置导航复用标签选中行的底色、文字和图标样式。静态检查、100 项相关测试和生产构建通过。Chromium 验证浅色、深色和纸张模式的配色及鼠标、键盘切换。 [设置导航](../../../web/src/components/Settings/SettingsContent.tsx)
 - **2026-11-22 22:07**　发布 Docker Hub `0.15`，核对编号、`latest`、提交标签和 AMD64、ARM64 两种平台。1444 项前端测试通过，正式 AMD64 镜像通过新装、重建、从 `0.14` 升级及 Chromium 验收。 [发布复盘](references/development-log.md#镜像-015)
 - **2026-11-23 21:15**　公开 README 在项目标题旁显示小猫图标，复用仓库内的应用图标。 [README](../../../README.md)
+- **2026-11-23 22:55**　按确认预览调整浅色首页画布、桌面侧栏与日历配色。生产构建、静态检查和 151 项相关测试通过，Chromium 核对画布、面板与日期的实际颜色及按日筛选。 [配色表](../cat-two-ui-development/references/desktop-visual-design.md#cat_two-主题)
+- **2026-11-23 23:11**　MCP 或 PAT 创建的笔记自动添加 `#MCP连接`。保存时识别正文中的真实标签，幂等重试沿用原请求。Go 静态检查、相关服务端及 Markdown 竞态测试通过，覆盖真实 MCP、REST 和 Connect 入口。 [外部 API](../cat-two-product-development/references/external-api.md#令牌创建笔记)

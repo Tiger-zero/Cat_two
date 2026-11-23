@@ -68,7 +68,7 @@ func TestIntegrationTokenUsesSameNoteOwnershipThroughRESTAndMCP(t *testing.T) {
 		"body":   map[string]any{"content": "Created with MCP"},
 	})
 	require.False(t, created.IsError, "%v", created.Content)
-	inst.requireMemo(t, token, memoID, "Created with MCP")
+	inst.requireMemo(t, token, memoID, "Created with MCP\n\n#MCP连接")
 
 	updated := call("memo_update_memo", map[string]any{
 		"memo": memoID,

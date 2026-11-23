@@ -6,6 +6,40 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestEnsureTagPreservesMarkdown(t *testing.T) {
+	svc := NewService(WithTagExtension())
+	const tag = "MCP连接"
+	for _, tc := range []struct {
+		name    string
+		content string
+		want    string
+	}{
+		{"empty", "", "#MCP连接"},
+		{"append after a titled note", "# 标题\n\n正文", "# 标题\n\n正文\n\n#MCP连接"},
+		{"existing exact tag", "正文 #MCP连接", "正文 #MCP连接"},
+		{"descendant does not replace exact tag", "正文 #MCP连接/子项", "正文 #MCP连接/子项\n\n#MCP连接"},
+		{"literal uses", "`#MCP连接` [#MCP连接](https://example.com)", "`#MCP连接` [#MCP连接](https://example.com)\n\n#MCP连接"},
+		{"open fence", "```md\n#MCP连接", "#MCP连接\n\n```md\n#MCP连接"},
+		{"open fence after a title", "# 标题 ###\r\n```md\r\n文本", "# 标题 ###\r\n\n#MCP连接\n\n```md\r\n文本"},
+		{"open HTML after a Setext title", "标题\n第二行\n===\n<pre>\n文本", "标题\n第二行\n===\n\n#MCP连接\n\n<pre>\n文本"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			before, err := svc.ExtractAll([]byte(tc.content))
+			require.NoError(t, err)
+			content, err := svc.EnsureTag(tc.content, tag)
+			require.NoError(t, err)
+			require.Equal(t, tc.want, content)
+			after, err := svc.ExtractAll([]byte(content))
+			require.NoError(t, err)
+			require.Contains(t, after.Tags, tag)
+			require.Equal(t, before.Property, after.Property)
+			again, err := svc.EnsureTag(content, tag)
+			require.NoError(t, err)
+			require.Equal(t, content, again)
+		})
+	}
+}
+
 func TestRenameTagBranch(t *testing.T) {
 	svc := NewService(WithTagExtension())
 	content := "#year/08 #year/08/10 #year/08/d\u200day #year/080 #Year/08 #year\n\n" +

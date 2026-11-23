@@ -17,6 +17,7 @@ import { useView } from "@/contexts/ViewContext";
 import useCurrentUser from "@/hooks/useCurrentUser";
 import useMediaQuery from "@/hooks/useMediaQuery";
 import { cn } from "@/lib/utils";
+import { ROUTES } from "@/router/routes";
 import { InstanceAccessMode } from "@/types/proto/api/instance_service_pb";
 import { buildAuthRoute, shouldGatePrivateInstance } from "@/utils/auth-redirect";
 import { useTranslate } from "@/utils/i18n";
@@ -83,6 +84,7 @@ const RootLayoutContent = () => {
   return (
     <div
       ref={shellRef}
+      data-home-workspace={pathname === ROUTES.HOME || undefined}
       className={cn(
         "mx-auto flex min-h-full w-full bg-mu-canvas md:gap-6 md:px-4 lg:gap-8 lg:px-6",
         limitShell && (maxColumns === 1 ? "max-w-[66.5rem]" : "max-w-7xl"),

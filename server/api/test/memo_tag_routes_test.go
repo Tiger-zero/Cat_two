@@ -12,6 +12,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	apipb "github.com/usememos/memos/proto/gen/api"
 	"github.com/usememos/memos/store"
@@ -67,18 +68,22 @@ func TestMemoTagEditsThroughREST(t *testing.T) {
 		require.NoError(t, protojson.Unmarshal(response.Body.Bytes(), memo))
 		return memo
 	}
-	createMemo := func(token, content string) *apipb.Memo {
+	createMemo := func(user *store.User, content string, attachments ...*apipb.Attachment) *apipb.Memo {
 		t.Helper()
-		const createdAt = "2024-08-01T10:00:00Z"
-		const updatedAt = "2024-08-02T12:30:00Z"
-		memo := requireMemoResponse(request(http.MethodPost, "/api/memos", token, map[string]string{
-			"content":    content,
-			"visibility": "PRIVATE",
-			"createTime": createdAt,
-			"updateTime": updatedAt,
-		}))
-		require.Equal(t, createdAt, memo.GetCreateTime().AsTime().Format(time.RFC3339))
-		require.Equal(t, updatedAt, memo.GetUpdateTime().AsTime().Format(time.RFC3339))
+		createdAt := time.Date(2024, time.August, 1, 10, 0, 0, 0, time.UTC)
+		updatedAt := time.Date(2024, time.August, 2, 12, 30, 0, 0, time.UTC)
+		memo, err := ts.Service.CreateMemo(ts.CreateUserContext(ctx, user.ID), &apipb.CreateMemoRequest{
+			Memo: &apipb.Memo{
+				Content:     content,
+				Visibility:  apipb.Visibility_PRIVATE,
+				CreateTime:  timestamppb.New(createdAt),
+				UpdateTime:  timestamppb.New(updatedAt),
+				Attachments: attachments,
+			},
+		})
+		require.NoError(t, err)
+		require.Equal(t, createdAt, memo.GetCreateTime().AsTime())
+		require.Equal(t, updatedAt, memo.GetUpdateTime().AsTime())
 		return memo
 	}
 	requireMemo := func(token string, original *apipb.Memo, content string) *apipb.Memo {
@@ -87,8 +92,8 @@ func TestMemoTagEditsThroughREST(t *testing.T) {
 		require.Equal(t, original.GetName(), memo.GetName())
 		require.Equal(t, original.GetCreator(), memo.GetCreator())
 		require.Equal(t, original.GetVisibility(), memo.GetVisibility())
-		require.Equal(t, original.GetCreateTime(), memo.GetCreateTime())
-		require.Equal(t, original.GetUpdateTime(), memo.GetUpdateTime())
+		require.Equal(t, original.GetCreateTime().AsTime(), memo.GetCreateTime().AsTime())
+		require.Equal(t, original.GetUpdateTime().AsTime(), memo.GetUpdateTime().AsTime())
 		require.Equal(t, content, memo.GetContent())
 		return memo
 	}
@@ -100,12 +105,12 @@ func TestMemoTagEditsThroughREST(t *testing.T) {
 		require.Equal(t, map[string]int{"updatedCount": want}, result)
 	}
 
-	source := createMemo(ownerToken, "Keep this #2027/08 note.\n\n`#2027/08` is code.")
-	descendant := createMemo(ownerToken, "Child #2027/08/project")
-	destination := createMemo(ownerToken, "Already at #2027/09")
-	unrelated := createMemo(ownerToken, "Different tag #2027/080")
-	needsNormalization := createMemo(ownerToken, "Review #2027/ 08 and `#2027/ 08`")
-	otherMemo := createMemo(otherOwnerToken, "Other account #2027/08 and #2027/ 08")
+	source := createMemo(owner, "Keep this #2027/08 note.\n\n`#2027/08` is code.")
+	descendant := createMemo(owner, "Child #2027/08/project")
+	destination := createMemo(owner, "Already at #2027/09")
+	unrelated := createMemo(owner, "Different tag #2027/080")
+	needsNormalization := createMemo(owner, "Review #2027/ 08 and `#2027/ 08`")
+	otherMemo := createMemo(otherOwner, "Other account #2027/08 and #2027/ 08")
 
 	rename := map[string]string{"oldName": "#2027/08", "newName": "#2027/09"}
 	require.Equal(t, http.StatusUnauthorized, request(http.MethodPost, "/api/tags/rename", "", rename).Code)
@@ -150,15 +155,12 @@ func TestMemoTagEditsThroughREST(t *testing.T) {
 	})
 	require.Equal(t, http.StatusOK, createdFile.Code, "%s", createdFile.Body)
 	require.NoError(t, protojson.Unmarshal(createdFile.Body.Bytes(), attachment))
-	root := requireMemoResponse(request(http.MethodPost, "/api/memos", ownerToken, map[string]any{
-		"content":     "Parent #recycle/project",
-		"attachments": []map[string]string{{"name": attachment.GetName()}},
-	}))
+	root := createMemo(owner, "Parent #recycle/project", &apipb.Attachment{Name: attachment.GetName()})
 	reply := requireMemoResponse(request(http.MethodPost, "/api/"+root.GetName()+"/comments", ownerToken, map[string]string{"content": "Reply"}))
 	nested := requireMemoResponse(request(http.MethodPost, "/api/"+reply.GetName()+"/comments", ownerToken, map[string]string{"content": "Nested reply"}))
 	root = requireMemoResponse(request(http.MethodPatch, "/api/"+root.GetName()+"?updateMask=state", ownerToken, map[string]string{"state": "ARCHIVED"}))
-	stillOutside := createMemo(ownerToken, "Different #recycle-bin")
-	otherOwnerMatching := createMemo(otherOwnerToken, "Different owner #recycle/project")
+	stillOutside := createMemo(owner, "Different #recycle-bin")
+	otherOwnerMatching := createMemo(otherOwner, "Different owner #recycle/project")
 	trash := map[string]string{"tagName": "recycle", "mode": "trash"}
 	requireCount(request(http.MethodPost, "/api/tags/delete", ownerToken, trash), 1)
 	for _, memo := range []*apipb.Memo{root, reply, nested} {
