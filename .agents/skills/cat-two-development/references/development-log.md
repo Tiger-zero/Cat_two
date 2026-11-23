@@ -1,5 +1,13 @@
 # Cat_two 开发记录
 
+## 2026-11-23（上海时间）
+
+### 镜像 0.16
+
+23:17 发布 Docker Hub `0.16`。`0.16`、`latest` 和 `sha-0c7f0ef9638c58fd0e0757a0e7ce3cd24e8e11b5` 指向同一镜像索引 `sha256:0850a1b4035ca76d5cdecc3824904d0f007fa9700be3542439346bb5c8b2ecb8`。Linux AMD64 和 ARM64 均对应提交 `0c7f0ef96`。本版更新浅色主页画布、桌面侧栏和日历配色，并为经 MCP 或个人访问令牌新建的笔记添加 `#MCP连接`。 [发布](https://github.com/Tiger-zero/Cat_two/actions/runs/45202778224) · [Docker Hub](https://hub.docker.com/r/tiger2896/cat_two/tags?name=0.16)
+
+1444 项前端测试和后端 CI 通过。正式 AMD64 镜像通过隔离 SQLite 卷的新装、重建和从 `0.15` 升级验证。Chromium 核对浅色预览配色和按日筛选，实际 MCP 和 PAT 创建的笔记可从侧栏按 `#MCP连接` 找回。 [前端检查](https://github.com/Tiger-zero/Cat_two/actions/runs/45202778133) · [后端检查](https://github.com/Tiger-zero/Cat_two/actions/runs/45202778322)
+
 ## 2026-11-22（上海时间）
 
 00:28 发布 Docker Hub `0.07`。`0.07`、`latest` 和 `sha-da3bb55d5348c74d46db5514cceab6c8b4cec0ea` 共用 `sha256:6cc27f7ccd216a4e455a63cac1269e7a701a64792a2f05554244fd6451f57cb3`，AMD64 和 ARM64 均对应提交 `da3bb55d5`。发布工作流的容器检查及本地 AMD64 使用正式镜像的新装、重建和从 `0.06` 升级检查通过。 [发布](https://github.com/Tiger-zero/Cat_two/actions/runs/44924203110) · [Docker Hub](https://hub.docker.com/r/tiger2896/cat_two/tags?name=0.07)
