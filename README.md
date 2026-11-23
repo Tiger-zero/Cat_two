@@ -1,4 +1,4 @@
-# Cat_two
+# <img src="web/public/android-chrome-512x512.png" width="48" height="48" align="absmiddle" alt=""> Cat_two
 
 Cat_two 是面向个人的自托管笔记应用。用网页记录 Markdown 笔记和附件，按日期、标签或关键词找回内容。笔记仅限创建者登录后访问。 [产品文档](.agents/skills/cat-two-product-development/references/product-guide.md)
 

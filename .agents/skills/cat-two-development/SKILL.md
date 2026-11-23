@@ -72,3 +72,4 @@ Cat_two 是单账户、自托管的个人笔记应用。新实例首次设置时
 - **2026-11-22 21:56**　浅色桌面首页的侧栏、账号面板、日历、输入框和笔记卡片改用 `#FFFFFF`。前端静态检查、134 项相关测试和生产构建通过。实际构建的 Chromium 截图与确认预览像素一致，同时核对了回收站侧栏、设置、深色与纸张主题。 [配色表](../cat-two-ui-development/references/desktop-visual-design.md#cat_two-主题)
 - **2026-11-22 22:00**　设置导航复用标签选中行的底色、文字和图标样式。静态检查、100 项相关测试和生产构建通过。Chromium 验证浅色、深色和纸张模式的配色及鼠标、键盘切换。 [设置导航](../../../web/src/components/Settings/SettingsContent.tsx)
 - **2026-11-22 22:07**　发布 Docker Hub `0.15`，核对编号、`latest`、提交标签和 AMD64、ARM64 两种平台。1444 项前端测试通过，正式 AMD64 镜像通过新装、重建、从 `0.14` 升级及 Chromium 验收。 [发布复盘](references/development-log.md#镜像-015)
+- **2026-11-23 21:15**　公开 README 在项目标题旁显示小猫图标，复用仓库内的应用图标。 [README](../../../README.md)
