@@ -51,8 +51,7 @@ permissions:
   contents: read
 
 env:
-  DOCKERHUB_IMAGE: docker.io/tiger2896/cat_two
-  GHCR_IMAGE: ghcr.io/tiger-zero/cat_two
+  IMAGE_REPOSITORY: ${{ inputs.registry == 'ghcr' && 'ghcr.io/tiger-zero/cat_two' || 'docker.io/tiger2896/cat_two' }}
 
 jobs:
   backend:
@@ -173,7 +172,7 @@ jobs:
             VERSION=${{ steps.version.outputs.version }}
             COMMIT=${{ github.sha }}
           cache-from: type=gha,scope=cat-two-container
-          cache-to: type=gha,mode=max,scope=cat-two-container
+          cache-to: type=gha,mode=max,scope=cat-two-container,ignore-error=true
 
       - name: Verify the web app and persistent SQLite data
         if: steps.scope.outputs.skip != 'true' && env.RELEASE_REQUESTED != 'true'
@@ -188,7 +187,6 @@ jobs:
       contents: read
       packages: write
     outputs:
-      image: ${{ steps.registry.outputs.image }}
       candidate: ${{ steps.image.outputs.digest }}
     steps:
       - uses: actions/checkout@v6
@@ -203,17 +201,6 @@ jobs:
       - uses: docker/setup-qemu-action@v4
 
       - uses: docker/setup-buildx-action@v4
-
-      - name: Select the candidate registry
-        id: registry
-        env:
-          TARGET_REGISTRY: ${{ inputs.registry }}
-        run: |
-          image="$DOCKERHUB_IMAGE"
-          if [[ "$TARGET_REGISTRY" == ghcr ]]; then
-            image="$GHCR_IMAGE"
-          fi
-          echo "image=$image" >> "$GITHUB_OUTPUT"
 
       - name: Sign in to Docker Hub
         if: inputs.registry != 'ghcr'
@@ -237,7 +224,7 @@ jobs:
           context: .
           file: scripts/Dockerfile
           platforms: linux/amd64,linux/arm64
-          outputs: type=image,name=${{ steps.registry.outputs.image }},push-by-digest=true,name-canonical=true,push=true
+          outputs: type=image,name=${{ env.IMAGE_REPOSITORY }},push-by-digest=true,name-canonical=true,push=true
           labels: |
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}
@@ -247,7 +234,7 @@ jobs:
             VERSION=${{ needs.verify.outputs.version }}
             COMMIT=${{ github.sha }}
           cache-from: type=gha,scope=cat-two-container
-          cache-to: type=gha,mode=max,scope=cat-two-container
+          cache-to: type=gha,mode=max,scope=cat-two-container,ignore-error=true
 
   smoke:
     name: Verify the candidate on ${{ matrix.arch }}
@@ -279,7 +266,7 @@ jobs:
 
       - name: Test the exact published candidate digest
         env:
-          CANDIDATE: ${{ needs.stage.outputs.image }}@${{ needs.stage.outputs.candidate }}
+          CANDIDATE: ${{ env.IMAGE_REPOSITORY }}@${{ needs.stage.outputs.candidate }}
           ARCHITECTURE: ${{ matrix.arch }}
         run: |
           bash scripts/release_smoke_test.sh --candidate-image "$CANDIDATE" \
@@ -326,5 +313,5 @@ jobs:
         env:
           IMAGE_DIGEST: ${{ needs.stage.outputs.candidate }}
         run: |
-          docker buildx imagetools create --tag "$GHCR_IMAGE:sha-$GITHUB_SHA" \
-            --tag "$GHCR_IMAGE:latest" "$GHCR_IMAGE@$IMAGE_DIGEST"
+          docker buildx imagetools create --tag "$IMAGE_REPOSITORY:sha-$GITHUB_SHA" \
+            --tag "$IMAGE_REPOSITORY:latest" "$IMAGE_REPOSITORY@$IMAGE_DIGEST"
