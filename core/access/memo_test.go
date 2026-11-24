@@ -13,12 +13,11 @@ func TestCheckMemoReadIsCreatorOnlyForAllStoredAudiences(t *testing.T) {
 	other := &store.User{ID: 2, RowStatus: store.Normal, Role: store.RoleUser}
 	admin := &store.User{ID: 3, RowStatus: store.Normal, Role: store.RoleAdmin}
 	archived := &store.User{ID: owner.ID, RowStatus: store.Archived}
-	spaceID := int32(7)
 	parentUID := "legacy-context"
 
-	for _, visibility := range []store.Visibility{store.Public, store.Protected, store.Private, store.SpaceAudience} {
+	for _, visibility := range []store.Visibility{store.Public, store.Protected, store.Private} {
 		t.Run(string(visibility), func(t *testing.T) {
-			memo := &store.Memo{ID: 10, CreatorID: owner.ID, RowStatus: store.Normal, Visibility: visibility, SpaceID: &spaceID, ParentUID: &parentUID}
+			memo := &store.Memo{ID: 10, CreatorID: owner.ID, RowStatus: store.Normal, Visibility: visibility, ParentUID: &parentUID}
 			read := MemoReadContext{Memo: memo, CreatorValid: true}
 			require.True(t, CheckMemoReadContext(withViewer(read, owner)).Allowed())
 			require.Equal(t, MemoReadDenialPermission, CheckMemoReadContext(withViewer(read, other)).Denial)
@@ -53,8 +52,6 @@ func TestCheckMemoReadInvalidStateFailsClosed(t *testing.T) {
 	read := MemoReadContext{Memo: memo, CreatorValid: true}
 	require.True(t, CheckMemoReadContext(withViewer(read, owner)).Allowed(), "legacy public note remains visible to its owner")
 
-	memo.Visibility = store.SpaceAudience
-	require.True(t, CheckMemoReadContext(withViewer(read, owner)).Allowed(), "a historical placement does not affect the author")
 	memo.Visibility = store.Visibility("FUTURE_AUDIENCE")
 	require.Equal(t, MemoReadDenialNotFound, CheckMemoReadContext(withViewer(read, owner)).Denial)
 	memo.Visibility = store.Public

@@ -64,7 +64,7 @@ func newMigratedStore(t *testing.T) (*store.Store, string) {
 	require.NoError(t, err)
 	storeInstance := store.New(dbDriver, instanceProfile)
 	t.Cleanup(func() { require.NoError(t, storeInstance.Close()) })
-	require.NoError(t, storeInstance.Migrate(context.Background()))
+	require.NoError(t, storeInstance.InitializeSchema(context.Background()))
 	return storeInstance, data
 }
 

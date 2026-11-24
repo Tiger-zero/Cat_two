@@ -63,8 +63,8 @@ type MemoServiceClient interface {
 	UpdateMemo(ctx context.Context, in *UpdateMemoRequest, opts ...grpc.CallOption) (*Memo, error)
 	// DeleteMemo moves the named memo and its comment subtree to the recycle bin.
 	// Only the memo creator can move it. The owner can restore it within 30 days
-	// with POST /api/trash/{uid}/restore or permanently delete it sooner with
-	// DELETE /api/trash/{uid}. The server purges expired entries.
+	// with POST /internal/trash/{uid}/restore or permanently delete it sooner with
+	// DELETE /internal/trash/{uid}. The server purges expired entries.
 	DeleteMemo(ctx context.Context, in *DeleteMemoRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	// ListMemoAttachments lists the attachments of a memo. Requires read access
 	// to the memo.
@@ -103,8 +103,7 @@ type MemoServiceClient interface {
 	// or an instance administrator.
 	ListMemoShares(ctx context.Context, in *ListMemoSharesRequest, opts ...grpc.CallOption) (*ListMemoSharesResponse, error)
 	// CreateMemoShare creates a share link for a memo. Requires the memo creator
-	// or an instance administrator. Only active memos without SPACE visibility
-	// can be shared.
+	// or an instance administrator. Only active memos can be shared.
 	CreateMemoShare(ctx context.Context, in *CreateMemoShareRequest, opts ...grpc.CallOption) (*MemoShare, error)
 	// DeleteMemoShare revokes a share link. Requires the memo creator or an
 	// instance administrator.
@@ -347,8 +346,8 @@ type MemoServiceServer interface {
 	UpdateMemo(context.Context, *UpdateMemoRequest) (*Memo, error)
 	// DeleteMemo moves the named memo and its comment subtree to the recycle bin.
 	// Only the memo creator can move it. The owner can restore it within 30 days
-	// with POST /api/trash/{uid}/restore or permanently delete it sooner with
-	// DELETE /api/trash/{uid}. The server purges expired entries.
+	// with POST /internal/trash/{uid}/restore or permanently delete it sooner with
+	// DELETE /internal/trash/{uid}. The server purges expired entries.
 	DeleteMemo(context.Context, *DeleteMemoRequest) (*emptypb.Empty, error)
 	// ListMemoAttachments lists the attachments of a memo. Requires read access
 	// to the memo.
@@ -387,8 +386,7 @@ type MemoServiceServer interface {
 	// or an instance administrator.
 	ListMemoShares(context.Context, *ListMemoSharesRequest) (*ListMemoSharesResponse, error)
 	// CreateMemoShare creates a share link for a memo. Requires the memo creator
-	// or an instance administrator. Only active memos without SPACE visibility
-	// can be shared.
+	// or an instance administrator. Only active memos can be shared.
 	CreateMemoShare(context.Context, *CreateMemoShareRequest) (*MemoShare, error)
 	// DeleteMemoShare revokes a share link. Requires the memo creator or an
 	// instance administrator.

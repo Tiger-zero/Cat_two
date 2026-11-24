@@ -103,17 +103,10 @@ func (ResourceChange_Action) EnumDescriptor() ([]byte, []int) {
 // one desired state. A resource may be declared in exactly one file.
 type Configuration struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Optional. Identity providers to manage, by resource name.
-	IdentityProviders []*IdentityProvider `protobuf:"bytes,1,rep,name=identity_providers,json=identityProviders,proto3" json:"identity_providers,omitempty"`
 	// Optional. Instance setting groups to manage, by resource name.
 	InstanceSettings []*InstanceSetting `protobuf:"bytes,2,rep,name=instance_settings,json=instanceSettings,proto3" json:"instance_settings,omitempty"`
 	// Optional. Users to manage, by resource name. Intended for bootstrap administrators.
 	Users []*User `protobuf:"bytes,3,rep,name=users,proto3" json:"users,omitempty"`
-	// Optional. SSO identities of declared users, by resource name: which
-	// identity-provider subject signs in as which user. Only a user the
-	// configuration declares may have one. Intended for bootstrap administrators
-	// on instances where sign-in is through an identity provider.
-	LinkedIdentities []*LinkedIdentity `protobuf:"bytes,6,rep,name=linked_identities,json=linkedIdentities,proto3" json:"linked_identities,omitempty"`
 	// Optional. Lifecycle rules for declared resources.
 	Lifecycle []*Lifecycle `protobuf:"bytes,4,rep,name=lifecycle,proto3" json:"lifecycle,omitempty"`
 	// Optional. Resources to take out of management.
@@ -152,13 +145,6 @@ func (*Configuration) Descriptor() ([]byte, []int) {
 	return file_api_configuration_proto_rawDescGZIP(), []int{0}
 }
 
-func (x *Configuration) GetIdentityProviders() []*IdentityProvider {
-	if x != nil {
-		return x.IdentityProviders
-	}
-	return nil
-}
-
 func (x *Configuration) GetInstanceSettings() []*InstanceSetting {
 	if x != nil {
 		return x.InstanceSettings
@@ -169,13 +155,6 @@ func (x *Configuration) GetInstanceSettings() []*InstanceSetting {
 func (x *Configuration) GetUsers() []*User {
 	if x != nil {
 		return x.Users
-	}
-	return nil
-}
-
-func (x *Configuration) GetLinkedIdentities() []*LinkedIdentity {
-	if x != nil {
-		return x.LinkedIdentities
 	}
 	return nil
 }
@@ -198,8 +177,7 @@ func (x *Configuration) GetRemoved() []*Removed {
 type Lifecycle struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Required. The resource name of a resource declared in the configuration.
-	// Format: identity-providers/{idp}, instance/settings/{setting}, users/{user},
-	// or users/{user}/linkedIdentities/{linked_identity}
+	// Format: instance/settings/{setting} or users/{user}
 	Resource string `protobuf:"bytes,1,opt,name=resource,proto3" json:"resource,omitempty"`
 	// Optional. Field paths, in JSON name form, that the configuration does not manage.
 	// Apply writes them only when it creates the resource, and the API does not protect them.
@@ -274,8 +252,7 @@ func (x *Lifecycle) GetWriteOnlyVersion() int32 {
 type Removed struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Required. The resource name of a resource the configuration manages.
-	// Format: identity-providers/{idp}, instance/settings/{setting}, users/{user},
-	// or users/{user}/linkedIdentities/{linked_identity}
+	// Format: instance/settings/{setting} or users/{user}
 	Resource string `protobuf:"bytes,1,opt,name=resource,proto3" json:"resource,omitempty"`
 	// Optional. Delete the resource, or reset an instance setting group to its defaults,
 	// instead of only releasing it from management.
@@ -416,8 +393,7 @@ func (x *Plan) GetWarnings() []string {
 type ResourceChange struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// The resource name.
-	// Format: identity-providers/{idp}, instance/settings/{setting}, users/{user},
-	// or users/{user}/linkedIdentities/{linked_identity}
+	// Format: instance/settings/{setting} or users/{user}
 	Resource string `protobuf:"bytes,1,opt,name=resource,proto3" json:"resource,omitempty"`
 	// The configuration file that declares the resource; empty for one that is no longer declared.
 	Source string `protobuf:"bytes,2,opt,name=source,proto3" json:"source,omitempty"`
@@ -508,7 +484,7 @@ func (x *ResourceChange) GetMessage() string {
 // FieldChange is one field apply would write.
 type FieldChange struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// The field path, in JSON names from the resource, such as config.oauth2Config.scopes.
+	// The field path, in JSON names from the resource, such as displayName.
 	Path string `protobuf:"bytes,1,opt,name=path,proto3" json:"path,omitempty"`
 	// The value before, as JSON. Sensitive values print as (sensitive) and write-only values
 	// as (write-only); an empty string means the resource does not exist yet.
@@ -574,14 +550,12 @@ var File_api_configuration_proto protoreflect.FileDescriptor
 
 const file_api_configuration_proto_rawDesc = "" +
 	"\n" +
-	"\x17api/configuration.proto\x12\tmemos.api\x1a\x15api/idp_service.proto\x1a\x1aapi/instance_service.proto\x1a\x16api/user_service.proto\x1a\x1fgoogle/api/field_behavior.proto\"\x93\x03\n" +
-	"\rConfiguration\x12O\n" +
-	"\x12identity_providers\x18\x01 \x03(\v2\x1b.memos.api.IdentityProviderB\x03\xe0A\x01R\x11identityProviders\x12L\n" +
+	"\x17api/configuration.proto\x12\tmemos.api\x1a\x1aapi/instance_service.proto\x1a\x16api/user_service.proto\x1a\x1fgoogle/api/field_behavior.proto\"\xa8\x02\n" +
+	"\rConfiguration\x12L\n" +
 	"\x11instance_settings\x18\x02 \x03(\v2\x1a.memos.api.InstanceSettingB\x03\xe0A\x01R\x10instanceSettings\x12*\n" +
-	"\x05users\x18\x03 \x03(\v2\x0f.memos.api.UserB\x03\xe0A\x01R\x05users\x12K\n" +
-	"\x11linked_identities\x18\x06 \x03(\v2\x19.memos.api.LinkedIdentityB\x03\xe0A\x01R\x10linkedIdentities\x127\n" +
+	"\x05users\x18\x03 \x03(\v2\x0f.memos.api.UserB\x03\xe0A\x01R\x05users\x127\n" +
 	"\tlifecycle\x18\x04 \x03(\v2\x14.memos.api.LifecycleB\x03\xe0A\x01R\tlifecycle\x121\n" +
-	"\aremoved\x18\x05 \x03(\v2\x12.memos.api.RemovedB\x03\xe0A\x01R\aremoved\"\xb9\x01\n" +
+	"\aremoved\x18\x05 \x03(\v2\x12.memos.api.RemovedB\x03\xe0A\x01R\aremovedJ\x04\b\x01\x10\x02J\x04\b\x06\x10\aR\x12identity_providersR\x11linked_identities\"\xb9\x01\n" +
 	"\tLifecycle\x12\x1f\n" +
 	"\bresource\x18\x01 \x01(\tB\x03\xe0A\x02R\bresource\x12*\n" +
 	"\x0eignore_changes\x18\x02 \x03(\tB\x03\xe0A\x01R\rignoreChanges\x12,\n" +
@@ -644,26 +618,22 @@ var file_api_configuration_proto_goTypes = []any{
 	(*Plan)(nil),               // 4: memos.api.Plan
 	(*ResourceChange)(nil),     // 5: memos.api.ResourceChange
 	(*FieldChange)(nil),        // 6: memos.api.FieldChange
-	(*IdentityProvider)(nil),   // 7: memos.api.IdentityProvider
-	(*InstanceSetting)(nil),    // 8: memos.api.InstanceSetting
-	(*User)(nil),               // 9: memos.api.User
-	(*LinkedIdentity)(nil),     // 10: memos.api.LinkedIdentity
+	(*InstanceSetting)(nil),    // 7: memos.api.InstanceSetting
+	(*User)(nil),               // 8: memos.api.User
 }
 var file_api_configuration_proto_depIdxs = []int32{
-	7,  // 0: memos.api.Configuration.identity_providers:type_name -> memos.api.IdentityProvider
-	8,  // 1: memos.api.Configuration.instance_settings:type_name -> memos.api.InstanceSetting
-	9,  // 2: memos.api.Configuration.users:type_name -> memos.api.User
-	10, // 3: memos.api.Configuration.linked_identities:type_name -> memos.api.LinkedIdentity
-	2,  // 4: memos.api.Configuration.lifecycle:type_name -> memos.api.Lifecycle
-	3,  // 5: memos.api.Configuration.removed:type_name -> memos.api.Removed
-	5,  // 6: memos.api.Plan.resource_changes:type_name -> memos.api.ResourceChange
-	0,  // 7: memos.api.ResourceChange.action:type_name -> memos.api.ResourceChange.Action
-	6,  // 8: memos.api.ResourceChange.field_changes:type_name -> memos.api.FieldChange
-	9,  // [9:9] is the sub-list for method output_type
-	9,  // [9:9] is the sub-list for method input_type
-	9,  // [9:9] is the sub-list for extension type_name
-	9,  // [9:9] is the sub-list for extension extendee
-	0,  // [0:9] is the sub-list for field type_name
+	7, // 0: memos.api.Configuration.instance_settings:type_name -> memos.api.InstanceSetting
+	8, // 1: memos.api.Configuration.users:type_name -> memos.api.User
+	2, // 2: memos.api.Configuration.lifecycle:type_name -> memos.api.Lifecycle
+	3, // 3: memos.api.Configuration.removed:type_name -> memos.api.Removed
+	5, // 4: memos.api.Plan.resource_changes:type_name -> memos.api.ResourceChange
+	0, // 5: memos.api.ResourceChange.action:type_name -> memos.api.ResourceChange.Action
+	6, // 6: memos.api.ResourceChange.field_changes:type_name -> memos.api.FieldChange
+	7, // [7:7] is the sub-list for method output_type
+	7, // [7:7] is the sub-list for method input_type
+	7, // [7:7] is the sub-list for extension type_name
+	7, // [7:7] is the sub-list for extension extendee
+	0, // [0:7] is the sub-list for field type_name
 }
 
 func init() { file_api_configuration_proto_init() }
@@ -671,7 +641,6 @@ func file_api_configuration_proto_init() {
 	if File_api_configuration_proto != nil {
 		return
 	}
-	file_api_idp_service_proto_init()
 	file_api_instance_service_proto_init()
 	file_api_user_service_proto_init()
 	type x struct{}

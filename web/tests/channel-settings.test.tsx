@@ -53,7 +53,7 @@ describe("Notification and network settings", () => {
 
     fireEvent.click(switchControl);
     fireEvent.click(screen.getByRole("button", { name: "Save Telegram" }));
-    expect(authenticatedFetch.mock.lastCall?.[0]).toBe("/api/notificationSettings");
+    expect(authenticatedFetch.mock.lastCall?.[0]).toBe("/internal/notificationSettings");
     expect(lastRequestBody()).toEqual({ telegram: { enabled: false, userId: "9007199254740993" } });
     expect(await screen.findByText("Disabled")).toBeVisible();
   });
@@ -178,7 +178,7 @@ describe("Notification and network settings", () => {
     const proxyUrl = "socks5h://proxy-user:proxy-password@proxy.example.test:1080";
     fireEvent.change(proxy, { target: { value: proxyUrl } });
     fireEvent.click(save);
-    expect(authenticatedFetch.mock.lastCall?.[0]).toBe("/api/networkSettings");
+    expect(authenticatedFetch.mock.lastCall?.[0]).toBe("/internal/networkSettings");
     expect(lastRequestBody()).toEqual({ enabled: true, proxyUrl });
     expect(await screen.findByText("Connecting through the saved proxy")).toBeVisible();
     expect(proxy).toHaveValue("");

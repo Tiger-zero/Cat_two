@@ -6,7 +6,7 @@ import { useTranslate } from "@/utils/i18n";
 
 export default function CopyableSettingValue({ label, value }: { label: string; value: string }) {
   const t = useTranslate();
-  const copyLabel = t("setting.access-token.copy-value", { label });
+  const copyLabel = t("setting.mcp-connection.copy-value", { label });
 
   return (
     <div className="min-w-0">
@@ -26,7 +26,7 @@ export default function CopyableSettingValue({ label, value }: { label: string; 
                   if (await copy(value).catch(() => false)) {
                     toast.add({ title: t("message.copied"), type: "success" });
                   } else {
-                    showErrorToast(t("setting.access-token.copy-failed"));
+                    showErrorToast(t("setting.mcp-connection.copy-failed"));
                   }
                 }}
                 icon={<CopyIcon />}

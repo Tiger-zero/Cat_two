@@ -3,6 +3,9 @@ package sqlite
 import (
 	"context"
 	"database/sql"
+	"encoding/binary"
+	"io"
+	"os"
 	"strings"
 
 	"github.com/pkg/errors"
@@ -10,19 +13,19 @@ import (
 	// Note: modernc.org/sqlite driver is imported in functions.go where
 	// RegisterScalarFunction is used. No blank import needed here.
 
-	"github.com/usememos/memos/internal/profile"
+	profilepkg "github.com/usememos/memos/internal/profile"
 	"github.com/usememos/memos/store"
 )
 
 type DB struct {
 	db      *sql.DB
-	profile *profile.Profile
+	profile *profilepkg.Profile
 }
 
 // NewDB opens a database specified by its database driver name and a
 // driver-specific data source name, usually consisting of at least a
 // database name and connection information.
-func NewDB(profile *profile.Profile) (store.Driver, error) {
+func NewDB(profile *profilepkg.Profile) (store.Driver, error) {
 	// Ensure a DSN is set before attempting to open the database.
 	if profile.DSN == "" {
 		return nil, errors.New("dsn required")
@@ -36,36 +39,23 @@ func NewDB(profile *profile.Profile) (store.Driver, error) {
 		return nil, errors.Wrap(err, "failed to register sqlite regexp function")
 	}
 
-	// Connect to the database with some sane settings:
-	// - No shared-cache: it's obsolete; WAL journal mode is a better solution.
-	// - No foreign key constraints: it's currently disabled by default, but it's a
-	// good practice to be explicit and prevent future surprises on SQLite upgrades.
-	// - Journal mode set to WAL: it's the recommended journal mode for most applications
-	// as it prevents locking issues.
-	// - mmap size set to 0: it disables memory mapping, which can cause OOM errors on some systems.
-	// - Transactions begin IMMEDIATE: several store operations read before they
-	//   write (a membership or lifecycle check, then an insert). With the default
-	//   DEFERRED mode such a transaction holds a read snapshot when it tries to
-	//   write, and if any other connection committed in between (for example the
-	//   asynchronous personal-access-token last-used update that runs on every
-	//   token-authenticated request) SQLite refuses the upgrade with SQLITE_BUSY
-	//   at once, without consulting busy_timeout. Taking the write lock up front
-	//   makes those transactions queue behind the busy handler instead.
-	//
-	// Notes:
-	// - When using the `modernc.org/sqlite` driver, each pragma must be prefixed with `_pragma=`.
-	//
-	// References:
-	// - https://pkg.go.dev/modernc.org/sqlite#Driver.Open
-	// - https://www.sqlite.org/sharedcache.html
-	// - https://www.sqlite.org/pragma.html
+	path, err := profilepkg.SQLiteDatabasePath(profile.DSN)
+	if err != nil {
+		return nil, err
+	}
+	if err := checkSQLiteFileVersion(path); err != nil {
+		return nil, err
+	}
+
+	// The schema check runs before enabling WAL. Transactions take their write
+	// lock up front so read-before-write operations honor busy_timeout.
 	separator := "?"
 	if strings.Contains(profile.DSN, "?") {
 		separator = "&"
 	}
-	sqliteDB, err := sql.Open("sqlite", profile.DSN+separator+"_pragma=foreign_keys(0)&_pragma=busy_timeout(10000)&_pragma=journal_mode(WAL)&_pragma=mmap_size(0)&_txlock=immediate")
+	sqliteDB, err := sql.Open("sqlite", profile.DSN+separator+"_pragma=foreign_keys(0)&_pragma=busy_timeout(10000)&_pragma=mmap_size(0)&_txlock=immediate")
 	if err != nil {
-		return nil, errors.Wrapf(err, "failed to open db with dsn: %s", profile.DSN)
+		return nil, errors.Wrap(err, "open Cat_two SQLite database")
 	}
 
 	driver := DB{db: sqliteDB, profile: profile}
@@ -81,14 +71,51 @@ func (d *DB) Close() error {
 	return d.db.Close()
 }
 
-func (d *DB) IsInitialized(ctx context.Context) (bool, error) {
-	// Check if the database is initialized by checking if the memo table exists.
-	var exists bool
-	err := d.db.QueryRowContext(ctx, "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='memo')").Scan(&exists)
-	if err != nil {
-		return false, errors.Wrap(err, "failed to check if database is initialized")
+// checkSQLiteFileVersion rejects legacy files before SQLite has a chance to
+// recover their journals or change their persistent journal mode.
+func checkSQLiteFileVersion(path string) error {
+	if path == ":memory:" {
+		return nil
 	}
-	return exists, nil
+	file, err := os.Open(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return requireNoSQLiteJournal(path)
+	}
+	if err != nil {
+		return errors.Wrap(err, "read SQLite database header")
+	}
+	defer file.Close()
+
+	var header [72]byte
+	n, err := io.ReadFull(file, header[:])
+	if n == 0 && errors.Is(err, io.EOF) {
+		return requireNoSQLiteJournal(path)
+	}
+	if err != nil && !errors.Is(err, io.ErrUnexpectedEOF) {
+		return errors.Wrap(err, "read SQLite database header")
+	}
+	if n < len(header) || string(header[:16]) != "SQLite format 3\x00" ||
+		binary.BigEndian.Uint32(header[60:64]) != store.SQLiteFileVersion ||
+		binary.BigEndian.Uint32(header[68:72]) != store.SQLiteApplicationID {
+		return store.ErrUnsupportedSchema
+	}
+	return nil
+}
+
+func requireNoSQLiteJournal(path string) error {
+	for _, suffix := range []string{"-wal", "-journal"} {
+		info, err := os.Stat(path + suffix)
+		if errors.Is(err, os.ErrNotExist) {
+			continue
+		}
+		if err != nil {
+			return errors.Wrap(err, "inspect SQLite journal")
+		}
+		if info.Size() != 0 {
+			return store.ErrUnsupportedSchema
+		}
+	}
+	return nil
 }
 
 // GetDatabaseSize returns the database size in bytes, or -1 if unavailable.

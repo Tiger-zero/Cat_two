@@ -28,7 +28,6 @@ type openAPIOperation struct {
 	RequestBody       *openAPIRequestBody        `yaml:"requestBody"`
 	Responses         map[string]openAPIResponse `yaml:"responses"`
 	Method            string                     `yaml:"-"`
-	Path              string                     `yaml:"-"`
 	ResponseSchema    jsonSchema                 `yaml:"-"`
 	RequestBodySchema jsonSchema                 `yaml:"-"`
 }
@@ -73,7 +72,7 @@ func loadOpenAPISpec(path string) (*openAPISpec, error) {
 
 func buildOperationRegistry(spec *openAPISpec, operationIDs ...string) (map[string]*openAPIOperation, error) {
 	registry := map[string]*openAPIOperation{}
-	for path, pathItem := range spec.Paths {
+	for _, pathItem := range spec.Paths {
 		for method, operation := range pathItem {
 			if operation == nil || operation.OperationID == "" {
 				continue
@@ -86,7 +85,6 @@ func buildOperationRegistry(spec *openAPISpec, operationIDs ...string) (map[stri
 			}
 
 			operation.Method = strings.ToUpper(method)
-			operation.Path = path
 
 			responseSchema, err := operationSuccessResponseSchema(spec, operation)
 			if err != nil {

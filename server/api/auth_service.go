@@ -57,9 +57,6 @@ func (s *APIService) GetCurrentUser(ctx context.Context, _ *apipb.GetCurrentUser
 // Authentication: Not required (public endpoint).
 // Returns: User info, access token, and token expiry.
 func (s *APIService) SignIn(ctx context.Context, request *apipb.SignInRequest) (*apipb.SignInResponse, error) {
-	if request.GetSsoCredentials() != nil {
-		return nil, retiredModuleError()
-	}
 	var existingUser *store.User
 
 	// The blocklist and rate limits run before any user lookup or hashing.

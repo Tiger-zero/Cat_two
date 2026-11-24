@@ -62,7 +62,6 @@ func newGoldenFixture() goldenFixture {
 				Pinned:     true,
 				Tags:       []string{"work", "work/q3"},
 				Location:   &Location{Placeholder: "Office", Latitude: 52.52, Longitude: 13.405},
-				Space:      &Space{UID: "team-notes", Title: "Team Notes"},
 				Relations:  []Relation{{Type: RelationReference, Memo: "Xy7LmN01"}},
 				Attachments: []Attachment{{
 					UID:           "att1c9d",

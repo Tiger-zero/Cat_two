@@ -1,7 +1,6 @@
 package test
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"net/http"
@@ -9,32 +8,17 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/usememos/memos/proto/gen/api/apiconnect"
 	storepb "github.com/usememos/memos/proto/gen/store"
 )
 
 // Legacy usage limits remain readable for compatibility, but do not block
-// memo creation over either transport.
-func TestStoredUsageLimitsDoNotRestrictEitherTransport(t *testing.T) {
+// memo creation from the web client.
+func TestStoredUsageLimitsDoNotRestrictWebMemoCreation(t *testing.T) {
 	ctx := context.Background()
 	inst := bootInstance(ctx, t, instanceOptions{personal: true, instanceURL: "http://127.0.0.1"})
 	inst.createAdmin(t)
 	token := inst.signIn(t)
-
-	send := func(method, path string, body any, headers map[string]string) *http.Response {
-		t.Helper()
-		encoded, err := json.Marshal(body)
-		require.NoError(t, err)
-		req, err := http.NewRequestWithContext(ctx, method, inst.baseURL+path, bytes.NewReader(encoded))
-		require.NoError(t, err)
-		req.Header.Set("Content-Type", "application/json")
-		req.Header.Set("Authorization", "Bearer "+token)
-		for key, value := range headers {
-			req.Header.Set(key, value)
-		}
-		resp, err := inst.client.Do(req)
-		require.NoError(t, err)
-		return resp
-	}
 
 	_, err := inst.server.Store.UpsertInstanceSetting(ctx, &storepb.InstanceSetting{
 		Key: storepb.InstanceSettingKey_USAGE_LIMITS,
@@ -49,14 +33,18 @@ func TestStoredUsageLimitsDoNotRestrictEitherTransport(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	status, body := inst.do(t, http.MethodPatch, "/api/instance/settings/USAGE_LIMITS", token, map[string]any{
-		"usageLimitsSetting": map[string]any{
-			"limits": []map[string]any{{"allUsers": true, "memoCount": "100"}},
+	const name = "instance/settings/USAGE_LIMITS"
+	status, body := inst.connect(t, apiconnect.InstanceServiceUpdateInstanceSettingProcedure, token, map[string]any{
+		"instanceSetting": map[string]any{
+			"name": name,
+			"usageLimitsSetting": map[string]any{
+				"limits": []map[string]any{{"allUsers": true, "memoCount": "100"}},
+			},
 		},
 	})
 	require.Equal(t, http.StatusNotImplemented, status, "%s", body)
 
-	status, body = inst.do(t, http.MethodGet, "/api/instance/settings/USAGE_LIMITS", token, nil)
+	status, body = inst.connect(t, apiconnect.InstanceServiceGetInstanceSettingProcedure, token, map[string]string{"name": name})
 	require.Equal(t, http.StatusOK, status, "%s", body)
 	var setting struct {
 		Name               string `json:"name"`
@@ -79,20 +67,10 @@ func TestStoredUsageLimitsDoNotRestrictEitherTransport(t *testing.T) {
 
 	inst.createMemo(t, token, "first", "the first memo")
 	inst.createMemo(t, token, "second", "the second memo")
-	memo := map[string]any{"content": "the third memo", "visibility": "PRIVATE"}
-	connectResp := send(http.MethodPost, "/memos.api.MemoService/CreateMemo", map[string]any{"memo": memo}, map[string]string{"Connect-Protocol-Version": "1"})
-	defer connectResp.Body.Close()
-	require.Equal(t, http.StatusOK, connectResp.StatusCode)
-	var created struct {
-		Name    string `json:"name"`
-		Content string `json:"content"`
-	}
-	require.NoError(t, json.NewDecoder(connectResp.Body).Decode(&created))
-	require.NotEmpty(t, created.Name)
-	require.Equal(t, "the third memo", created.Content)
+	inst.createMemo(t, token, "third", "the third memo")
 
 	userName := "users/" + testAdminUsername
-	status, body = inst.do(t, http.MethodGet, "/api/"+userName+"/usage", token, nil)
+	status, body = inst.connect(t, apiconnect.UserServiceGetUserUsageProcedure, token, map[string]string{"name": userName + "/usage"})
 	require.Equal(t, http.StatusOK, status, "%s", body)
 	var usage struct {
 		Name       string                     `json:"name"`

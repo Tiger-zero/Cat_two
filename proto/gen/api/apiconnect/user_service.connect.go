@@ -74,42 +74,6 @@ const (
 	// UserServiceDeleteUserNotificationProcedure is the fully-qualified name of the UserService's
 	// DeleteUserNotification RPC.
 	UserServiceDeleteUserNotificationProcedure = "/memos.api.UserService/DeleteUserNotification"
-	// UserServiceListUserWebhooksProcedure is the fully-qualified name of the UserService's
-	// ListUserWebhooks RPC.
-	UserServiceListUserWebhooksProcedure = "/memos.api.UserService/ListUserWebhooks"
-	// UserServiceCreateUserWebhookProcedure is the fully-qualified name of the UserService's
-	// CreateUserWebhook RPC.
-	UserServiceCreateUserWebhookProcedure = "/memos.api.UserService/CreateUserWebhook"
-	// UserServiceUpdateUserWebhookProcedure is the fully-qualified name of the UserService's
-	// UpdateUserWebhook RPC.
-	UserServiceUpdateUserWebhookProcedure = "/memos.api.UserService/UpdateUserWebhook"
-	// UserServiceDeleteUserWebhookProcedure is the fully-qualified name of the UserService's
-	// DeleteUserWebhook RPC.
-	UserServiceDeleteUserWebhookProcedure = "/memos.api.UserService/DeleteUserWebhook"
-	// UserServiceGetUserWebhookSigningSecretProcedure is the fully-qualified name of the UserService's
-	// GetUserWebhookSigningSecret RPC.
-	UserServiceGetUserWebhookSigningSecretProcedure = "/memos.api.UserService/GetUserWebhookSigningSecret"
-	// UserServiceListLinkedIdentitiesProcedure is the fully-qualified name of the UserService's
-	// ListLinkedIdentities RPC.
-	UserServiceListLinkedIdentitiesProcedure = "/memos.api.UserService/ListLinkedIdentities"
-	// UserServiceGetLinkedIdentityProcedure is the fully-qualified name of the UserService's
-	// GetLinkedIdentity RPC.
-	UserServiceGetLinkedIdentityProcedure = "/memos.api.UserService/GetLinkedIdentity"
-	// UserServiceCreateLinkedIdentityProcedure is the fully-qualified name of the UserService's
-	// CreateLinkedIdentity RPC.
-	UserServiceCreateLinkedIdentityProcedure = "/memos.api.UserService/CreateLinkedIdentity"
-	// UserServiceDeleteLinkedIdentityProcedure is the fully-qualified name of the UserService's
-	// DeleteLinkedIdentity RPC.
-	UserServiceDeleteLinkedIdentityProcedure = "/memos.api.UserService/DeleteLinkedIdentity"
-	// UserServiceListPersonalAccessTokensProcedure is the fully-qualified name of the UserService's
-	// ListPersonalAccessTokens RPC.
-	UserServiceListPersonalAccessTokensProcedure = "/memos.api.UserService/ListPersonalAccessTokens"
-	// UserServiceCreatePersonalAccessTokenProcedure is the fully-qualified name of the UserService's
-	// CreatePersonalAccessToken RPC.
-	UserServiceCreatePersonalAccessTokenProcedure = "/memos.api.UserService/CreatePersonalAccessToken"
-	// UserServiceDeletePersonalAccessTokenProcedure is the fully-qualified name of the UserService's
-	// DeletePersonalAccessToken RPC.
-	UserServiceDeletePersonalAccessTokenProcedure = "/memos.api.UserService/DeletePersonalAccessToken"
 	// UserServiceImportMemosProcedure is the fully-qualified name of the UserService's ImportMemos RPC.
 	UserServiceImportMemosProcedure = "/memos.api.UserService/ImportMemos"
 )
@@ -131,7 +95,7 @@ type UserServiceClient interface {
 	// anyone. Changing the password ends the user's other sessions.
 	UpdateUser(context.Context, *connect.Request[api.UpdateUserRequest]) (*connect.Response[api.User], error)
 	// DeleteUser deletes a user. Users may delete themselves; admins may delete
-	// anyone. A user who belongs to any space cannot be deleted.
+	// anyone.
 	DeleteUser(context.Context, *connect.Request[api.DeleteUserRequest]) (*connect.Response[emptypb.Empty], error)
 	// ListUserSettings lists the settings of a user. Only the user may call it.
 	// The GENERAL setting is always included, with defaults when it was never
@@ -153,7 +117,7 @@ type UserServiceClient interface {
 	// user. Only the user or an admin may call it.
 	GetUserUsage(context.Context, *connect.Request[api.GetUserUsageRequest]) (*connect.Response[api.UserUsage], error)
 	// ListUserNotifications lists a user's notifications. Only the user may call
-	// it. Notifications whose memos or space invitation the user can no longer
+	// it. Notifications whose memos the user can no longer
 	// read are left out.
 	ListUserNotifications(context.Context, *connect.Request[api.ListUserNotificationsRequest]) (*connect.Response[api.ListUserNotificationsResponse], error)
 	// UpdateUserNotification updates a notification's status. Only the receiver
@@ -162,43 +126,6 @@ type UserServiceClient interface {
 	// DeleteUserNotification permanently deletes a notification. Only the
 	// receiver may call it.
 	DeleteUserNotification(context.Context, *connect.Request[api.DeleteUserNotificationRequest]) (*connect.Response[emptypb.Empty], error)
-	// ListUserWebhooks lists a user's webhooks. Only the user may call it.
-	ListUserWebhooks(context.Context, *connect.Request[api.ListUserWebhooksRequest]) (*connect.Response[api.ListUserWebhooksResponse], error)
-	// CreateUserWebhook creates a webhook for a user. Only the user may call it.
-	// The service generates a signing secret when none is given.
-	CreateUserWebhook(context.Context, *connect.Request[api.CreateUserWebhookRequest]) (*connect.Response[api.UserWebhook], error)
-	// UpdateUserWebhook updates a webhook. Only the owner may call it.
-	UpdateUserWebhook(context.Context, *connect.Request[api.UpdateUserWebhookRequest]) (*connect.Response[api.UserWebhook], error)
-	// DeleteUserWebhook deletes a webhook. Only the owner may call it.
-	DeleteUserWebhook(context.Context, *connect.Request[api.DeleteUserWebhookRequest]) (*connect.Response[emptypb.Empty], error)
-	// GetUserWebhookSigningSecret returns the signing secret of a webhook. Only
-	// the owner may call it. The secret is returned only through this call; it
-	// is never included in List, Create or Update responses.
-	GetUserWebhookSigningSecret(context.Context, *connect.Request[api.GetUserWebhookSigningSecretRequest]) (*connect.Response[api.GetUserWebhookSigningSecretResponse], error)
-	// ListLinkedIdentities lists the SSO identities linked to a user. The user
-	// and admins may call it.
-	ListLinkedIdentities(context.Context, *connect.Request[api.ListLinkedIdentitiesRequest]) (*connect.Response[api.ListLinkedIdentitiesResponse], error)
-	// GetLinkedIdentity gets an SSO identity linked to a user. The user and
-	// admins may call it.
-	GetLinkedIdentity(context.Context, *connect.Request[api.GetLinkedIdentityRequest]) (*connect.Response[api.LinkedIdentity], error)
-	// CreateLinkedIdentity completes an OAuth flow and links the resulting SSO
-	// identity to the authenticated user, who must be the parent.
-	CreateLinkedIdentity(context.Context, *connect.Request[api.CreateLinkedIdentityRequest]) (*connect.Response[api.LinkedIdentity], error)
-	// DeleteLinkedIdentity unlinks an SSO identity from a user. The user and
-	// admins may call it.
-	DeleteLinkedIdentity(context.Context, *connect.Request[api.DeleteLinkedIdentityRequest]) (*connect.Response[emptypb.Empty], error)
-	// ListPersonalAccessTokens lists a user's personal access tokens (PATs),
-	// without their token values. PATs are long-lived tokens for API and script
-	// access, distinct from short-lived JWT access tokens. The user and admins
-	// may call it.
-	ListPersonalAccessTokens(context.Context, *connect.Request[api.ListPersonalAccessTokensRequest]) (*connect.Response[api.ListPersonalAccessTokensResponse], error)
-	// CreatePersonalAccessToken creates a personal access token for a user.
-	// Only the user may call it. The token value is returned only once, in the
-	// response.
-	CreatePersonalAccessToken(context.Context, *connect.Request[api.CreatePersonalAccessTokenRequest]) (*connect.Response[api.CreatePersonalAccessTokenResponse], error)
-	// DeletePersonalAccessToken deletes a personal access token, which stops
-	// working immediately. Only the owner may call it.
-	DeletePersonalAccessToken(context.Context, *connect.Request[api.DeletePersonalAccessTokenRequest]) (*connect.Response[emptypb.Empty], error)
 	// ImportMemos uploads a Memos export file in bounded chunks and imports it
 	// into the user's memos. The first call carries the spec and returns an
 	// upload_id; later calls carry that upload_id. A finishing call with
@@ -310,78 +237,6 @@ func NewUserServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 			connect.WithSchema(userServiceMethods.ByName("DeleteUserNotification")),
 			connect.WithClientOptions(opts...),
 		),
-		listUserWebhooks: connect.NewClient[api.ListUserWebhooksRequest, api.ListUserWebhooksResponse](
-			httpClient,
-			baseURL+UserServiceListUserWebhooksProcedure,
-			connect.WithSchema(userServiceMethods.ByName("ListUserWebhooks")),
-			connect.WithClientOptions(opts...),
-		),
-		createUserWebhook: connect.NewClient[api.CreateUserWebhookRequest, api.UserWebhook](
-			httpClient,
-			baseURL+UserServiceCreateUserWebhookProcedure,
-			connect.WithSchema(userServiceMethods.ByName("CreateUserWebhook")),
-			connect.WithClientOptions(opts...),
-		),
-		updateUserWebhook: connect.NewClient[api.UpdateUserWebhookRequest, api.UserWebhook](
-			httpClient,
-			baseURL+UserServiceUpdateUserWebhookProcedure,
-			connect.WithSchema(userServiceMethods.ByName("UpdateUserWebhook")),
-			connect.WithClientOptions(opts...),
-		),
-		deleteUserWebhook: connect.NewClient[api.DeleteUserWebhookRequest, emptypb.Empty](
-			httpClient,
-			baseURL+UserServiceDeleteUserWebhookProcedure,
-			connect.WithSchema(userServiceMethods.ByName("DeleteUserWebhook")),
-			connect.WithClientOptions(opts...),
-		),
-		getUserWebhookSigningSecret: connect.NewClient[api.GetUserWebhookSigningSecretRequest, api.GetUserWebhookSigningSecretResponse](
-			httpClient,
-			baseURL+UserServiceGetUserWebhookSigningSecretProcedure,
-			connect.WithSchema(userServiceMethods.ByName("GetUserWebhookSigningSecret")),
-			connect.WithClientOptions(opts...),
-		),
-		listLinkedIdentities: connect.NewClient[api.ListLinkedIdentitiesRequest, api.ListLinkedIdentitiesResponse](
-			httpClient,
-			baseURL+UserServiceListLinkedIdentitiesProcedure,
-			connect.WithSchema(userServiceMethods.ByName("ListLinkedIdentities")),
-			connect.WithClientOptions(opts...),
-		),
-		getLinkedIdentity: connect.NewClient[api.GetLinkedIdentityRequest, api.LinkedIdentity](
-			httpClient,
-			baseURL+UserServiceGetLinkedIdentityProcedure,
-			connect.WithSchema(userServiceMethods.ByName("GetLinkedIdentity")),
-			connect.WithClientOptions(opts...),
-		),
-		createLinkedIdentity: connect.NewClient[api.CreateLinkedIdentityRequest, api.LinkedIdentity](
-			httpClient,
-			baseURL+UserServiceCreateLinkedIdentityProcedure,
-			connect.WithSchema(userServiceMethods.ByName("CreateLinkedIdentity")),
-			connect.WithClientOptions(opts...),
-		),
-		deleteLinkedIdentity: connect.NewClient[api.DeleteLinkedIdentityRequest, emptypb.Empty](
-			httpClient,
-			baseURL+UserServiceDeleteLinkedIdentityProcedure,
-			connect.WithSchema(userServiceMethods.ByName("DeleteLinkedIdentity")),
-			connect.WithClientOptions(opts...),
-		),
-		listPersonalAccessTokens: connect.NewClient[api.ListPersonalAccessTokensRequest, api.ListPersonalAccessTokensResponse](
-			httpClient,
-			baseURL+UserServiceListPersonalAccessTokensProcedure,
-			connect.WithSchema(userServiceMethods.ByName("ListPersonalAccessTokens")),
-			connect.WithClientOptions(opts...),
-		),
-		createPersonalAccessToken: connect.NewClient[api.CreatePersonalAccessTokenRequest, api.CreatePersonalAccessTokenResponse](
-			httpClient,
-			baseURL+UserServiceCreatePersonalAccessTokenProcedure,
-			connect.WithSchema(userServiceMethods.ByName("CreatePersonalAccessToken")),
-			connect.WithClientOptions(opts...),
-		),
-		deletePersonalAccessToken: connect.NewClient[api.DeletePersonalAccessTokenRequest, emptypb.Empty](
-			httpClient,
-			baseURL+UserServiceDeletePersonalAccessTokenProcedure,
-			connect.WithSchema(userServiceMethods.ByName("DeletePersonalAccessToken")),
-			connect.WithClientOptions(opts...),
-		),
 		importMemos: connect.NewClient[api.ImportMemosRequest, api.ImportMemosResponse](
 			httpClient,
 			baseURL+UserServiceImportMemosProcedure,
@@ -393,34 +248,22 @@ func NewUserServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 
 // userServiceClient implements UserServiceClient.
 type userServiceClient struct {
-	listUsers                   *connect.Client[api.ListUsersRequest, api.ListUsersResponse]
-	getUser                     *connect.Client[api.GetUserRequest, api.User]
-	batchGetUsers               *connect.Client[api.BatchGetUsersRequest, api.BatchGetUsersResponse]
-	createUser                  *connect.Client[api.CreateUserRequest, api.User]
-	updateUser                  *connect.Client[api.UpdateUserRequest, api.User]
-	deleteUser                  *connect.Client[api.DeleteUserRequest, emptypb.Empty]
-	listUserSettings            *connect.Client[api.ListUserSettingsRequest, api.ListUserSettingsResponse]
-	getUserSetting              *connect.Client[api.GetUserSettingRequest, api.UserSetting]
-	updateUserSetting           *connect.Client[api.UpdateUserSettingRequest, api.UserSetting]
-	listUserStats               *connect.Client[api.ListUserStatsRequest, api.ListUserStatsResponse]
-	getUserStats                *connect.Client[api.GetUserStatsRequest, api.UserStats]
-	getUserUsage                *connect.Client[api.GetUserUsageRequest, api.UserUsage]
-	listUserNotifications       *connect.Client[api.ListUserNotificationsRequest, api.ListUserNotificationsResponse]
-	updateUserNotification      *connect.Client[api.UpdateUserNotificationRequest, api.UserNotification]
-	deleteUserNotification      *connect.Client[api.DeleteUserNotificationRequest, emptypb.Empty]
-	listUserWebhooks            *connect.Client[api.ListUserWebhooksRequest, api.ListUserWebhooksResponse]
-	createUserWebhook           *connect.Client[api.CreateUserWebhookRequest, api.UserWebhook]
-	updateUserWebhook           *connect.Client[api.UpdateUserWebhookRequest, api.UserWebhook]
-	deleteUserWebhook           *connect.Client[api.DeleteUserWebhookRequest, emptypb.Empty]
-	getUserWebhookSigningSecret *connect.Client[api.GetUserWebhookSigningSecretRequest, api.GetUserWebhookSigningSecretResponse]
-	listLinkedIdentities        *connect.Client[api.ListLinkedIdentitiesRequest, api.ListLinkedIdentitiesResponse]
-	getLinkedIdentity           *connect.Client[api.GetLinkedIdentityRequest, api.LinkedIdentity]
-	createLinkedIdentity        *connect.Client[api.CreateLinkedIdentityRequest, api.LinkedIdentity]
-	deleteLinkedIdentity        *connect.Client[api.DeleteLinkedIdentityRequest, emptypb.Empty]
-	listPersonalAccessTokens    *connect.Client[api.ListPersonalAccessTokensRequest, api.ListPersonalAccessTokensResponse]
-	createPersonalAccessToken   *connect.Client[api.CreatePersonalAccessTokenRequest, api.CreatePersonalAccessTokenResponse]
-	deletePersonalAccessToken   *connect.Client[api.DeletePersonalAccessTokenRequest, emptypb.Empty]
-	importMemos                 *connect.Client[api.ImportMemosRequest, api.ImportMemosResponse]
+	listUsers              *connect.Client[api.ListUsersRequest, api.ListUsersResponse]
+	getUser                *connect.Client[api.GetUserRequest, api.User]
+	batchGetUsers          *connect.Client[api.BatchGetUsersRequest, api.BatchGetUsersResponse]
+	createUser             *connect.Client[api.CreateUserRequest, api.User]
+	updateUser             *connect.Client[api.UpdateUserRequest, api.User]
+	deleteUser             *connect.Client[api.DeleteUserRequest, emptypb.Empty]
+	listUserSettings       *connect.Client[api.ListUserSettingsRequest, api.ListUserSettingsResponse]
+	getUserSetting         *connect.Client[api.GetUserSettingRequest, api.UserSetting]
+	updateUserSetting      *connect.Client[api.UpdateUserSettingRequest, api.UserSetting]
+	listUserStats          *connect.Client[api.ListUserStatsRequest, api.ListUserStatsResponse]
+	getUserStats           *connect.Client[api.GetUserStatsRequest, api.UserStats]
+	getUserUsage           *connect.Client[api.GetUserUsageRequest, api.UserUsage]
+	listUserNotifications  *connect.Client[api.ListUserNotificationsRequest, api.ListUserNotificationsResponse]
+	updateUserNotification *connect.Client[api.UpdateUserNotificationRequest, api.UserNotification]
+	deleteUserNotification *connect.Client[api.DeleteUserNotificationRequest, emptypb.Empty]
+	importMemos            *connect.Client[api.ImportMemosRequest, api.ImportMemosResponse]
 }
 
 // ListUsers calls memos.api.UserService.ListUsers.
@@ -498,66 +341,6 @@ func (c *userServiceClient) DeleteUserNotification(ctx context.Context, req *con
 	return c.deleteUserNotification.CallUnary(ctx, req)
 }
 
-// ListUserWebhooks calls memos.api.UserService.ListUserWebhooks.
-func (c *userServiceClient) ListUserWebhooks(ctx context.Context, req *connect.Request[api.ListUserWebhooksRequest]) (*connect.Response[api.ListUserWebhooksResponse], error) {
-	return c.listUserWebhooks.CallUnary(ctx, req)
-}
-
-// CreateUserWebhook calls memos.api.UserService.CreateUserWebhook.
-func (c *userServiceClient) CreateUserWebhook(ctx context.Context, req *connect.Request[api.CreateUserWebhookRequest]) (*connect.Response[api.UserWebhook], error) {
-	return c.createUserWebhook.CallUnary(ctx, req)
-}
-
-// UpdateUserWebhook calls memos.api.UserService.UpdateUserWebhook.
-func (c *userServiceClient) UpdateUserWebhook(ctx context.Context, req *connect.Request[api.UpdateUserWebhookRequest]) (*connect.Response[api.UserWebhook], error) {
-	return c.updateUserWebhook.CallUnary(ctx, req)
-}
-
-// DeleteUserWebhook calls memos.api.UserService.DeleteUserWebhook.
-func (c *userServiceClient) DeleteUserWebhook(ctx context.Context, req *connect.Request[api.DeleteUserWebhookRequest]) (*connect.Response[emptypb.Empty], error) {
-	return c.deleteUserWebhook.CallUnary(ctx, req)
-}
-
-// GetUserWebhookSigningSecret calls memos.api.UserService.GetUserWebhookSigningSecret.
-func (c *userServiceClient) GetUserWebhookSigningSecret(ctx context.Context, req *connect.Request[api.GetUserWebhookSigningSecretRequest]) (*connect.Response[api.GetUserWebhookSigningSecretResponse], error) {
-	return c.getUserWebhookSigningSecret.CallUnary(ctx, req)
-}
-
-// ListLinkedIdentities calls memos.api.UserService.ListLinkedIdentities.
-func (c *userServiceClient) ListLinkedIdentities(ctx context.Context, req *connect.Request[api.ListLinkedIdentitiesRequest]) (*connect.Response[api.ListLinkedIdentitiesResponse], error) {
-	return c.listLinkedIdentities.CallUnary(ctx, req)
-}
-
-// GetLinkedIdentity calls memos.api.UserService.GetLinkedIdentity.
-func (c *userServiceClient) GetLinkedIdentity(ctx context.Context, req *connect.Request[api.GetLinkedIdentityRequest]) (*connect.Response[api.LinkedIdentity], error) {
-	return c.getLinkedIdentity.CallUnary(ctx, req)
-}
-
-// CreateLinkedIdentity calls memos.api.UserService.CreateLinkedIdentity.
-func (c *userServiceClient) CreateLinkedIdentity(ctx context.Context, req *connect.Request[api.CreateLinkedIdentityRequest]) (*connect.Response[api.LinkedIdentity], error) {
-	return c.createLinkedIdentity.CallUnary(ctx, req)
-}
-
-// DeleteLinkedIdentity calls memos.api.UserService.DeleteLinkedIdentity.
-func (c *userServiceClient) DeleteLinkedIdentity(ctx context.Context, req *connect.Request[api.DeleteLinkedIdentityRequest]) (*connect.Response[emptypb.Empty], error) {
-	return c.deleteLinkedIdentity.CallUnary(ctx, req)
-}
-
-// ListPersonalAccessTokens calls memos.api.UserService.ListPersonalAccessTokens.
-func (c *userServiceClient) ListPersonalAccessTokens(ctx context.Context, req *connect.Request[api.ListPersonalAccessTokensRequest]) (*connect.Response[api.ListPersonalAccessTokensResponse], error) {
-	return c.listPersonalAccessTokens.CallUnary(ctx, req)
-}
-
-// CreatePersonalAccessToken calls memos.api.UserService.CreatePersonalAccessToken.
-func (c *userServiceClient) CreatePersonalAccessToken(ctx context.Context, req *connect.Request[api.CreatePersonalAccessTokenRequest]) (*connect.Response[api.CreatePersonalAccessTokenResponse], error) {
-	return c.createPersonalAccessToken.CallUnary(ctx, req)
-}
-
-// DeletePersonalAccessToken calls memos.api.UserService.DeletePersonalAccessToken.
-func (c *userServiceClient) DeletePersonalAccessToken(ctx context.Context, req *connect.Request[api.DeletePersonalAccessTokenRequest]) (*connect.Response[emptypb.Empty], error) {
-	return c.deletePersonalAccessToken.CallUnary(ctx, req)
-}
-
 // ImportMemos calls memos.api.UserService.ImportMemos.
 func (c *userServiceClient) ImportMemos(ctx context.Context, req *connect.Request[api.ImportMemosRequest]) (*connect.Response[api.ImportMemosResponse], error) {
 	return c.importMemos.CallUnary(ctx, req)
@@ -580,7 +363,7 @@ type UserServiceHandler interface {
 	// anyone. Changing the password ends the user's other sessions.
 	UpdateUser(context.Context, *connect.Request[api.UpdateUserRequest]) (*connect.Response[api.User], error)
 	// DeleteUser deletes a user. Users may delete themselves; admins may delete
-	// anyone. A user who belongs to any space cannot be deleted.
+	// anyone.
 	DeleteUser(context.Context, *connect.Request[api.DeleteUserRequest]) (*connect.Response[emptypb.Empty], error)
 	// ListUserSettings lists the settings of a user. Only the user may call it.
 	// The GENERAL setting is always included, with defaults when it was never
@@ -602,7 +385,7 @@ type UserServiceHandler interface {
 	// user. Only the user or an admin may call it.
 	GetUserUsage(context.Context, *connect.Request[api.GetUserUsageRequest]) (*connect.Response[api.UserUsage], error)
 	// ListUserNotifications lists a user's notifications. Only the user may call
-	// it. Notifications whose memos or space invitation the user can no longer
+	// it. Notifications whose memos the user can no longer
 	// read are left out.
 	ListUserNotifications(context.Context, *connect.Request[api.ListUserNotificationsRequest]) (*connect.Response[api.ListUserNotificationsResponse], error)
 	// UpdateUserNotification updates a notification's status. Only the receiver
@@ -611,43 +394,6 @@ type UserServiceHandler interface {
 	// DeleteUserNotification permanently deletes a notification. Only the
 	// receiver may call it.
 	DeleteUserNotification(context.Context, *connect.Request[api.DeleteUserNotificationRequest]) (*connect.Response[emptypb.Empty], error)
-	// ListUserWebhooks lists a user's webhooks. Only the user may call it.
-	ListUserWebhooks(context.Context, *connect.Request[api.ListUserWebhooksRequest]) (*connect.Response[api.ListUserWebhooksResponse], error)
-	// CreateUserWebhook creates a webhook for a user. Only the user may call it.
-	// The service generates a signing secret when none is given.
-	CreateUserWebhook(context.Context, *connect.Request[api.CreateUserWebhookRequest]) (*connect.Response[api.UserWebhook], error)
-	// UpdateUserWebhook updates a webhook. Only the owner may call it.
-	UpdateUserWebhook(context.Context, *connect.Request[api.UpdateUserWebhookRequest]) (*connect.Response[api.UserWebhook], error)
-	// DeleteUserWebhook deletes a webhook. Only the owner may call it.
-	DeleteUserWebhook(context.Context, *connect.Request[api.DeleteUserWebhookRequest]) (*connect.Response[emptypb.Empty], error)
-	// GetUserWebhookSigningSecret returns the signing secret of a webhook. Only
-	// the owner may call it. The secret is returned only through this call; it
-	// is never included in List, Create or Update responses.
-	GetUserWebhookSigningSecret(context.Context, *connect.Request[api.GetUserWebhookSigningSecretRequest]) (*connect.Response[api.GetUserWebhookSigningSecretResponse], error)
-	// ListLinkedIdentities lists the SSO identities linked to a user. The user
-	// and admins may call it.
-	ListLinkedIdentities(context.Context, *connect.Request[api.ListLinkedIdentitiesRequest]) (*connect.Response[api.ListLinkedIdentitiesResponse], error)
-	// GetLinkedIdentity gets an SSO identity linked to a user. The user and
-	// admins may call it.
-	GetLinkedIdentity(context.Context, *connect.Request[api.GetLinkedIdentityRequest]) (*connect.Response[api.LinkedIdentity], error)
-	// CreateLinkedIdentity completes an OAuth flow and links the resulting SSO
-	// identity to the authenticated user, who must be the parent.
-	CreateLinkedIdentity(context.Context, *connect.Request[api.CreateLinkedIdentityRequest]) (*connect.Response[api.LinkedIdentity], error)
-	// DeleteLinkedIdentity unlinks an SSO identity from a user. The user and
-	// admins may call it.
-	DeleteLinkedIdentity(context.Context, *connect.Request[api.DeleteLinkedIdentityRequest]) (*connect.Response[emptypb.Empty], error)
-	// ListPersonalAccessTokens lists a user's personal access tokens (PATs),
-	// without their token values. PATs are long-lived tokens for API and script
-	// access, distinct from short-lived JWT access tokens. The user and admins
-	// may call it.
-	ListPersonalAccessTokens(context.Context, *connect.Request[api.ListPersonalAccessTokensRequest]) (*connect.Response[api.ListPersonalAccessTokensResponse], error)
-	// CreatePersonalAccessToken creates a personal access token for a user.
-	// Only the user may call it. The token value is returned only once, in the
-	// response.
-	CreatePersonalAccessToken(context.Context, *connect.Request[api.CreatePersonalAccessTokenRequest]) (*connect.Response[api.CreatePersonalAccessTokenResponse], error)
-	// DeletePersonalAccessToken deletes a personal access token, which stops
-	// working immediately. Only the owner may call it.
-	DeletePersonalAccessToken(context.Context, *connect.Request[api.DeletePersonalAccessTokenRequest]) (*connect.Response[emptypb.Empty], error)
 	// ImportMemos uploads a Memos export file in bounded chunks and imports it
 	// into the user's memos. The first call carries the spec and returns an
 	// upload_id; later calls carry that upload_id. A finishing call with
@@ -755,78 +501,6 @@ func NewUserServiceHandler(svc UserServiceHandler, opts ...connect.HandlerOption
 		connect.WithSchema(userServiceMethods.ByName("DeleteUserNotification")),
 		connect.WithHandlerOptions(opts...),
 	)
-	userServiceListUserWebhooksHandler := connect.NewUnaryHandler(
-		UserServiceListUserWebhooksProcedure,
-		svc.ListUserWebhooks,
-		connect.WithSchema(userServiceMethods.ByName("ListUserWebhooks")),
-		connect.WithHandlerOptions(opts...),
-	)
-	userServiceCreateUserWebhookHandler := connect.NewUnaryHandler(
-		UserServiceCreateUserWebhookProcedure,
-		svc.CreateUserWebhook,
-		connect.WithSchema(userServiceMethods.ByName("CreateUserWebhook")),
-		connect.WithHandlerOptions(opts...),
-	)
-	userServiceUpdateUserWebhookHandler := connect.NewUnaryHandler(
-		UserServiceUpdateUserWebhookProcedure,
-		svc.UpdateUserWebhook,
-		connect.WithSchema(userServiceMethods.ByName("UpdateUserWebhook")),
-		connect.WithHandlerOptions(opts...),
-	)
-	userServiceDeleteUserWebhookHandler := connect.NewUnaryHandler(
-		UserServiceDeleteUserWebhookProcedure,
-		svc.DeleteUserWebhook,
-		connect.WithSchema(userServiceMethods.ByName("DeleteUserWebhook")),
-		connect.WithHandlerOptions(opts...),
-	)
-	userServiceGetUserWebhookSigningSecretHandler := connect.NewUnaryHandler(
-		UserServiceGetUserWebhookSigningSecretProcedure,
-		svc.GetUserWebhookSigningSecret,
-		connect.WithSchema(userServiceMethods.ByName("GetUserWebhookSigningSecret")),
-		connect.WithHandlerOptions(opts...),
-	)
-	userServiceListLinkedIdentitiesHandler := connect.NewUnaryHandler(
-		UserServiceListLinkedIdentitiesProcedure,
-		svc.ListLinkedIdentities,
-		connect.WithSchema(userServiceMethods.ByName("ListLinkedIdentities")),
-		connect.WithHandlerOptions(opts...),
-	)
-	userServiceGetLinkedIdentityHandler := connect.NewUnaryHandler(
-		UserServiceGetLinkedIdentityProcedure,
-		svc.GetLinkedIdentity,
-		connect.WithSchema(userServiceMethods.ByName("GetLinkedIdentity")),
-		connect.WithHandlerOptions(opts...),
-	)
-	userServiceCreateLinkedIdentityHandler := connect.NewUnaryHandler(
-		UserServiceCreateLinkedIdentityProcedure,
-		svc.CreateLinkedIdentity,
-		connect.WithSchema(userServiceMethods.ByName("CreateLinkedIdentity")),
-		connect.WithHandlerOptions(opts...),
-	)
-	userServiceDeleteLinkedIdentityHandler := connect.NewUnaryHandler(
-		UserServiceDeleteLinkedIdentityProcedure,
-		svc.DeleteLinkedIdentity,
-		connect.WithSchema(userServiceMethods.ByName("DeleteLinkedIdentity")),
-		connect.WithHandlerOptions(opts...),
-	)
-	userServiceListPersonalAccessTokensHandler := connect.NewUnaryHandler(
-		UserServiceListPersonalAccessTokensProcedure,
-		svc.ListPersonalAccessTokens,
-		connect.WithSchema(userServiceMethods.ByName("ListPersonalAccessTokens")),
-		connect.WithHandlerOptions(opts...),
-	)
-	userServiceCreatePersonalAccessTokenHandler := connect.NewUnaryHandler(
-		UserServiceCreatePersonalAccessTokenProcedure,
-		svc.CreatePersonalAccessToken,
-		connect.WithSchema(userServiceMethods.ByName("CreatePersonalAccessToken")),
-		connect.WithHandlerOptions(opts...),
-	)
-	userServiceDeletePersonalAccessTokenHandler := connect.NewUnaryHandler(
-		UserServiceDeletePersonalAccessTokenProcedure,
-		svc.DeletePersonalAccessToken,
-		connect.WithSchema(userServiceMethods.ByName("DeletePersonalAccessToken")),
-		connect.WithHandlerOptions(opts...),
-	)
 	userServiceImportMemosHandler := connect.NewUnaryHandler(
 		UserServiceImportMemosProcedure,
 		svc.ImportMemos,
@@ -865,30 +539,6 @@ func NewUserServiceHandler(svc UserServiceHandler, opts ...connect.HandlerOption
 			userServiceUpdateUserNotificationHandler.ServeHTTP(w, r)
 		case UserServiceDeleteUserNotificationProcedure:
 			userServiceDeleteUserNotificationHandler.ServeHTTP(w, r)
-		case UserServiceListUserWebhooksProcedure:
-			userServiceListUserWebhooksHandler.ServeHTTP(w, r)
-		case UserServiceCreateUserWebhookProcedure:
-			userServiceCreateUserWebhookHandler.ServeHTTP(w, r)
-		case UserServiceUpdateUserWebhookProcedure:
-			userServiceUpdateUserWebhookHandler.ServeHTTP(w, r)
-		case UserServiceDeleteUserWebhookProcedure:
-			userServiceDeleteUserWebhookHandler.ServeHTTP(w, r)
-		case UserServiceGetUserWebhookSigningSecretProcedure:
-			userServiceGetUserWebhookSigningSecretHandler.ServeHTTP(w, r)
-		case UserServiceListLinkedIdentitiesProcedure:
-			userServiceListLinkedIdentitiesHandler.ServeHTTP(w, r)
-		case UserServiceGetLinkedIdentityProcedure:
-			userServiceGetLinkedIdentityHandler.ServeHTTP(w, r)
-		case UserServiceCreateLinkedIdentityProcedure:
-			userServiceCreateLinkedIdentityHandler.ServeHTTP(w, r)
-		case UserServiceDeleteLinkedIdentityProcedure:
-			userServiceDeleteLinkedIdentityHandler.ServeHTTP(w, r)
-		case UserServiceListPersonalAccessTokensProcedure:
-			userServiceListPersonalAccessTokensHandler.ServeHTTP(w, r)
-		case UserServiceCreatePersonalAccessTokenProcedure:
-			userServiceCreatePersonalAccessTokenHandler.ServeHTTP(w, r)
-		case UserServiceDeletePersonalAccessTokenProcedure:
-			userServiceDeletePersonalAccessTokenHandler.ServeHTTP(w, r)
 		case UserServiceImportMemosProcedure:
 			userServiceImportMemosHandler.ServeHTTP(w, r)
 		default:
@@ -958,54 +608,6 @@ func (UnimplementedUserServiceHandler) UpdateUserNotification(context.Context, *
 
 func (UnimplementedUserServiceHandler) DeleteUserNotification(context.Context, *connect.Request[api.DeleteUserNotificationRequest]) (*connect.Response[emptypb.Empty], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("memos.api.UserService.DeleteUserNotification is not implemented"))
-}
-
-func (UnimplementedUserServiceHandler) ListUserWebhooks(context.Context, *connect.Request[api.ListUserWebhooksRequest]) (*connect.Response[api.ListUserWebhooksResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("memos.api.UserService.ListUserWebhooks is not implemented"))
-}
-
-func (UnimplementedUserServiceHandler) CreateUserWebhook(context.Context, *connect.Request[api.CreateUserWebhookRequest]) (*connect.Response[api.UserWebhook], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("memos.api.UserService.CreateUserWebhook is not implemented"))
-}
-
-func (UnimplementedUserServiceHandler) UpdateUserWebhook(context.Context, *connect.Request[api.UpdateUserWebhookRequest]) (*connect.Response[api.UserWebhook], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("memos.api.UserService.UpdateUserWebhook is not implemented"))
-}
-
-func (UnimplementedUserServiceHandler) DeleteUserWebhook(context.Context, *connect.Request[api.DeleteUserWebhookRequest]) (*connect.Response[emptypb.Empty], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("memos.api.UserService.DeleteUserWebhook is not implemented"))
-}
-
-func (UnimplementedUserServiceHandler) GetUserWebhookSigningSecret(context.Context, *connect.Request[api.GetUserWebhookSigningSecretRequest]) (*connect.Response[api.GetUserWebhookSigningSecretResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("memos.api.UserService.GetUserWebhookSigningSecret is not implemented"))
-}
-
-func (UnimplementedUserServiceHandler) ListLinkedIdentities(context.Context, *connect.Request[api.ListLinkedIdentitiesRequest]) (*connect.Response[api.ListLinkedIdentitiesResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("memos.api.UserService.ListLinkedIdentities is not implemented"))
-}
-
-func (UnimplementedUserServiceHandler) GetLinkedIdentity(context.Context, *connect.Request[api.GetLinkedIdentityRequest]) (*connect.Response[api.LinkedIdentity], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("memos.api.UserService.GetLinkedIdentity is not implemented"))
-}
-
-func (UnimplementedUserServiceHandler) CreateLinkedIdentity(context.Context, *connect.Request[api.CreateLinkedIdentityRequest]) (*connect.Response[api.LinkedIdentity], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("memos.api.UserService.CreateLinkedIdentity is not implemented"))
-}
-
-func (UnimplementedUserServiceHandler) DeleteLinkedIdentity(context.Context, *connect.Request[api.DeleteLinkedIdentityRequest]) (*connect.Response[emptypb.Empty], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("memos.api.UserService.DeleteLinkedIdentity is not implemented"))
-}
-
-func (UnimplementedUserServiceHandler) ListPersonalAccessTokens(context.Context, *connect.Request[api.ListPersonalAccessTokensRequest]) (*connect.Response[api.ListPersonalAccessTokensResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("memos.api.UserService.ListPersonalAccessTokens is not implemented"))
-}
-
-func (UnimplementedUserServiceHandler) CreatePersonalAccessToken(context.Context, *connect.Request[api.CreatePersonalAccessTokenRequest]) (*connect.Response[api.CreatePersonalAccessTokenResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("memos.api.UserService.CreatePersonalAccessToken is not implemented"))
-}
-
-func (UnimplementedUserServiceHandler) DeletePersonalAccessToken(context.Context, *connect.Request[api.DeletePersonalAccessTokenRequest]) (*connect.Response[emptypb.Empty], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("memos.api.UserService.DeletePersonalAccessToken is not implemented"))
 }
 
 func (UnimplementedUserServiceHandler) ImportMemos(context.Context, *connect.Request[api.ImportMemosRequest]) (*connect.Response[api.ImportMemosResponse], error) {

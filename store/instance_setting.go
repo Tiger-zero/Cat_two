@@ -24,8 +24,7 @@ type DeleteInstanceSetting struct {
 	Name string
 }
 
-// encodeInstanceSetting turns a setting into its stored row, normalizing a
-// storage setting and validating usage limits as every write must.
+// encodeInstanceSetting turns a supported setting into its stored row.
 func encodeInstanceSetting(upsert *storepb.InstanceSetting) (*InstanceSetting, error) {
 	instanceSettingRaw := &InstanceSetting{
 		Name: upsert.Key.String(),
@@ -36,9 +35,6 @@ func encodeInstanceSetting(upsert *storepb.InstanceSetting) (*InstanceSetting, e
 		valueBytes, err = protojson.Marshal(upsert.GetBasicSetting())
 	} else if upsert.Key == storepb.InstanceSettingKey_GENERAL {
 		valueBytes, err = protojson.Marshal(upsert.GetGeneralSetting())
-	} else if upsert.Key == storepb.InstanceSettingKey_STORAGE {
-		NormalizeInstanceStorageSetting(upsert.GetStorageSetting())
-		valueBytes, err = protojson.Marshal(upsert.GetStorageSetting())
 	} else if upsert.Key == storepb.InstanceSettingKey_TAGS {
 		valueBytes, err = protojson.Marshal(upsert.GetTagsSetting())
 	} else if upsert.Key == storepb.InstanceSettingKey_NOTIFICATION {
@@ -296,45 +292,6 @@ func (s *Store) GetInstanceAISetting(ctx context.Context) (*storepb.InstanceAISe
 	return instanceAISetting, nil
 }
 
-const (
-	defaultInstanceStorageType = storepb.InstanceStorageSetting_LOCAL
-	// DefaultAttachmentPathTemplate is the managed local upload path relative to the data directory.
-	DefaultAttachmentPathTemplate = AttachmentDirectory + "/{timestamp}_{uuid}_{filename}"
-)
-
-func (s *Store) GetInstanceStorageSetting(ctx context.Context) (*storepb.InstanceStorageSetting, error) {
-	instanceSetting, err := s.GetInstanceSetting(ctx, &FindInstanceSetting{
-		Name: storepb.InstanceSettingKey_STORAGE.String(),
-	})
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to get instance storage setting")
-	}
-
-	stored := instanceSetting.GetStorageSetting()
-	instanceStorageSetting := &storepb.InstanceStorageSetting{}
-	if stored != nil {
-		instanceStorageSetting = proto.CloneOf(stored)
-	}
-	NormalizeInstanceStorageSetting(instanceStorageSetting)
-	if instanceStorageSetting.StorageType == storepb.InstanceStorageSetting_STORAGE_TYPE_UNSPECIFIED {
-		instanceStorageSetting.StorageType = defaultInstanceStorageType
-	}
-	if instanceStorageSetting.FilepathTemplate == "" {
-		instanceStorageSetting.FilepathTemplate = DefaultAttachmentPathTemplate
-	}
-	// Only write back when normalization changed the cached value; on the common
-	// path the cache already holds the normalized setting.
-	if !proto.Equal(stored, instanceStorageSetting) {
-		s.cacheInstanceSetting(ctx, &storepb.InstanceSetting{
-			Key: storepb.InstanceSettingKey_STORAGE,
-			Value: &storepb.InstanceSetting_StorageSetting{
-				StorageSetting: proto.CloneOf(instanceStorageSetting),
-			},
-		})
-	}
-	return instanceStorageSetting, nil
-}
-
 func convertInstanceSettingFromRaw(instanceSettingRaw *InstanceSetting) (*storepb.InstanceSetting, error) {
 	instanceSetting := &storepb.InstanceSetting{
 		Key: storepb.InstanceSettingKey(storepb.InstanceSettingKey_value[instanceSettingRaw.Name]),
@@ -352,12 +309,6 @@ func convertInstanceSettingFromRaw(instanceSettingRaw *InstanceSetting) (*storep
 			return nil, err
 		}
 		instanceSetting.Value = &storepb.InstanceSetting_GeneralSetting{GeneralSetting: generalSetting}
-	case storepb.InstanceSettingKey_STORAGE.String():
-		storageSetting := &storepb.InstanceStorageSetting{}
-		if err := protojsonUnmarshaler.Unmarshal([]byte(instanceSettingRaw.Value), storageSetting); err != nil {
-			return nil, err
-		}
-		instanceSetting.Value = &storepb.InstanceSetting_StorageSetting{StorageSetting: storageSetting}
 	case storepb.InstanceSettingKey_TAGS.String():
 		tagsSetting := &storepb.InstanceTagsSetting{}
 		if err := protojsonUnmarshaler.Unmarshal([]byte(instanceSettingRaw.Value), tagsSetting); err != nil {

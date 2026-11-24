@@ -48,14 +48,14 @@ vi.mock("@/components/PagedMemoList", () => ({
     renderStickyHeader,
     ...props
   }: {
-    renderer: (memo: { name: string; space?: string }, options: { compact: boolean }) => React.ReactNode;
+    renderer: (memo: { name: string }, options: { compact: boolean }) => React.ReactNode;
     renderStickyHeader: () => React.ReactNode;
   } & Record<string, unknown>) => {
     state.listProps = props;
     return (
       <>
         {renderStickyHeader()}
-        {renderer({ name: "memos/1", space: "spaces/legacy" }, { compact: false })}
+        {renderer({ name: "memos/1" }, { compact: false })}
       </>
     );
   },
@@ -116,13 +116,6 @@ describe("<Home>", () => {
     expect(state.editorProps?.suggestions).toEqual([{ id: "tag:work" }]);
     expect(state.filterOptions).not.toHaveProperty("creatorName");
     expect(state.memoViewProps).toMatchObject({ showPinned: true });
-  });
-
-  it("renders an owned note with legacy Space metadata in the personal feed", () => {
-    render(<Home />);
-
-    expect(state.listProps).toMatchObject({ contextFilter: 'creator == "users/steven"' });
-    expect(state.memoViewProps).toMatchObject({ memo: { name: "memos/1", space: "spaces/legacy" } });
   });
 
   it("lets a regular user export their own memos", () => {

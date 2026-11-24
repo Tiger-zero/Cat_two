@@ -28,7 +28,7 @@ data=$(mktemp -d)
 trap 'rm -rf -- "$data"' EXIT
 trap 'exit 143' TERM
 go run -buildvcs=true ./cmd/memos --addr 127.0.0.1 --port 18081 --unix-sock= --instance-url= \
-  --driver sqlite --data "$data" --dsn "$data/smoke.db" --demo=false --config-apply=off`,
+  --driver sqlite --data "$data" --dsn "$data/smoke.db" --config-apply=off`,
       url: `${backend}/healthz`,
       timeout: 180_000,
       reuseExistingServer: false,

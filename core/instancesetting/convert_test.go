@@ -14,23 +14,11 @@ import (
 // and back. Secrets survive, because comparing configuration with stored state
 // needs them; responses redact them in server/api.
 func TestConversionRoundTrips(t *testing.T) {
-	s3 := &storepb.StorageS3Config{
-		AccessKeyId: "AKID", AccessKeySecret: "secret", Endpoint: "https://s3.example.com", Region: "auto",
-		Bucket: "memos", UsePathStyle: true, InsecureSkipTlsVerify: true,
-	}
 	settings := []*storepb.InstanceSetting{
 		{Key: storepb.InstanceSettingKey_GENERAL, Value: &storepb.InstanceSetting_GeneralSetting{GeneralSetting: &storepb.InstanceGeneralSetting{
 			DisallowUserRegistration: true, DisallowPasswordAuth: true, AdditionalStyle: "c",
 			WeekStartDayOffset: 1, DisallowChangeUsername: true, DisallowChangeNickname: true,
 			CustomProfile: &storepb.InstanceCustomProfile{Title: "t", Description: "d", LogoUrl: "https://example.com/logo.png"},
-		}}},
-		{Key: storepb.InstanceSettingKey_STORAGE, Value: &storepb.InstanceSetting_StorageSetting{StorageSetting: &storepb.InstanceStorageSetting{
-			StorageType: storepb.InstanceStorageSetting_S3, FilepathTemplate: "assets/{filename}", S3Config: proto.CloneOf(s3),
-			Storages: []*storepb.Storage{
-				{Id: "s3", Name: "Archive", Type: storepb.StorageType_STORAGE_TYPE_S3, Config: &storepb.Storage_S3Config{S3Config: proto.CloneOf(s3)}},
-				{Id: "local", Name: "Local", Type: storepb.StorageType_STORAGE_TYPE_LOCAL},
-			},
-			DefaultStorageId: "s3",
 		}}},
 		{Key: storepb.InstanceSettingKey_TAGS, Value: &storepb.InstanceSetting_TagsSetting{TagsSetting: &storepb.InstanceTagsSetting{
 			Tags: map[string]*storepb.InstanceTagMetadata{"work": {BackgroundColor: &colorpb.Color{Red: 1}, BlurContent: true}},

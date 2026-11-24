@@ -44,7 +44,7 @@ body:
     id: version
     attributes:
       label: Cat_two version
-      description: Provide the Docker image tag or the version and commit returned by GET /api/instance/profile.
+      description: Provide the Docker image tag and the complete commit SHA if available.
       placeholder: "Docker tag 0.16"
     validations:
       required: true

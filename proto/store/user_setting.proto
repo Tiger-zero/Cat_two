@@ -8,22 +8,18 @@ import "google/type/color.proto";
 option go_package = "gen/store";
 
 message UserSetting {
-  reserved 4;
-  reserved "memo_views";
+  reserved 4, 5, 7;
+  reserved "memo_views", "webhooks", "personal_access_tokens";
 
   enum Key {
-    reserved 2;
-    reserved "MEMO_VIEWS";
+    reserved 2, 3, 5;
+    reserved "MEMO_VIEWS", "WEBHOOKS", "PERSONAL_ACCESS_TOKENS";
 
     KEY_UNSPECIFIED = 0;
     // General user settings.
     GENERAL = 1;
-    // The webhooks of the user.
-    WEBHOOKS = 3;
     // Refresh tokens for the user.
     REFRESH_TOKENS = 4;
-    // Personal access tokens for the user.
-    PERSONAL_ACCESS_TOKENS = 5;
     // Per-user tag metadata.
     TAGS = 6;
     // Memo editor preferences of the user.
@@ -35,9 +31,7 @@ message UserSetting {
   Key key = 2;
   oneof value {
     GeneralUserSetting general = 3;
-    WebhooksUserSetting webhooks = 5;
     RefreshTokensUserSetting refresh_tokens = 6;
-    PersonalAccessTokensUserSetting personal_access_tokens = 7;
     TagsUserSetting tags = 8;
     EditorUserSetting editor = 9;
   }
@@ -109,36 +103,4 @@ message RefreshTokensUserSetting {
   }
 
   repeated RefreshToken refresh_tokens = 1;
-}
-
-message PersonalAccessTokensUserSetting {
-  message PersonalAccessToken {
-    // Unique identifier for this token
-    string token_id = 1;
-    // SHA-256 hash of the actual token
-    string token_hash = 2;
-    // User-provided description
-    string description = 3;
-    // When the token expires (null = never)
-    google.protobuf.Timestamp expires_at = 4;
-    // When the token was created
-    google.protobuf.Timestamp created_at = 5;
-    // When the token was last used
-    google.protobuf.Timestamp last_used_at = 6;
-  }
-  repeated PersonalAccessToken tokens = 1;
-}
-
-message WebhooksUserSetting {
-  message Webhook {
-    // Unique identifier for the webhook
-    string id = 1;
-    // Descriptive title for the webhook
-    string title = 2;
-    // The webhook URL endpoint
-    string url = 3;
-    // Optional signing secret for webhook authentication.
-    string signing_secret = 4;
-  }
-  repeated Webhook webhooks = 1;
 }

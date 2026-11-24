@@ -43,7 +43,7 @@ vi.mock("@/i18n", () => ({
 
 vi.mock("@/components/MemoView/MemoViewContext", () => ({
   useMemoViewContext: () => ({
-    memo: { name: "memos/123", visibility: 1, pinned: false, space: "spaces/product" },
+    memo: { name: "memos/123", visibility: 1, pinned: false },
     creator: state.creator,
     currentUser: state.currentUser,
     parentPage: "/?filter=tagSearch%3Awork",

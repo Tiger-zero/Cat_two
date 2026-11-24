@@ -11,7 +11,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-	"google.golang.org/protobuf/types/known/fieldmaskpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	apipb "github.com/usememos/memos/proto/gen/api"
@@ -28,9 +27,6 @@ func TestDeleteUserSelfDeleteCleansAccountDataAndAuthCookies(t *testing.T) {
 
 	ctx := context.Background()
 	user, err := ts.CreateRegularUser(ctx, "alice")
-	require.NoError(t, err)
-
-	_, err = ts.Store.GetDriver().GetDB().ExecContext(ctx, "INSERT INTO user_identity (user_id, provider, extern_uid) VALUES (?, ?, ?)", user.ID, "google", "alice-google-sub")
 	require.NoError(t, err)
 
 	err = ts.Store.AddUserRefreshToken(ctx, user.ID, &storepb.RefreshTokensUserSetting_RefreshToken{
@@ -50,10 +46,6 @@ func TestDeleteUserSelfDeleteCleansAccountDataAndAuthCookies(t *testing.T) {
 	deletedUser, err := ts.Store.GetUser(ctx, &store.FindUser{ID: &user.ID})
 	require.NoError(t, err)
 	require.Nil(t, deletedUser)
-
-	var identities int
-	require.NoError(t, ts.Store.GetDriver().GetDB().QueryRowContext(ctx, "SELECT COUNT(*) FROM user_identity WHERE user_id = ?", user.ID).Scan(&identities))
-	require.Zero(t, identities)
 
 	refreshSetting, err := ts.Store.GetUserSetting(ctx, &store.FindUserSetting{
 		UserID: &user.ID,
@@ -215,15 +207,6 @@ func TestDeleteUserSelfDeleteRemovesOnlyOwnedMemosAndResources(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	_, err = ts.Store.GetDriver().GetDB().ExecContext(ctx, "INSERT INTO user_identity (user_id, provider, extern_uid) VALUES (?, ?, ?)", user.ID, "google", "resource-owner-google-sub")
-	require.NoError(t, err)
-	err = ts.Store.AddUserPersonalAccessToken(ctx, user.ID, &storepb.PersonalAccessTokensUserSetting_PersonalAccessToken{
-		TokenId:     "pat-owner",
-		TokenHash:   "pat-owner-hash",
-		Description: "owner pat",
-	})
-	require.NoError(t, err)
-
 	headerCtx := api.WithHeaderCarrier(ctx)
 	authCtx := ts.CreateUserContext(headerCtx, user.ID)
 	_, err = ts.Service.DeleteUser(authCtx, &apipb.DeleteUserRequest{
@@ -308,58 +291,6 @@ func TestDeleteUserSelfDeleteRemovesOnlyOwnedMemosAndResources(t *testing.T) {
 	receivedInboxes, err := ts.Store.ListInboxes(ctx, &store.FindInbox{ReceiverID: &user.ID})
 	require.NoError(t, err)
 	require.Empty(t, receivedInboxes)
-
-	var identities int
-	require.NoError(t, ts.Store.GetDriver().GetDB().QueryRowContext(ctx, "SELECT COUNT(*) FROM user_identity WHERE user_id = ?", user.ID).Scan(&identities))
-	require.Zero(t, identities)
-
-	patSetting, err := ts.Store.GetUserSetting(ctx, &store.FindUserSetting{
-		UserID: &user.ID,
-		Key:    storepb.UserSetting_PERSONAL_ACCESS_TOKENS,
-	})
-	require.NoError(t, err)
-	require.Nil(t, patSetting)
-}
-
-func TestArchiveAndDeleteAccountWithHistoricalSpaceMembership(t *testing.T) {
-	ctx := t.Context()
-	ts := NewTestService(t)
-	defer ts.Cleanup()
-
-	admin, err := ts.CreateHostUser(ctx, "instance-admin")
-	require.NoError(t, err)
-	user, err := ts.CreateRegularUser(ctx, "legacy-space-admin")
-	require.NoError(t, err)
-	adminCtx := ts.CreateUserContext(ctx, admin.ID)
-	db := ts.Store.GetDriver().GetDB()
-	var spaceID int32
-	require.NoError(t, db.QueryRowContext(ctx, "INSERT INTO space (uid, title) VALUES (?, ?) RETURNING id", "old-space", "Historical Space").Scan(&spaceID))
-	_, err = db.ExecContext(ctx, "INSERT INTO space_member (space_id, user_id, status, role) VALUES (?, ?, 'ACTIVE', 'ADMIN'), (?, ?, 'ACTIVE', 'USER')", spaceID, user.ID, spaceID, admin.ID)
-	require.NoError(t, err)
-
-	userName := api.BuildUserName(user.Username)
-	updated, err := ts.Service.UpdateUser(adminCtx, &apipb.UpdateUserRequest{
-		User:       &apipb.User{Name: userName, State: apipb.State_ARCHIVED},
-		UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"state"}},
-	})
-	require.NoError(t, err)
-	require.Equal(t, apipb.State_ARCHIVED, updated.State)
-	var memberships int
-	require.NoError(t, db.QueryRowContext(ctx, "SELECT COUNT(*) FROM space_member WHERE space_id = ?", spaceID).Scan(&memberships))
-	require.Equal(t, 2, memberships, "archiving preserves historical metadata")
-
-	_, err = ts.Service.DeleteUser(adminCtx, &apipb.DeleteUserRequest{Name: userName})
-	require.NoError(t, err)
-	deleted, err := ts.Store.GetUser(ctx, &store.FindUser{ID: &user.ID})
-	require.NoError(t, err)
-	require.Nil(t, deleted)
-
-	var remainingUser int32
-	require.NoError(t, db.QueryRowContext(ctx, "SELECT user_id FROM space_member WHERE space_id = ?", spaceID).Scan(&remainingUser))
-	require.Equal(t, admin.ID, remainingUser)
-	var title string
-	require.NoError(t, db.QueryRowContext(ctx, "SELECT title FROM space WHERE id = ?", spaceID).Scan(&title))
-	require.Equal(t, "Historical Space", title)
 }
 
 func TestDeleteUserRollbackPreservesAllResources(t *testing.T) {
@@ -429,15 +360,6 @@ func TestDeleteUserRollbackPreservesAllResources(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	_, err = ts.Store.GetDriver().GetDB().ExecContext(ctx, "INSERT INTO user_identity (user_id, provider, extern_uid) VALUES (?, ?, ?)", user.ID, "google", "rollback-owner-google-sub")
-	require.NoError(t, err)
-	err = ts.Store.AddUserPersonalAccessToken(ctx, user.ID, &storepb.PersonalAccessTokensUserSetting_PersonalAccessToken{
-		TokenId:     "pat-rollback-owner",
-		TokenHash:   "pat-rollback-owner-hash",
-		Description: "rollback pat",
-	})
-	require.NoError(t, err)
-
 	headerCtx := api.WithHeaderCarrier(ctx)
 	failCtx := store.WithDeleteUserFailpoint(headerCtx, store.DeleteUserFailpointBeforeCommit)
 	authCtx := ts.CreateUserContext(failCtx, user.ID)
@@ -470,17 +392,6 @@ func TestDeleteUserRollbackPreservesAllResources(t *testing.T) {
 	inboxesAfterRollback, err := ts.Store.ListInboxes(ctx, &store.FindInbox{ID: &inbox.ID})
 	require.NoError(t, err)
 	require.Len(t, inboxesAfterRollback, 1)
-
-	var subject string
-	require.NoError(t, ts.Store.GetDriver().GetDB().QueryRowContext(ctx, "SELECT extern_uid FROM user_identity WHERE user_id = ?", user.ID).Scan(&subject))
-	require.Equal(t, "rollback-owner-google-sub", subject)
-
-	patSetting, err := ts.Store.GetUserSetting(ctx, &store.FindUserSetting{
-		UserID: &user.ID,
-		Key:    storepb.UserSetting_PERSONAL_ACCESS_TOKENS,
-	})
-	require.NoError(t, err)
-	require.NotNil(t, patSetting)
 }
 
 func TestDeleteUserReportsPostCommitAttachmentStorageCleanupFailure(t *testing.T) {

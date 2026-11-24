@@ -12,7 +12,7 @@ func authorizeSQLiteMemoComment(ctx context.Context, tx dbExecutor, mutation *st
 	snapshot, err := loadSQLiteMemoParticipation(ctx, tx, *mutation.CommentContextMemoID, mutation.MemoCreate.CreatorID)
 	if err != nil {
 		if stderrors.Is(err, sql.ErrNoRows) {
-			return store.ErrMemoSpaceNotWritable
+			return store.ErrMemoContextUnavailable
 		}
 		return err
 	}

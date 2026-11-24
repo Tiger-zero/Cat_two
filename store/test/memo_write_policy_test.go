@@ -9,7 +9,7 @@ import (
 	"github.com/usememos/memos/store"
 )
 
-func TestMemoWritePolicyUsesCurrentAudienceWhenCreatingShare(t *testing.T) {
+func TestMemoWritePolicyRejectsShareOfArchivedNote(t *testing.T) {
 	ctx := context.Background()
 	ts := NewTestingStore(ctx, t)
 	defer ts.Close()
@@ -22,13 +22,6 @@ func TestMemoWritePolicyUsesCurrentAudienceWhenCreatingShare(t *testing.T) {
 	require.NoError(t, err)
 
 	policy := &store.MemoWritePolicy{ActorUserID: owner.ID, CreatingShare: true}
-	spaceAudience := store.SpaceAudience
-	require.NoError(t, ts.UpdateMemo(ctx, &store.UpdateMemo{ID: memo.ID, Visibility: &spaceAudience}))
-	_, err = ts.CreateMemoShare(ctx, &store.MemoShare{
-		UID: "memo-current-share-token", MemoID: memo.ID, CreatorID: owner.ID, Policy: policy,
-	})
-	require.ErrorIs(t, err, store.ErrMemoShareConflict)
-
 	public := store.Public
 	archived := store.Archived
 	require.NoError(t, ts.UpdateMemo(ctx, &store.UpdateMemo{ID: memo.ID, Visibility: &public, RowStatus: &archived}))

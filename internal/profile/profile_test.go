@@ -1,6 +1,7 @@
 package profile
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -51,4 +52,25 @@ func TestValidateDatabaseDriver(t *testing.T) {
 		require.ErrorContains(t, p.Validate(), "Cat_two requires SQLite")
 		require.NoDirExists(t, p.Data, "invalid database configurations must fail before preparing their data directory")
 	}
+}
+
+func TestDefaultDataDirPreservesExistingMount(t *testing.T) {
+	containerDir := t.TempDir()
+	sentinelPath := filepath.Join(containerDir, ".write-test")
+	contents := []byte("preexisting hidden file")
+	require.NoError(t, os.WriteFile(sentinelPath, contents, 0o600))
+	require.Equal(t, containerDir, defaultDataDir(containerDir))
+	require.NoError(t, os.Chmod(containerDir, 0o550))
+	t.Cleanup(func() { require.NoError(t, os.Chmod(containerDir, 0o750)) })
+
+	resolved := &Profile{Data: defaultDataDir(containerDir)}
+	require.NoError(t, resolved.Validate())
+	require.Equal(t, containerDir, resolved.Data)
+	require.Equal(t, filepath.Join(containerDir, "memos_prod.db"), resolved.DSN)
+	got, err := os.ReadFile(sentinelPath)
+	require.NoError(t, err)
+	require.Equal(t, contents, got)
+
+	require.Equal(t, ".", defaultDataDir(filepath.Join(containerDir, "absent")))
+	require.Equal(t, ".", defaultDataDir(sentinelPath))
 }

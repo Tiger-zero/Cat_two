@@ -3,7 +3,6 @@ package test
 import (
 	"context"
 	"fmt"
-	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -41,7 +40,7 @@ func TestInstanceSettingGetNonExistent(t *testing.T) {
 
 	// Get non-existent setting
 	setting, err := ts.GetInstanceSetting(ctx, &store.FindInstanceSetting{
-		Name: storepb.InstanceSettingKey_STORAGE.String(),
+		Name: storepb.InstanceSettingKey_TAGS.String(),
 	})
 	require.NoError(t, err)
 	require.Nil(t, setting)
@@ -241,87 +240,9 @@ func TestCreateInstanceSettingIfNotExistsIsFirstWriterWins(t *testing.T) {
 	require.Equal(t, winner, settings[0].Value, "a later insert attempt must not overwrite the persisted value")
 }
 
-func TestInstanceSettingStorageSetting(t *testing.T) {
+func TestInstanceStorageSettingIsNotPersisted(t *testing.T) {
 	t.Parallel()
-	ctx := context.Background()
-	ts := NewTestingStore(ctx, t)
-
-	// Get default storage setting (should have defaults)
-	storageSetting, err := ts.GetInstanceStorageSetting(ctx)
-	require.NoError(t, err)
-	require.NotNil(t, storageSetting)
-	require.Equal(t, storepb.InstanceStorageSetting_LOCAL, storageSetting.StorageType)
-	require.Equal(t, "assets/{timestamp}_{uuid}_{filename}", storageSetting.FilepathTemplate)
-
-	// Set custom storage setting
-	_, err = ts.UpsertInstanceSetting(ctx, &storepb.InstanceSetting{
-		Key: storepb.InstanceSettingKey_STORAGE,
-		Value: &storepb.InstanceSetting_StorageSetting{
-			StorageSetting: &storepb.InstanceStorageSetting{
-				StorageType:      storepb.InstanceStorageSetting_LOCAL,
-				FilepathTemplate: "uploads/{date}/{filename}",
-			},
-		},
-	})
-	require.NoError(t, err)
-
-	// Verify
-	storageSetting, err = ts.GetInstanceStorageSetting(ctx)
-	require.NoError(t, err)
-	require.Equal(t, storepb.InstanceStorageSetting_LOCAL, storageSetting.StorageType)
-	require.Equal(t, "uploads/{date}/{filename}", storageSetting.FilepathTemplate)
-
-	ts.Close()
-}
-
-func TestDeleteInstanceStorageSettingInvalidatesCache(t *testing.T) {
-	t.Parallel()
-	ctx := context.Background()
-	ts := NewTestingStore(ctx, t)
-	defer ts.Close()
-
-	_, err := ts.UpsertInstanceSetting(ctx, &storepb.InstanceSetting{
-		Key: storepb.InstanceSettingKey_STORAGE,
-		Value: &storepb.InstanceSetting_StorageSetting{
-			StorageSetting: &storepb.InstanceStorageSetting{
-				DefaultStorageId: "primary",
-				Storages: []*storepb.Storage{
-					{
-						Id:   "primary",
-						Type: storepb.StorageType_STORAGE_TYPE_S3,
-						Config: &storepb.Storage_S3Config{S3Config: &storepb.StorageS3Config{
-							AccessKeyId:     "access-key",
-							AccessKeySecret: "secret",
-							Endpoint:        "https://s3.example.com",
-							Region:          "us-east-1",
-							Bucket:          "memos",
-						}},
-					},
-				},
-			},
-		},
-	})
-	require.NoError(t, err)
-	configuredSetting, err := ts.GetInstanceStorageSetting(ctx)
-	require.NoError(t, err)
-	require.Equal(t, "primary", configuredSetting.DefaultStorageId)
-	require.Equal(t, storepb.InstanceStorageSetting_S3, configuredSetting.StorageType)
-
-	err = ts.DeleteInstanceSetting(ctx, &store.DeleteInstanceSetting{Name: storepb.InstanceSettingKey_STORAGE.String()})
-	require.NoError(t, err)
-
-	stored, err := ts.GetUncachedInstanceSetting(ctx, &store.FindInstanceSetting{Name: storepb.InstanceSettingKey_STORAGE.String()})
-	require.NoError(t, err)
-	require.Nil(t, stored)
-	defaultSetting, err := ts.GetInstanceStorageSetting(ctx)
-	require.NoError(t, err)
-	require.Equal(t, storepb.InstanceStorageSetting_LOCAL, defaultSetting.StorageType)
-	require.Nil(t, defaultSetting.S3Config)
-}
-
-func TestInstanceStorageSettingCacheIsolation(t *testing.T) {
-	t.Parallel()
-	ctx := context.Background()
+	ctx := t.Context()
 	ts := NewTestingStore(ctx, t)
 	defer ts.Close()
 
@@ -331,37 +252,10 @@ func TestInstanceStorageSettingCacheIsolation(t *testing.T) {
 			StorageSetting: &storepb.InstanceStorageSetting{StorageType: storepb.InstanceStorageSetting_LOCAL},
 		},
 	})
+	require.ErrorContains(t, err, "unsupported instance setting key: STORAGE")
+	stored, err := ts.GetDriver().ListInstanceSettings(ctx, &store.FindInstanceSetting{Name: "STORAGE"})
 	require.NoError(t, err)
-
-	first, err := ts.GetInstanceStorageSetting(ctx)
-	require.NoError(t, err)
-	require.NotEmpty(t, first.Storages)
-	first.Storages[0].Name = "caller mutation"
-
-	second, err := ts.GetInstanceStorageSetting(ctx)
-	require.NoError(t, err)
-	require.Equal(t, "Local", second.Storages[0].Name)
-
-	start := make(chan struct{})
-	errCh := make(chan error, 16)
-	var wg sync.WaitGroup
-	for range 16 {
-		wg.Go(func() {
-			<-start
-			for range 50 {
-				if _, err := ts.GetInstanceStorageSetting(ctx); err != nil {
-					errCh <- err
-					return
-				}
-			}
-		})
-	}
-	close(start)
-	wg.Wait()
-	close(errCh)
-	for err := range errCh {
-		require.NoError(t, err)
-	}
+	require.Empty(t, stored)
 }
 
 func TestInstanceSettingTagsSetting(t *testing.T) {
@@ -534,9 +428,9 @@ func TestInstanceSettingListAll(t *testing.T) {
 	require.NoError(t, err)
 
 	_, err = ts.UpsertInstanceSetting(ctx, &storepb.InstanceSetting{
-		Key: storepb.InstanceSettingKey_STORAGE,
-		Value: &storepb.InstanceSetting_StorageSetting{
-			StorageSetting: &storepb.InstanceStorageSetting{},
+		Key: storepb.InstanceSettingKey_TAGS,
+		Value: &storepb.InstanceSetting_TagsSetting{
+			TagsSetting: &storepb.InstanceTagsSetting{},
 		},
 	})
 	require.NoError(t, err)

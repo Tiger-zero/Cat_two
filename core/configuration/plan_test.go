@@ -108,12 +108,11 @@ func generalDocument(title string) string {
 func TestPlanCreateAdoptNoOpAndDrift(t *testing.T) {
 	reader := newFakeReader()
 	reader.settings[storepb.InstanceSettingKey_GENERAL] = generalSetting("memos")
-	desired := loadDesired(t, map[string]string{"storage.json": `{"instanceSettings":[{"name":"instance/settings/STORAGE","storageSetting":{"storageType":"LOCAL"}}]}`, "general.json": generalDocument("Company")})
+	desired := loadDesired(t, map[string]string{"general.json": generalDocument("Company")})
 
 	first := planFor(t, desired, reader)
 	require.True(t, first.Valid())
 	require.True(t, first.HasChanges())
-	require.Equal(t, apipb.ResourceChange_CREATE, changeFor(t, first, "instance/settings/STORAGE").Action)
 	general := changeFor(t, first, "instance/settings/GENERAL")
 	require.Equal(t, apipb.ResourceChange_ADOPT, general.Action)
 	require.Equal(t, "general.json", general.Source)
@@ -133,31 +132,16 @@ func TestPlanCreateAdoptNoOpAndDrift(t *testing.T) {
 	require.True(t, drifted.Drift)
 
 	// A changed file is an update, not drift.
-	changed := loadDesired(t, map[string]string{"storage.json": `{"instanceSettings":[{"name":"instance/settings/STORAGE","storageSetting":{"storageType":"LOCAL"}}]}`, "general.json": generalDocument("Renamed")})
+	changed := loadDesired(t, map[string]string{"general.json": generalDocument("Renamed")})
 	updated := changeFor(t, planFor(t, changed, reader), "instance/settings/GENERAL")
 	require.Equal(t, apipb.ResourceChange_UPDATE, updated.Action)
 	require.False(t, updated.Drift)
 
 	// A managed resource deleted outside the configuration is recreated, as drift.
-	delete(reader.settings, storepb.InstanceSettingKey_STORAGE)
-	recreated := changeFor(t, planFor(t, desired, reader), "instance/settings/STORAGE")
+	delete(reader.settings, storepb.InstanceSettingKey_GENERAL)
+	recreated := changeFor(t, planFor(t, desired, reader), "instance/settings/GENERAL")
 	require.Equal(t, apipb.ResourceChange_CREATE, recreated.Action)
 	require.True(t, recreated.Drift)
-}
-
-func TestPlanComparesNormalizedValues(t *testing.T) {
-	reader := newFakeReader()
-	storage := &storepb.InstanceStorageSetting{StorageType: storepb.InstanceStorageSetting_LOCAL}
-	store.NormalizeInstanceStorageSetting(storage)
-	reader.settings[storepb.InstanceSettingKey_STORAGE] = &storepb.InstanceSetting{Key: storepb.InstanceSettingKey_STORAGE, Value: &storepb.InstanceSetting_StorageSetting{StorageSetting: storage}}
-
-	desired := loadDesired(t, map[string]string{"settings.json": `{"instanceSettings":[
-		{"name":"instance/settings/STORAGE","storageSetting":{"storageType":"LOCAL"}}
-	]}`})
-	for _, change := range planFor(t, desired, reader).Message.ResourceChanges {
-		require.Equal(t, apipb.ResourceChange_ADOPT, change.Action, change.Resource)
-		require.Empty(t, change.FieldChanges, "a default endpoint and a normalized storage registry are not differences: %s", change.Resource)
-	}
 }
 
 func TestPlanIgnoreChanges(t *testing.T) {
@@ -177,27 +161,14 @@ func TestPlanUndeclaredManagedResources(t *testing.T) {
 	reader.state = &storepb.InstanceConfigurationState{Serial: 4, Resources: []*storepb.InstanceConfigurationState_ManagedResource{
 		{Name: "instance/settings/GENERAL", Kind: "InstanceSetting", PreventDestroy: true},
 		{Name: "users/owner", Kind: "User"},
-		{Name: "users/legacy", Kind: "User"},
 	}}
 	result := planFor(t, loadDesired(t, map[string]string{"removed.json": `{"removed":[
 		{"resource":"instance/settings/GENERAL","destroy":true},
-		{"resource":"users/legacy","destroy":true},
 		{"resource":"users/owner"}]}`}), reader)
 	require.Equal(t, apipb.ResourceChange_RELEASE, changeFor(t, result, "users/owner").Action)
 	require.Equal(t, apipb.ResourceChange_ERROR, changeFor(t, result, "instance/settings/GENERAL").Action)
-	require.Len(t, result.Message.ResourceChanges, 2, "destructive user removals are ignored")
+	require.Len(t, result.Message.ResourceChanges, 2)
 	require.Contains(t, strings.Join(result.Message.Errors, " "), "preventDestroy was set")
-}
-
-func TestPlanPreservesRetiredSettingRecord(t *testing.T) {
-	reader := newFakeReader()
-	reader.state = &storepb.InstanceConfigurationState{Resources: []*storepb.InstanceConfigurationState_ManagedResource{
-		{Name: "instance/settings/MEMO_RELATED", Kind: "InstanceSetting", ManagedFields: []string{"*"}},
-	}}
-	plan := planFor(t, loadDesired(t, map[string]string{"empty.json": `{}`}), reader)
-	require.True(t, plan.Valid())
-	require.False(t, plan.HasChanges())
-	require.True(t, proto.Equal(reader.state.Resources[0], plan.next.Resources[0]))
 }
 
 func TestPlanOrdersActions(t *testing.T) {
@@ -249,55 +220,21 @@ func TestPlanUsers(t *testing.T) {
 	noPassword := loadDesired(t, map[string]string{"u.json": `{"users":[{"name":"users/admin","username":"admin","role":"ADMIN"}],"lifecycle":[{"resource":"users/admin","writeOnlyVersion":2}]}`})
 	require.Contains(t, strings.Join(planFor(t, noPassword, reader).Message.Errors, ""), "no password is declared")
 
-	linked := planFor(t, loadDesired(t, map[string]string{"u.json": `{"identityProviders":[{"name":"identity-providers/sso"}],
-		"users":[{"name":"users/admin","username":"admin","role":"ADMIN"}],
-		"linkedIdentities":[{"name":"users/admin/linkedIdentities/sso","externalUid":"subject"}]}`}), newFakeReader())
-	require.False(t, linked.Valid(), "a retired link cannot replace a bootstrap password")
-	require.Contains(t, strings.Join(linked.Message.Errors, " "), "password is required")
+	bootstrap := planFor(t, loadDesired(t, map[string]string{"u.json": `{"users":[{"name":"users/admin","username":"admin","role":"ADMIN"}]}`}), newFakeReader())
+	require.False(t, bootstrap.Valid())
+	require.Contains(t, strings.Join(bootstrap.Message.Errors, " "), "password is required")
 }
 
-func TestPlanDoesNotBootstrapMoreThanOneAdministratorOrPromoteExistingUser(t *testing.T) {
-	adminAndExtra := loadDesired(t, map[string]string{"users.json": `{"users":[
-		{"name":"users/admin","username":"admin","role":"ADMIN","password":"pw"},
-		{"name":"users/extra","username":"extra","role":"ADMIN","password":"pw"}
+func TestPlanRejectsMismatchedAdministrator(t *testing.T) {
+	desired := loadDesired(t, map[string]string{"users.json": `{"users":[
+		{"name":"users/admin","username":"admin","role":"ADMIN","password":"pw"}
 	]}`})
-	plan := planFor(t, adminAndExtra, newFakeReader())
-	require.True(t, plan.Valid())
-	require.False(t, plan.HasChanges())
-	require.NotEmpty(t, plan.Message.Warnings)
-
 	reader := newFakeReader()
-	reader.users = []*store.User{{ID: 1, Username: "admin", Role: store.RoleUser}}
-	plan = planFor(t, adminAndExtra, reader)
-	require.True(t, plan.Valid())
+	reader.users = []*store.User{{ID: 1, Username: "first-admin", Role: store.RoleAdmin}}
+	plan := planFor(t, desired, reader)
+	require.False(t, plan.Valid())
 	require.False(t, plan.HasChanges())
-	require.NotEmpty(t, plan.Message.Warnings)
-}
-
-func TestPlanPreservesLegacyStorageMetadata(t *testing.T) {
-	reader := newFakeReader()
-	name := "instance/settings/STORAGE"
-	reader.state.Resources = []*storepb.InstanceConfigurationState_ManagedResource{{Name: name, Kind: "InstanceSetting"}}
-	reader.settings[storepb.InstanceSettingKey_STORAGE] = &storepb.InstanceSetting{
-		Key: storepb.InstanceSettingKey_STORAGE,
-		Value: &storepb.InstanceSetting_StorageSetting{StorageSetting: &storepb.InstanceStorageSetting{
-			StorageType: storepb.InstanceStorageSetting_S3, S3Config: &storepb.StorageS3Config{Bucket: "legacy"},
-		}},
-	}
-	for name, input := range map[string]string{
-		"legacy declaration": `{"instanceSettings":[{"name":"instance/settings/STORAGE","storageSetting":{"storageType":"S3","s3Config":{"accessKeySecret":"${env:MISSING}"}}}]}`,
-		"local replacement":  `{"instanceSettings":[{"name":"instance/settings/STORAGE","storageSetting":{"storageType":"LOCAL"}}]}`,
-		"remove":             `{"removed":[{"resource":"instance/settings/STORAGE","destroy":true}]}`,
-		"absent":             `{}`,
-	} {
-		t.Run(name, func(t *testing.T) {
-			plan := planFor(t, loadDesired(t, map[string]string{"storage.json": input}), reader)
-			require.True(t, plan.Valid(), plan.Message.Errors)
-			require.False(t, plan.HasChanges())
-			require.NotEmpty(t, plan.Message.Warnings)
-			require.True(t, proto.Equal(reader.state.Resources[0], plan.next.Resources[0]))
-		})
-	}
+	require.Contains(t, strings.Join(plan.Message.Errors, " "), "must match the existing account")
 }
 
 func TestPlanStateOnlyChange(t *testing.T) {

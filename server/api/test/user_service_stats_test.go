@@ -10,7 +10,6 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	"github.com/usememos/memos/internal/testutil/legacyspace"
 	apipb "github.com/usememos/memos/proto/gen/api"
 	storepb "github.com/usememos/memos/proto/gen/store"
 	"github.com/usememos/memos/store"
@@ -338,94 +337,30 @@ func TestListUserStats_FilterExcludesPrivateMemos(t *testing.T) {
 	require.NotContains(t, filteredResp.UserStats[0].TagCounts, "private")
 }
 
-func TestUserStatsUseMemoLocalAccess(t *testing.T) {
-	ctx := context.Background()
+func TestUserStatsRequireMemoOwnerToRevealCounts(t *testing.T) {
+	ctx := t.Context()
 	ts := NewTestService(t)
 	defer ts.Cleanup()
 
-	owner, err := ts.CreateRegularUser(ctx, "stats-access-owner")
+	owner, err := ts.CreateHostUser(ctx, "stats-owner")
 	require.NoError(t, err)
-	member, err := ts.CreateRegularUser(ctx, "stats-access-member")
-	require.NoError(t, err)
-	applicationAdmin, err := ts.CreateHostUser(ctx, "stats-access-app-admin")
-	require.NoError(t, err)
-
-	db := ts.Store.GetDriver().GetDB()
-	spaceID, err := legacyspace.Seed(ctx, db, "stats-access-space", "Stats access", owner.ID)
-	require.NoError(t, err)
-	require.NoError(t, legacyspace.AddMember(ctx, db, spaceID, member.ID, "USER"))
-
-	fixtures := []struct {
-		uid        string
-		visibility store.Visibility
-		tag        string
-	}{
-		{uid: "stats-access-public", visibility: store.Public, tag: "public"},
-		{uid: "stats-access-protected", visibility: store.Protected, tag: "protected"},
-		{uid: "stats-access-private", visibility: store.Private, tag: "private"},
-	}
-	for _, fixture := range fixtures {
-		_, err := ts.Store.CreateMemo(ctx, &store.Memo{
-			UID:        fixture.uid,
-			CreatorID:  owner.ID,
-			Content:    fixture.tag,
-			Visibility: fixture.visibility,
-			Payload:    &storepb.MemoPayload{Tags: []string{fixture.tag}},
+	ownerCtx := ts.CreateUserContext(ctx, owner.ID)
+	for _, tag := range []string{"work", "ideas"} {
+		_, err := ts.Service.CreateMemo(ownerCtx, &apipb.CreateMemoRequest{
+			Memo: &apipb.Memo{Content: "Private #" + tag, Visibility: apipb.Visibility_PRIVATE},
 		})
 		require.NoError(t, err)
 	}
-	legacyMemo, err := ts.Store.CreateMemo(ctx, &store.Memo{
-		UID: "stats-access-members", CreatorID: owner.ID, Content: "space", Visibility: store.Private,
-		Payload: &storepb.MemoPayload{Tags: []string{"space"}},
-	})
+	request := &apipb.GetUserStatsRequest{Name: "users/" + owner.Username}
+	owned, err := ts.Service.GetUserStats(ownerCtx, request)
 	require.NoError(t, err)
-	require.NoError(t, legacyspace.PlaceMemo(ctx, db, legacyMemo.ID, spaceID, "SPACE"))
+	require.Equal(t, int32(2), owned.TotalMemoCount)
+	require.Equal(t, map[string]int32{"work": 1, "ideas": 1}, owned.TagCounts)
 
-	ownerName := fmt.Sprintf("users/%s", owner.Username)
-	tests := []struct {
-		name       string
-		requestCtx context.Context
-		wantTags   []string
-		denyTags   []string
-	}{
-		{
-			name:       "owner",
-			requestCtx: ts.CreateUserContext(ctx, owner.ID),
-			wantTags:   []string{"public", "protected", "private", "space"},
-		},
-		{
-			name:       "space member",
-			requestCtx: ts.CreateUserContext(ctx, member.ID),
-			denyTags:   []string{"public", "protected", "private", "space"},
-		},
-		{
-			name:       "nonmember application admin",
-			requestCtx: ts.CreateUserContext(ctx, applicationAdmin.ID),
-			denyTags:   []string{"public", "protected", "private", "space"},
-		},
-		{
-			name:       "anonymous",
-			requestCtx: ctx,
-			denyTags:   []string{"public", "protected", "private", "space"},
-		},
-	}
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			response, err := ts.Service.GetUserStats(test.requestCtx, &apipb.GetUserStatsRequest{Name: ownerName})
-			require.NoError(t, err)
-			require.Equal(t, int32(len(test.wantTags)), response.TotalMemoCount)
-			for _, tag := range test.wantTags {
-				require.Equal(t, int32(1), response.TagCounts[tag], "expected tag %q to be visible", tag)
-			}
-			for _, tag := range test.denyTags {
-				require.NotContains(t, response.TagCounts, tag)
-			}
-		})
-	}
-
-	memberStats, err := ts.Service.ListUserStats(ts.CreateUserContext(ctx, member.ID), &apipb.ListUserStatsRequest{Parent: "users/-"})
+	anonymous, err := ts.Service.GetUserStats(ctx, request)
 	require.NoError(t, err)
-	require.Empty(t, memberStats.UserStats)
+	require.Zero(t, anonymous.TotalMemoCount)
+	require.Empty(t, anonymous.TagCounts)
 }
 
 func TestGetUserStats_AttachmentStorage(t *testing.T) {

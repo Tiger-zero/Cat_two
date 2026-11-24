@@ -19,16 +19,8 @@ const memoBodyStagePrefix = ".memo-body-"
 
 var errMemoBodyDigestMismatch = errors.New("memo body digest does not match its file")
 
-// LegacyMemoBody carries one SQL body that has not been copied to its Markdown file.
-type LegacyMemoBody struct {
-	ID      int32
-	Content string
-}
-
 type memoBodyDriver interface {
 	GetMemoBodyNamespace(context.Context) (string, error)
-	ListLegacyMemoBodies(context.Context, int32, int) ([]LegacyMemoBody, error)
-	SetMemoBodyDigest(context.Context, int32, string, string) (bool, error)
 	ListMemoBodyDigests(context.Context) ([]string, error)
 	ListMemoBodyReferences(context.Context, int32, int) ([]MemoBodyReference, error)
 	GetMemoBodyProjection(context.Context, int32, string) (string, error)
@@ -38,50 +30,21 @@ func (s *Store) memoBodiesEnabled() bool {
 	return s.profile.Personal
 }
 
-// MigrateMemoBodies publishes legacy SQL bodies and removes unreferenced old
-// versions in this database's namespace. Run it before serving requests and
-// with exclusive access to the logical database and its body directory.
-func (s *Store) MigrateMemoBodies(ctx context.Context) error {
+// SweepMemoBodies removes unreferenced files from this database's namespace.
+// Run with exclusive access before serving requests.
+func (s *Store) SweepMemoBodies(ctx context.Context) error {
 	if !s.memoBodiesEnabled() {
 		return nil
 	}
 	driver, ok := s.driver.(memoBodyDriver)
 	if !ok {
-		return errors.New("database driver does not implement memo body migration")
+		return errors.New("database driver does not implement memo body storage")
 	}
 	notes, err := s.openMemoBodyDirectory(ctx, true)
 	if err != nil {
 		return err
 	}
 	defer notes.Close()
-
-	var afterID int32
-	for {
-		bodies, err := driver.ListLegacyMemoBodies(ctx, afterID, 128)
-		if err != nil {
-			return errors.Wrap(err, "list legacy memo bodies")
-		}
-		if len(bodies) == 0 {
-			break
-		}
-		for _, body := range bodies {
-			if err := ctx.Err(); err != nil {
-				return err
-			}
-			digest, err := publishMemoBody(notes, body.Content)
-			if err != nil {
-				return errors.Wrapf(err, "write body for memo %d", body.ID)
-			}
-			changed, err := driver.SetMemoBodyDigest(ctx, body.ID, body.Content, digest)
-			if err != nil {
-				return errors.Wrapf(err, "link body for memo %d", body.ID)
-			}
-			if !changed {
-				return errors.Errorf("memo %d changed during body migration", body.ID)
-			}
-			afterID = body.ID
-		}
-	}
 	return sweepMemoBodies(ctx, driver, notes)
 }
 

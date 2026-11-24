@@ -56,7 +56,7 @@ func ValidateEntryName(name string) error {
 }
 
 // ValidateUID checks the public resource UID grammar shared by memos,
-// attachments, and Spaces.
+// and attachments.
 func ValidateUID(uid string) error {
 	if !identifier.UIDMatcher.MatchString(uid) {
 		return errors.Errorf("invalid uid %q", uid)

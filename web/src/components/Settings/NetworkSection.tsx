@@ -31,7 +31,7 @@ function isProxyUrl(value: string) {
 
 export default function NetworkSection() {
   const t = useTranslate();
-  const { query, saving, save } = useAdminSettingsRequest<NetworkSettings, NetworkUpdate>("/api/networkSettings");
+  const { query, saving, save } = useAdminSettingsRequest<NetworkSettings, NetworkUpdate>("/internal/networkSettings");
   const [enabledEdit, setEnabledEdit] = useState<boolean>();
   const [proxyUrl, setProxyUrl] = useState("");
   const [error, setError] = useState<Translations>();

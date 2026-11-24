@@ -2,7 +2,6 @@ package test
 
 import (
 	"context"
-	"fmt"
 	"strings"
 	"testing"
 
@@ -10,7 +9,6 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	"github.com/usememos/memos/internal/testutil/legacyspace"
 	apipb "github.com/usememos/memos/proto/gen/api"
 	"github.com/usememos/memos/store"
 )
@@ -104,73 +102,35 @@ func TestListMemoCommentsIncludesReactionResourceNames(t *testing.T) {
 	require.True(t, strings.HasPrefix(comments.Comments[0].Reactions[0].Name, comment.Name+"/reactions/"))
 }
 
-func TestAssignedLegacyMemoReactionsRequireMemoOwner(t *testing.T) {
-	ctx := context.Background()
+func TestPrivateMemoReactionIsVisibleToMemoOwner(t *testing.T) {
+	ctx := t.Context()
 	ts := NewTestService(t)
 	defer ts.Cleanup()
 
-	owner, err := ts.CreateRegularUser(ctx, "reaction-space-owner")
-	require.NoError(t, err)
-	member, err := ts.CreateRegularUser(ctx, "reaction-space-member")
-	require.NoError(t, err)
-	admin, err := ts.CreateHostUser(ctx, "reaction-space-admin")
+	owner, err := ts.CreateHostUser(ctx, "reaction-owner")
 	require.NoError(t, err)
 	ownerCtx := ts.CreateUserContext(ctx, owner.ID)
-	memberCtx := ts.CreateUserContext(ctx, member.ID)
-	adminCtx := ts.CreateUserContext(ctx, admin.ID)
-
-	db := ts.Store.GetDriver().GetDB()
-	spaceID, err := legacyspace.Seed(ctx, db, "reaction-space", "Reaction Space", owner.ID)
-	require.NoError(t, err)
-	require.NoError(t, legacyspace.AddMember(ctx, db, spaceID, member.ID, "ADMIN"))
-	root, err := ts.Store.CreateMemo(ctx, &store.Memo{
-		UID:        "reaction-space-root",
-		CreatorID:  owner.ID,
-		Content:    "assigned legacy public memo",
-		Visibility: store.Public,
+	memo, err := ts.Service.CreateMemo(ownerCtx, &apipb.CreateMemoRequest{
+		Memo: &apipb.Memo{Content: "Private reaction", Visibility: apipb.Visibility_PRIVATE},
 	})
 	require.NoError(t, err)
-	require.NoError(t, legacyspace.PlaceMemo(ctx, db, root.ID, spaceID, "PUBLIC"))
-	name := "memos/" + root.UID
-	legacyReaction, err := ts.Store.UpsertReaction(ctx, &store.Reaction{
-		CreatorID:    member.ID,
-		MemoID:       root.ID,
-		ReactionType: "🔥",
+	reaction, err := ts.Service.UpsertMemoReaction(ownerCtx, &apipb.UpsertMemoReactionRequest{
+		Parent: memo.Name, Reaction: &apipb.Reaction{ReactionType: "👍"},
 	})
 	require.NoError(t, err)
 
-	for _, actor := range []context.Context{memberCtx, adminCtx} {
-		_, err = ts.Service.UpsertMemoReaction(actor, &apipb.UpsertMemoReactionRequest{
-			Parent:   name,
-			Reaction: &apipb.Reaction{ReactionType: "👍"},
-		})
-		require.Equal(t, codes.PermissionDenied, status.Code(err))
-		_, err = ts.Service.ListMemoReactions(actor, &apipb.ListMemoReactionsRequest{Parent: name})
-		require.Equal(t, codes.PermissionDenied, status.Code(err))
-		feed, err := ts.Service.ListMemos(actor, &apipb.ListMemosRequest{PageSize: 20})
-		require.NoError(t, err)
-		require.Empty(t, feed.Memos)
-	}
-	_, err = ts.Service.ListMemoReactions(ctx, &apipb.ListMemoReactionsRequest{Parent: name})
-	require.Equal(t, codes.Unauthenticated, status.Code(err))
-
-	_, err = ts.Service.UpsertMemoReaction(ownerCtx, &apipb.UpsertMemoReactionRequest{
-		Parent:   name,
-		Reaction: &apipb.Reaction{ReactionType: "👍"},
-	})
-	require.NoError(t, err)
-	require.NoError(t, legacyspace.RemoveMember(ctx, db, spaceID, member.ID))
-	_, err = ts.Service.DeleteMemoReaction(memberCtx, &apipb.DeleteMemoReactionRequest{
-		Name: fmt.Sprintf("%s/reactions/%d", name, legacyReaction.ID),
-	})
-	require.NoError(t, err, "the creator may withdraw their legacy reaction")
-
-	listed, err := ts.Service.ListMemoReactions(ownerCtx, &apipb.ListMemoReactionsRequest{Parent: name})
+	request := &apipb.ListMemoReactionsRequest{Parent: memo.Name}
+	listed, err := ts.Service.ListMemoReactions(ownerCtx, request)
 	require.NoError(t, err)
 	require.Len(t, listed.Reactions, 1)
-	got, err := ts.Service.GetMemo(ownerCtx, &apipb.GetMemoRequest{Name: name})
+	require.Equal(t, reaction.Name, listed.Reactions[0].Name)
+	_, err = ts.Service.ListMemoReactions(ctx, request)
+	require.Equal(t, codes.Unauthenticated, status.Code(err))
+
+	got, err := ts.Service.GetMemo(ownerCtx, &apipb.GetMemoRequest{Name: memo.Name})
 	require.NoError(t, err)
 	require.Len(t, got.Reactions, 1)
+	require.Equal(t, reaction.Name, got.Reactions[0].Name)
 }
 
 func TestDeleteMemoReaction(t *testing.T) {

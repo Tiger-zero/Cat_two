@@ -63,7 +63,7 @@ describe("MemoActionMenu", () => {
   });
 
   it("groups an owner's memo actions by what they do to the card and puts Delete last, with no Move entry", async () => {
-    await openMenu(memoOf({ space: "spaces/work" }));
+    await openMenu(memoOf());
     expect(menuItemLabels()).toEqual(["common.edit", "common.pin", "common.archive", "common.open", "common.copy", "common.delete"]);
     const separators = screen.getAllByRole("separator");
     expect(separators[separators.length - 1].nextElementSibling).toBe(screen.getByRole("menuitem", { name: "common.delete" }));

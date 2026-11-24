@@ -10,7 +10,6 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	"github.com/usememos/memos/internal/testutil/legacyspace"
 	apipb "github.com/usememos/memos/proto/gen/api"
 	"github.com/usememos/memos/store"
 )
@@ -58,29 +57,21 @@ func TestDeleteMemoShare_VerifiesShareBelongsToMemo(t *testing.T) {
 	requireSharePresent(ctx, t, ts, shareToken)
 }
 
-func TestDeleteMemoShare_DoesNotRequireHistoricalSpaceMembership(t *testing.T) {
-	ctx := context.Background()
+func TestDeleteMemoShare_OwnerCanRevokeShare(t *testing.T) {
+	ctx := t.Context()
 	ts := NewTestService(t)
 	defer ts.Cleanup()
 
-	owner, err := ts.CreateRegularUser(ctx, "share-space-owner")
-	require.NoError(t, err)
-	admin, err := ts.CreateRegularUser(ctx, "share-space-admin")
+	owner, err := ts.CreateHostUser(ctx, "share-owner")
 	require.NoError(t, err)
 	ownerCtx := ts.CreateUserContext(ctx, owner.ID)
-	db := ts.Store.GetDriver().GetDB()
-	spaceID, err := legacyspace.Seed(ctx, db, "share-space", "Share Space", owner.ID)
+	memo, err := ts.Service.CreateMemo(ownerCtx, &apipb.CreateMemoRequest{
+		Memo: &apipb.Memo{Content: "Private memo", Visibility: apipb.Visibility_PRIVATE},
+	})
 	require.NoError(t, err)
-	require.NoError(t, legacyspace.AddMember(ctx, db, spaceID, admin.ID, "ADMIN"))
-	memo, err := ts.Service.CreateMemo(ownerCtx, &apipb.CreateMemoRequest{Memo: &apipb.Memo{
-		Content: "assigned share",
-	}})
-	require.NoError(t, err)
-	require.NoError(t, legacyspace.PlaceMemo(ctx, db, parseMemoIDFromNameForTest(t, ts, memo.Name), spaceID, "PRIVATE"))
-	const shareToken = "legacy-assigned-share"
+	const shareToken = "retired-share"
 	shareName := seedLegacyMemoShare(ctx, t, ts, memo.Name, owner.ID, shareToken, nil)
 
-	require.NoError(t, legacyspace.RemoveMember(ctx, db, spaceID, owner.ID))
 	_, err = ts.Service.DeleteMemoShare(ownerCtx, &apipb.DeleteMemoShareRequest{Name: shareName})
 	require.NoError(t, err)
 	storedShare, err := ts.Store.GetMemoShare(ctx, &store.FindMemoShare{UID: new(shareToken)})

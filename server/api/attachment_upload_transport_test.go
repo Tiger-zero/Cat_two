@@ -32,8 +32,7 @@ func (r *uploadCountingReader) Read(p []byte) (int, error) {
 
 func TestCreateAttachmentConnectChecksCredentialsBeforeReadingBody(t *testing.T) {
 	svc, ctx := newUploadTestService(t)
-	handler, err := svc.NewHandler(t.Context())
-	require.NoError(t, err)
+	handler := svc.NewHandler()
 	attachment := &apipb.CreateAttachmentRequest{Attachment: &apipb.Attachment{
 		Filename: "inline.txt",
 		Type:     "text/plain",
@@ -79,55 +78,52 @@ func TestCreateAttachmentConnectChecksCredentialsBeforeReadingBody(t *testing.T)
 	require.EqualValues(t, len(attachment.Attachment.Content), response.Msg.Size)
 }
 
-func TestUploadAttachmentTransports(t *testing.T) {
+func TestUploadAttachmentConnect(t *testing.T) {
 	svc, ctx := newUploadTestService(t)
 	user, err := svc.fetchCurrentUser(ctx)
 	require.NoError(t, err)
 	token, _, err := auth.GenerateAccessTokenV2(user.ID, user.Username, string(user.Role), string(user.RowStatus), user.PasswordHash, []byte(svc.Secret))
 	require.NoError(t, err)
 	e := http.NewServeMux()
-	apiHandler, handlerErr := svc.NewHandler(context.Background())
-	require.NoError(t, handlerErr)
+	apiHandler := svc.NewHandler()
 	e.Handle("/", apiHandler)
 
-	for _, path := range []string{"/api/attachments:upload", attachmentUploadProcedure} {
-		t.Run(path, func(t *testing.T) {
-			call := func(message proto.Message, authenticated bool) *httptest.ResponseRecorder {
-				t.Helper()
-				data, err := protojson.Marshal(message)
-				require.NoError(t, err)
-				req := httptest.NewRequest(http.MethodPost, path, bytes.NewReader(data))
-				req.Header.Set("Content-Type", "application/json")
-				if authenticated {
-					req.Header.Set("Authorization", "Bearer "+token)
-				}
-				rec := httptest.NewRecorder()
-				e.ServeHTTP(rec, req)
-				return rec
-			}
-			initial := &apipb.UploadAttachmentRequest{Upload: uploadSpec("file.txt", 3)}
-			require.Equal(t, http.StatusUnauthorized, call(initial, false).Code)
-			rec := call(initial, true)
-			require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
-			response := &apipb.UploadAttachmentResponse{}
-			require.NoError(t, protojson.Unmarshal(rec.Body.Bytes(), response))
-			rec = call(&apipb.UploadAttachmentRequest{Upload: uploadID(response.UploadId), Data: []byte("abc"), FinishWrite: true}, true)
-			require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
-			require.NoError(t, protojson.Unmarshal(rec.Body.Bytes(), response))
-			require.NotNil(t, response.Attachment)
-
-			oversized, err := protojson.Marshal(&apipb.UploadAttachmentRequest{Data: make([]byte, uploadRequestLimit)})
+	t.Run("Connect JSON and message limit", func(t *testing.T) {
+		call := func(message proto.Message, authenticated bool) *httptest.ResponseRecorder {
+			t.Helper()
+			data, err := protojson.Marshal(message)
 			require.NoError(t, err)
-			reader := &uploadCountingReader{reader: bytes.NewReader(oversized)}
-			req := httptest.NewRequest(http.MethodPost, path, reader)
+			req := httptest.NewRequest(http.MethodPost, attachmentUploadProcedure, bytes.NewReader(data))
 			req.Header.Set("Content-Type", "application/json")
-			req.Header.Set("Authorization", "Bearer "+token)
-			rec = httptest.NewRecorder()
+			if authenticated {
+				req.Header.Set("Authorization", "Bearer "+token)
+			}
+			rec := httptest.NewRecorder()
 			e.ServeHTTP(rec, req)
-			require.GreaterOrEqual(t, rec.Code, 400)
-			require.LessOrEqual(t, reader.read, uploadRequestLimit+1, "body must be bounded before decoding")
-		})
-	}
+			return rec
+		}
+		initial := &apipb.UploadAttachmentRequest{Upload: uploadSpec("file.txt", 3)}
+		require.Equal(t, http.StatusUnauthorized, call(initial, false).Code)
+		rec := call(initial, true)
+		require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+		response := &apipb.UploadAttachmentResponse{}
+		require.NoError(t, protojson.Unmarshal(rec.Body.Bytes(), response))
+		rec = call(&apipb.UploadAttachmentRequest{Upload: uploadID(response.UploadId), Data: []byte("abc"), FinishWrite: true}, true)
+		require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+		require.NoError(t, protojson.Unmarshal(rec.Body.Bytes(), response))
+		require.NotNil(t, response.Attachment)
+
+		oversized, err := protojson.Marshal(&apipb.UploadAttachmentRequest{Data: make([]byte, uploadRequestLimit)})
+		require.NoError(t, err)
+		reader := &uploadCountingReader{reader: bytes.NewReader(oversized)}
+		req := httptest.NewRequest(http.MethodPost, attachmentUploadProcedure, reader)
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+token)
+		rec = httptest.NewRecorder()
+		e.ServeHTTP(rec, req)
+		require.GreaterOrEqual(t, rec.Code, 400)
+		require.LessOrEqual(t, reader.read, uploadRequestLimit+1, "body must be bounded before decoding")
+	})
 
 	t.Run("Connect protobuf and compressed message limit", func(t *testing.T) {
 		server := httptest.NewTestServer(t, e)

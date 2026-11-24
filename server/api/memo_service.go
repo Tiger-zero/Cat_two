@@ -330,9 +330,6 @@ func (s *APIService) UpdateMemo(ctx context.Context, request *apipb.UpdateMemoRe
 	if !access.CanManageMemo(user, memo) {
 		return nil, status.Errorf(codes.PermissionDenied, "permission denied")
 	}
-	if request.Memo.GetSpace() != "" {
-		return nil, retiredModuleError()
-	}
 
 	update := &store.UpdateMemo{
 		ID: memo.ID,
@@ -345,8 +342,8 @@ func (s *APIService) UpdateMemo(ctx context.Context, request *apipb.UpdateMemoRe
 	}
 	updatePaths := make(map[string]bool, len(request.UpdateMask.Paths))
 	for _, path := range request.UpdateMask.Paths {
-		// Older clients can include the retired Space field in the mask. Locations are read-only.
-		if path == "space" || path == "location" {
+		// Locations are read-only.
+		if path == "location" {
 			continue
 		}
 		updatePaths[path] = true
@@ -372,8 +369,8 @@ func (s *APIService) UpdateMemo(ctx context.Context, request *apipb.UpdateMemoRe
 	}
 
 	for _, path := range request.UpdateMask.Paths {
-		// Placement and legacy visibility are handled above. Location is read-only.
-		if path == "visibility" || path == "space" || path == "location" {
+		// Legacy visibility is handled above. Location is read-only.
+		if path == "visibility" || path == "location" {
 			continue
 		}
 		if path == "content" {

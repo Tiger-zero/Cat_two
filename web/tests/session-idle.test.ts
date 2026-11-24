@@ -80,7 +80,11 @@ describe("browser idle editing deadline", () => {
     vi.advanceTimersByTime(30_000);
     recordMemoEditingActivity();
     expect(localStorage.getItem(deadlineKey("editing"))).toBe(String(Date.now() + idleLimit));
-    expect(authenticatedFetch).toHaveBeenCalledExactlyOnceWith("/api/session/activity", { method: "POST", keepalive: true }, "editing");
+    expect(authenticatedFetch).toHaveBeenCalledExactlyOnceWith(
+      "/internal/session/activity",
+      { method: "POST", keepalive: true },
+      "editing",
+    );
 
     await vi.advanceTimersByTimeAsync(100);
     recordMemoEditingActivity();
@@ -101,7 +105,7 @@ describe("browser idle editing deadline", () => {
     await vi.advanceTimersByTimeAsync(1_000);
 
     expect(authenticatedFetch).toHaveBeenCalledExactlyOnceWith(
-      "/api/session/activity",
+      "/internal/session/activity",
       { method: "POST", keepalive: true },
       "previous-login",
     );

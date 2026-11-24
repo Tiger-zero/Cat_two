@@ -79,7 +79,7 @@ func TestPersonalToolsShareAccountRateLimit(t *testing.T) {
 	handler := service.authorizePersonalTools(func(context.Context, string, sdkmcp.Request) (sdkmcp.Result, error) {
 		return success, nil
 	})
-	ctx := auth.SetUserInContext(t.Context(), &store.User{ID: 7}, "")
+	ctx := auth.SetUserInContext(t.Context(), &store.User{ID: 7})
 	ctx = context.WithValue(ctx, connectionPermissionContextKey{}, store.MCPConnectionReadWrite)
 	require.True(t, limiter.Consume(ratelimit.ScopeAuthenticated, "7", 1).Allowed)
 	for _, tool := range []string{"tag_tree", "memo_search", "memo_create_memo", "unknown"} {
@@ -224,7 +224,7 @@ func newMCPTestEndpoint(t *testing.T) (http.Handler, string) {
 	require.NoError(t, err)
 	st := store.New(driver, p)
 	t.Cleanup(func() { require.NoError(t, st.Close()) })
-	require.NoError(t, st.Migrate(t.Context()))
+	require.NoError(t, st.InitializeSchema(t.Context()))
 	owner, err := st.CreateUser(t.Context(), &store.User{Username: "mcp-fixture", Role: store.RoleAdmin})
 	require.NoError(t, err)
 	_, token, err := mcpconnection.Issue(t.Context(), st, owner.ID, "Protocol fixture", "permanent", "", time.Now())

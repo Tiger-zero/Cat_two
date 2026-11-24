@@ -39,9 +39,6 @@ func (s *APIService) GetUserSetting(ctx context.Context, request *apipb.GetUserS
 		return nil, status.Errorf(codes.InvalidArgument, "invalid setting key: %v", err)
 	}
 
-	if storeKey == storepb.UserSetting_WEBHOOKS {
-		return nil, retiredModuleError()
-	}
 	userSetting, err := s.Store.GetUserSetting(ctx, &store.FindUserSetting{
 		UserID: &userID,
 		Key:    storeKey,
@@ -84,9 +81,6 @@ func (s *APIService) UpdateUserSetting(ctx context.Context, request *apipb.Updat
 		return nil, status.Errorf(codes.InvalidArgument, "invalid setting key: %v", err)
 	}
 
-	if storeKey == storepb.UserSetting_WEBHOOKS {
-		return nil, retiredModuleError()
-	}
 	var updatedSetting *apipb.UserSetting
 	switch storeKey {
 	case storepb.UserSetting_GENERAL:
@@ -230,9 +224,6 @@ func (s *APIService) ListUserSettings(ctx context.Context, request *apipb.ListUs
 
 	settings := make([]*apipb.UserSetting, 0, len(userSettings))
 	for _, storeSetting := range userSettings {
-		if storeSetting.Key == storepb.UserSetting_WEBHOOKS {
-			continue
-		}
 		apiSetting := convertUserSettingFromStore(storeSetting, user, storeSetting.Key)
 		if apiSetting != nil {
 			settings = append(settings, apiSetting)
@@ -259,18 +250,4 @@ func (s *APIService) ListUserSettings(ctx context.Context, request *apipb.ListUs
 	}
 
 	return response, nil
-}
-
-func (s *APIService) authorizeUserResourceAccess(ctx context.Context, userID int32, allowAdmin bool) (*store.User, error) {
-	currentUser, err := s.fetchCurrentUser(ctx)
-	if err != nil {
-		return nil, status.Errorf(codes.Internal, "failed to get current user: %v", err)
-	}
-	if currentUser == nil {
-		return nil, status.Errorf(codes.Unauthenticated, "user not authenticated")
-	}
-	if currentUser.ID == userID || (allowAdmin && currentUser.Role == store.RoleAdmin) {
-		return currentUser, nil
-	}
-	return nil, status.Errorf(codes.PermissionDenied, "permission denied")
 }

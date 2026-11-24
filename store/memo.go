@@ -12,17 +12,12 @@ import (
 	storepb "github.com/usememos/memos/proto/gen/store"
 )
 
-// ErrMemoSpaceNotWritable indicates that a memo targets a missing or otherwise
-// invalid Space.
-var ErrMemoSpaceNotWritable = errors.New("memo space is not writable")
+// ErrMemoContextUnavailable indicates an absent or inactive comment target.
+var ErrMemoContextUnavailable = errors.New("memo context is unavailable")
 
 // ErrMemoPermissionDenied indicates that the actor no longer owns the memo
 // being mutated.
 var ErrMemoPermissionDenied = errors.New("memo mutation permission denied")
-
-// ErrMemoShareConflict indicates that an active share conflicts with a
-// SPACE audience transition.
-var ErrMemoShareConflict = errors.New("active memo share conflicts with audience")
 
 // ErrMemoContentBudgetExceeded means the requested Markdown exceeds the read budget.
 var ErrMemoContentBudgetExceeded = errors.New("memo content budget exceeded")
@@ -37,8 +32,6 @@ const (
 	Protected Visibility = "PROTECTED"
 	// Private is the PRIVATE visibility.
 	Private Visibility = "PRIVATE"
-	// SpaceAudience is visible only to active members of its space.
-	SpaceAudience Visibility = "SPACE"
 )
 
 func (v Visibility) String() string {
@@ -76,7 +69,6 @@ type Memo struct {
 	Visibility Visibility
 	Pinned     bool
 	Payload    *storepb.MemoPayload
-	SpaceID    *int32
 	DeletedTs  *int64
 	// Revision changes whenever note content, metadata, or attachments are edited.
 	Revision int64
@@ -269,12 +261,6 @@ func validateMemoCreate(create *Memo) error {
 	if !isValidVisibility(create.Visibility) {
 		return errors.New("invalid visibility")
 	}
-	if create.Visibility == SpaceAudience && create.SpaceID == nil {
-		return errors.New("SPACE visibility requires a space")
-	}
-	if create.SpaceID != nil {
-		return ErrMemoSpaceNotWritable
-	}
 	return nil
 }
 
@@ -316,7 +302,7 @@ func (s *Store) VisitActiveMemoTags(ctx context.Context, creatorID int32, visit 
 }
 
 // CountUserMemos counts the memos a user created, comments included, in every
-// row status and Space.
+// row status.
 func (s *Store) CountUserMemos(ctx context.Context, creatorID int32) (int64, error) {
 	return s.driver.CountUserMemos(ctx, creatorID)
 }
@@ -388,13 +374,8 @@ func ValidateMemoWriteSnapshot(policy *MemoWritePolicy, update *UpdateMemo, snap
 	if (snapshot.RowStatus != Normal && snapshot.RowStatus != Archived) || !isValidVisibility(snapshot.Visibility) {
 		return ErrMemoMutationConflict
 	}
-	if policy.CreatingShare {
-		if snapshot.RowStatus != Normal {
-			return ErrMemoMutationConflict
-		}
-		if snapshot.Visibility == SpaceAudience {
-			return ErrMemoShareConflict
-		}
+	if policy.CreatingShare && snapshot.RowStatus != Normal {
+		return ErrMemoMutationConflict
 	}
 	if update != nil && update.Visibility != nil && *update.Visibility != Private {
 		return ErrMemoPermissionDenied
@@ -403,7 +384,7 @@ func ValidateMemoWriteSnapshot(policy *MemoWritePolicy, update *UpdateMemo, snap
 }
 
 func isValidVisibility(visibility Visibility) bool {
-	return visibility == Public || visibility == Protected || visibility == Private || visibility == SpaceAudience
+	return visibility == Public || visibility == Protected || visibility == Private
 }
 
 func (s *Store) DeleteMemo(ctx context.Context, delete *DeleteMemo) error {

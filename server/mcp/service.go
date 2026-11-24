@@ -22,7 +22,7 @@ import (
 	"github.com/usememos/memos/store"
 )
 
-// MCP carries note and filter text. Attachments are uploaded through REST.
+// MCP carries note and filter text. The web client uploads attachments through Connect.
 const maxMCPRequestBytes int64 = 16 << 20
 
 // toolCatalogTTL is the freshness hint advertised on tools/list and
@@ -77,7 +77,7 @@ func NewMCPService(profile *profile.Profile, apiService *api.APIService) (*MCPSe
 	server.AddReceivingMiddleware(catalogCacheMiddleware)
 
 	service := &MCPService{profile: profile, store: apiService.Store, RateLimiter: apiService.RateLimiter}
-	execute := personalAPI{service: apiService, marshaler: api.NewJSONMarshaler()}.execute
+	execute := personalAPI{service: apiService}.execute
 	for _, tool := range tools {
 		server.AddTool(tool, newMCPToolHandler(execute, operationsByTool[tool.Name]))
 	}
@@ -202,7 +202,7 @@ func (s *MCPService) servePersonal(w http.ResponseWriter, r *http.Request) {
 		httphandler.WriteError(w, r, response)
 		return
 	}
-	ctx = auth.SetUserInContext(ctx, &store.User{ID: connection.UserID}, "")
+	ctx = auth.SetUserInContext(ctx, &store.User{ID: connection.UserID})
 	ctx = context.WithValue(ctx, connectionPermissionContextKey{}, connection.Permission)
 	r = r.Clone(ctx)
 	r.Header.Del("Authorization")

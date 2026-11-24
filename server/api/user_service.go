@@ -19,7 +19,6 @@ import (
 	"github.com/usememos/memos/internal/clientip"
 	"github.com/usememos/memos/internal/ratelimit"
 	apipb "github.com/usememos/memos/proto/gen/api"
-	"github.com/usememos/memos/server/auth"
 	"github.com/usememos/memos/store"
 )
 
@@ -216,128 +215,6 @@ func (s *APIService) CreateUser(ctx context.Context, request *apipb.CreateUserRe
 	if err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, "%v", err)
 	}
-	if s.personalMode() {
-		return s.createPersonalAdministrator(ctx, request, email)
-	}
-
-	currentUser, _ := s.fetchCurrentUser(ctx)
-	roleToAssign := store.RoleUser
-	if currentUser != nil && currentUser.Role == store.RoleAdmin {
-		// Authenticated ADMIN user can create users with any role specified in request
-		if request.User.Role != apipb.User_ROLE_UNSPECIFIED {
-			roleToAssign = convertUserRoleToStore(request.User.Role)
-		}
-	} else {
-		limitOne := 1
-		allUsers, err := s.Store.ListUsers(ctx, &store.FindUser{Limit: &limitOne})
-		if err != nil {
-			return nil, status.Errorf(codes.Internal, "failed to list users: %v", err)
-		}
-		if len(allUsers) == 0 {
-			roleToAssign = store.RoleAdmin
-			if !request.ValidateOnly {
-				passwordHash, err := bcrypt.GenerateFromPassword([]byte(request.User.Password), bcrypt.DefaultCost)
-				if err != nil {
-					return nil, status.Errorf(codes.Internal, "failed to generate password hash: %v", err)
-				}
-				user, created, err := s.Store.CreateUserIfNoUsers(ctx, &store.User{
-					Username:     request.User.Username,
-					Role:         store.RoleAdmin,
-					Email:        email,
-					Nickname:     request.User.DisplayName,
-					PasswordHash: string(passwordHash),
-				})
-				if err != nil {
-					return nil, convertUserWriteError(err, "failed to create first user")
-				}
-				if created {
-					return convertUserFromStore(user, user), nil
-				}
-				roleToAssign = store.RoleUser
-			}
-		}
-
-		// Only allow user registration if it is enabled in the settings, or if the user is a superuser
-		if roleToAssign != store.RoleAdmin {
-			instanceGeneralSetting, err := s.Store.GetInstanceGeneralSetting(ctx)
-			if err != nil {
-				return nil, status.Errorf(codes.Internal, "failed to get instance general setting, error: %v", err)
-			}
-			if instanceGeneralSetting.DisallowUserRegistration {
-				return nil, status.Errorf(codes.PermissionDenied, "user registration is not allowed")
-			}
-			if instanceGeneralSetting.DisallowPasswordAuth {
-				return nil, status.Errorf(codes.PermissionDenied, "password signup is not allowed")
-			}
-		}
-	}
-
-	// Self-service registration is bounded per address, may require a challenge,
-	// and may be vetoed by the instance's signup policy. Admin creation and
-	// first-user setup are not.
-	if currentUser == nil || currentUser.Role != store.RoleAdmin {
-		clientIP := clientip.FromContext(ctx)
-		scope := ratelimit.ScopeSignupIP
-		if request.ValidateOnly {
-			scope = ratelimit.ScopeValidateIP
-		}
-		if err := s.throttleAndCharge(scope, clientIP, 1); err != nil {
-			return nil, err
-		}
-		if !request.ValidateOnly {
-			if err := s.requireChallenge(ctx, ratelimit.ScopeSignupIP); err != nil {
-				return nil, err
-			}
-			if s.SignupPolicy != nil {
-				if err := s.SignupPolicy.AllowSignup(ctx, email, clientIP); err != nil {
-					return nil, status.Error(codes.PermissionDenied, err.Error())
-				}
-			}
-		}
-	}
-
-	// If validate_only is true, just validate without creating
-	if request.ValidateOnly {
-		// Perform validation checks without actually creating the user. The
-		// unique index is the guarantee on the real write; this lookup only
-		// gives the caller the same answer ahead of time.
-		if email != "" {
-			holder, err := s.Store.GetUser(ctx, &store.FindUser{Email: &email})
-			if err != nil {
-				return nil, status.Errorf(codes.Internal, "failed to check email: %v", err)
-			}
-			if holder != nil {
-				return nil, status.Error(codes.AlreadyExists, emailTakenMessage)
-			}
-		}
-		return &apipb.User{
-			Username:    request.User.Username,
-			Email:       email,
-			DisplayName: request.User.DisplayName,
-			Role:        convertUserRoleFromStore(roleToAssign),
-		}, nil
-	}
-
-	passwordHash, err := bcrypt.GenerateFromPassword([]byte(request.User.Password), bcrypt.DefaultCost)
-	if err != nil {
-		return nil, status.Errorf(codes.Internal, "failed to generate password hash: %v", err)
-	}
-
-	user, err := s.Store.CreateUser(ctx, &store.User{
-		Username:     request.User.Username,
-		Role:         roleToAssign,
-		Email:        email,
-		Nickname:     request.User.DisplayName,
-		PasswordHash: string(passwordHash),
-	})
-	if err != nil {
-		return nil, convertUserWriteError(err, "failed to create user")
-	}
-
-	return convertUserFromStore(user, user), nil
-}
-
-func (s *APIService) createPersonalAdministrator(ctx context.Context, request *apipb.CreateUserRequest, email string) (*apipb.User, error) {
 	const registrationClosed = "registration closed after initial administrator setup"
 	users, err := s.Store.ListUsers(ctx, &store.FindUser{Limit: new(1)})
 	if err != nil {
@@ -471,9 +348,6 @@ func (s *APIService) UpdateUser(ctx context.Context, request *apipb.UpdateUserRe
 			role := convertUserRoleToStore(request.User.Role)
 			update.Role = &role
 		case "password":
-			if s.personalMode() && auth.HasPersonalAccessToken(ctx) {
-				return nil, status.Error(codes.PermissionDenied, "password changes require an interactive session")
-			}
 			if err := coreuser.ValidatePassword(request.User.Password); err != nil {
 				return nil, status.Errorf(codes.InvalidArgument, "%v", err)
 			}

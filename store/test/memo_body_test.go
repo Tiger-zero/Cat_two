@@ -22,7 +22,7 @@ func openMemoBodyStore(t *testing.T, p *profile.Profile) *store.Store {
 	require.NoError(t, err)
 	st := store.New(driver, p)
 	t.Cleanup(func() { _ = st.Close() })
-	require.NoError(t, st.Migrate(t.Context()))
+	require.NoError(t, st.InitializeSchema(t.Context()))
 	return st
 }
 
@@ -47,34 +47,29 @@ func assertMemoBodyFile(t *testing.T, st *store.Store, id int32, content string)
 	return path
 }
 
-func TestMemoBodiesMigrateArchiveAndTrashWithinDatabaseNamespace(t *testing.T) {
+func TestMemoBodiesSweepArchiveAndTrashWithinDatabaseNamespace(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()
 	p := getTestingProfile(t)
-	legacy := openMemoBodyStore(t, p)
-	owner, err := createTestingHostUser(ctx, legacy)
-	require.NoError(t, err)
-	archived, err := legacy.CreateMemo(ctx, &store.Memo{UID: "legacy-archived", CreatorID: owner.ID, Visibility: store.Private, Content: "旧归档\n"})
-	require.NoError(t, err)
-	require.NoError(t, legacy.UpdateMemo(ctx, &store.UpdateMemo{ID: archived.ID, RowStatus: new(store.Archived)}))
-	trashed, err := legacy.CreateMemo(ctx, &store.Memo{UID: "legacy-trash", CreatorID: owner.ID, Visibility: store.Private, Content: "旧回收站\n"})
-	require.NoError(t, err)
-	now := time.Now().Unix()
-	_, err = legacy.ApplyMemoTrash(ctx, &store.MemoTrashMutation{MemoID: trashed.ID, ActorUserID: owner.ID, Action: store.MemoTrashMove, NowTs: now})
-	require.NoError(t, err)
-	removeMemoBodySchema(ctx, t, legacy)
-	setSchemaVersion(ctx, t, legacy, "26.11.7")
-	require.NoError(t, legacy.Close())
-
 	p.Personal = true
 	st := openMemoBodyStore(t, p)
-	require.NoError(t, st.MigrateMemoBodies(ctx))
+	owner, err := createTestingHostUser(ctx, st)
+	require.NoError(t, err)
+	archived, err := st.CreateMemo(ctx, &store.Memo{UID: "sweep-archived", CreatorID: owner.ID, Visibility: store.Private, Content: "归档\n"})
+	require.NoError(t, err)
+	require.NoError(t, st.UpdateMemo(ctx, &store.UpdateMemo{ID: archived.ID, RowStatus: new(store.Archived)}))
+	trashed, err := st.CreateMemo(ctx, &store.Memo{UID: "sweep-trash", CreatorID: owner.ID, Visibility: store.Private, Content: "回收站\n"})
+	require.NoError(t, err)
+	now := time.Now().Unix()
+	_, err = st.ApplyMemoTrash(ctx, &store.MemoTrashMutation{MemoID: trashed.ID, ActorUserID: owner.ID, Action: store.MemoTrashMove, NowTs: now})
+	require.NoError(t, err)
+	require.NoError(t, st.SweepMemoBodies(ctx))
 	archivedPath := assertMemoBodyFile(t, st, archived.ID, archived.Content)
 	trashedPath := assertMemoBodyFile(t, st, trashed.ID, trashed.Content)
 	read, err := st.GetMemo(ctx, &store.FindMemo{ID: &trashed.ID, Trash: store.MemoTrashOnly})
 	require.NoError(t, err)
 	require.Equal(t, trashed.Content, read.Content)
-	require.EqualValues(t, 1, read.Revision)
+	require.Equal(t, trashed.Revision+1, read.Revision)
 	require.Empty(t, read.CreationRequestDigest)
 	_, err = st.ApplyMemoTrash(ctx, &store.MemoTrashMutation{MemoID: trashed.ID, ActorUserID: owner.ID, Action: store.MemoTrashPurge, NowTs: now})
 	require.NoError(t, err)
@@ -98,7 +93,7 @@ func TestMemoBodiesMigrateArchiveAndTrashWithinDatabaseNamespace(t *testing.T) {
 	}
 	require.NoError(t, st.Close())
 	st = openMemoBodyStore(t, p)
-	require.NoError(t, st.MigrateMemoBodies(ctx))
+	require.NoError(t, st.SweepMemoBodies(ctx))
 	for _, path := range orphanStages {
 		require.NoFileExists(t, path)
 	}
@@ -155,7 +150,7 @@ func TestMemoBodiesWriteThroughMutationAndReadVerifiedFiles(t *testing.T) {
 	require.FileExists(t, initialPath)
 	require.FileExists(t, directPath)
 
-	require.NoError(t, st.MigrateMemoBodies(ctx))
+	require.NoError(t, st.SweepMemoBodies(ctx))
 	require.NoFileExists(t, initialPath)
 	require.NoFileExists(t, directPath)
 	require.NoFileExists(t, failedPath)

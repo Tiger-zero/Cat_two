@@ -7,18 +7,18 @@ repo. If a fact here conflicts with source files or CI config, trust the source 
 
 Cat_two is a self-hosted personal note-taking app based on Memos.
 
-- Backend: Go 1.27.4, net/http, Connect RPC, gRPC-Gateway, Protocol Buffers.
+- Backend: Go 1.27.4, net/http, browser Connect RPC, Protocol Buffers and a dedicated MCP transport.
 - Frontend: React 19, TypeScript 7, Vite 8, Tailwind CSS v4, `@usememos/ui` on Base UI, React Query v5.
-- Storage: SQLite is the only supported database for Cat_two deployments, migrations, compatibility checks, and tests.
-- Generated API outputs: `proto/gen/` for Go/OpenAPI, `web/src/types/proto/` for TypeScript.
+- Storage: a single-account SQLite schema. Incompatible earlier databases are rejected at startup.
+- Generated protocol outputs: Go messages and service bindings in `proto/gen/`, TypeScript in `web/src/types/proto/`. The embedded OpenAPI document supplies MCP tool schemas.
 
 ## Working Rules
 
 - Read relevant code before editing; prefer local patterns over new abstractions.
 - Keep diffs scoped. Do not do repo-wide cleanup, dependency churn, or generated-file rewrites unless the task requires it.
 - Do not hand-edit generated proto outputs. Change `.proto` files, then run `buf generate`.
-- For a schema change, add a SQLite migration and update `store/migration/sqlite/LATEST.sql`.
-- Add public API endpoints to `server/api/acl_config.go`.
+- For a SQLite schema change, keep the fresh schema, version guard and tests aligned.
+- Register unauthenticated browser Connect methods in `server/api/acl_config.go`. External note integrations use `/mcp`.
 - Ask before adding heavy dependencies, changing auth/token behavior, or altering Docker/release workflows.
 - Start repository work with the [project development skill](.agents/skills/cat-two-development/SKILL.md).
   Use the [product development skill](.agents/skills/cat-two-product-development/SKILL.md) for feature and API work,
@@ -46,7 +46,7 @@ go run -buildvcs=true ./cmd/memos config plan --data DIR --config-dir DIR # Decl
 go test ./store/test -run '^TestMemoStore$' # Example of a focused SQLite test run
 go build ./...                     # Compile all Go packages
 go test ./...                      # Run the full Go suite
-go test -v ./store/...             # SQLite store and migration tests
+go test -v ./store/...             # SQLite store and schema tests
 go test -v -race ./server/...      # Server tests with race detector
 go test -v -race ./internal/...    # Internal package tests with race detector
 go test -v -run TestFoo ./core/... # Run matching Go tests in one tree
@@ -58,14 +58,14 @@ golangci-lint run --fix            # Auto-fix lint, including goimports
 
 # Frontend
 cd web && pnpm install --frozen-lockfile # Use Node >=24.22.3 <25 and pnpm from web/package.json
-cd web && pnpm dev                 # Dev server on :3001, proxying API to :8081 (or $DEV_PROXY_SERVER)
+cd web && pnpm dev                 # Dev server on :3001, proxying backend requests to :8081 (or $DEV_PROXY_SERVER)
 cd web && pnpm lint                # Type check + Biome lint
 cd web && pnpm test                # Vitest unit tests
 cd web && pnpm build               # Production build
 cd web && pnpm release             # Build SPA into server/frontend/dist
 
 # Protocol Buffers
-cd proto && buf generate           # Regenerate Go + TypeScript + OpenAPI
+cd proto && buf generate           # Regenerate Go, TypeScript and internal MCP schema inputs
 cd proto && buf lint               # Lint proto files
 cd proto && buf format -w          # Format proto files
 ```
@@ -78,17 +78,17 @@ Every root folder is named for what it holds. Read the folder's `doc.go` or `REA
 | --- | --- | --- |
 | `cmd/memos/` | Cobra/Viper CLI setup and server startup | anything |
 | `server/` | The HTTP process: net/http bootstrap, graceful shutdown, every transport | core, store, markdown, filter, internal |
-| `server/api/` | Connect/gRPC-Gateway services, ACL config, SSE hub. Thin handlers; rules go to `core/` | |
+| `server/api/` | Browser Connect services, `/internal/` session routes, ACL config, SSE hub. Thin handlers. Rules go to `core/` | |
 | `server/fileserver/` | Native HTTP file serving, thumbnails, range requests | |
 | `server/frontend/` | Static SPA serving; `dist/` is the built SPA baked in by `go:embed` | |
 | `server/mcp/` | Model Context Protocol server | |
-| `server/auth/` | JWT access tokens, refresh tokens, PAT handling | |
+| `server/auth/` | Browser JWT access tokens, refresh cookies and session authentication | |
 | `core/` | Business rules for author access, memo payloads and exports, instance settings, message capture, MCP connections, users and declarative configuration | store, markdown, filter, internal |
-| `store/` | Store facade, cache, SQLite migrations, and the `Driver` implemented in `store/db/sqlite/` | markdown, filter, internal |
+| `store/` | Store facade, cache, SQLite schema and the `Driver` implemented in `store/db/sqlite/` | markdown, filter, internal |
 | `markdown/` | Markdown engine: parser, AST, memos syntax extensions, renderer, memo payload | proto/gen, internal |
 | `filter/` | CEL filter compiler, SQLite rendering, and filterable field schema | internal |
 | `internal/` | Private plumbing for identifiers, trusted proxies, rate limits and HTTP helpers | third party only |
-| `proto/api/`, `proto/store/` | Public API and internal storage proto sources; `proto/gen/` is generated | |
+| `proto/api/`, `proto/store/` | Browser protocol and internal storage proto sources; `proto/gen/` is generated | |
 | `web/src/` | React SPA: `connect.ts` clients, `auth-state.ts`, `hooks/`, `contexts/`, `components/`, `lib/`, `locales/`, `themes/` | |
 
 Layering rules, enforced by `depguard` in `.golangci.yaml`:
@@ -109,13 +109,13 @@ Black-box service tests live in `server/api/test/`, unit tests next to the code.
 | Change | Update | Verify |
 | --- | --- | --- |
 | Go service or router behavior | Handlers under `server/`, rules under `core/`, tests near package | Go tests for affected packages and the affected HTTP, Connect, or MCP path |
-| Store or migration behavior | `store/` and the SQLite migration or schema as applicable | Focused SQLite tests, then `go test ./store/...` for shared storage or schema changes |
+| Store or schema behavior | `store/` and SQLite schema | Focused SQLite tests, then `go test ./store/...` for shared storage or schema changes |
 | Markdown or filter logic | `markdown/`, `filter/` | Go tests for affected packages and integration paths |
 | Internal package logic | Relevant `internal/` package tests | Go tests for affected packages |
 | Frontend behavior | Components/hooks/contexts under `web/src/` | `cd web && pnpm lint && pnpm test` |
 | Frontend production output | Vite config or release-sensitive UI | `cd web && pnpm build` or `pnpm release` |
 | Proto API | `.proto` source, generated outputs, `proto/api/CHANGELOG.md` for breaks | `cd proto && buf generate && buf lint` |
-| Public unauthenticated route | `server/api/acl_config.go` | Targeted server test or manual route check |
+| Unauthenticated browser Connect method | `server/api/acl_config.go` | Targeted server test or manual route check |
 
 ## Go Conventions
 
@@ -132,10 +132,10 @@ localization, accessibility, and desktop verification. Read it before editing fr
 
 ## Database And Proto Rules
 
-- Keep SQLite fresh-install SQL and incremental migrations equivalent. Match both paths in storage tests. [Storage tests](store/test/README.md)
+- Cover SQLite initialization, restart and rejection of incompatible schemas in storage tests. [Storage tests](store/test/README.md)
 - Proto field changes must preserve compatibility unless the task explicitly allows a breaking API change. Record every
   allowed break in `proto/api/CHANGELOG.md`; compatibility is checked during review.
-- Regenerate after proto edits and include both Go/OpenAPI and TypeScript generated outputs.
+- Regenerate Go and TypeScript bindings and the embedded MCP schema inputs after proto edits.
 
 ## Verification Policy
 
@@ -161,8 +161,8 @@ localization, accessibility, and desktop verification. Read it before editing fr
   `store`, `server`, `internal`, `other` (`cmd`, `core`, `markdown`, `filter`, `proto` and Cat_two script tests).
 - Backend, frontend and Proto workflows use changed-path filters. The container workflow checks its input paths on ordinary
   pushes and always builds for manual or explicit publish requests.
-- Backend store tests use SQLite, including fresh install and CalVer upgrade fixtures. To test a Cat_two image upgrade, pass
-  `--previous-image` to the [container smoke script](scripts/release_smoke_test.sh).
+- Backend store tests use SQLite. The [container smoke script](scripts/release_smoke_test.sh) tests a fresh candidate and its
+  persistent data after container recreation.
 - Frontend CI: Node 24, pnpm 11.0.1, `pnpm lint` and `pnpm test`. The container workflow builds the production web assets.
 - Proto CI: `buf lint` and `buf format` check.
 - Docker runtime uses Alpine 3.24 and runs the application as a non-root user on port 5230. Cat_two publishes amd64 and arm64. See `scripts/Dockerfile`.

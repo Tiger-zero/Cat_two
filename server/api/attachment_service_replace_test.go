@@ -109,14 +109,6 @@ func TestReplaceAttachmentRetryDeletesLeftoverFile(t *testing.T) {
 	svc := newIntegrationService(t)
 	t.Cleanup(svc.CloseUploads)
 	ctx := context.Background()
-	_, err := svc.Store.UpsertInstanceSetting(ctx, &storepb.InstanceSetting{
-		Key: storepb.InstanceSettingKey_STORAGE,
-		Value: &storepb.InstanceSetting_StorageSetting{StorageSetting: &storepb.InstanceStorageSetting{
-			Storages:         []*storepb.Storage{{Id: "local", Name: "Local", Type: storepb.StorageType_STORAGE_TYPE_LOCAL}},
-			DefaultStorageId: "local",
-		}},
-	})
-	require.NoError(t, err)
 	user := createSpaceTestUser(ctx, t, svc, "artist", store.RoleUser)
 	userCtx := userCtx(ctx, user.ID)
 	content := testutil.BuildPNG(4, 4)
@@ -197,14 +189,6 @@ func TestReplaceAttachmentRetryKeepsLeftoverWhenDeleteFails(t *testing.T) {
 	svc := newIntegrationService(t)
 	t.Cleanup(svc.CloseUploads)
 	ctx := context.Background()
-	_, err := svc.Store.UpsertInstanceSetting(ctx, &storepb.InstanceSetting{
-		Key: storepb.InstanceSettingKey_STORAGE,
-		Value: &storepb.InstanceSetting_StorageSetting{StorageSetting: &storepb.InstanceStorageSetting{
-			Storages:         []*storepb.Storage{{Id: "local", Name: "Local", Type: storepb.StorageType_STORAGE_TYPE_LOCAL}},
-			DefaultStorageId: "local",
-		}},
-	})
-	require.NoError(t, err)
 	user := createSpaceTestUser(ctx, t, svc, "artist", store.RoleUser)
 	userCtx := userCtx(ctx, user.ID)
 	content := testutil.BuildPNG(4, 4)

@@ -61,10 +61,10 @@ describe("<TwoFactorSection>", () => {
     await waitFor(() => expect(navigateTo).toHaveBeenCalledWith("/auth", { replace: true }));
     expect(logout).toHaveBeenCalledOnce();
     expect(authenticatedFetch.mock.calls.map(([path, request]) => [path, request.body])).toEqual([
-      ["/api/auth/totp", undefined],
-      ["/api/auth/totp/setup", JSON.stringify({ password: "first-password" })],
-      ["/api/auth/totp/setup", JSON.stringify({ password: "correct-password" })],
-      ["/api/auth/totp/enable", JSON.stringify({ password: "correct-password", code: "123456" })],
+      ["/internal/auth/totp", undefined],
+      ["/internal/auth/totp/setup", JSON.stringify({ password: "first-password" })],
+      ["/internal/auth/totp/setup", JSON.stringify({ password: "correct-password" })],
+      ["/internal/auth/totp/enable", JSON.stringify({ password: "correct-password", code: "123456" })],
     ]);
     expect(screen.queryByText("MYAUTHENTICATORKEY")).not.toBeInTheDocument();
   });
@@ -104,7 +104,7 @@ describe("<TwoFactorSection>", () => {
     fireEvent.click(form.getByRole("button", { name: "two-factor.disable" }));
     await waitFor(() => expect(logout).toHaveBeenCalledOnce());
     expect(authenticatedFetch).toHaveBeenLastCalledWith(
-      "/api/auth/totp/disable",
+      "/internal/auth/totp/disable",
       expect.objectContaining({ method: "POST", body: JSON.stringify({ password: "current-password", code: "654321" }) }),
     );
   });

@@ -8,8 +8,8 @@ import (
 	"github.com/usememos/memos/store"
 )
 
-func TestLegacyMemoPoliciesApplyOwnershipAcrossHistoricalAudiences(t *testing.T) {
-	for _, visibility := range []store.Visibility{store.Private, store.Public, store.Protected, store.SpaceAudience} {
+func TestMemoPoliciesRequireOwnership(t *testing.T) {
+	for _, visibility := range []store.Visibility{store.Private, store.Public, store.Protected} {
 		t.Run(string(visibility), func(t *testing.T) {
 			snapshot := &store.MemoRelationEndpointSnapshot{
 				ActorUserID: 1, Actor: store.MemoActorState{Active: true, Admin: true}, EndpointID: 10,

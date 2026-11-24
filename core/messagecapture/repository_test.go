@@ -23,7 +23,7 @@ func newTestStore(t *testing.T, dataPath string) *store.Store {
 	require.NoError(t, err)
 	s := store.New(driver, p)
 	t.Cleanup(func() { require.NoError(t, s.Close()) })
-	require.NoError(t, s.Migrate(t.Context()))
+	require.NoError(t, s.InitializeSchema(t.Context()))
 	return s
 }
 

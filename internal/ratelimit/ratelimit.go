@@ -26,9 +26,9 @@ const (
 	ScopeSignInIP Scope = "signin_ip"
 	// ScopeSignInAccount counts failed password sign-ins per submitted username.
 	ScopeSignInAccount Scope = "signin_account"
-	// ScopeSignupIP counts self-service registrations per client address.
+	// ScopeSignupIP counts initial administrator setup attempts per client address.
 	ScopeSignupIP Scope = "signup_ip"
-	// ScopeValidateIP counts validate-only registration probes per client address.
+	// ScopeValidateIP counts validate-only setup probes per client address.
 	ScopeValidateIP Scope = "validate_ip"
 	// ScopePasswordResetIP is reserved for the password reset flow, per client address.
 	ScopePasswordResetIP Scope = "password_reset_ip"
@@ -112,12 +112,6 @@ type Challenge interface {
 	Provider() string
 	SiteKey() string
 	Verify(ctx context.Context, scope Scope, token string, clientIP string) error
-}
-
-// SignupPolicy decides whether a self-service registration may proceed. A
-// nil SignupPolicy allows every registration.
-type SignupPolicy interface {
-	AllowSignup(ctx context.Context, canonicalEmail string, clientIP string) error
 }
 
 // MemoryLimiter is a sliding-window counter kept in process memory. Each key

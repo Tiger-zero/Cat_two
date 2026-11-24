@@ -1,6 +1,6 @@
 # Cat_two MCP server
 
-Cat_two serves `/mcp` over stateless Streamable HTTP with JSON responses. It exposes tools and uses the same typed service methods and author permissions as REST and Connect. Clients use a dedicated MCP connection token for every request. File uploads use REST.
+Cat_two serves `/mcp` over stateless Streamable HTTP with JSON responses. The tools use the same typed service methods and author permissions as the Cat_two web app. Clients use a dedicated MCP connection token for every request. File uploads and downloads are available in the signed-in web app.
 
 ## Transport and authentication
 
@@ -13,10 +13,10 @@ Cat_two serves `/mcp` over stateless Streamable HTTP with JSON responses. It exp
 ### Connecting a client
 
 Point a Streamable HTTP client at `https://<your-instance>/mcp`. Sign in
-to Cat_two, open **Settings → MCP and API**, and create
+to Cat_two, open **Settings → MCP**, and create
 an MCP connection. Choose 7 days (the default), 14 days, one calendar year
 from issuance, or a permanent token. Choose read-only or read and write.
-Read and write is the default and applies to connections from older releases.
+Read and write is the default.
 The token works immediately and is shown once at creation.
 In Codex, leave the Bearer token environment-variable field blank and set the
 `Authorization` request header to the full copied value. The following JSON
@@ -41,36 +41,16 @@ the first connection's client IP and the token expiration. The connection
 expires when its token does. Deleting the connection invalidates the token
 for the next request, including from a client that has already connected.
 
-After upgrading, existing active tokens retain their original expiration.
-Connections approved under the old workflow retain the first request's
-recorded address. Replace expired tokens or old awaiting or pending tokens by
-creating a new connection. REST integrations continue to use personal access
-tokens.
-[Codex setup and troubleshooting](../../plugins/cat-two-notes/README.md#连接-nas)
+To switch to a new instance, create a new MCP connection there and update the client URL and header. [Codex setup and troubleshooting](../../plugins/cat-two-notes/README.md#连接-nas)
 
 ### Managing Cat_two connections
 
-Management requires a signed-in session. `GET /api/mcpConnections` lists the
-account's connections with their permission, current state, token expiration,
-and first connection IP once recorded. `POST /api/mcpConnections` creates a
-connection from `{"label":"My Codex","duration":"7d","permission":"read_only"}`.
-The duration starts at issuance. Omit `permission` or pass `read_write` for
-a connection that can create and update notes.
-Supported values are `7d` (the default), `14d`, `1y` (one calendar year in UTC),
-and `permanent`. The creation response includes the token once.
-
-`DELETE /api/mcpConnections/{id}` removes a connection owned by the signed-in
-account and returns `204 No Content` on success. Unknown IDs and connections
-owned by another account return `404`. The next request with the deleted token
-fails authentication. The legacy
-`POST /api/mcpConnections/{id}/decision` endpoint continues to accept
-`{"action":"revoke"}`. Legacy approval and denial actions return `400`.
+The web settings page manages connections through `/internal/mcpConnections`. Management uses a signed-in web session. The browser lists the token's state, permission, expiration and first recorded client IP. Creating a connection returns the token once. Deleting it invalidates the next request.
 
 ## Tool surface
 
-Cat_two provides `auth_get_current_user`, `memo_list_memos`,
-`memo_get_memo`, `memo_create_memo` and
-`memo_update_memo`.
+Cat_two provides `auth_get_current_user`, `memo_list_memos`, `memo_get_memo`,
+`memo_create_memo`, and `memo_update_memo`, plus the search, batch and tag tools below.
 
 The following read-only tools use the connection owner's notes.
 
@@ -103,9 +83,9 @@ before retrying.
 
 ## Request flow
 
-Startup resolves request and response schemas only for the five published operations selected in `catalog.go`. Generated OpenAPI continues to describe REST. MCP tools compile references to local JSON Schema definitions. The Cat_two search, batch and tag tools are registered with their own typed inputs.
+Startup resolves request and response schemas only for the five published operations selected in `catalog.go`. The embedded OpenAPI generated from Proto HTTP annotations supplies these MCP tool schemas. MCP tools compile references to local JSON Schema definitions. The Cat_two search, batch and tag tools are registered with their own typed inputs.
 
-`service.go` validates the connection and tool arguments. `personal_api.go` binds requests directly to the API service, applies the same partial-update mask semantics as REST, and returns typed results in `structuredContent`. Tool errors set `isError` and use a text block.
+`service.go` validates the connection and tool arguments. `personal_api.go` binds requests directly to the API service, applies the same partial-update mask semantics as browser Connect, and returns typed results in `structuredContent`. Tool errors set `isError` and use a text block.
 
 ## Verification
 

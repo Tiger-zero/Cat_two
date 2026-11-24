@@ -356,7 +356,7 @@ func convertLocationFromStore(location *storepb.MemoPayload_Location) *apipb.Loc
 
 func validateCreateMemoVisibility(visibility apipb.Visibility) (store.Visibility, error) {
 	switch visibility {
-	case apipb.Visibility_VISIBILITY_UNSPECIFIED, apipb.Visibility_PRIVATE, apipb.Visibility_PROTECTED, apipb.Visibility_PUBLIC, apipb.Visibility_SPACE:
+	case apipb.Visibility_VISIBILITY_UNSPECIFIED, apipb.Visibility_PRIVATE, apipb.Visibility_PROTECTED, apipb.Visibility_PUBLIC:
 		return store.Private, nil
 	default:
 		return "", status.Errorf(codes.InvalidArgument, "invalid memo visibility")

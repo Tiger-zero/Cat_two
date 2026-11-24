@@ -18,10 +18,7 @@ var curatedOperationIDs = []string{
 }
 
 type registeredOperation struct {
-	ToolName    string
 	OperationID string
-	Method      string
-	Path        string
 	Operation   *openAPIOperation
 	InputSchema jsonSchema
 }
@@ -108,8 +105,6 @@ func buildToolFromOperation(operation *openAPIOperation) (*sdkmcp.Tool, *registe
 	tool := &sdkmcp.Tool{
 		Meta: sdkmcp.Meta{
 			"operationId": operation.OperationID,
-			"method":      operation.Method,
-			"path":        operation.Path,
 		},
 		Name:         name,
 		Title:        title,
@@ -120,10 +115,7 @@ func buildToolFromOperation(operation *openAPIOperation) (*sdkmcp.Tool, *registe
 	}
 
 	return tool, &registeredOperation{
-		ToolName:    name,
 		OperationID: operation.OperationID,
-		Method:      operation.Method,
-		Path:        operation.Path,
 		Operation:   operation,
 		InputSchema: inputSchema,
 	}

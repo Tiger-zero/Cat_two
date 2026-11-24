@@ -21,7 +21,7 @@ const (
 // RegisterSSERoutes registers the SSE endpoint.
 func RegisterSSERoutes(mux *http.ServeMux, hub *SSEHub, storeInstance *store.Store, secret string) {
 	authenticator := auth.NewAuthenticator(storeInstance, secret)
-	mux.Handle("/api/sse", httphandler.GET(httphandler.Func(func(w http.ResponseWriter, r *http.Request) error {
+	mux.Handle("/internal/sse", httphandler.GET(httphandler.Func(func(w http.ResponseWriter, r *http.Request) error {
 		return handleSSE(w, r, hub, authenticator)
 	}), nil))
 }
@@ -32,13 +32,10 @@ func handleSSE(w http.ResponseWriter, r *http.Request, hub *SSEHub, authenticato
 	// Authenticate the request.
 	authHeader := r.Header.Get("Authorization")
 	result := authenticator.Authenticate(r.Context(), authHeader)
-	if result == nil {
+	if result == nil || result.Claims.UserID == 0 {
 		return httphandler.JSON(w, http.StatusUnauthorized, map[string]string{"error": "authentication required"})
 	}
-	userID := getSSEClientUserID(result)
-	if userID == 0 {
-		return httphandler.JSON(w, http.StatusUnauthorized, map[string]string{"error": "authentication required"})
-	}
+	userID := result.Claims.UserID
 
 	// Set SSE headers.
 	w.Header().Set("Content-Type", "text/event-stream")
@@ -63,11 +60,7 @@ func handleSSE(w http.ResponseWriter, r *http.Request, hub *SSEHub, authenticato
 
 	ctx := r.Context()
 	stillAuthenticated := func() bool {
-		if result.Claims != nil {
-			_, err := authenticator.AuthenticateByAccessTokenV2(ctx, result.AccessToken)
-			return err == nil
-		}
-		_, _, err := authenticator.AuthenticateByPAT(ctx, result.AccessToken)
+		_, err := authenticator.AuthenticateByAccessTokenV2(ctx, result.AccessToken)
 		return err == nil
 	}
 
@@ -139,17 +132,4 @@ func resetSSETimer(timer *time.Timer) {
 		}
 	}
 	timer.Reset(sseHeartbeatInterval)
-}
-
-func getSSEClientUserID(result *auth.AuthResult) int32 {
-	if result == nil {
-		return 0
-	}
-	if result.Claims != nil {
-		return result.Claims.UserID
-	}
-	if result.User != nil {
-		return result.User.ID
-	}
-	return 0
 }

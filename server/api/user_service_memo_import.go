@@ -321,9 +321,6 @@ func (i *memoImporter) buildMemo(record *memoexport.Memo, uid string, content []
 		Pinned:     record.Pinned,
 		Payload:    &storepb.MemoPayload{},
 	}
-	if record.Space != nil {
-		i.warn(record.UID, "space placement from the archive was ignored")
-	}
 	if store.IsMemoCreationChannel(record.CreationChannel) {
 		memo.Payload.CreationChannel = record.CreationChannel
 	}

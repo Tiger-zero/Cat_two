@@ -2,7 +2,6 @@ syntax = "proto3";
 
 package memos.api;
 
-import "api/idp_service.proto";
 import "api/instance_service.proto";
 import "api/user_service.proto";
 import "google/api/field_behavior.proto";
@@ -13,20 +12,14 @@ option go_package = "gen/api";
 // configuration directory is one Configuration, and all files are merged into
 // one desired state. A resource may be declared in exactly one file.
 message Configuration {
-  // Optional. Identity providers to manage, by resource name.
-  repeated IdentityProvider identity_providers = 1 [(google.api.field_behavior) = OPTIONAL];
+  reserved 1, 6;
+  reserved "identity_providers", "linked_identities";
 
   // Optional. Instance setting groups to manage, by resource name.
   repeated InstanceSetting instance_settings = 2 [(google.api.field_behavior) = OPTIONAL];
 
   // Optional. Users to manage, by resource name. Intended for bootstrap administrators.
   repeated User users = 3 [(google.api.field_behavior) = OPTIONAL];
-
-  // Optional. SSO identities of declared users, by resource name: which
-  // identity-provider subject signs in as which user. Only a user the
-  // configuration declares may have one. Intended for bootstrap administrators
-  // on instances where sign-in is through an identity provider.
-  repeated LinkedIdentity linked_identities = 6 [(google.api.field_behavior) = OPTIONAL];
 
   // Optional. Lifecycle rules for declared resources.
   repeated Lifecycle lifecycle = 4 [(google.api.field_behavior) = OPTIONAL];
@@ -38,8 +31,7 @@ message Configuration {
 // Lifecycle adjusts how one declared resource is planned and applied.
 message Lifecycle {
   // Required. The resource name of a resource declared in the configuration.
-  // Format: identity-providers/{idp}, instance/settings/{setting}, users/{user},
-  // or users/{user}/linkedIdentities/{linked_identity}
+  // Format: instance/settings/{setting} or users/{user}
   string resource = 1 [(google.api.field_behavior) = REQUIRED];
 
   // Optional. Field paths, in JSON name form, that the configuration does not manage.
@@ -56,8 +48,7 @@ message Lifecycle {
 // Removed takes a resource out of management.
 message Removed {
   // Required. The resource name of a resource the configuration manages.
-  // Format: identity-providers/{idp}, instance/settings/{setting}, users/{user},
-  // or users/{user}/linkedIdentities/{linked_identity}
+  // Format: instance/settings/{setting} or users/{user}
   string resource = 1 [(google.api.field_behavior) = REQUIRED];
 
   // Optional. Delete the resource, or reset an instance setting group to its defaults,
@@ -88,8 +79,7 @@ message Plan {
 // ResourceChange is what apply would do to one resource.
 message ResourceChange {
   // The resource name.
-  // Format: identity-providers/{idp}, instance/settings/{setting}, users/{user},
-  // or users/{user}/linkedIdentities/{linked_identity}
+  // Format: instance/settings/{setting} or users/{user}
   string resource = 1;
 
   // The configuration file that declares the resource; empty for one that is no longer declared.
@@ -131,7 +121,7 @@ message ResourceChange {
 
 // FieldChange is one field apply would write.
 message FieldChange {
-  // The field path, in JSON names from the resource, such as config.oauth2Config.scopes.
+  // The field path, in JSON names from the resource, such as displayName.
   string path = 1;
 
   // The value before, as JSON. Sensitive values print as (sensitive) and write-only values

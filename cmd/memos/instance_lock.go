@@ -21,7 +21,7 @@ func lockInstance(ctx context.Context, p *profile.Profile) (func(), error) {
 		return nil, errors.Wrap(err, "resolve instance data directory for locking")
 	}
 	paths := []string{filepath.Join(data, ".cat-two.lock")}
-	database, err := sqliteDatabasePath(p.DSN)
+	database, err := profile.SQLiteDatabasePath(p.DSN)
 	if err != nil {
 		return nil, err
 	}

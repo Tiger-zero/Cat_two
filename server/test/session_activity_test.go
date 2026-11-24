@@ -24,7 +24,7 @@ func TestPersonalWebSessionExpiresWithoutEdits(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, owner)
 
-	const activityPath = "/api/session/activity"
+	const activityPath = "/internal/session/activity"
 	const idleHeader = "X-Memos-Session-Idle-Expires-At"
 	type result struct {
 		status  int
@@ -38,6 +38,9 @@ func TestPersonalWebSessionExpiresWithoutEdits(t *testing.T) {
 		require.NoError(t, err)
 		if body != "" {
 			req.Header.Set("Content-Type", "application/json")
+		}
+		if strings.HasPrefix(path, "/memos.api.") {
+			req.Header.Set("Connect-Protocol-Version", "1")
 		}
 		if token != "" {
 			req.Header.Set("Authorization", "Bearer "+token)
@@ -75,7 +78,7 @@ func TestPersonalWebSessionExpiresWithoutEdits(t *testing.T) {
 	require.Equal(t, stored[0].GetCreatedAt().AsTime(), stored[0].GetLastEditAt().AsTime())
 	require.Equal(t, stored[0].GetLastEditAt().AsTime().Add(store.UserSessionIdleTimeout), initialDeadline)
 
-	me := request(http.MethodGet, "/api/auth/me", signedIn.AccessToken, "", "", nil)
+	me := request(http.MethodPost, apiconnect.AuthServiceGetCurrentUserProcedure, signedIn.AccessToken, "{}", "", nil)
 	require.Equal(t, http.StatusOK, me.status, "%s", me.body)
 	require.Equal(t, signIn.headers.Get(idleHeader), me.headers.Get(idleHeader))
 	refresh := request(http.MethodPost, apiconnect.AuthServiceRefreshTokenProcedure, "", "{}", inst.baseURL, signIn.cookies[0])
@@ -84,15 +87,9 @@ func TestPersonalWebSessionExpiresWithoutEdits(t *testing.T) {
 	require.Len(t, refresh.cookies, 1)
 	require.NotEqual(t, signIn.cookies[0].Value, refresh.cookies[0].Value)
 
-	code, body := inst.do(t, http.MethodPost, "/api/users/"+testAdminUsername+"/personalAccessTokens", signedIn.AccessToken, map[string]string{
-		"description": "personal idle policy regression test",
-	})
-	require.Equal(t, http.StatusOK, code, "%s", body)
-	var personal struct{ Token string }
-	require.NoError(t, json.Unmarshal(body, &personal))
-	require.NotEmpty(t, personal.Token)
-	patActivity := request(http.MethodPost, activityPath, personal.Token, "", inst.baseURL, nil)
-	require.Equal(t, http.StatusUnauthorized, patActivity.status)
+	_, mcpToken := createMCPConnection(t, inst, signedIn.AccessToken, "Idle session isolation fixture", "")
+	mcpActivity := request(http.MethodPost, activityPath, mcpToken, "", inst.baseURL, nil)
+	require.Equal(t, http.StatusUnauthorized, mcpActivity.status)
 	crossOrigin := request(http.MethodPost, activityPath, signedIn.AccessToken, "", "https://other.example.test", nil)
 	require.Equal(t, http.StatusForbidden, crossOrigin.status)
 	noOrigin := request(http.MethodPost, activityPath, signedIn.AccessToken, "", "", nil)
@@ -104,7 +101,7 @@ func TestPersonalWebSessionExpiresWithoutEdits(t *testing.T) {
 	var extended struct{ IdleExpiresAt time.Time }
 	require.NoError(t, json.Unmarshal([]byte(activity.body), &extended))
 	require.True(t, extended.IdleExpiresAt.After(initialDeadline))
-	me = request(http.MethodGet, "/api/auth/me", signedIn.AccessToken, "", "", nil)
+	me = request(http.MethodPost, apiconnect.AuthServiceGetCurrentUserProcedure, signedIn.AccessToken, "{}", "", nil)
 	require.Equal(t, extended.IdleExpiresAt.UTC().Format(time.RFC3339Nano), me.headers.Get(idleHeader))
 
 	stored, err = inst.server.Store.GetUserRefreshTokens(ctx, owner.ID)
@@ -116,16 +113,16 @@ func TestPersonalWebSessionExpiresWithoutEdits(t *testing.T) {
 		Value: &storepb.UserSetting_RefreshTokens{RefreshTokens: &storepb.RefreshTokensUserSetting{RefreshTokens: stored}},
 	})
 	require.NoError(t, err)
-	me = request(http.MethodGet, "/api/auth/me", signedIn.AccessToken, "", "", nil)
+	me = request(http.MethodPost, apiconnect.AuthServiceGetCurrentUserProcedure, signedIn.AccessToken, "{}", "", nil)
 	require.Equal(t, http.StatusUnauthorized, me.status)
-	staleRefresh := request(http.MethodPost, "/api/auth/refresh", "", "{}", inst.baseURL, refresh.cookies[0])
+	staleRefresh := request(http.MethodPost, apiconnect.AuthServiceRefreshTokenProcedure, "", "{}", inst.baseURL, refresh.cookies[0])
 	require.Equal(t, http.StatusUnauthorized, staleRefresh.status)
 	require.Contains(t, staleRefresh.body, "session idle expired")
 	require.Empty(t, staleRefresh.cookies)
 	staleActivity := request(http.MethodPost, activityPath, signedIn.AccessToken, "", inst.baseURL, nil)
 	require.Equal(t, http.StatusUnauthorized, staleActivity.status)
 	require.Contains(t, staleActivity.body, "session idle expired")
-	patRead := request(http.MethodGet, "/api/auth/me", personal.Token, "", "", nil)
-	require.Equal(t, http.StatusOK, patRead.status)
-	require.Empty(t, patRead.headers.Get(idleHeader))
+	mcpRead := request(http.MethodPost, apiconnect.AuthServiceGetCurrentUserProcedure, mcpToken, "{}", "", nil)
+	require.Equal(t, http.StatusUnauthorized, mcpRead.status)
+	require.Empty(t, mcpRead.headers.Get(idleHeader))
 }

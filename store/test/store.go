@@ -20,7 +20,7 @@ func NewTestingStore(ctx context.Context, t *testing.T) *store.Store {
 	}
 
 	store := store.New(dbDriver, p)
-	if err := store.Migrate(ctx); err != nil {
+	if err := store.InitializeSchema(ctx); err != nil {
 		t.Fatalf("failed to migrate db: %v", err)
 	}
 	return store

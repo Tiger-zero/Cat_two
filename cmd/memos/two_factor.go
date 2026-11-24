@@ -9,7 +9,6 @@ import (
 
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 
 	"github.com/usememos/memos/internal/profile"
 	"github.com/usememos/memos/internal/version"
@@ -51,7 +50,6 @@ func runTwoFactorReset(cmd *cobra.Command, _ []string) error {
 	ctx, cancel := context.WithTimeout(cmd.Context(), 30*time.Second)
 	defer cancel()
 	instance, err := openInstanceStore(ctx, &profile.Profile{
-		Demo:    viper.GetBool("demo"),
 		Data:    flagOrSetting(cmd, "data"),
 		Driver:  flagOrSetting(cmd, "driver"),
 		DSN:     dsn,

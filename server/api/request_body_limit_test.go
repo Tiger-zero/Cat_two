@@ -32,14 +32,11 @@ func TestRequestBodyLimitPerProcedure(t *testing.T) {
 	require.Less(t, int64(maxGeneralRequestBytes), int64(MaxAPIRequestBytes))
 }
 
-func TestAuthSubmissionBodyLimitTransports(t *testing.T) {
+func TestConnectAuthSubmissionBodyLimit(t *testing.T) {
 	service, _ := newUploadTestService(t)
-	handler, err := service.NewHandler(t.Context())
-	require.NoError(t, err)
+	handler := service.NewHandler()
 	for _, route := range []string{
-		"/api/auth/signin",
 		"/memos.api.AuthService/SignIn",
-		"/api/users",
 		"/memos.api.UserService/CreateUser",
 	} {
 		t.Run(route, func(t *testing.T) {

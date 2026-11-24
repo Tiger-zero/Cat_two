@@ -11,7 +11,7 @@ interface Proof {
 }
 
 export async function requestTwoFactor<T>(path: "" | "/setup" | "/enable" | "/disable", proof?: Proof, signal?: AbortSignal): Promise<T> {
-  const response = await authenticatedFetch(`/api/auth/totp${path}`, {
+  const response = await authenticatedFetch(`/internal/auth/totp${path}`, {
     signal,
     cache: "no-store",
     ...(proof && { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(proof) }),

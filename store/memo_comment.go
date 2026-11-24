@@ -33,10 +33,10 @@ func checkMemoCommentParticipation(snapshot *MemoCommentAuthorizationSnapshot, r
 		return ErrMemoPermissionDenied
 	}
 	if snapshot.ContextID <= 0 || !isValidVisibility(snapshot.ContextVisibility) {
-		return ErrMemoSpaceNotWritable
+		return ErrMemoContextUnavailable
 	}
-	if snapshot.ContextRowStatus != Normal && !(restoreArchivedComment && snapshot.ContextRowStatus == Archived) {
-		return ErrMemoSpaceNotWritable
+	if snapshot.ContextRowStatus != Normal && (!restoreArchivedComment || snapshot.ContextRowStatus != Archived) {
+		return ErrMemoContextUnavailable
 	}
 	if snapshot.ContextCreatorID != snapshot.ActorUserID {
 		return ErrMemoPermissionDenied

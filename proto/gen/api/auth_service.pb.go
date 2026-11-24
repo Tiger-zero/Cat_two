@@ -32,7 +32,6 @@ type SignInRequest struct {
 	// Types that are valid to be assigned to Credentials:
 	//
 	//	*SignInRequest_PasswordCredentials_
-	//	*SignInRequest_SsoCredentials_
 	Credentials   isSignInRequest_Credentials `protobuf_oneof:"credentials"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -84,15 +83,6 @@ func (x *SignInRequest) GetPasswordCredentials() *SignInRequest_PasswordCredenti
 	return nil
 }
 
-func (x *SignInRequest) GetSsoCredentials() *SignInRequest_SsoCredentials {
-	if x != nil {
-		if x, ok := x.Credentials.(*SignInRequest_SsoCredentials_); ok {
-			return x.SsoCredentials
-		}
-	}
-	return nil
-}
-
 type isSignInRequest_Credentials interface {
 	isSignInRequest_Credentials()
 }
@@ -102,14 +92,7 @@ type SignInRequest_PasswordCredentials_ struct {
 	PasswordCredentials *SignInRequest_PasswordCredentials `protobuf:"bytes,1,opt,name=password_credentials,json=passwordCredentials,proto3,oneof"`
 }
 
-type SignInRequest_SsoCredentials_ struct {
-	// SSO credentials from an OAuth2 authorization code flow.
-	SsoCredentials *SignInRequest_SsoCredentials `protobuf:"bytes,2,opt,name=sso_credentials,json=ssoCredentials,proto3,oneof"`
-}
-
 func (*SignInRequest_PasswordCredentials_) isSignInRequest_Credentials() {}
-
-func (*SignInRequest_SsoCredentials_) isSignInRequest_Credentials() {}
 
 // Response message for AuthService.SignIn.
 type SignInResponse struct {
@@ -455,100 +438,18 @@ func (x *SignInRequest_PasswordCredentials) GetOtpCode() string {
 	return ""
 }
 
-// SsoCredentials are the result of an OAuth2 authorization code flow with an identity provider.
-// A first sign-in creates a local user unless the instance disallows user registration.
-type SignInRequest_SsoCredentials struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Required. The resource name of the identity provider.
-	// Format: identity-providers/{idp}
-	IdentityProvider string `protobuf:"bytes,1,opt,name=identity_provider,json=identityProvider,proto3" json:"identity_provider,omitempty"`
-	// Required. The authorization code returned by the identity provider.
-	Code string `protobuf:"bytes,2,opt,name=code,proto3" json:"code,omitempty"`
-	// Required. The redirect URI used in the authorization request.
-	RedirectUri string `protobuf:"bytes,3,opt,name=redirect_uri,json=redirectUri,proto3" json:"redirect_uri,omitempty"`
-	// Optional. The PKCE code verifier (RFC 7636). Set it when the authorization request used a code challenge.
-	CodeVerifier  string `protobuf:"bytes,4,opt,name=code_verifier,json=codeVerifier,proto3" json:"code_verifier,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *SignInRequest_SsoCredentials) Reset() {
-	*x = SignInRequest_SsoCredentials{}
-	mi := &file_api_auth_service_proto_msgTypes[8]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *SignInRequest_SsoCredentials) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*SignInRequest_SsoCredentials) ProtoMessage() {}
-
-func (x *SignInRequest_SsoCredentials) ProtoReflect() protoreflect.Message {
-	mi := &file_api_auth_service_proto_msgTypes[8]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use SignInRequest_SsoCredentials.ProtoReflect.Descriptor instead.
-func (*SignInRequest_SsoCredentials) Descriptor() ([]byte, []int) {
-	return file_api_auth_service_proto_rawDescGZIP(), []int{0, 1}
-}
-
-func (x *SignInRequest_SsoCredentials) GetIdentityProvider() string {
-	if x != nil {
-		return x.IdentityProvider
-	}
-	return ""
-}
-
-func (x *SignInRequest_SsoCredentials) GetCode() string {
-	if x != nil {
-		return x.Code
-	}
-	return ""
-}
-
-func (x *SignInRequest_SsoCredentials) GetRedirectUri() string {
-	if x != nil {
-		return x.RedirectUri
-	}
-	return ""
-}
-
-func (x *SignInRequest_SsoCredentials) GetCodeVerifier() string {
-	if x != nil {
-		return x.CodeVerifier
-	}
-	return ""
-}
-
 var File_api_auth_service_proto protoreflect.FileDescriptor
 
 const file_api_auth_service_proto_rawDesc = "" +
 	"\n" +
-	"\x16api/auth_service.proto\x12\tmemos.api\x1a\x16api/user_service.proto\x1a\x1cgoogle/api/annotations.proto\x1a\x1fgoogle/api/field_behavior.proto\x1a\x19google/api/resource.proto\x1a\x1bgoogle/protobuf/empty.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\x9d\x04\n" +
+	"\x16api/auth_service.proto\x12\tmemos.api\x1a\x16api/user_service.proto\x1a\x1cgoogle/api/annotations.proto\x1a\x1fgoogle/api/field_behavior.proto\x1a\x1bgoogle/protobuf/empty.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\x91\x02\n" +
 	"\rSignInRequest\x12a\n" +
-	"\x14password_credentials\x18\x01 \x01(\v2,.memos.api.SignInRequest.PasswordCredentialsH\x00R\x13passwordCredentials\x12R\n" +
-	"\x0fsso_credentials\x18\x02 \x01(\v2'.memos.api.SignInRequest.SsoCredentialsH\x00R\x0essoCredentials\x1aw\n" +
+	"\x14password_credentials\x18\x01 \x01(\v2,.memos.api.SignInRequest.PasswordCredentialsH\x00R\x13passwordCredentials\x1aw\n" +
 	"\x13PasswordCredentials\x12\x1f\n" +
 	"\busername\x18\x01 \x01(\tB\x03\xe0A\x02R\busername\x12\x1f\n" +
 	"\bpassword\x18\x02 \x01(\tB\x03\xe0A\x02R\bpassword\x12\x1e\n" +
-	"\botp_code\x18\x03 \x01(\tB\x03\xe0A\x01R\aotpCode\x1a\xcc\x01\n" +
-	"\x0eSsoCredentials\x12O\n" +
-	"\x11identity_provider\x18\x01 \x01(\tB\"\xe0A\x02\xfaA\x1c\n" +
-	"\x1amemos.api/IdentityProviderR\x10identityProvider\x12\x17\n" +
-	"\x04code\x18\x02 \x01(\tB\x03\xe0A\x02R\x04code\x12&\n" +
-	"\fredirect_uri\x18\x03 \x01(\tB\x03\xe0A\x02R\vredirectUri\x12(\n" +
-	"\rcode_verifier\x18\x04 \x01(\tB\x03\xe0A\x01R\fcodeVerifierB\r\n" +
-	"\vcredentials\"\xad\x01\n" +
+	"\botp_code\x18\x03 \x01(\tB\x03\xe0A\x01R\aotpCodeB\r\n" +
+	"\vcredentialsJ\x04\b\x02\x10\x03R\x0fsso_credentials\"\xad\x01\n" +
 	"\x0eSignInResponse\x12#\n" +
 	"\x04user\x18\x01 \x01(\v2\x0f.memos.api.UserR\x04user\x12!\n" +
 	"\faccess_token\x18\x02 \x01(\tR\vaccessToken\x12S\n" +
@@ -581,7 +482,7 @@ func file_api_auth_service_proto_rawDescGZIP() []byte {
 	return file_api_auth_service_proto_rawDescData
 }
 
-var file_api_auth_service_proto_msgTypes = make([]protoimpl.MessageInfo, 9)
+var file_api_auth_service_proto_msgTypes = make([]protoimpl.MessageInfo, 8)
 var file_api_auth_service_proto_goTypes = []any{
 	(*SignInRequest)(nil),                     // 0: memos.api.SignInRequest
 	(*SignInResponse)(nil),                    // 1: memos.api.SignInResponse
@@ -591,31 +492,29 @@ var file_api_auth_service_proto_goTypes = []any{
 	(*GetCurrentUserResponse)(nil),            // 5: memos.api.GetCurrentUserResponse
 	(*SignOutRequest)(nil),                    // 6: memos.api.SignOutRequest
 	(*SignInRequest_PasswordCredentials)(nil), // 7: memos.api.SignInRequest.PasswordCredentials
-	(*SignInRequest_SsoCredentials)(nil),      // 8: memos.api.SignInRequest.SsoCredentials
-	(*User)(nil),                              // 9: memos.api.User
-	(*timestamppb.Timestamp)(nil),             // 10: google.protobuf.Timestamp
-	(*emptypb.Empty)(nil),                     // 11: google.protobuf.Empty
+	(*User)(nil),                              // 8: memos.api.User
+	(*timestamppb.Timestamp)(nil),             // 9: google.protobuf.Timestamp
+	(*emptypb.Empty)(nil),                     // 10: google.protobuf.Empty
 }
 var file_api_auth_service_proto_depIdxs = []int32{
 	7,  // 0: memos.api.SignInRequest.password_credentials:type_name -> memos.api.SignInRequest.PasswordCredentials
-	8,  // 1: memos.api.SignInRequest.sso_credentials:type_name -> memos.api.SignInRequest.SsoCredentials
-	9,  // 2: memos.api.SignInResponse.user:type_name -> memos.api.User
-	10, // 3: memos.api.SignInResponse.access_token_expire_time:type_name -> google.protobuf.Timestamp
-	10, // 4: memos.api.RefreshTokenResponse.access_token_expire_time:type_name -> google.protobuf.Timestamp
-	9,  // 5: memos.api.GetCurrentUserResponse.user:type_name -> memos.api.User
-	0,  // 6: memos.api.AuthService.SignIn:input_type -> memos.api.SignInRequest
-	2,  // 7: memos.api.AuthService.RefreshToken:input_type -> memos.api.RefreshTokenRequest
-	4,  // 8: memos.api.AuthService.GetCurrentUser:input_type -> memos.api.GetCurrentUserRequest
-	6,  // 9: memos.api.AuthService.SignOut:input_type -> memos.api.SignOutRequest
-	1,  // 10: memos.api.AuthService.SignIn:output_type -> memos.api.SignInResponse
-	3,  // 11: memos.api.AuthService.RefreshToken:output_type -> memos.api.RefreshTokenResponse
-	5,  // 12: memos.api.AuthService.GetCurrentUser:output_type -> memos.api.GetCurrentUserResponse
-	11, // 13: memos.api.AuthService.SignOut:output_type -> google.protobuf.Empty
-	10, // [10:14] is the sub-list for method output_type
-	6,  // [6:10] is the sub-list for method input_type
-	6,  // [6:6] is the sub-list for extension type_name
-	6,  // [6:6] is the sub-list for extension extendee
-	0,  // [0:6] is the sub-list for field type_name
+	8,  // 1: memos.api.SignInResponse.user:type_name -> memos.api.User
+	9,  // 2: memos.api.SignInResponse.access_token_expire_time:type_name -> google.protobuf.Timestamp
+	9,  // 3: memos.api.RefreshTokenResponse.access_token_expire_time:type_name -> google.protobuf.Timestamp
+	8,  // 4: memos.api.GetCurrentUserResponse.user:type_name -> memos.api.User
+	0,  // 5: memos.api.AuthService.SignIn:input_type -> memos.api.SignInRequest
+	2,  // 6: memos.api.AuthService.RefreshToken:input_type -> memos.api.RefreshTokenRequest
+	4,  // 7: memos.api.AuthService.GetCurrentUser:input_type -> memos.api.GetCurrentUserRequest
+	6,  // 8: memos.api.AuthService.SignOut:input_type -> memos.api.SignOutRequest
+	1,  // 9: memos.api.AuthService.SignIn:output_type -> memos.api.SignInResponse
+	3,  // 10: memos.api.AuthService.RefreshToken:output_type -> memos.api.RefreshTokenResponse
+	5,  // 11: memos.api.AuthService.GetCurrentUser:output_type -> memos.api.GetCurrentUserResponse
+	10, // 12: memos.api.AuthService.SignOut:output_type -> google.protobuf.Empty
+	9,  // [9:13] is the sub-list for method output_type
+	5,  // [5:9] is the sub-list for method input_type
+	5,  // [5:5] is the sub-list for extension type_name
+	5,  // [5:5] is the sub-list for extension extendee
+	0,  // [0:5] is the sub-list for field type_name
 }
 
 func init() { file_api_auth_service_proto_init() }
@@ -626,7 +525,6 @@ func file_api_auth_service_proto_init() {
 	file_api_user_service_proto_init()
 	file_api_auth_service_proto_msgTypes[0].OneofWrappers = []any{
 		(*SignInRequest_PasswordCredentials_)(nil),
-		(*SignInRequest_SsoCredentials_)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
@@ -634,7 +532,7 @@ func file_api_auth_service_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_api_auth_service_proto_rawDesc), len(file_api_auth_service_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   9,
+			NumMessages:   8,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

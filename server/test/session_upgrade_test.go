@@ -4,13 +4,13 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
-	"strings"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
+	"github.com/usememos/memos/proto/gen/api/apiconnect"
 	storepb "github.com/usememos/memos/proto/gen/store"
 	"github.com/usememos/memos/server/auth"
 	"github.com/usememos/memos/store"
@@ -33,9 +33,7 @@ func TestPersonalLegacySessionUpgradesOnRefresh(t *testing.T) {
 	require.NoError(t, instance.server.Store.AddUserRefreshToken(ctx, admin.ID, &storepb.RefreshTokensUserSetting_RefreshToken{
 		TokenId: legacyID, ExpiresAt: timestamppb.New(expiry), CreatedAt: timestamppb.New(legacyCreatedAt),
 	}))
-	me, err := http.NewRequestWithContext(ctx, http.MethodGet, instance.baseURL+"/api/auth/me", nil)
-	require.NoError(t, err)
-	me.Header.Set("Authorization", "Bearer "+legacyAccess)
+	me := instance.connectRequest(t, apiconnect.AuthServiceGetCurrentUserProcedure, legacyAccess, nil)
 	me.AddCookie(&http.Cookie{Name: auth.RefreshTokenCookieName, Value: legacyRefresh})
 	unauthenticated, err := instance.client.Do(me)
 	require.NoError(t, err)
@@ -43,9 +41,7 @@ func TestPersonalLegacySessionUpgradesOnRefresh(t *testing.T) {
 	require.Equal(t, http.StatusUnauthorized, unauthenticated.StatusCode)
 	require.Empty(t, unauthenticated.Cookies(), "the first unauthorized response must preserve the legacy refresh cookie")
 
-	refresh, err := http.NewRequestWithContext(ctx, http.MethodPost, instance.baseURL+"/api/auth/refresh", strings.NewReader("{}"))
-	require.NoError(t, err)
-	refresh.Header.Set("Content-Type", "application/json")
+	refresh := instance.connectRequest(t, apiconnect.AuthServiceRefreshTokenProcedure, "", nil)
 	refresh.AddCookie(&http.Cookie{Name: auth.RefreshTokenCookieName, Value: legacyRefresh})
 	response, err := instance.client.Do(refresh)
 	require.NoError(t, err)
@@ -63,10 +59,10 @@ func TestPersonalLegacySessionUpgradesOnRefresh(t *testing.T) {
 	claims, err := auth.ParseAccessTokenV2(upgraded.AccessToken, secret)
 	require.NoError(t, err)
 	require.Equal(t, legacyID, claims.SessionID)
-	code, _ := instance.do(t, http.MethodGet, "/api/auth/me", upgraded.AccessToken, nil)
+	code, _ := instance.connect(t, apiconnect.AuthServiceGetCurrentUserProcedure, upgraded.AccessToken, nil)
 	require.Equal(t, http.StatusOK, code)
-	code, _ = instance.do(t, http.MethodPost, "/api/auth/signout", upgraded.AccessToken, nil)
+	code, _ = instance.connect(t, apiconnect.AuthServiceSignOutProcedure, upgraded.AccessToken, nil)
 	require.Equal(t, http.StatusOK, code)
-	code, _ = instance.do(t, http.MethodGet, "/api/auth/me", upgraded.AccessToken, nil)
+	code, _ = instance.connect(t, apiconnect.AuthServiceGetCurrentUserProcedure, upgraded.AccessToken, nil)
 	require.Equal(t, http.StatusUnauthorized, code)
 }

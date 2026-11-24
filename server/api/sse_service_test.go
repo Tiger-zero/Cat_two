@@ -518,7 +518,7 @@ func TestPurgeMemoTrashCleansAttachmentStorage(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, deletedAttachment, "recoverable memo keeps its attachment data")
 	require.FileExists(t, attachmentPath)
-	purge := runMemoTrashRequest(t, svc, owner, "DELETE", "/api/trash/"+memoUID)
+	purge := runMemoTrashRequest(t, svc, owner, "DELETE", "/internal/trash/"+memoUID)
 	require.Equal(t, 204, purge.Code, purge.Body.String())
 	deletedAttachment, err = svc.Store.GetAttachment(ctx, &store.FindAttachment{ID: &attachment.ID})
 	require.NoError(t, err)

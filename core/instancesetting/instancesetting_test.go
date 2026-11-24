@@ -12,7 +12,6 @@ import (
 func TestValidateRequiresValueMatchingKey(t *testing.T) {
 	for _, key := range []storepb.InstanceSettingKey{
 		storepb.InstanceSettingKey_GENERAL,
-		storepb.InstanceSettingKey_STORAGE,
 		storepb.InstanceSettingKey_TAGS,
 		storepb.InstanceSettingKey_NOTIFICATION,
 		storepb.InstanceSettingKey_AI,
@@ -137,53 +136,11 @@ func TestNormalizeAISetting(t *testing.T) {
 	require.Equal(t, "whisper-1", setting.Transcription.Model)
 }
 
-func s3Storage(id string) *storepb.Storage {
-	return &storepb.Storage{
-		Id:   id,
-		Type: storepb.StorageType_STORAGE_TYPE_S3,
-		Config: &storepb.Storage_S3Config{S3Config: &storepb.StorageS3Config{
-			Endpoint: "https://s3.example.com", Region: "us-east-1", Bucket: "memos", AccessKeyId: "AKID", AccessKeySecret: "secret",
-		}},
-	}
-}
-
-func storageSetting(defaultID string, storages ...*storepb.Storage) *storepb.InstanceSetting {
-	return &storepb.InstanceSetting{
+func TestValidateManagedStorageCannotBeWritten(t *testing.T) {
+	require.ErrorContains(t, Validate(&storepb.InstanceSetting{
 		Key: storepb.InstanceSettingKey_STORAGE,
 		Value: &storepb.InstanceSetting_StorageSetting{StorageSetting: &storepb.InstanceStorageSetting{
-			Storages:         storages,
-			DefaultStorageId: defaultID,
+			StorageType: storepb.InstanceStorageSetting_LOCAL,
 		}},
-	}
-}
-
-func TestValidateStorage(t *testing.T) {
-	local := &storepb.Storage{Id: "local", Type: storepb.StorageType_STORAGE_TYPE_LOCAL}
-	require.NoError(t, Validate(storageSetting("main", s3Storage("main"), local)))
-	require.ErrorContains(t, Validate(storageSetting("mian", s3Storage("main"))), `default storage "mian" is not configured`)
-	require.ErrorContains(t, Validate(storageSetting("main", s3Storage("main"), s3Storage("main"))), "duplicated")
-	require.ErrorContains(t, Validate(storageSetting("main", s3Storage(""))), "storages[0].id is required")
-	require.ErrorContains(t, Validate(storageSetting("x", &storepb.Storage{Id: "x"})), "type is required")
-
-	for field, clear := range map[string]func(*storepb.StorageS3Config){
-		"endpoint":          func(c *storepb.StorageS3Config) { c.Endpoint = "" },
-		"region":            func(c *storepb.StorageS3Config) { c.Region = "" },
-		"bucket":            func(c *storepb.StorageS3Config) { c.Bucket = "" },
-		"access_key_id":     func(c *storepb.StorageS3Config) { c.AccessKeyId = "" },
-		"access_key_secret": func(c *storepb.StorageS3Config) { c.AccessKeySecret = "" },
-	} {
-		incomplete := s3Storage("archive")
-		clear(incomplete.GetS3Config())
-		// A non-default storage is checked as strictly as the default one.
-		err := Validate(storageSetting("local", local, incomplete))
-		require.ErrorContains(t, err, `storage archive `+field+` is required`, field)
-	}
-
-	legacy := &storepb.InstanceSetting{
-		Key:   storepb.InstanceSettingKey_STORAGE,
-		Value: &storepb.InstanceSetting_StorageSetting{StorageSetting: &storepb.InstanceStorageSetting{StorageType: storepb.InstanceStorageSetting_S3}},
-	}
-	require.ErrorContains(t, Validate(legacy), "s3_config is required")
-	legacy.GetStorageSetting().StorageType = storepb.InstanceStorageSetting_LOCAL
-	require.NoError(t, Validate(legacy))
+	}), "attachment storage is managed by Cat_two")
 }

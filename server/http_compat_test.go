@@ -40,7 +40,7 @@ func TestHTTPCompatibility(t *testing.T) {
 	var snapshots []httpSnapshot
 	for _, path := range []string{
 		"/healthz", "/healthz/", "/health%7A", "/api", "/api/", "/api/missing", "/api/sse", "/api/sse/",
-		"/api/v1", "/api/v1/", "/api/v1/memos", "/file", "/file/", "/file/attachments/missing", "/file/attachments/missing/",
+		"/internal/sse", "/internal/sse/", "/api/v1", "/api/v1/", "/api/v1/memos", "/file", "/file/", "/file/attachments/missing", "/file/attachments/missing/",
 		"/file/attachments/missing/a%2Fb.txt", "/file/attachments/%6dissing/file.txt", "/file/%61ttachments/missing/file.txt",
 		"/memos.api", "/memos.api.", "/memos.api.UnknownService/Unknown", "/memos.api.v1.MemoService/ListMemos",
 		"/memos/x", "/assets/missing.js", "/index.html", "/robots.txt", "/sitemap.xml",
@@ -114,7 +114,7 @@ func TestHTTPStreaming(t *testing.T) {
 	client := server.Client()
 	streamCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
-	req, err := http.NewRequestWithContext(streamCtx, http.MethodGet, server.URL+"/api/sse", nil)
+	req, err := http.NewRequestWithContext(streamCtx, http.MethodGet, server.URL+"/internal/sse", nil)
 	require.NoError(t, err)
 	req.Header.Set("Authorization", "Bearer "+token)
 	response, err := client.Do(req)
@@ -130,7 +130,7 @@ func TestHTTPStreaming(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "\n", line)
 
-	create, err := http.NewRequestWithContext(streamCtx, http.MethodPost, server.URL+"/api/memos", strings.NewReader(`{"memoId":"streamed","content":"streamed memo"}`))
+	create, err := http.NewRequestWithContext(streamCtx, http.MethodPost, server.URL+"/memos.api.MemoService/CreateMemo", strings.NewReader(`{"memoId":"streamed","memo":{"content":"streamed memo"}}`))
 	require.NoError(t, err)
 	create.Header.Set("Authorization", "Bearer "+token)
 	create.Header.Set("Content-Type", "application/json")

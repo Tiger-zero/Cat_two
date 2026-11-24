@@ -42,8 +42,6 @@ type Desired struct {
 	UserFields map[string][]string
 	// Warnings are diagnostics that do not stop the load, such as deprecated fields.
 	Warnings []string
-	// preserved contains retired declarations whose previously managed state stays intact.
-	preserved map[string]bool
 }
 
 // Resolver supplies the values ${env:NAME} and ${file:PATH} references name.
@@ -80,7 +78,6 @@ func Load(dir string, resolver Resolver) (*Desired, error) {
 		Configuration: &apipb.Configuration{},
 		Sources:       map[string]string{},
 		UserFields:    map[string][]string{},
-		preserved:     map[string]bool{},
 	}
 	entries, err := os.ReadDir(dir)
 	if errors.Is(err, fs.ErrNotExist) {
@@ -108,7 +105,7 @@ func Load(dir string, resolver Resolver) (*Desired, error) {
 		if err != nil {
 			return nil, errors.Wrapf(err, "failed to read %s", name)
 		}
-		document, userFields, warnings, problems := decodeDocument(content, resolver, desired.preserved)
+		document, userFields, warnings, problems := decodeDocument(content, resolver)
 		for _, warning := range warnings {
 			desired.Warnings = append(desired.Warnings, name+": "+warning)
 		}

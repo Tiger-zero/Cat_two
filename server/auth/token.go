@@ -7,7 +7,6 @@
 // Authentication methods supported:
 // - JWT access tokens: Short-lived tokens (15 minutes) for API access
 // - JWT refresh tokens: Long-lived tokens (30 days) for obtaining new access tokens
-// - Personal Access Tokens (PAT): Long-lived tokens for programmatic access
 package auth
 
 import (
@@ -20,7 +19,6 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/pkg/errors"
 
-	"github.com/usememos/memos/internal/random"
 	"github.com/usememos/memos/store"
 )
 
@@ -49,9 +47,6 @@ const (
 
 	// RefreshTokenCookieName is the cookie name for refresh tokens.
 	RefreshTokenCookieName = "memos_refresh"
-
-	// PersonalAccessTokenPrefix is the prefix for PAT tokens.
-	PersonalAccessTokenPrefix = "memos_pat_"
 )
 
 // ClaimsMessage represents the claims structure in a JWT token.
@@ -223,22 +218,6 @@ func GenerateSessionRefreshToken(userID int32, tokenID, sessionID, revision stri
 	}
 
 	return tokenString, expiresAt, nil
-}
-
-// GeneratePersonalAccessToken generates a random PAT string.
-func GeneratePersonalAccessToken() string {
-	randomStr, err := random.String(32)
-	if err != nil {
-		// Fallback to UUID if RandomString fails
-		return PersonalAccessTokenPrefix + random.UUID()
-	}
-	return PersonalAccessTokenPrefix + randomStr
-}
-
-// HashPersonalAccessToken returns SHA-256 hash of a PAT.
-func HashPersonalAccessToken(token string) string {
-	hash := sha256.Sum256([]byte(token))
-	return hex.EncodeToString(hash[:])
 }
 
 // verifyJWTKeyFunc returns a jwt.Keyfunc that validates the signing method and key ID.

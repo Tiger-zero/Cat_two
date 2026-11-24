@@ -92,7 +92,7 @@ describe("ReactionSelector", () => {
     expect(picker.getByRole("gridcell", { name: "thumbs up: medium skin tone" })).toBeInTheDocument();
     fireEvent.change(search, { target: { value: "no such emoji" } });
     expect(picker.queryByRole("gridcell")).not.toBeInTheDocument();
-    expect(picker.getByText("space.icon.no-results")).toBeVisible();
+    expect(picker.getByText("memo.reaction-no-results")).toBeVisible();
   });
 
   it("keeps accessible emoji names and actions without native tooltips or a preview footer", async () => {
@@ -204,17 +204,9 @@ describe("ReactionSelector", () => {
     expect(screen.getByText("🎉")).toBeInTheDocument();
   });
 
-  it("offers the picker to the author of a note with legacy Space metadata", async () => {
-    const memo = reactionMemo();
-    memo.space = "spaces/a";
-    setup(memo);
-    expect((await openPicker()).getByRole("combobox")).toBeInTheDocument();
-  });
-
-  it("hides the picker on another author's note with legacy Space metadata", () => {
+  it("hides the picker on another author's note", () => {
     const memo = reactionMemo();
     memo.creator = "users/other";
-    memo.space = "spaces/a";
     setup(memo);
     expect(screen.queryByRole("button", { name: "memo.add-reaction" })).not.toBeInTheDocument();
   });

@@ -5,9 +5,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
-	"net/url"
 	"os"
-	"runtime"
 	"strings"
 	"time"
 
@@ -207,9 +205,8 @@ func runConfigPlan(ctx context.Context, dir string, resolver configuration.Resol
 	return nil
 }
 
-// openConfigurationStore opens the instance database. To read, as plan and
-// state do, it never creates or migrates a database. To write, as apply does,
-// it migrates exactly as server startup would, creating a fresh one.
+// openConfigurationStore opens the instance database. Plan and state check
+// the current schema. Apply can also initialize a fresh database.
 func openConfigurationStore(ctx context.Context, cmd *cobra.Command, write bool) (*store.Store, error) {
 	return openInstanceStore(ctx, &profile.Profile{
 		Data:    flagOrSetting(cmd, "data"),
@@ -220,7 +217,7 @@ func openConfigurationStore(ctx context.Context, cmd *cobra.Command, write bool)
 	}, write)
 }
 
-func openInstanceStore(ctx context.Context, instanceProfile *profile.Profile, migrate bool) (*store.Store, error) {
+func openInstanceStore(ctx context.Context, instanceProfile *profile.Profile, initialize bool) (*store.Store, error) {
 	if instanceProfile.Data != "" {
 		if _, err := os.Stat(instanceProfile.Data); err != nil {
 			return nil, errors.Wrap(err, "failed to open the data directory")
@@ -229,8 +226,8 @@ func openInstanceStore(ctx context.Context, instanceProfile *profile.Profile, mi
 	if err := instanceProfile.Validate(); err != nil {
 		return nil, errors.Wrap(err, "failed to validate profile")
 	}
-	if !migrate {
-		path, err := sqliteDatabasePath(instanceProfile.DSN)
+	if !initialize {
+		path, err := profile.SQLiteDatabasePath(instanceProfile.DSN)
 		if err != nil {
 			return nil, err
 		}
@@ -246,38 +243,14 @@ func openInstanceStore(ctx context.Context, instanceProfile *profile.Profile, mi
 	}
 	storeInstance := store.New(dbDriver, instanceProfile)
 	check := storeInstance.CheckSchemaCurrent
-	if migrate {
-		check = storeInstance.Migrate
+	if initialize {
+		check = storeInstance.InitializeSchema
 	}
 	if err := check(ctx); err != nil {
 		storeInstance.Close()
 		return nil, err
 	}
 	return storeInstance, nil
-}
-
-func sqliteDatabasePath(dsn string) (string, error) {
-	if !strings.HasPrefix(dsn, "file:") {
-		if query := strings.IndexByte(dsn, '?'); query > 0 {
-			return dsn[:query], nil
-		}
-		return dsn, nil
-	}
-	uri, err := url.Parse(dsn)
-	if err != nil {
-		return "", errors.Wrap(err, "invalid SQLite file URI")
-	}
-	if uri.Query().Get("mode") == "memory" {
-		return ":memory:", nil
-	}
-	if uri.Opaque != "" {
-		return url.PathUnescape(uri.Opaque)
-	}
-	path := uri.Path
-	if runtime.GOOS == "windows" && len(path) > 2 && path[0] == '/' && path[2] == ':' {
-		path = path[1:]
-	}
-	return path, nil
 }
 
 func runConfigApply(ctx context.Context, dir string, resolver configuration.Resolver, s *store.Store, metadata configuration.ApplyMetadata, jsonOutput bool, stdout, stderr io.Writer) error {

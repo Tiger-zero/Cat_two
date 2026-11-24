@@ -8,7 +8,6 @@ import type { User } from "./user_service_pb";
 import { file_api_user_service } from "./user_service_pb";
 import { file_google_api_annotations } from "../google/api/annotations_pb";
 import { file_google_api_field_behavior } from "../google/api/field_behavior_pb";
-import { file_google_api_resource } from "../google/api/resource_pb";
 import type { EmptySchema, Timestamp } from "@bufbuild/protobuf/wkt";
 import { file_google_protobuf_empty, file_google_protobuf_timestamp } from "@bufbuild/protobuf/wkt";
 import type { Message } from "@bufbuild/protobuf";
@@ -17,7 +16,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file api/auth_service.proto.
  */
 export const file_api_auth_service: GenFile = /*@__PURE__*/
-  fileDesc("ChZhcGkvYXV0aF9zZXJ2aWNlLnByb3RvEgltZW1vcy5hcGkiqAMKDVNpZ25JblJlcXVlc3QSTAoUcGFzc3dvcmRfY3JlZGVudGlhbHMYASABKAsyLC5tZW1vcy5hcGkuU2lnbkluUmVxdWVzdC5QYXNzd29yZENyZWRlbnRpYWxzSAASQgoPc3NvX2NyZWRlbnRpYWxzGAIgASgLMicubWVtb3MuYXBpLlNpZ25JblJlcXVlc3QuU3NvQ3JlZGVudGlhbHNIABpaChNQYXNzd29yZENyZWRlbnRpYWxzEhUKCHVzZXJuYW1lGAEgASgJQgPgQQISFQoIcGFzc3dvcmQYAiABKAlCA+BBAhIVCghvdHBfY29kZRgDIAEoCUID4EEBGpkBCg5Tc29DcmVkZW50aWFscxI9ChFpZGVudGl0eV9wcm92aWRlchgBIAEoCUIi4EEC+kEcChptZW1vcy5hcGkvSWRlbnRpdHlQcm92aWRlchIRCgRjb2RlGAIgASgJQgPgQQISGQoMcmVkaXJlY3RfdXJpGAMgASgJQgPgQQISGgoNY29kZV92ZXJpZmllchgEIAEoCUID4EEBQg0KC2NyZWRlbnRpYWxzIoMBCg5TaWduSW5SZXNwb25zZRIdCgR1c2VyGAEgASgLMg8ubWVtb3MuYXBpLlVzZXISFAoMYWNjZXNzX3Rva2VuGAIgASgJEjwKGGFjY2Vzc190b2tlbl9leHBpcmVfdGltZRgDIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAiFQoTUmVmcmVzaFRva2VuUmVxdWVzdCJqChRSZWZyZXNoVG9rZW5SZXNwb25zZRIUCgxhY2Nlc3NfdG9rZW4YASABKAkSPAoYYWNjZXNzX3Rva2VuX2V4cGlyZV90aW1lGAIgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcCIXChVHZXRDdXJyZW50VXNlclJlcXVlc3QiNwoWR2V0Q3VycmVudFVzZXJSZXNwb25zZRIdCgR1c2VyGAEgASgLMg8ubWVtb3MuYXBpLlVzZXIiEAoOU2lnbk91dFJlcXVlc3QyngMKC0F1dGhTZXJ2aWNlEloKBlNpZ25JbhIYLm1lbW9zLmFwaS5TaWduSW5SZXF1ZXN0GhkubWVtb3MuYXBpLlNpZ25JblJlc3BvbnNlIhuC0+STAhU6ASoiEC9hcGkvYXV0aC9zaWduaW4SbQoMUmVmcmVzaFRva2VuEh4ubWVtb3MuYXBpLlJlZnJlc2hUb2tlblJlcXVlc3QaHy5tZW1vcy5hcGkuUmVmcmVzaFRva2VuUmVzcG9uc2UiHILT5JMCFjoBKiIRL2FwaS9hdXRoL3JlZnJlc2gSawoOR2V0Q3VycmVudFVzZXISIC5tZW1vcy5hcGkuR2V0Q3VycmVudFVzZXJSZXF1ZXN0GiEubWVtb3MuYXBpLkdldEN1cnJlbnRVc2VyUmVzcG9uc2UiFILT5JMCDhIML2FwaS9hdXRoL21lElcKB1NpZ25PdXQSGS5tZW1vcy5hcGkuU2lnbk91dFJlcXVlc3QaFi5nb29nbGUucHJvdG9idWYuRW1wdHkiGYLT5JMCEyIRL2FwaS9hdXRoL3NpZ25vdXRCjwEKDWNvbS5tZW1vcy5hcGlCEEF1dGhTZXJ2aWNlUHJvdG9QAVonZ2l0aHViLmNvbS91c2VtZW1vcy9tZW1vcy9wcm90by9nZW4vYXBpogIDTUFYqgIJTWVtb3MuQXBpygIJTWVtb3NcQXBp4gIVTWVtb3NcQXBpXEdQQk1ldGFkYXRh6gIKTWVtb3M6OkFwaWIGcHJvdG8z", [file_api_user_service, file_google_api_annotations, file_google_api_field_behavior, file_google_api_resource, file_google_protobuf_empty, file_google_protobuf_timestamp]);
+  fileDesc("ChZhcGkvYXV0aF9zZXJ2aWNlLnByb3RvEgltZW1vcy5hcGki3wEKDVNpZ25JblJlcXVlc3QSTAoUcGFzc3dvcmRfY3JlZGVudGlhbHMYASABKAsyLC5tZW1vcy5hcGkuU2lnbkluUmVxdWVzdC5QYXNzd29yZENyZWRlbnRpYWxzSAAaWgoTUGFzc3dvcmRDcmVkZW50aWFscxIVCgh1c2VybmFtZRgBIAEoCUID4EECEhUKCHBhc3N3b3JkGAIgASgJQgPgQQISFQoIb3RwX2NvZGUYAyABKAlCA+BBAUINCgtjcmVkZW50aWFsc0oECAIQA1IPc3NvX2NyZWRlbnRpYWxzIoMBCg5TaWduSW5SZXNwb25zZRIdCgR1c2VyGAEgASgLMg8ubWVtb3MuYXBpLlVzZXISFAoMYWNjZXNzX3Rva2VuGAIgASgJEjwKGGFjY2Vzc190b2tlbl9leHBpcmVfdGltZRgDIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAiFQoTUmVmcmVzaFRva2VuUmVxdWVzdCJqChRSZWZyZXNoVG9rZW5SZXNwb25zZRIUCgxhY2Nlc3NfdG9rZW4YASABKAkSPAoYYWNjZXNzX3Rva2VuX2V4cGlyZV90aW1lGAIgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcCIXChVHZXRDdXJyZW50VXNlclJlcXVlc3QiNwoWR2V0Q3VycmVudFVzZXJSZXNwb25zZRIdCgR1c2VyGAEgASgLMg8ubWVtb3MuYXBpLlVzZXIiEAoOU2lnbk91dFJlcXVlc3QyngMKC0F1dGhTZXJ2aWNlEloKBlNpZ25JbhIYLm1lbW9zLmFwaS5TaWduSW5SZXF1ZXN0GhkubWVtb3MuYXBpLlNpZ25JblJlc3BvbnNlIhuC0+STAhU6ASoiEC9hcGkvYXV0aC9zaWduaW4SbQoMUmVmcmVzaFRva2VuEh4ubWVtb3MuYXBpLlJlZnJlc2hUb2tlblJlcXVlc3QaHy5tZW1vcy5hcGkuUmVmcmVzaFRva2VuUmVzcG9uc2UiHILT5JMCFjoBKiIRL2FwaS9hdXRoL3JlZnJlc2gSawoOR2V0Q3VycmVudFVzZXISIC5tZW1vcy5hcGkuR2V0Q3VycmVudFVzZXJSZXF1ZXN0GiEubWVtb3MuYXBpLkdldEN1cnJlbnRVc2VyUmVzcG9uc2UiFILT5JMCDhIML2FwaS9hdXRoL21lElcKB1NpZ25PdXQSGS5tZW1vcy5hcGkuU2lnbk91dFJlcXVlc3QaFi5nb29nbGUucHJvdG9idWYuRW1wdHkiGYLT5JMCEyIRL2FwaS9hdXRoL3NpZ25vdXRCjwEKDWNvbS5tZW1vcy5hcGlCEEF1dGhTZXJ2aWNlUHJvdG9QAVonZ2l0aHViLmNvbS91c2VtZW1vcy9tZW1vcy9wcm90by9nZW4vYXBpogIDTUFYqgIJTWVtb3MuQXBpygIJTWVtb3NcQXBp4gIVTWVtb3NcQXBpXEdQQk1ldGFkYXRh6gIKTWVtb3M6OkFwaWIGcHJvdG8z", [file_api_user_service, file_google_api_annotations, file_google_api_field_behavior, file_google_protobuf_empty, file_google_protobuf_timestamp]);
 
 /**
  * Request message for AuthService.SignIn.
@@ -38,14 +37,6 @@ export type SignInRequest = Message<"memos.api.SignInRequest"> & {
      */
     value: SignInRequest_PasswordCredentials;
     case: "passwordCredentials";
-  } | {
-    /**
-     * SSO credentials from an OAuth2 authorization code flow.
-     *
-     * @generated from field: memos.api.SignInRequest.SsoCredentials sso_credentials = 2;
-     */
-    value: SignInRequest_SsoCredentials;
-    case: "ssoCredentials";
   } | { case: undefined; value?: undefined };
 };
 
@@ -91,50 +82,6 @@ export type SignInRequest_PasswordCredentials = Message<"memos.api.SignInRequest
  */
 export const SignInRequest_PasswordCredentialsSchema: GenMessage<SignInRequest_PasswordCredentials> = /*@__PURE__*/
   messageDesc(file_api_auth_service, 0, 0);
-
-/**
- * SsoCredentials are the result of an OAuth2 authorization code flow with an identity provider.
- * A first sign-in creates a local user unless the instance disallows user registration.
- *
- * @generated from message memos.api.SignInRequest.SsoCredentials
- */
-export type SignInRequest_SsoCredentials = Message<"memos.api.SignInRequest.SsoCredentials"> & {
-  /**
-   * Required. The resource name of the identity provider.
-   * Format: identity-providers/{idp}
-   *
-   * @generated from field: string identity_provider = 1;
-   */
-  identityProvider: string;
-
-  /**
-   * Required. The authorization code returned by the identity provider.
-   *
-   * @generated from field: string code = 2;
-   */
-  code: string;
-
-  /**
-   * Required. The redirect URI used in the authorization request.
-   *
-   * @generated from field: string redirect_uri = 3;
-   */
-  redirectUri: string;
-
-  /**
-   * Optional. The PKCE code verifier (RFC 7636). Set it when the authorization request used a code challenge.
-   *
-   * @generated from field: string code_verifier = 4;
-   */
-  codeVerifier: string;
-};
-
-/**
- * Describes the message memos.api.SignInRequest.SsoCredentials.
- * Use `create(SignInRequest_SsoCredentialsSchema)` to create a new message.
- */
-export const SignInRequest_SsoCredentialsSchema: GenMessage<SignInRequest_SsoCredentials> = /*@__PURE__*/
-  messageDesc(file_api_auth_service, 0, 1);
 
 /**
  * Response message for AuthService.SignIn.

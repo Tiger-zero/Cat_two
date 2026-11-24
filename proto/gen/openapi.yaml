@@ -35,8 +35,6 @@ paths:
                      Supported fields: creator, filename, mime_type, create_time, memo_id, space.
                      `creator` is the linked memo's creator, or the uploader for an unlinked attachment. It supports equality with a
                      User resource name.
-                     `space` is the linked memo's Space resource name, or null when the attachment is unlinked or its memo has no
-                     space. It supports only a non-negated `==` comparison with a Space resource name or null.
                   schema:
                     type: string
                 - name: orderBy
@@ -330,157 +328,6 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Status'
-    /api/identity-providers:
-        get:
-            tags:
-                - IdentityProviderService
-            description: |-
-                ListIdentityProviders lists identity providers.
-                 Public, so the sign-in page can show SSO options. Client secrets are never returned.
-            operationId: IdentityProviderService_ListIdentityProviders
-            responses:
-                "200":
-                    description: OK
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/ListIdentityProvidersResponse'
-                default:
-                    description: Default error response
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Status'
-        post:
-            tags:
-                - IdentityProviderService
-            description: |-
-                CreateIdentityProvider creates an identity provider.
-                 Requires the admin role. Fails with FAILED_PRECONDITION when the ID belongs to a provider configured by the
-                 deployment.
-            operationId: IdentityProviderService_CreateIdentityProvider
-            parameters:
-                - name: identityProviderId
-                  in: query
-                  description: |-
-                    Optional. The ID to use for the identity provider, which becomes the final component of the resource name.
-                     If empty, the server generates one.
-                     Format: ^[a-zA-Z0-9]([a-zA-Z0-9-]{0,34}[a-zA-Z0-9])?$
-                  schema:
-                    type: string
-            requestBody:
-                content:
-                    application/json:
-                        schema:
-                            $ref: '#/components/schemas/IdentityProvider'
-                required: true
-            responses:
-                "200":
-                    description: OK
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/IdentityProvider'
-                default:
-                    description: Default error response
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Status'
-    /api/identity-providers/{identity-provider}:
-        get:
-            tags:
-                - IdentityProviderService
-            description: |-
-                GetIdentityProvider gets an identity provider.
-                 The client secret is never returned.
-            operationId: IdentityProviderService_GetIdentityProvider
-            parameters:
-                - name: identity-provider
-                  in: path
-                  description: The identity-provider id.
-                  required: true
-                  schema:
-                    type: string
-            responses:
-                "200":
-                    description: OK
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/IdentityProvider'
-                default:
-                    description: Default error response
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Status'
-        delete:
-            tags:
-                - IdentityProviderService
-            description: |-
-                DeleteIdentityProvider deletes an identity provider.
-                 Requires the admin role. Providers configured by the deployment cannot be deleted. Fails with
-                 FAILED_PRECONDITION when password sign-in is disabled for regular users and no other effective provider remains.
-            operationId: IdentityProviderService_DeleteIdentityProvider
-            parameters:
-                - name: identity-provider
-                  in: path
-                  description: The identity-provider id.
-                  required: true
-                  schema:
-                    type: string
-            responses:
-                "200":
-                    description: OK
-                    content: {}
-                default:
-                    description: Default error response
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Status'
-        patch:
-            tags:
-                - IdentityProviderService
-            description: |-
-                UpdateIdentityProvider updates an identity provider.
-                 Requires the admin role. Providers configured by the deployment cannot be updated.
-            operationId: IdentityProviderService_UpdateIdentityProvider
-            parameters:
-                - name: identity-provider
-                  in: path
-                  description: The identity-provider id.
-                  required: true
-                  schema:
-                    type: string
-                - name: updateMask
-                  in: query
-                  description: |-
-                    Required. The fields to update. Supported paths: title, identifier_filter, config; other paths are ignored.
-                     An empty OAuth2 client secret in config keeps the stored secret.
-                  schema:
-                    type: string
-                    format: field-mask
-            requestBody:
-                content:
-                    application/json:
-                        schema:
-                            $ref: '#/components/schemas/IdentityProvider'
-                required: true
-            responses:
-                "200":
-                    description: OK
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/IdentityProvider'
-                default:
-                    description: Default error response
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Status'
     /api/instance/configuration:
         get:
             tags:
@@ -688,9 +535,7 @@ paths:
                        content (string), creator (string, e.g. "users/1"),
                        created_ts / updated_ts (timestamp), pinned (bool),
                        creation_channel (string: web | telegram | browser_extension | wechat | unknown),
-                       visibility (string: PRIVATE | PROTECTED | PUBLIC | SPACE),
-                       space (string resource name, or null when the memo has no space;
-                         supports == and comparisons against null, e.g. space != null),
+                       visibility (string: PRIVATE | PROTECTED | PUBLIC),
                        tags (list<string>; match with `"work" in tags`, not `tag == "work"`),
                        has_task_list / has_link / has_code / has_incomplete_tasks (bool),
                        has_location (bool; true when the memo has a location attached),
@@ -873,8 +718,8 @@ paths:
             description: |-
                 DeleteMemo moves the named memo and its comment subtree to the recycle bin.
                  Only the memo creator can move it. The owner can restore it within 30 days
-                 with POST /api/trash/{uid}/restore or permanently delete it sooner with
-                 DELETE /api/trash/{uid}. The server purges expired entries.
+                 with POST /internal/trash/{uid}/restore or permanently delete it sooner with
+                 DELETE /internal/trash/{uid}. The server purges expired entries.
             operationId: MemoService_DeleteMemo
             parameters:
                 - name: memo
@@ -918,7 +763,7 @@ paths:
                   in: query
                   description: |-
                     Required. The fields to update. Supported paths: content, visibility,
-                     space, pinned, state, create_time, update_time, location, attachments,
+                     pinned, state, create_time, update_time, location, attachments,
                      relations.
                   schema:
                     type: string
@@ -1336,8 +1181,7 @@ paths:
                 - MemoService
             description: |-
                 CreateMemoShare creates a share link for a memo. Requires the memo creator
-                 or an instance administrator. Only active memos without SPACE visibility
-                 can be shared.
+                 or an instance administrator. Only active memos can be shared.
             operationId: MemoService_CreateMemoShare
             parameters:
                 - name: memo
@@ -1418,529 +1262,6 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Memo'
-                default:
-                    description: Default error response
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Status'
-    /api/spaces:
-        get:
-            tags:
-                - SpaceService
-            description: ListSpaces lists the spaces of which the authenticated caller is a member.
-            operationId: SpaceService_ListSpaces
-            parameters:
-                - name: pageSize
-                  in: query
-                  description: Optional. The maximum number of spaces to return. The service may return fewer.
-                  schema:
-                    type: integer
-                    format: int32
-                - name: pageToken
-                  in: query
-                  description: Optional. A page token from a previous call. Provide it to retrieve the next page.
-                  schema:
-                    type: string
-            responses:
-                "200":
-                    description: OK
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/ListSpacesResponse'
-                default:
-                    description: Default error response
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Status'
-        post:
-            tags:
-                - SpaceService
-            description: |-
-                CreateSpace creates a space and makes the authenticated caller its first
-                 administrator.
-            operationId: SpaceService_CreateSpace
-            parameters:
-                - name: spaceId
-                  in: query
-                  description: |-
-                    Optional. The ID to use for the space, which becomes the final segment of
-                     its resource name. If empty, a UUID v4 is generated. Must match
-                     ^[a-zA-Z0-9]([a-zA-Z0-9-]{0,34}[a-zA-Z0-9])?$.
-                  schema:
-                    type: string
-            requestBody:
-                content:
-                    application/json:
-                        schema:
-                            $ref: '#/components/schemas/Space'
-                required: true
-            responses:
-                "200":
-                    description: OK
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Space'
-                default:
-                    description: Default error response
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Status'
-    /api/spaces/{space}:
-        get:
-            tags:
-                - SpaceService
-            description: |-
-                GetSpace gets a space of which the authenticated caller is a member.
-                 Spaces the caller is not a member of are reported as not found.
-            operationId: SpaceService_GetSpace
-            parameters:
-                - name: space
-                  in: path
-                  description: The space id.
-                  required: true
-                  schema:
-                    type: string
-            responses:
-                "200":
-                    description: OK
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Space'
-                default:
-                    description: Default error response
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Status'
-        delete:
-            tags:
-                - SpaceService
-            description: |-
-                DeleteSpace permanently deletes a space and every memo currently placed
-                 in it. It never follows memo relations to other memos. Only a space
-                 administrator can delete a space.
-            operationId: SpaceService_DeleteSpace
-            parameters:
-                - name: space
-                  in: path
-                  description: The space id.
-                  required: true
-                  schema:
-                    type: string
-            responses:
-                "200":
-                    description: OK
-                    content: {}
-                default:
-                    description: Default error response
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Status'
-        patch:
-            tags:
-                - SpaceService
-            description: |-
-                UpdateSpace updates space metadata. Only a space administrator can update
-                 a space.
-            operationId: SpaceService_UpdateSpace
-            parameters:
-                - name: space
-                  in: path
-                  description: The space id.
-                  required: true
-                  schema:
-                    type: string
-                - name: updateMask
-                  in: query
-                  description: 'Required. The fields to update. Supported paths: title, description, icon.'
-                  schema:
-                    type: string
-                    format: field-mask
-            requestBody:
-                content:
-                    application/json:
-                        schema:
-                            $ref: '#/components/schemas/Space'
-                required: true
-            responses:
-                "200":
-                    description: OK
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Space'
-                default:
-                    description: Default error response
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Status'
-    /api/spaces/{space}/invitations:
-        get:
-            tags:
-                - SpaceService
-            description: |-
-                ListSpaceInvitations lists the pending invitations for a space. Only a
-                 space administrator can list them.
-            operationId: SpaceService_ListSpaceInvitations
-            parameters:
-                - name: space
-                  in: path
-                  description: The space id.
-                  required: true
-                  schema:
-                    type: string
-                - name: pageSize
-                  in: query
-                  description: Optional. The maximum number of invitations to return. The service may return fewer.
-                  schema:
-                    type: integer
-                    format: int32
-                - name: pageToken
-                  in: query
-                  description: Optional. A page token from a previous call. Provide it to retrieve the next page.
-                  schema:
-                    type: string
-            responses:
-                "200":
-                    description: OK
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/ListSpaceInvitationsResponse'
-                default:
-                    description: Default error response
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Status'
-        post:
-            tags:
-                - SpaceService
-            description: |-
-                CreateSpaceInvitation invites an existing active user to a space. Only a
-                 space administrator can invite. The invitee gets no space access until
-                 they accept.
-            operationId: SpaceService_CreateSpaceInvitation
-            parameters:
-                - name: space
-                  in: path
-                  description: The space id.
-                  required: true
-                  schema:
-                    type: string
-            requestBody:
-                content:
-                    application/json:
-                        schema:
-                            $ref: '#/components/schemas/SpaceInvitation'
-                required: true
-            responses:
-                "200":
-                    description: OK
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/SpaceInvitation'
-                default:
-                    description: Default error response
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Status'
-    /api/spaces/{space}/invitations/{invitation}:
-        get:
-            tags:
-                - SpaceService
-            description: |-
-                GetSpaceInvitation gets one pending invitation. Only the invitee or a
-                 space administrator can get it.
-            operationId: SpaceService_GetSpaceInvitation
-            parameters:
-                - name: space
-                  in: path
-                  description: The space id.
-                  required: true
-                  schema:
-                    type: string
-                - name: invitation
-                  in: path
-                  description: The invitation id.
-                  required: true
-                  schema:
-                    type: string
-            responses:
-                "200":
-                    description: OK
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/SpaceInvitation'
-                default:
-                    description: Default error response
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Status'
-        delete:
-            tags:
-                - SpaceService
-            description: |-
-                DeleteSpaceInvitation revokes a pending invitation. Only a space
-                 administrator can revoke it.
-            operationId: SpaceService_DeleteSpaceInvitation
-            parameters:
-                - name: space
-                  in: path
-                  description: The space id.
-                  required: true
-                  schema:
-                    type: string
-                - name: invitation
-                  in: path
-                  description: The invitation id.
-                  required: true
-                  schema:
-                    type: string
-            responses:
-                "200":
-                    description: OK
-                    content: {}
-                default:
-                    description: Default error response
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Status'
-    /api/spaces/{space}/invitations/{invitation}:accept:
-        post:
-            tags:
-                - SpaceService
-            description: |-
-                AcceptSpaceInvitation accepts a pending invitation and creates a
-                 membership with the invited role. Only the invitee can accept it.
-            operationId: SpaceService_AcceptSpaceInvitation
-            parameters:
-                - name: space
-                  in: path
-                  description: The space id.
-                  required: true
-                  schema:
-                    type: string
-                - name: invitation
-                  in: path
-                  description: The invitation id.
-                  required: true
-                  schema:
-                    type: string
-            requestBody:
-                content:
-                    application/json:
-                        schema:
-                            $ref: '#/components/schemas/AcceptSpaceInvitationRequest'
-                required: true
-            responses:
-                "200":
-                    description: OK
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/SpaceMember'
-                default:
-                    description: Default error response
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Status'
-    /api/spaces/{space}/invitations/{invitation}:decline:
-        post:
-            tags:
-                - SpaceService
-            description: |-
-                DeclineSpaceInvitation declines a pending invitation without creating a
-                 membership. Only the invitee can decline it.
-            operationId: SpaceService_DeclineSpaceInvitation
-            parameters:
-                - name: space
-                  in: path
-                  description: The space id.
-                  required: true
-                  schema:
-                    type: string
-                - name: invitation
-                  in: path
-                  description: The invitation id.
-                  required: true
-                  schema:
-                    type: string
-            requestBody:
-                content:
-                    application/json:
-                        schema:
-                            $ref: '#/components/schemas/DeclineSpaceInvitationRequest'
-                required: true
-            responses:
-                "200":
-                    description: OK
-                    content: {}
-                default:
-                    description: Default error response
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Status'
-    /api/spaces/{space}/members:
-        get:
-            tags:
-                - SpaceService
-            description: |-
-                ListSpaceMembers lists the members of a space. The caller must be a member
-                 of the space.
-            operationId: SpaceService_ListSpaceMembers
-            parameters:
-                - name: space
-                  in: path
-                  description: The space id.
-                  required: true
-                  schema:
-                    type: string
-                - name: pageSize
-                  in: query
-                  description: Optional. The maximum number of members to return. The service may return fewer.
-                  schema:
-                    type: integer
-                    format: int32
-                - name: pageToken
-                  in: query
-                  description: Optional. A page token from a previous call. Provide it to retrieve the next page.
-                  schema:
-                    type: string
-            responses:
-                "200":
-                    description: OK
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/ListSpaceMembersResponse'
-                default:
-                    description: Default error response
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Status'
-    /api/spaces/{space}/members/{member}:
-        get:
-            tags:
-                - SpaceService
-            description: |-
-                GetSpaceMember gets one membership in a space. The caller must be a member
-                 of the space.
-            operationId: SpaceService_GetSpaceMember
-            parameters:
-                - name: space
-                  in: path
-                  description: The space id.
-                  required: true
-                  schema:
-                    type: string
-                - name: member
-                  in: path
-                  description: The member id.
-                  required: true
-                  schema:
-                    type: string
-            responses:
-                "200":
-                    description: OK
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/SpaceMember'
-                default:
-                    description: Default error response
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Status'
-        delete:
-            tags:
-                - SpaceService
-            description: |-
-                DeleteSpaceMember removes a member. A space administrator can remove any
-                 member, and a member may delete their own membership to leave the space.
-                 A space must keep at least one administrator.
-            operationId: SpaceService_DeleteSpaceMember
-            parameters:
-                - name: space
-                  in: path
-                  description: The space id.
-                  required: true
-                  schema:
-                    type: string
-                - name: member
-                  in: path
-                  description: The member id.
-                  required: true
-                  schema:
-                    type: string
-            responses:
-                "200":
-                    description: OK
-                    content: {}
-                default:
-                    description: Default error response
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Status'
-        patch:
-            tags:
-                - SpaceService
-            description: |-
-                UpdateSpaceMember changes a member's space role. Only a space administrator
-                 can change roles, and a space must keep at least one administrator.
-            operationId: SpaceService_UpdateSpaceMember
-            parameters:
-                - name: space
-                  in: path
-                  description: The space id.
-                  required: true
-                  schema:
-                    type: string
-                - name: member
-                  in: path
-                  description: The member id.
-                  required: true
-                  schema:
-                    type: string
-                - name: updateMask
-                  in: query
-                  description: |-
-                    Required. The fields to update. Must include role. The user path is also
-                     accepted, but the user must match the existing member and is never changed.
-                  schema:
-                    type: string
-                    format: field-mask
-            requestBody:
-                content:
-                    application/json:
-                        schema:
-                            $ref: '#/components/schemas/SpaceMember'
-                required: true
-            responses:
-                "200":
-                    description: OK
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/SpaceMember'
                 default:
                     description: Default error response
                     content:
@@ -2079,7 +1400,7 @@ paths:
                 - UserService
             description: |-
                 DeleteUser deletes a user. Users may delete themselves; admins may delete
-                 anyone. A user who belongs to any space cannot be deleted.
+                 anyone.
             operationId: UserService_DeleteUser
             parameters:
                 - name: user
@@ -2090,9 +1411,7 @@ paths:
                     type: string
                 - name: force
                   in: query
-                  description: |-
-                    Optional. Currently ignored; deleting a user who belongs to any space
-                     fails with FAILED_PRECONDITION.
+                  description: Optional. Currently ignored.
                   schema:
                     type: boolean
             responses:
@@ -2152,138 +1471,13 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Status'
-    /api/users/{user}/linkedIdentities:
-        get:
-            tags:
-                - UserService
-            description: |-
-                ListLinkedIdentities lists the SSO identities linked to a user. The user
-                 and admins may call it.
-            operationId: UserService_ListLinkedIdentities
-            parameters:
-                - name: user
-                  in: path
-                  description: The user id.
-                  required: true
-                  schema:
-                    type: string
-            responses:
-                "200":
-                    description: OK
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/ListLinkedIdentitiesResponse'
-                default:
-                    description: Default error response
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Status'
-        post:
-            tags:
-                - UserService
-            description: |-
-                CreateLinkedIdentity completes an OAuth flow and links the resulting SSO
-                 identity to the authenticated user, who must be the parent.
-            operationId: UserService_CreateLinkedIdentity
-            parameters:
-                - name: user
-                  in: path
-                  description: The user id.
-                  required: true
-                  schema:
-                    type: string
-            requestBody:
-                content:
-                    application/json:
-                        schema:
-                            $ref: '#/components/schemas/CreateLinkedIdentityRequest'
-                required: true
-            responses:
-                "200":
-                    description: OK
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/LinkedIdentity'
-                default:
-                    description: Default error response
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Status'
-    /api/users/{user}/linkedIdentities/{linkedIdentity}:
-        get:
-            tags:
-                - UserService
-            description: |-
-                GetLinkedIdentity gets an SSO identity linked to a user. The user and
-                 admins may call it.
-            operationId: UserService_GetLinkedIdentity
-            parameters:
-                - name: user
-                  in: path
-                  description: The user id.
-                  required: true
-                  schema:
-                    type: string
-                - name: linkedIdentity
-                  in: path
-                  description: The linkedIdentity id.
-                  required: true
-                  schema:
-                    type: string
-            responses:
-                "200":
-                    description: OK
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/LinkedIdentity'
-                default:
-                    description: Default error response
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Status'
-        delete:
-            tags:
-                - UserService
-            description: |-
-                DeleteLinkedIdentity unlinks an SSO identity from a user. The user and
-                 admins may call it.
-            operationId: UserService_DeleteLinkedIdentity
-            parameters:
-                - name: user
-                  in: path
-                  description: The user id.
-                  required: true
-                  schema:
-                    type: string
-                - name: linkedIdentity
-                  in: path
-                  description: The linkedIdentity id.
-                  required: true
-                  schema:
-                    type: string
-            responses:
-                "200":
-                    description: OK
-                    content: {}
-                default:
-                    description: Default error response
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Status'
     /api/users/{user}/notifications:
         get:
             tags:
                 - UserService
             description: |-
                 ListUserNotifications lists a user's notifications. Only the user may call
-                 it. Notifications whose memos or space invitation the user can no longer
+                 it. Notifications whose memos the user can no longer
                  read are left out.
             operationId: UserService_ListUserNotifications
             parameters:
@@ -2397,116 +1591,6 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/UserNotification'
-                default:
-                    description: Default error response
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Status'
-    /api/users/{user}/personalAccessTokens:
-        get:
-            tags:
-                - UserService
-            description: |-
-                ListPersonalAccessTokens lists a user's personal access tokens (PATs),
-                 without their token values. PATs are long-lived tokens for API and script
-                 access, distinct from short-lived JWT access tokens. The user and admins
-                 may call it.
-            operationId: UserService_ListPersonalAccessTokens
-            parameters:
-                - name: user
-                  in: path
-                  description: The user id.
-                  required: true
-                  schema:
-                    type: string
-                - name: pageSize
-                  in: query
-                  description: |-
-                    Optional. The maximum number of tokens to return. The service may return
-                     fewer. Currently ignored; all tokens are returned in one page.
-                  schema:
-                    type: integer
-                    format: int32
-                - name: pageToken
-                  in: query
-                  description: |-
-                    Optional. A page token from a previous call. Provide it to retrieve the
-                     next page.
-                  schema:
-                    type: string
-            responses:
-                "200":
-                    description: OK
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/ListPersonalAccessTokensResponse'
-                default:
-                    description: Default error response
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Status'
-        post:
-            tags:
-                - UserService
-            description: |-
-                CreatePersonalAccessToken creates a personal access token for a user.
-                 Only the user may call it. The token value is returned only once, in the
-                 response.
-            operationId: UserService_CreatePersonalAccessToken
-            parameters:
-                - name: user
-                  in: path
-                  description: The user id.
-                  required: true
-                  schema:
-                    type: string
-            requestBody:
-                content:
-                    application/json:
-                        schema:
-                            $ref: '#/components/schemas/CreatePersonalAccessTokenRequest'
-                required: true
-            responses:
-                "200":
-                    description: OK
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/CreatePersonalAccessTokenResponse'
-                default:
-                    description: Default error response
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Status'
-    /api/users/{user}/personalAccessTokens/{personalAccessToken}:
-        delete:
-            tags:
-                - UserService
-            description: |-
-                DeletePersonalAccessToken deletes a personal access token, which stops
-                 working immediately. Only the owner may call it.
-            operationId: UserService_DeletePersonalAccessToken
-            parameters:
-                - name: user
-                  in: path
-                  description: The user id.
-                  required: true
-                  schema:
-                    type: string
-                - name: personalAccessToken
-                  in: path
-                  description: The personalAccessToken id.
-                  required: true
-                  schema:
-                    type: string
-            responses:
-                "200":
-                    description: OK
-                    content: {}
                 default:
                     description: Default error response
                     content:
@@ -2637,45 +1721,6 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Status'
-    /api/users/{user}/spaceInvitations:
-        get:
-            tags:
-                - SpaceService
-            description: |-
-                ListUserSpaceInvitations lists the authenticated user's pending space
-                 invitations. A user cannot list another user's invitations.
-            operationId: SpaceService_ListUserSpaceInvitations
-            parameters:
-                - name: user
-                  in: path
-                  description: The user id.
-                  required: true
-                  schema:
-                    type: string
-                - name: pageSize
-                  in: query
-                  description: Optional. The maximum number of invitations to return. The service may return fewer.
-                  schema:
-                    type: integer
-                    format: int32
-                - name: pageToken
-                  in: query
-                  description: Optional. A page token from a previous call. Provide it to retrieve the next page.
-                  schema:
-                    type: string
-            responses:
-                "200":
-                    description: OK
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/ListUserSpaceInvitationsResponse'
-                default:
-                    description: Default error response
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Status'
     /api/users/{user}/stats:
         get:
             tags:
@@ -2746,175 +1791,6 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/UserUsage'
-                default:
-                    description: Default error response
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Status'
-    /api/users/{user}/webhooks:
-        get:
-            tags:
-                - UserService
-            description: ListUserWebhooks lists a user's webhooks. Only the user may call it.
-            operationId: UserService_ListUserWebhooks
-            parameters:
-                - name: user
-                  in: path
-                  description: The user id.
-                  required: true
-                  schema:
-                    type: string
-            responses:
-                "200":
-                    description: OK
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/ListUserWebhooksResponse'
-                default:
-                    description: Default error response
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Status'
-        post:
-            tags:
-                - UserService
-            description: |-
-                CreateUserWebhook creates a webhook for a user. Only the user may call it.
-                 The service generates a signing secret when none is given.
-            operationId: UserService_CreateUserWebhook
-            parameters:
-                - name: user
-                  in: path
-                  description: The user id.
-                  required: true
-                  schema:
-                    type: string
-            requestBody:
-                content:
-                    application/json:
-                        schema:
-                            $ref: '#/components/schemas/UserWebhook'
-                required: true
-            responses:
-                "200":
-                    description: OK
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/UserWebhook'
-                default:
-                    description: Default error response
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Status'
-    /api/users/{user}/webhooks/{webhook}:
-        delete:
-            tags:
-                - UserService
-            description: DeleteUserWebhook deletes a webhook. Only the owner may call it.
-            operationId: UserService_DeleteUserWebhook
-            parameters:
-                - name: user
-                  in: path
-                  description: The user id.
-                  required: true
-                  schema:
-                    type: string
-                - name: webhook
-                  in: path
-                  description: The webhook id.
-                  required: true
-                  schema:
-                    type: string
-            responses:
-                "200":
-                    description: OK
-                    content: {}
-                default:
-                    description: Default error response
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Status'
-        patch:
-            tags:
-                - UserService
-            description: UpdateUserWebhook updates a webhook. Only the owner may call it.
-            operationId: UserService_UpdateUserWebhook
-            parameters:
-                - name: user
-                  in: path
-                  description: The user id.
-                  required: true
-                  schema:
-                    type: string
-                - name: webhook
-                  in: path
-                  description: The webhook id.
-                  required: true
-                  schema:
-                    type: string
-                - name: updateMask
-                  in: query
-                  description: |-
-                    The fields to update. Supported paths: url, display_name, signing_secret.
-                     When unset, all of them are updated, skipping an empty url or
-                     signing_secret.
-                  schema:
-                    type: string
-                    format: field-mask
-            requestBody:
-                content:
-                    application/json:
-                        schema:
-                            $ref: '#/components/schemas/UserWebhook'
-                required: true
-            responses:
-                "200":
-                    description: OK
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/UserWebhook'
-                default:
-                    description: Default error response
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Status'
-    /api/users/{user}/webhooks/{webhook}:getSigningSecret:
-        get:
-            tags:
-                - UserService
-            description: |-
-                GetUserWebhookSigningSecret returns the signing secret of a webhook. Only
-                 the owner may call it. The secret is returned only through this call; it
-                 is never included in List, Create or Update responses.
-            operationId: UserService_GetUserWebhookSigningSecret
-            parameters:
-                - name: user
-                  in: path
-                  description: The user id.
-                  required: true
-                  schema:
-                    type: string
-                - name: webhook
-                  in: path
-                  description: The webhook id.
-                  required: true
-                  schema:
-                    type: string
-            responses:
-                "200":
-                    description: OK
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/GetUserWebhookSigningSecretResponse'
                 default:
                     description: Default error response
                     content:
@@ -3031,17 +1907,6 @@ paths:
                                 $ref: '#/components/schemas/Status'
 components:
     schemas:
-        AcceptSpaceInvitationRequest:
-            required:
-                - name
-            type: object
-            properties:
-                name:
-                    type: string
-                    description: |-
-                        Required. The resource name of the invitation.
-                         Format: spaces/{space}/invitations/{invitation}
-            description: Request message for SpaceService.AcceptSpaceInvitation.
         Attachment:
             required:
                 - filename
@@ -3380,94 +2245,6 @@ components:
                         type: string
                     description: The managed field paths the configuration does not write after creation, so the API accepts edits to them.
             description: ManagedResource is one resource the configuration manages.
-        CreateLinkedIdentityRequest:
-            required:
-                - parent
-                - identityProvider
-                - code
-                - redirectUri
-            type: object
-            properties:
-                parent:
-                    type: string
-                    description: |-
-                        Required. The user who owns the linked identity. Must be the caller.
-                         Format: users/{user}
-                identityProvider:
-                    type: string
-                    description: |-
-                        Required. The identity provider to link.
-                         Format: identity-providers/{idp}
-                code:
-                    type: string
-                    description: Required. The authorization code from the identity provider.
-                redirectUri:
-                    type: string
-                    description: Required. The redirect URI used in the OAuth flow.
-                codeVerifier:
-                    type: string
-                    description: Optional. The PKCE code verifier used in the OAuth flow.
-            description: Request message for UserService.CreateLinkedIdentity.
-        CreatePersonalAccessTokenRequest:
-            required:
-                - parent
-            type: object
-            properties:
-                parent:
-                    type: string
-                    description: |-
-                        Required. The user who owns the token. Must be the caller.
-                         Format: users/{user}
-                description:
-                    type: string
-                    description: Optional. The description of the token.
-                expiresInDays:
-                    type: integer
-                    description: |-
-                        Optional. The lifetime of the token in days. 0 means the token never
-                         expires.
-                    format: int32
-            description: Request message for UserService.CreatePersonalAccessToken.
-        CreatePersonalAccessTokenResponse:
-            type: object
-            properties:
-                personalAccessToken:
-                    allOf:
-                        - $ref: '#/components/schemas/PersonalAccessToken'
-                    description: The personal access token metadata.
-                token:
-                    type: string
-                    description: The token value. This is the only time it is returned.
-            description: Response message for UserService.CreatePersonalAccessToken.
-        DeclineSpaceInvitationRequest:
-            required:
-                - name
-            type: object
-            properties:
-                name:
-                    type: string
-                    description: |-
-                        Required. The resource name of the invitation.
-                         Format: spaces/{space}/invitations/{invitation}
-            description: Request message for SpaceService.DeclineSpaceInvitation.
-        FieldMapping:
-            type: object
-            properties:
-                identifier:
-                    type: string
-                    description: The claim that uniquely identifies the user. Sign-in fails when it is missing or empty.
-                displayName:
-                    type: string
-                    description: The claim used as the display name. Falls back to the identifier when unset.
-                email:
-                    type: string
-                    description: The claim used as the email address.
-                avatarUrl:
-                    type: string
-                    description: The claim used as the avatar URL.
-            description: |-
-                FieldMapping maps user info claims of an OAuth2 identity provider to user fields.
-                 Each field holds the name of a claim.
         GeneralSetting_CustomProfile:
             type: object
             properties:
@@ -3489,13 +2266,6 @@ components:
                         - $ref: '#/components/schemas/User'
                     description: The authenticated user.
             description: Response message for AuthService.GetCurrentUser.
-        GetUserWebhookSigningSecretResponse:
-            type: object
-            properties:
-                signingSecret:
-                    type: string
-                    description: The signing secret, in the Standard Webhooks "whsec_<base64>" form.
-            description: Response message for UserService.GetUserWebhookSigningSecret.
         GoogleProtobufAny:
             type: object
             properties:
@@ -3504,44 +2274,6 @@ components:
                     description: The type of the serialized message.
             additionalProperties: true
             description: Contains an arbitrary serialized message along with a @type that describes the type of the serialized message.
-        IdentityProvider:
-            required:
-                - type
-                - title
-                - config
-            type: object
-            properties:
-                name:
-                    type: string
-                    description: |-
-                        Identifier. The resource name of the identity provider.
-                         Format: identity-providers/{idp}
-                type:
-                    enum:
-                        - TYPE_UNSPECIFIED
-                        - OAUTH2
-                    type: string
-                    description: Required. The type of the identity provider.
-                    format: enum
-                title:
-                    type: string
-                    description: Required. The display title of the identity provider.
-                identifierFilter:
-                    type: string
-                    description: Optional. A regular expression the user identifier must match to sign in. Empty allows every identifier.
-                config:
-                    allOf:
-                        - $ref: '#/components/schemas/IdentityProviderConfig'
-                    description: Required. The type-specific configuration of the identity provider.
-            description: IdentityProvider is an external identity provider users can sign in with.
-        IdentityProviderConfig:
-            type: object
-            properties:
-                oauth2Config:
-                    allOf:
-                        - $ref: '#/components/schemas/OAuth2Config'
-                    description: The configuration of an OAuth2 identity provider.
-            description: IdentityProviderConfig is the type-specific configuration of an identity provider.
         ImportMemosIssue:
             type: object
             properties:
@@ -4065,28 +2797,6 @@ components:
                     type: string
                     description: The preview image URL.
             description: LinkMetadata is the preview metadata of a web link.
-        LinkedIdentity:
-            type: object
-            properties:
-                name:
-                    type: string
-                    description: |-
-                        Identifier. The resource name of the linked identity. {linked_identity} is
-                         the ID of the identity provider.
-                         Format: users/{user}/linkedIdentities/{linked_identity}
-                identityProvider:
-                    readOnly: true
-                    type: string
-                    description: |-
-                        Output only. The resource name of the identity provider.
-                         Format: identity-providers/{idp}
-                externalUid:
-                    type: string
-                    description: |-
-                        The external user identifier from the identity provider: the subject that
-                         signs in as this user. Set by signing in through the provider, or declared
-                         in a configuration file for a declared user.
-            description: LinkedIdentity is an SSO identity linked to a user account.
         ListAttachmentsResponse:
             type: object
             properties:
@@ -4099,24 +2809,6 @@ components:
                     type: string
                     description: A token to retrieve the next page. Empty when there are no more pages.
             description: Response message for AttachmentService.ListAttachments.
-        ListIdentityProvidersResponse:
-            type: object
-            properties:
-                identityProviders:
-                    type: array
-                    items:
-                        $ref: '#/components/schemas/IdentityProvider'
-                    description: The identity providers.
-            description: Response message for IdentityProviderService.ListIdentityProviders.
-        ListLinkedIdentitiesResponse:
-            type: object
-            properties:
-                linkedIdentities:
-                    type: array
-                    items:
-                        $ref: '#/components/schemas/LinkedIdentity'
-                    description: The linked identities.
-            description: Response message for UserService.ListLinkedIdentities.
         ListMemoAttachmentsResponse:
             type: object
             properties:
@@ -4186,54 +2878,6 @@ components:
                     type: string
                     description: A token to retrieve the next page. Empty when there are no more pages.
             description: Response message for MemoService.ListMemos.
-        ListPersonalAccessTokensResponse:
-            type: object
-            properties:
-                personalAccessTokens:
-                    type: array
-                    items:
-                        $ref: '#/components/schemas/PersonalAccessToken'
-                    description: The personal access tokens, without their token values.
-                nextPageToken:
-                    type: string
-                    description: A token to retrieve the next page. Empty when there are no more pages.
-            description: Response message for UserService.ListPersonalAccessTokens.
-        ListSpaceInvitationsResponse:
-            type: object
-            properties:
-                spaceInvitations:
-                    type: array
-                    items:
-                        $ref: '#/components/schemas/SpaceInvitation'
-                    description: The pending invitations for the space.
-                nextPageToken:
-                    type: string
-                    description: A token to retrieve the next page. Empty when there are no more pages.
-            description: Response message for SpaceService.ListSpaceInvitations.
-        ListSpaceMembersResponse:
-            type: object
-            properties:
-                spaceMembers:
-                    type: array
-                    items:
-                        $ref: '#/components/schemas/SpaceMember'
-                    description: The members of the space.
-                nextPageToken:
-                    type: string
-                    description: A token to retrieve the next page. Empty when there are no more pages.
-            description: Response message for SpaceService.ListSpaceMembers.
-        ListSpacesResponse:
-            type: object
-            properties:
-                spaces:
-                    type: array
-                    items:
-                        $ref: '#/components/schemas/Space'
-                    description: The spaces of which the caller is a member.
-                nextPageToken:
-                    type: string
-                    description: A token to retrieve the next page. Empty when there are no more pages.
-            description: Response message for SpaceService.ListSpaces.
         ListUserNotificationsResponse:
             type: object
             properties:
@@ -4258,18 +2902,6 @@ components:
                     type: string
                     description: A token to retrieve the next page. Empty when there are no more pages.
             description: Response message for UserService.ListUserSettings.
-        ListUserSpaceInvitationsResponse:
-            type: object
-            properties:
-                spaceInvitations:
-                    type: array
-                    items:
-                        $ref: '#/components/schemas/SpaceInvitation'
-                    description: The pending invitations received by the user.
-                nextPageToken:
-                    type: string
-                    description: A token to retrieve the next page. Empty when there are no more pages.
-            description: Response message for SpaceService.ListUserSpaceInvitations.
         ListUserStatsResponse:
             type: object
             properties:
@@ -4279,15 +2911,6 @@ components:
                         $ref: '#/components/schemas/UserStats'
                     description: The statistics, one entry per user.
             description: Response message for UserService.ListUserStats.
-        ListUserWebhooksResponse:
-            type: object
-            properties:
-                webhooks:
-                    type: array
-                    items:
-                        $ref: '#/components/schemas/UserWebhook'
-                    description: The webhooks.
-            description: Response message for UserService.ListUserWebhooks.
         ListUsersResponse:
             type: object
             properties:
@@ -4382,12 +3005,6 @@ components:
                     description: |-
                         Output only. The resource name of the creator.
                          Format: users/{user}
-                space:
-                    type: string
-                    description: |-
-                        Optional. The space in which the memo is placed. Every memo, including a
-                         comment, owns its placement independently.
-                         Format: spaces/{space}
                 content:
                     type: string
                     description: |-
@@ -4403,11 +3020,10 @@ components:
                         - PRIVATE
                         - PROTECTED
                         - PUBLIC
-                        - SPACE
                     type: string
                     description: |-
                         Required. The visibility of the memo. Defaults to PRIVATE on creation when
-                         unspecified. SPACE requires the memo to be placed in a space.
+                         unspecified.
                     format: enum
                 state:
                     enum:
@@ -4648,63 +3264,6 @@ components:
                     type: string
                     description: The Reply-To email address.
             description: EmailSetting is the SMTP configuration for notification emails.
-        OAuth2Config:
-            type: object
-            properties:
-                clientId:
-                    type: string
-                    description: The OAuth2 client ID.
-                clientSecret:
-                    type: string
-                    description: 'The OAuth2 client secret. Write-only: it is never returned in responses.'
-                authUrl:
-                    type: string
-                    description: The authorization endpoint URL.
-                tokenUrl:
-                    type: string
-                    description: The token endpoint URL, used to exchange the authorization code for an access token.
-                userInfoUrl:
-                    type: string
-                    description: The user info endpoint URL, used to fetch the claims of the signed-in user.
-                scopes:
-                    type: array
-                    items:
-                        type: string
-                    description: The scopes to request.
-                fieldMapping:
-                    allOf:
-                        - $ref: '#/components/schemas/FieldMapping'
-                    description: How user info claims map to user fields.
-            description: OAuth2Config is the configuration of an OAuth2 identity provider.
-        PersonalAccessToken:
-            type: object
-            properties:
-                name:
-                    type: string
-                    description: |-
-                        Identifier. The resource name of the personal access token.
-                         Format: users/{user}/personalAccessTokens/{personal_access_token}
-                description:
-                    type: string
-                    description: Optional. The description of the token.
-                createTime:
-                    readOnly: true
-                    type: string
-                    description: Output only. The creation time.
-                    format: date-time
-                expireTime:
-                    type: string
-                    description: Optional. The expiration time. Unset means the token never expires.
-                    format: date-time
-                lastUseTime:
-                    readOnly: true
-                    type: string
-                    description: Output only. The time the token was last used.
-                    format: date-time
-            description: |-
-                PersonalAccessToken is a long-lived token for API and script access.
-                 PATs are distinct from short-lived JWT access tokens used for session
-                 authentication.
         PhotoMetadata:
             type: object
             properties:
@@ -4835,10 +3394,6 @@ components:
                     allOf:
                         - $ref: '#/components/schemas/SignInRequest_PasswordCredentials'
                     description: Username and password credentials.
-                ssoCredentials:
-                    allOf:
-                        - $ref: '#/components/schemas/SignInRequest_SsoCredentials'
-                    description: SSO credentials from an OAuth2 authorization code flow.
             description: Request message for AuthService.SignIn.
         SignInRequest_PasswordCredentials:
             required:
@@ -4858,30 +3413,6 @@ components:
             description: |-
                 PasswordCredentials are a username and password.
                  Regular users cannot use them when the instance disallows password sign-in.
-        SignInRequest_SsoCredentials:
-            required:
-                - identityProvider
-                - code
-                - redirectUri
-            type: object
-            properties:
-                identityProvider:
-                    type: string
-                    description: |-
-                        Required. The resource name of the identity provider.
-                         Format: identity-providers/{idp}
-                code:
-                    type: string
-                    description: Required. The authorization code returned by the identity provider.
-                redirectUri:
-                    type: string
-                    description: Required. The redirect URI used in the authorization request.
-                codeVerifier:
-                    type: string
-                    description: Optional. The PKCE code verifier (RFC 7636). Set it when the authorization request used a code challenge.
-            description: |-
-                SsoCredentials are the result of an OAuth2 authorization code flow with an identity provider.
-                 A first sign-in creates a local user unless the instance disallows user registration.
         SignInResponse:
             type: object
             properties:
@@ -4901,117 +3432,6 @@ components:
                          Call RefreshToken before this time.
                     format: date-time
             description: Response message for AuthService.SignIn.
-        Space:
-            required:
-                - title
-            type: object
-            properties:
-                name:
-                    type: string
-                    description: |-
-                        Identifier. The resource name of the space.
-                         Format: spaces/{space}
-                title:
-                    type: string
-                    description: Required. The human-readable title.
-                description:
-                    type: string
-                    description: Optional. A description of the space.
-                icon:
-                    allOf:
-                        - $ref: '#/components/schemas/Space_Icon'
-                    description: |-
-                        Optional. The display icon. Omit it when updating with the "icon" mask to
-                         reset to the default space mark.
-                currentUserRole:
-                    readOnly: true
-                    enum:
-                        - ROLE_UNSPECIFIED
-                        - ADMIN
-                        - USER
-                    type: string
-                    description: |-
-                        Output only. The authenticated user's membership role in this space.
-                         ROLE_UNSPECIFIED when this space is exposed as metadata only.
-                    format: enum
-                memberCount:
-                    readOnly: true
-                    type: integer
-                    description: |-
-                        Output only. The number of accepted members in this space. Pending
-                         invitations are excluded. Zero when this space is exposed as metadata only.
-                    format: int32
-            description: Space is a collaboration boundary for placed memos.
-        SpaceInvitation:
-            required:
-                - invitee
-                - role
-            type: object
-            properties:
-                name:
-                    type: string
-                    description: |-
-                        Identifier. The resource name of the invitation. The invitation segment
-                         is the invitee's username.
-                         Format: spaces/{space}/invitations/{invitation}
-                invitee:
-                    type: string
-                    description: |-
-                        Required. The invited user.
-                         Format: users/{user}
-                role:
-                    enum:
-                        - ROLE_UNSPECIFIED
-                        - ADMIN
-                        - USER
-                    type: string
-                    description: Required. The role the user receives after accepting the invitation.
-                    format: enum
-                space:
-                    readOnly: true
-                    allOf:
-                        - $ref: '#/components/schemas/Space'
-                    description: |-
-                        Output only. The space the user is invited to, as metadata only. This lets
-                         an invitee understand the invitation without membership-based GetSpace
-                         access.
-            description: SpaceInvitation is a pending invitation for an existing user to join a space.
-        SpaceMember:
-            required:
-                - user
-                - role
-            type: object
-            properties:
-                name:
-                    type: string
-                    description: |-
-                        Identifier. The resource name of the membership. The member segment is
-                         the member's username.
-                         Format: spaces/{space}/members/{member}
-                user:
-                    type: string
-                    description: |-
-                        Required. The member user.
-                         Format: users/{user}
-                role:
-                    enum:
-                        - ROLE_UNSPECIFIED
-                        - ADMIN
-                        - USER
-                    type: string
-                    description: Required. The member's role within this space.
-                    format: enum
-            description: SpaceMember is a user's membership and governance role in a space.
-        Space_Icon:
-            type: object
-            properties:
-                emoji:
-                    type: string
-                    description: A Unicode emoji sequence.
-                lucide:
-                    type: string
-                    description: A canonical Lucide icon name, such as "leaf".
-            description: Icon is the display icon of a space.
         Status:
             type: object
             properties:
@@ -5316,7 +3736,6 @@ components:
                         - TYPE_UNSPECIFIED
                         - MEMO_COMMENT
                         - MEMO_MENTION
-                        - SPACE_INVITATION
                     type: string
                     description: Output only. The type of the notification.
                     format: enum
@@ -5330,11 +3749,6 @@ components:
                     allOf:
                         - $ref: '#/components/schemas/UserNotification_MemoMentionPayload'
                     description: Output only. Details of a MEMO_MENTION notification.
-                spaceInvitation:
-                    readOnly: true
-                    allOf:
-                        - $ref: '#/components/schemas/UserNotification_SpaceInvitationPayload'
-                    description: Output only. Details of a SPACE_INVITATION notification.
                 status:
                     enum:
                         - STATUS_UNSPECIFIED
@@ -5389,37 +3803,6 @@ components:
                     type: string
                     description: Preview text of the related parent memo.
             description: MemoMentionPayload holds the details of a MEMO_MENTION notification.
-        UserNotification_SpaceInvitationPayload:
-            type: object
-            properties:
-                spaceInvitation:
-                    type: string
-                    description: |-
-                        The invitation.
-                         Format: spaces/{space}/invitations/{invitation}
-                space:
-                    allOf:
-                        - $ref: '#/components/schemas/Space'
-                    description: The read-only Space summary carried by the invitation.
-                role:
-                    enum:
-                        - ROLE_UNSPECIFIED
-                        - ADMIN
-                        - USER
-                    type: string
-                    description: The role the invitation offers.
-                    format: enum
-                state:
-                    enum:
-                        - STATE_UNSPECIFIED
-                        - PENDING
-                        - ACCEPTED
-                    type: string
-                    description: The current state of the invitation for the receiver.
-                    format: enum
-            description: |-
-                SpaceInvitationPayload holds the details of a SPACE_INVITATION
-                 notification.
         UserSetting:
             type: object
             properties:
@@ -5433,10 +3816,6 @@ components:
                     allOf:
                         - $ref: '#/components/schemas/UserSetting_GeneralSetting'
                     description: The value of the GENERAL setting.
-                webhooksSetting:
-                    allOf:
-                        - $ref: '#/components/schemas/UserSetting_WebhooksSetting'
-                    description: The value of the WEBHOOKS setting.
                 tagsSetting:
                     allOf:
                         - $ref: '#/components/schemas/UserSetting_TagsSetting'
@@ -5502,15 +3881,6 @@ components:
                         Optional. Map of tag name pattern to tag metadata. Each key is treated as
                          an anchored regular expression (^pattern$).
             description: TagsSetting holds user-specific tag metadata.
-        UserSetting_WebhooksSetting:
-            type: object
-            properties:
-                webhooks:
-                    type: array
-                    items:
-                        $ref: '#/components/schemas/UserWebhook'
-                    description: The user's webhooks.
-            description: WebhooksSetting holds a user's webhooks.
         UserStats:
             type: object
             properties:
@@ -5652,41 +4022,6 @@ components:
                     type: string
                     description: The size in bytes of one uploaded file.
             description: Limits is the limit for each metric. An unset limit is unlimited, as is 0.
-        UserWebhook:
-            type: object
-            properties:
-                name:
-                    type: string
-                    description: |-
-                        Identifier. The resource name of the webhook.
-                         Format: users/{user}/webhooks/{webhook}
-                displayName:
-                    type: string
-                    description: A human-readable name for the webhook.
-                url:
-                    type: string
-                    description: The URL the webhook request is sent to. Required on create.
-                signingSecret:
-                    writeOnly: true
-                    type: string
-                    description: |-
-                        Input only. The secret used to HMAC-SHA256 sign the webhook request body.
-                         Never returned; use GetUserWebhookSigningSecret to read it.
-                signingSecretSet:
-                    readOnly: true
-                    type: boolean
-                    description: Output only. Whether a signing secret is configured for this webhook.
-                createTime:
-                    readOnly: true
-                    type: string
-                    description: Output only. The creation timestamp. Currently never set.
-                    format: date-time
-                updateTime:
-                    readOnly: true
-                    type: string
-                    description: Output only. The last update timestamp. Currently never set.
-                    format: date-time
-            description: UserWebhook is a webhook owned by a user.
         VideoMetadata:
             type: object
             properties:
@@ -5700,22 +4035,11 @@ tags:
       description: AttachmentService manages files attached to memos.
     - name: AuthService
       description: 'AuthService manages sign-in sessions: it issues, refreshes, and revokes the tokens that authenticate API calls.'
-    - name: IdentityProviderService
-      description: |-
-        IdentityProviderService is a legacy API retained for protocol compatibility.
-         The external identity provider methods are retired in Cat_two.
     - name: InstanceService
       description: InstanceService exposes the instance profile, instance-wide settings and usage statistics.
     - name: MemoService
       description: |-
         MemoService manages memos and their attachments, relations, comments,
          reactions, and share links.
-    - name: SpaceService
-      description: |-
-        SpaceService is a legacy API retained for protocol compatibility.
-         The collaborative space, membership and invitation methods are retired in Cat_two.
     - name: UserService
-      description: |-
-        UserService manages users and the resources they own: settings, statistics,
-         notifications, webhooks, linked identities, personal access tokens, and memo
-         export files.
+      description: UserService manages the local account, settings and memo imports.

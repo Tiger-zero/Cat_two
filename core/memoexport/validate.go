@@ -105,11 +105,6 @@ func validateMemo(memo *Memo) ([]Warning, error) {
 			return nil, fail("parent must not be the memo itself")
 		}
 	}
-	if memo.Space != nil {
-		if err := ValidateUID(memo.Space.UID); err != nil {
-			return nil, fail("space: %v", err)
-		}
-	}
 	if memo.Location != nil {
 		if memo.Location.Latitude < -90 || memo.Location.Latitude > 90 || memo.Location.Longitude < -180 || memo.Location.Longitude > 180 {
 			return nil, fail("location is out of range")

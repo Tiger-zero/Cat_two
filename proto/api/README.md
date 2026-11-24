@@ -2,7 +2,7 @@
 
 This API design should follow the guidelines and best practices outlined in the [Google API Improvement Proposals (AIPs)](https://google.aip.dev/).
 
-The public package remains `memos.api` for existing clients. Breaking changes are recorded in the changelog. [API changelog](CHANGELOG.md)
+The package `memos.api` defines browser Connect procedures. HTTP annotations supply the embedded OpenAPI data used by MCP tools. External clients use the dedicated MCP tool contract. [API changelog](CHANGELOG.md) · [MCP tool surface](../../server/mcp/README.md#tool-surface)
 
 ## File Layout
 

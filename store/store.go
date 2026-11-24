@@ -14,7 +14,6 @@ type Store struct {
 	driver  Driver
 
 	refreshTokenMu    sync.Mutex
-	patMu             sync.Mutex
 	memoBodyMu        sync.Mutex
 	memoBodyNamespace string
 

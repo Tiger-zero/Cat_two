@@ -31,10 +31,6 @@ func ToStore(setting *apipb.InstanceSetting) *storepb.InstanceSetting {
 		if value := setting.GetGeneralSetting(); value != nil {
 			result.Value = &storepb.InstanceSetting_GeneralSetting{GeneralSetting: generalSettingToStore(value)}
 		}
-	case storepb.InstanceSettingKey_STORAGE:
-		if value := setting.GetStorageSetting(); value != nil {
-			result.Value = &storepb.InstanceSetting_StorageSetting{StorageSetting: storageSettingToStore(value)}
-		}
 	case storepb.InstanceSettingKey_TAGS:
 		if value := setting.GetTagsSetting(); value != nil {
 			result.Value = &storepb.InstanceSetting_TagsSetting{TagsSetting: tagsSettingToStore(value)}
@@ -68,8 +64,6 @@ func FromStore(setting *storepb.InstanceSetting) *apipb.InstanceSetting {
 	switch setting.Value.(type) {
 	case *storepb.InstanceSetting_GeneralSetting:
 		result.Value = &apipb.InstanceSetting_GeneralSetting_{GeneralSetting: generalSettingFromStore(setting.GetGeneralSetting())}
-	case *storepb.InstanceSetting_StorageSetting:
-		result.Value = &apipb.InstanceSetting_StorageSetting_{StorageSetting: storageSettingFromStore(setting.GetStorageSetting())}
 	case *storepb.InstanceSetting_TagsSetting:
 		result.Value = &apipb.InstanceSetting_TagsSetting_{TagsSetting: tagsSettingFromStore(setting.GetTagsSetting())}
 	case *storepb.InstanceSetting_NotificationSetting:
@@ -203,108 +197,6 @@ func generalSettingToStore(setting *apipb.InstanceSetting_GeneralSetting) *store
 		}
 	}
 	return generalSetting
-}
-
-func storageSettingFromStore(settingpb *storepb.InstanceStorageSetting) *apipb.InstanceSetting_StorageSetting {
-	if settingpb == nil {
-		return nil
-	}
-	setting := &apipb.InstanceSetting_StorageSetting{
-		StorageType:      apipb.InstanceSetting_StorageSetting_StorageType(settingpb.StorageType),
-		FilepathTemplate: settingpb.FilepathTemplate,
-		DefaultStorageId: settingpb.DefaultStorageId,
-	}
-	for _, storagepb := range settingpb.Storages {
-		setting.Storages = append(setting.Storages, storageFromStore(storagepb))
-	}
-	if settingpb.S3Config != nil {
-		setting.S3Config = &apipb.InstanceSetting_StorageSetting_S3Config{
-			AccessKeyId:           settingpb.S3Config.AccessKeyId,
-			AccessKeySecret:       settingpb.S3Config.AccessKeySecret,
-			Endpoint:              settingpb.S3Config.Endpoint,
-			Region:                settingpb.S3Config.Region,
-			Bucket:                settingpb.S3Config.Bucket,
-			UsePathStyle:          settingpb.S3Config.UsePathStyle,
-			InsecureSkipTlsVerify: settingpb.S3Config.InsecureSkipTlsVerify,
-		}
-	}
-	return setting
-}
-
-func storageSettingToStore(setting *apipb.InstanceSetting_StorageSetting) *storepb.InstanceStorageSetting {
-	if setting == nil {
-		return nil
-	}
-	settingpb := &storepb.InstanceStorageSetting{
-		StorageType:      storepb.InstanceStorageSetting_StorageType(setting.StorageType),
-		FilepathTemplate: setting.FilepathTemplate,
-		DefaultStorageId: setting.DefaultStorageId,
-	}
-	for _, storage := range setting.Storages {
-		settingpb.Storages = append(settingpb.Storages, storageToStore(storage))
-	}
-	if setting.S3Config != nil {
-		settingpb.S3Config = &storepb.StorageS3Config{
-			AccessKeyId:           setting.S3Config.AccessKeyId,
-			AccessKeySecret:       setting.S3Config.AccessKeySecret,
-			Endpoint:              setting.S3Config.Endpoint,
-			Region:                setting.S3Config.Region,
-			Bucket:                setting.S3Config.Bucket,
-			UsePathStyle:          setting.S3Config.UsePathStyle,
-			InsecureSkipTlsVerify: setting.S3Config.InsecureSkipTlsVerify,
-		}
-	}
-	return settingpb
-}
-
-func storageFromStore(storagepb *storepb.Storage) *apipb.InstanceSetting_Storage {
-	if storagepb == nil {
-		return nil
-	}
-	storage := &apipb.InstanceSetting_Storage{
-		Id:   storagepb.Id,
-		Name: storagepb.Name,
-		Type: apipb.InstanceSetting_StorageType(storagepb.Type),
-	}
-	if s3Config := storagepb.GetS3Config(); s3Config != nil {
-		storage.Config = &apipb.InstanceSetting_Storage_S3Config_{
-			S3Config: &apipb.InstanceSetting_Storage_S3Config{
-				AccessKeyId:           s3Config.AccessKeyId,
-				AccessKeySecret:       s3Config.AccessKeySecret,
-				Endpoint:              s3Config.Endpoint,
-				Region:                s3Config.Region,
-				Bucket:                s3Config.Bucket,
-				UsePathStyle:          s3Config.UsePathStyle,
-				InsecureSkipTlsVerify: s3Config.InsecureSkipTlsVerify,
-			},
-		}
-	}
-	return storage
-}
-
-func storageToStore(storage *apipb.InstanceSetting_Storage) *storepb.Storage {
-	if storage == nil {
-		return nil
-	}
-	storagepb := &storepb.Storage{
-		Id:   storage.Id,
-		Name: storage.Name,
-		Type: storepb.StorageType(storage.Type),
-	}
-	if s3Config := storage.GetS3Config(); s3Config != nil {
-		storagepb.Config = &storepb.Storage_S3Config{
-			S3Config: &storepb.StorageS3Config{
-				AccessKeyId:           s3Config.AccessKeyId,
-				AccessKeySecret:       s3Config.AccessKeySecret,
-				Endpoint:              s3Config.Endpoint,
-				Region:                s3Config.Region,
-				Bucket:                s3Config.Bucket,
-				UsePathStyle:          s3Config.UsePathStyle,
-				InsecureSkipTlsVerify: s3Config.InsecureSkipTlsVerify,
-			},
-		}
-	}
-	return storagepb
 }
 
 func tagsSettingFromStore(setting *storepb.InstanceTagsSetting) *apipb.InstanceSetting_TagsSetting {

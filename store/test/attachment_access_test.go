@@ -10,7 +10,7 @@ import (
 	"github.com/usememos/memos/store"
 )
 
-func TestPersonalAttachmentScopeUsesMemoOwnerWithoutSpace(t *testing.T) {
+func TestPersonalAttachmentScopeUsesMemoOwner(t *testing.T) {
 	ctx := context.Background()
 	ts := NewTestingStore(ctx, t)
 	defer ts.Close()
@@ -27,8 +27,6 @@ func TestPersonalAttachmentScopeUsesMemoOwnerWithoutSpace(t *testing.T) {
 	otherMemo, err := ts.CreateMemo(ctx, &store.Memo{
 		UID: "attachment-scope-other-memo", CreatorID: other.ID, Content: "other", Visibility: store.Public,
 	})
-	require.NoError(t, err)
-	_, err = ts.GetDriver().GetDB().ExecContext(ctx, "UPDATE memo SET space_id = ?, visibility = 'SPACE' WHERE id = ?", 2147483000, memo.ID)
 	require.NoError(t, err)
 
 	createAttachment := func(uid string, creatorID int32, memoID *int32) *store.Attachment {

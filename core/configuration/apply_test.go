@@ -2,8 +2,6 @@ package configuration
 
 import (
 	"context"
-	"database/sql"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -26,7 +24,7 @@ func newTestStore(t *testing.T) *store.Store {
 	require.NoError(t, err)
 	s := store.New(driver, instanceProfile)
 	t.Cleanup(func() { require.NoError(t, s.Close()) })
-	require.NoError(t, s.Migrate(context.Background()))
+	require.NoError(t, s.InitializeSchema(context.Background()))
 	return s
 }
 
@@ -46,7 +44,6 @@ func requirePassword(t *testing.T, s *store.Store, username, password string) {
 }
 
 func instanceFiles(title, password string, version string) map[string]string {
-
 	return map[string]string{
 		"general.json": generalDocument(title),
 		"users.json": `{"users":[{"name":"users/admin","username":"admin","role":"ADMIN","password":"` + password + `"}],
@@ -147,76 +144,6 @@ func TestApplyRemovals(t *testing.T) {
 	general, err := s.GetUncachedInstanceSetting(ctx, &store.FindInstanceSetting{Name: "GENERAL"})
 	require.NoError(t, err)
 	require.Nil(t, general, "an explicitly removed active setting is reset")
-}
-
-func TestApplyLegacyConfigurationPreservesData(t *testing.T) {
-	ctx := context.Background()
-	s := newTestStore(t)
-	admin, err := s.CreateUser(ctx, &store.User{Username: "admin", Role: store.RoleAdmin, PasswordHash: "old-hash"})
-	require.NoError(t, err)
-	legacy, err := s.CreateUser(ctx, &store.User{Username: "legacy", Role: store.RoleUser, PasswordHash: "legacy-hash"})
-	require.NoError(t, err)
-	legacyMemo, err := s.CreateMemo(ctx, &store.Memo{UID: "legacy-note", CreatorID: legacy.ID, Content: "old private note", Visibility: store.Private})
-	require.NoError(t, err)
-	db, err := sql.Open("sqlite", filepath.Join(s.GetDataDir(), "memos_prod.db"))
-	require.NoError(t, err)
-	t.Cleanup(func() { require.NoError(t, db.Close()) })
-	const providerConfig = `{"clientId":"old-client","clientSecret":"old-secret"}`
-	_, err = db.ExecContext(ctx, `INSERT INTO idp (uid, name, type, config) VALUES ('sso', 'Legacy SSO', 'OAUTH2', ?)`, providerConfig)
-	require.NoError(t, err)
-	_, err = db.ExecContext(ctx, `INSERT INTO user_identity (user_id, provider, extern_uid) VALUES (?, 'sso', 'legacy-subject')`, legacy.ID)
-	require.NoError(t, err)
-	legacySetting := &storepb.InstanceSetting{Key: storepb.InstanceSettingKey_AI,
-		Value: &storepb.InstanceSetting_AiSetting{AiSetting: &storepb.InstanceAISetting{Providers: []*storepb.AIProviderConfig{{Id: "old-ai", ApiKey: "old-key"}}}}}
-	_, err = s.UpsertInstanceSetting(ctx, legacySetting)
-	require.NoError(t, err)
-	_, err = s.RunConfigurationTransaction(ctx, func(context.Context, *store.ConfigurationTransaction) (*storepb.InstanceConfigurationState, error) {
-		return &storepb.InstanceConfigurationState{Resources: []*storepb.InstanceConfigurationState_ManagedResource{
-			{Name: "identity-providers/sso", Kind: "IdentityProvider", AppliedTs: 123},
-			{Name: "users/legacy/linkedIdentities/sso", Kind: "LinkedIdentity", AppliedTs: 123},
-			{Name: "users/legacy", Kind: "User", AppliedTs: 123},
-			{Name: "instance/settings/AI", Kind: "InstanceSetting", AppliedTs: 123},
-		}}, nil
-	})
-	require.NoError(t, err)
-
-	files := map[string]string{"legacy.json": `{
-		"identityProviders":[{"name":"identity-providers/sso","config":"${env:RETIRED_SECRET}"}],
-		"linkedIdentities":[{"name":"users/legacy/linkedIdentities/sso","externalUid":"${file:/missing/legacy}"}],
-		"instanceSettings":[{"name":"instance/settings/AI","aiSetting":{"providers":[{"apiKey":"${env:RETIRED_AI_KEY}"}]}}],
-		"users":[{"name":"users/admin","username":"admin","role":"ADMIN","password":"new-password"},
-			{"name":"users/legacy","username":"legacy","role":"USER","password":"${env:RETIRED_USER_PASSWORD}"},
-			{"name":"users/extra","username":"extra","role":"ADMIN","password":"ignored"}],
-		"lifecycle":[{"resource":"users/admin","writeOnlyVersion":1},{"resource":"users/legacy"}],
-		"removed":[{"resource":"users/legacy","destroy":true},{"resource":"instance/settings/AI","destroy":true},
-			{"resource":"identity-providers/sso","destroy":true},{"resource":"users/legacy/linkedIdentities/sso","destroy":true}]
-	}`}
-	desired, err := Load(writeFiles(t, files), Resolver{})
-	require.NoError(t, err, "retired declarations must not resolve their secrets")
-	plan, state := applyFor(t, desired, s)
-	require.True(t, plan.Valid(), plan.Message.Errors)
-	require.Len(t, plan.Message.ResourceChanges, 1)
-	require.Len(t, state.Resources, 5)
-	users, err := s.ListUsers(ctx, &store.FindUser{})
-	require.NoError(t, err)
-	require.Len(t, users, 2)
-	requirePassword(t, s, admin.Username, "new-password")
-	unchangedUser, err := s.GetUser(ctx, &store.FindUser{ID: &legacy.ID})
-	require.NoError(t, err)
-	require.Equal(t, legacy.PasswordHash, unchangedUser.PasswordHash)
-	unchangedMemo, err := s.GetMemo(ctx, &store.FindMemo{ID: &legacyMemo.ID})
-	require.NoError(t, err)
-	require.Equal(t, legacyMemo.Content, unchangedMemo.Content)
-	var unchangedConfig, unchangedSubject string
-	require.NoError(t, db.QueryRowContext(ctx, `SELECT config FROM idp WHERE uid = 'sso'`).Scan(&unchangedConfig))
-	require.Equal(t, providerConfig, unchangedConfig)
-	require.NoError(t, db.QueryRowContext(ctx, `SELECT extern_uid FROM user_identity WHERE user_id = ? AND provider = 'sso'`, legacy.ID).Scan(&unchangedSubject))
-	require.Equal(t, "legacy-subject", unchangedSubject)
-	unchangedSetting, err := s.GetUncachedInstanceSetting(ctx, &store.FindInstanceSetting{Name: "AI"})
-	require.NoError(t, err)
-	require.Equal(t, "old-key", unchangedSetting.GetAiSetting().Providers[0].ApiKey)
-	again, _ := applyFor(t, desired, s)
-	require.False(t, again.HasChanges())
 }
 
 func TestApplyFailureRollsBack(t *testing.T) {

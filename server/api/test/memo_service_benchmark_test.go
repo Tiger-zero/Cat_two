@@ -75,7 +75,7 @@ func newTestingServiceForTB(tb testing.TB) *TestService {
 	}
 
 	testStore := store.New(dbDriver, testProfile)
-	if err := testStore.Migrate(ctx); err != nil {
+	if err := testStore.InitializeSchema(ctx); err != nil {
 		tb.Fatalf("failed to migrate db: %v", err)
 	}
 	tb.Cleanup(func() {

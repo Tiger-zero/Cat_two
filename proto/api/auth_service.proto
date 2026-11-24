@@ -5,7 +5,6 @@ package memos.api;
 import "api/user_service.proto";
 import "google/api/annotations.proto";
 import "google/api/field_behavior.proto";
-import "google/api/resource.proto";
 import "google/protobuf/empty.proto";
 import "google/protobuf/timestamp.proto";
 
@@ -55,9 +54,6 @@ message SignInRequest {
   oneof credentials {
     // Username and password credentials.
     PasswordCredentials password_credentials = 1;
-
-    // SSO credentials from an OAuth2 authorization code flow.
-    SsoCredentials sso_credentials = 2;
   }
 
   // PasswordCredentials are a username and password.
@@ -73,25 +69,8 @@ message SignInRequest {
     string otp_code = 3 [(google.api.field_behavior) = OPTIONAL];
   }
 
-  // SsoCredentials are the result of an OAuth2 authorization code flow with an identity provider.
-  // A first sign-in creates a local user unless the instance disallows user registration.
-  message SsoCredentials {
-    // Required. The resource name of the identity provider.
-    // Format: identity-providers/{idp}
-    string identity_provider = 1 [
-      (google.api.field_behavior) = REQUIRED,
-      (google.api.resource_reference) = {type: "memos.api/IdentityProvider"}
-    ];
-
-    // Required. The authorization code returned by the identity provider.
-    string code = 2 [(google.api.field_behavior) = REQUIRED];
-
-    // Required. The redirect URI used in the authorization request.
-    string redirect_uri = 3 [(google.api.field_behavior) = REQUIRED];
-
-    // Optional. The PKCE code verifier (RFC 7636). Set it when the authorization request used a code challenge.
-    string code_verifier = 4 [(google.api.field_behavior) = OPTIONAL];
-  }
+  reserved 2;
+  reserved "sso_credentials";
 }
 
 // Response message for AuthService.SignIn.

@@ -39,14 +39,14 @@ func TestSSEHandler_Authentication(t *testing.T) {
 	api.RegisterSSERoutes(e, ts.Service.SSEHub, ts.Store, ts.Secret)
 
 	t.Run("no token returns 401", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodGet, "/api/sse", nil)
+		req := httptest.NewRequest(http.MethodGet, "/internal/sse", nil)
 		rec := httptest.NewRecorder()
 		e.ServeHTTP(rec, req)
 		require.Equal(t, http.StatusUnauthorized, rec.Code)
 	})
 
 	t.Run("invalid token returns 401", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodGet, "/api/sse", nil)
+		req := httptest.NewRequest(http.MethodGet, "/internal/sse", nil)
 		req.Header.Set("Authorization", "Bearer invalid-token")
 		rec := httptest.NewRecorder()
 		e.ServeHTTP(rec, req)
@@ -60,7 +60,7 @@ func TestSSEHandler_Authentication(t *testing.T) {
 		client := server.Client()
 		reqCtx, cancel := context.WithTimeout(ctx, time.Second)
 		defer cancel()
-		req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, server.URL+"/api/sse", nil)
+		req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, server.URL+"/internal/sse", nil)
 		require.NoError(t, err)
 		req.Header.Set("Authorization", "Bearer "+token)
 		resp, err := client.Do(req)
@@ -71,7 +71,7 @@ func TestSSEHandler_Authentication(t *testing.T) {
 	})
 
 	t.Run("token in query param returns 401", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodGet, "/api/sse?token="+token, nil)
+		req := httptest.NewRequest(http.MethodGet, "/internal/sse?token="+token, nil)
 		rec := httptest.NewRecorder()
 		e.ServeHTTP(rec, req)
 		require.Equal(t, http.StatusUnauthorized, rec.Code)
@@ -83,7 +83,7 @@ func TestSSEHandler_Authentication(t *testing.T) {
 
 		reqCtx, cancel := context.WithTimeout(ctx, time.Second)
 		defer cancel()
-		req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, server.URL+"/api/sse", nil)
+		req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, server.URL+"/internal/sse", nil)
 		require.NoError(t, err)
 		req.Header.Set("Authorization", "Bearer "+token)
 
@@ -129,7 +129,7 @@ func TestSSEHandler_Authentication(t *testing.T) {
 		client := server.Client()
 		requestCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 		defer cancel()
-		req, err := http.NewRequestWithContext(requestCtx, http.MethodGet, server.URL+"/api/sse", nil)
+		req, err := http.NewRequestWithContext(requestCtx, http.MethodGet, server.URL+"/internal/sse", nil)
 		require.NoError(t, err)
 		req.Header.Set("Authorization", "Bearer "+token)
 		resp, err := client.Do(req)
@@ -158,7 +158,7 @@ func TestSSEHandler_Authentication(t *testing.T) {
 		server := httptest.NewTestServer(t, e)
 		client := server.Client()
 
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, server.URL+"/api/sse", nil)
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, server.URL+"/internal/sse", nil)
 		require.NoError(t, err)
 		req.Header.Set("Authorization", "Bearer "+token)
 

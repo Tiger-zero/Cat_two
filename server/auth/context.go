@@ -2,7 +2,6 @@ package auth
 
 import (
 	"context"
-	"strings"
 	"time"
 
 	"github.com/usememos/memos/store"
@@ -17,10 +16,6 @@ const (
 	// Set for all authenticated requests.
 	// Use GetUserID(ctx) to retrieve this value.
 	UserIDContextKey ContextKey = iota
-
-	// AccessTokenContextKey stores the JWT token for token-based auth.
-	// Only set when authenticated via Bearer token.
-	AccessTokenContextKey
 
 	// UserClaimsContextKey stores the claims from access token.
 	UserClaimsContextKey
@@ -38,33 +33,9 @@ func GetUserID(ctx context.Context) int32 {
 	return 0
 }
 
-// GetAccessToken retrieves the JWT access token from the context.
-// Returns empty string if not authenticated via bearer token.
-func GetAccessToken(ctx context.Context) string {
-	if v, ok := ctx.Value(AccessTokenContextKey).(string); ok {
-		return v
-	}
-	return ""
-}
-
-// HasPersonalAccessToken reports whether the caller was authenticated with a personal access token.
-func HasPersonalAccessToken(ctx context.Context) bool {
-	return strings.HasPrefix(GetAccessToken(ctx), PersonalAccessTokenPrefix)
-}
-
-// SetUserInContext sets the authenticated user's information in the context.
-// This is a simpler alternative to AuthorizeAndSetContext for cases where
-// authorization is handled separately (e.g., HTTP middleware).
-//
-// Parameters:
-//   - user: The authenticated user
-//   - accessToken: Set if authenticated via JWT token (empty string otherwise)
-func SetUserInContext(ctx context.Context, user *store.User, accessToken string) context.Context {
-	ctx = context.WithValue(ctx, UserIDContextKey, user.ID)
-	if accessToken != "" {
-		ctx = context.WithValue(ctx, AccessTokenContextKey, accessToken)
-	}
-	return ctx
+// SetUserInContext attaches an identity already verified by its transport.
+func SetUserInContext(ctx context.Context, user *store.User) context.Context {
+	return context.WithValue(ctx, UserIDContextKey, user.ID)
 }
 
 // UserClaims represents authenticated user info from access token.
@@ -96,14 +67,9 @@ func SetUserClaimsInContext(ctx context.Context, claims *UserClaims) context.Con
 // This is the canonical way to propagate auth state after a successful Authenticate call.
 // Safe to call with a nil result (no-op).
 func ApplyToContext(ctx context.Context, result *AuthResult) context.Context {
-	if result == nil {
+	if result == nil || result.Claims == nil {
 		return ctx
 	}
-	if result.Claims != nil {
-		ctx = SetUserClaimsInContext(ctx, result.Claims)
-		ctx = context.WithValue(ctx, UserIDContextKey, result.Claims.UserID)
-	} else if result.User != nil {
-		ctx = SetUserInContext(ctx, result.User, result.AccessToken)
-	}
-	return ctx
+	ctx = SetUserClaimsInContext(ctx, result.Claims)
+	return context.WithValue(ctx, UserIDContextKey, result.Claims.UserID)
 }

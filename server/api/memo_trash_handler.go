@@ -31,18 +31,16 @@ type memoTrashPage struct {
 	NextPageToken string          `json:"nextPageToken"`
 }
 
-func (s *APIService) newMemoTrashHandler(authorizer *Authorizer) http.Handler {
-	mux := http.NewServeMux()
-	mux.HandleFunc("GET /api/trash", s.authorizeMemoTrash(authorizer, func(w http.ResponseWriter, r *http.Request, user *store.User) error {
+func (s *APIService) registerMemoTrashRoutes(mux *http.ServeMux, authorizer *Authorizer) {
+	mux.HandleFunc("GET /internal/trash", s.authorizeMemoTrash(authorizer, func(w http.ResponseWriter, r *http.Request, user *store.User) error {
 		page, err := s.listMemoTrash(r.Context(), user, r.URL.Query().Get("pageSize"), r.URL.Query().Get("pageToken"), time.Now())
 		if err != nil {
 			return err
 		}
 		return httphandler.JSON(w, http.StatusOK, page)
 	}))
-	mux.HandleFunc("POST /api/trash/{uid}/restore", s.authorizeMemoTrash(authorizer, s.handleMemoTrashMutation(store.MemoTrashRestore)))
-	mux.HandleFunc("DELETE /api/trash/{uid}", s.authorizeMemoTrash(authorizer, s.handleMemoTrashMutation(store.MemoTrashPurge)))
-	return mux
+	mux.HandleFunc("POST /internal/trash/{uid}/restore", s.authorizeMemoTrash(authorizer, s.handleMemoTrashMutation(store.MemoTrashRestore)))
+	mux.HandleFunc("DELETE /internal/trash/{uid}", s.authorizeMemoTrash(authorizer, s.handleMemoTrashMutation(store.MemoTrashPurge)))
 }
 
 func (s *APIService) authorizeMemoTrash(authorizer *Authorizer, handler func(http.ResponseWriter, *http.Request, *store.User) error) http.HandlerFunc {
@@ -51,25 +49,25 @@ func (s *APIService) authorizeMemoTrash(authorizer *Authorizer, handler func(htt
 		ctx := r.Context()
 		result := authorizer.Authenticate(ctx, r.Header.Get("Authorization"))
 		if err := authorizer.CheckAccess(ctx, "", result); err != nil {
-			writeGatewayAuthorizationError(w, err)
+			writeHTTPAuthorizationError(w, err)
 			return
 		}
 		if err := authorizer.Throttle(ctx, "", result); err != nil {
-			writeGatewayStatusError(w, err)
+			writeHTTPStatusError(w, err)
 			return
 		}
 		r = r.WithContext(auth.ApplyToContext(ctx, result))
 		user, err := s.fetchCurrentUser(r.Context())
 		if err != nil {
-			writeGatewayStatusError(w, status.Error(codes.Internal, "failed to get current user"))
+			writeHTTPStatusError(w, status.Error(codes.Internal, "failed to get current user"))
 			return
 		}
 		if !access.IsActiveUser(user) {
-			writeGatewayStatusError(w, status.Error(codes.Unauthenticated, "authentication required"))
+			writeHTTPStatusError(w, status.Error(codes.Unauthenticated, "authentication required"))
 			return
 		}
 		if err := handler(w, r, user); err != nil {
-			writeGatewayStatusError(w, err)
+			writeHTTPStatusError(w, err)
 		}
 	}
 }

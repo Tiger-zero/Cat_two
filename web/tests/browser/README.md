@@ -14,4 +14,4 @@ Set `CAT_TWO_CHROMIUM_EXECUTABLE` to an installed Chromium binary if Playwright'
 
 ## Check an existing split dev setup
 
-Start the backend on an unused port and set `DEV_PROXY_SERVER` to its origin when starting Vite. Leave `MEMOS_INSTANCE_URL` unset for this check. Open **Settings → MCP and API** in the Vite page and create a test connection. The displayed MCP address should use the Vite origin and end in `/mcp`. Configure that address in a Streamable HTTP client, use the displayed Authorization value, then run tool discovery and a read such as `memo_search`. Delete the test connection afterwards.
+Start the backend on an unused port and set `DEV_PROXY_SERVER` to its origin when starting Vite. Leave `MEMOS_INSTANCE_URL` unset for this check. Open **Settings → MCP** in the Vite page and create a test connection. The displayed MCP address should use the Vite origin and end in `/mcp`. Configure that address in a Streamable HTTP client, use the displayed Authorization value, then run tool discovery and a read such as `memo_search`. Delete the test connection afterwards.

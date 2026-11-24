@@ -9,10 +9,7 @@ import (
 type MCPConnectionStatus string
 
 const (
-	MCPConnectionAwaiting MCPConnectionStatus = "awaiting"
-	MCPConnectionPending  MCPConnectionStatus = "pending"
 	MCPConnectionApproved MCPConnectionStatus = "approved"
-	MCPConnectionDenied   MCPConnectionStatus = "denied"
 	MCPConnectionRevoked  MCPConnectionStatus = "revoked"
 )
 

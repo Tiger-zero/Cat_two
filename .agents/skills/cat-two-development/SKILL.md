@@ -1,13 +1,13 @@
 ---
 name: cat-two-development
-description: Cat_two 整体项目开发指引。用于判断项目定位、确定改动范围、选择验证方式，以及维护仓库文档、NAS 部署、数据库迁移和 Docker 发布。
+description: Cat_two 整体项目开发指引。用于判断项目定位、确定改动范围、选择验证方式，以及维护仓库文档、NAS 部署、SQLite 架构和 Docker 发布。
 ---
 
 # Cat_two 项目开发
 
 ## 项目定位
 
-Cat_two 是单账户、自托管的个人笔记应用。新实例首次设置时创建一个管理员账户，日常围绕私有笔记的记录、查找、整理和同步展开。桌面 Web 是界面设计与视觉验收目标。Cat_two 是 SQLite 单数据库项目，部署、迁移和数据库兼容性验证均只覆盖 SQLite。升级时保留笔记作者、正文、本地附件和引用。笔记权限按作者判断。旧空间归属和 S3 对象迁移均已退役。
+Cat_two 是单账户、自托管的个人笔记应用。新实例首次设置时创建一个管理员账户，日常围绕私有笔记的记录、查找、整理和同步展开。桌面 Web 是界面设计与视觉验收目标。Cat_two 使用单账户 SQLite 架构，启动时拒绝不兼容的旧库。通过网页登录记录和管理私有笔记。外部自动化走专用 MCP，消息收件支持 Telegram 和企业微信。
 
 项目基于 Memos，按 Cat_two 自身需求演进。参考其他项目之前，先确认场景，再从本仓库的实际入口、API、权限和数据流找可复用的实现。涉及界面、API 或存储的改动沿用户完成任务的完整链路验证。
 
@@ -15,7 +15,7 @@ Cat_two 是单账户、自托管的个人笔记应用。新实例首次设置时
 
 | 查阅主题 | 入口 |
 | --- | --- |
-| 产品功能、笔记与附件的数据流、内容格式、REST 和 MCP | [产品功能开发 Skill](../cat-two-product-development/SKILL.md) |
+| 产品功能、笔记与附件的数据流及内容格式、网页接口、MCP 和消息收件 | [产品功能开发 Skill](../cat-two-product-development/SKILL.md) |
 | 桌面布局、主题、组件、交互与浏览器验收 | [UI 设计与开发 Skill](../cat-two-ui-development/SKILL.md) |
 | 连接已有实例及使用 Codex 整理笔记 | [MCP 使用 Skill](../cat-two-mcp/SKILL.md) |
 | 仓库编码约定、启动命令、生成和验证 | [AGENTS.md](../../../AGENTS.md) |
@@ -28,9 +28,9 @@ Cat_two 是单账户、自托管的个人笔记应用。新实例首次设置时
 
 ## 开发规范
 
-1. 确认可见需求、目标分支与现有工作区改动。区分源码、运行镜像和部署实例，使用 `/api/instance/profile` 返回的 `version` 和 `commit` 核对部署版本。
+1. 确认可见需求、目标分支与现有工作区改动。区分源码、运行镜像和部署实例，使用网页 Connect `InstanceService.GetInstanceProfile` 返回的 `version` 和 `commit` 核对部署版本。 [版本检查](../cat-two-product-development/references/external-api.md#凭据和可见性)
 2. 按现有层次复用实现。入口从 `cmd` 到 `server`，业务规则放在 `core`，持久化由 `store` 维护，通用工具放在 `internal`。API、数据模型和生成物的修改遵循 [仓库分层](../../../AGENTS.md#repository-layout) 和 [数据库与 Proto 约定](../../../AGENTS.md#database-and-proto-rules)。
-3. 回归既有调用与数据。使用隔离实例和临时数据卷验证写入、删除、恢复及迁移。涉及公网入口、登录或权限时，覆盖匿名、本人、过期或撤销凭据及既有数据归属。检查 HTTPS、可信代理、真实 IP、限流和 SSE。 [部署安全](../cat-two-product-development/references/deployment.md#在公网部署) · [安全说明](../../../SECURITY.md)
+3. 回归既有调用与数据。使用隔离实例和临时数据卷验证写入、删除、恢复和重启回读。涉及公网入口、登录或权限时，覆盖匿名、本人、过期或撤销凭据及当前账户的数据归属。检查 HTTPS、可信代理、真实 IP、限流和 SSE。 [部署安全](../cat-two-product-development/references/deployment.md#在公网部署) · [安全说明](../../../SECURITY.md)
 4. 保持文档和实现同步。用户可见行为、格式及接口更新到产品功能 Skill，布局、交互和设计规范更新到 UI Skill。架构、交付或开发流程更新到本 Skill，细节由相应参考文档维护。
 
 ## 验证
@@ -40,19 +40,19 @@ Cat_two 是单账户、自托管的个人笔记应用。新实例首次设置时
 | 改动 | 验证方式 |
 | --- | --- |
 | 服务端、鉴权或数据流 | 先运行受影响的包或用 `-run` 定向验证，按改动补 HTTP、Connect 或 MCP 验收。并发和生命周期改动使用 `-race`。 |
-| 存储或迁移 | 先运行相关的 SQLite 用例。共享存储或架构改动扩到 `go test ./store/...`，覆盖新装、增量迁移和 CalVer 升级。 [存储测试](../../../store/test/README.md) |
+| 存储或架构 | 先运行相关的 SQLite 用例。共享存储或架构改动扩到 `go test ./store/...`，覆盖新装、重启回读和不兼容库拒绝。 [存储测试](../../../store/test/README.md) |
 | 桌面网页 | 按改动范围运行 `pnpm lint`、`pnpm test` 和生产构建，在浏览器核对相关流程。 [UI 验收](../cat-two-ui-development/SKILL.md) |
-| Proto 和生成物 | 运行仓库规定的 `buf generate`、`buf lint` 和格式检查，核对 Go、OpenAPI 和 TypeScript 输出。 [验证命令](../../../AGENTS.md#commands) |
+| Proto 和生成物 | 运行仓库规定的 `buf generate`、`buf lint` 和格式检查，核对 Go 和 TypeScript 绑定及 MCP 使用的内部 OpenAPI 输出。 [验证命令](../../../AGENTS.md#commands) |
 | 文档 | 运行 `git diff --check`，迁移时核对本地链接、章节锚点和文档覆盖。 |
 
-发布前，同一提交须通过完整的 CI 检查、生产构建及 SQLite 容器的新装、重建与升级验证。跨端行为按各功能的验收说明复测，例如导入导出时核对正文、附件、标签与引用。 [测试命令](../../../AGENTS.md#verification-policy) · [产品功能开发](../cat-two-product-development/SKILL.md)
+发布前，同一提交须通过完整的 CI 检查、生产构建及 SQLite 容器的新装和重建验证。跨端行为按各功能的验收说明复测，例如导入导出时核对正文、附件、标签与引用。 [测试命令](../../../AGENTS.md#verification-policy) · [产品功能开发](../cat-two-product-development/SKILL.md)
 
 ## 部署、镜像和交付
 
-- 用统一的 `compose.yaml` 验证默认命名卷、NAS 目录绑定、运行身份、`/healthz` 和重建后的笔记及附件。切换已有部署先核对生效的镜像、挂载、端口和运行身份。 [备份与升级](../cat-two-product-development/references/deployment.md#备份和升级) · [Compose](../../../compose.yaml)
+- 用统一的 `compose.yaml` 验证默认命名卷、NAS 目录绑定、运行身份、`/healthz` 和重建后的笔记及附件。已有旧库部署保留原数据卷和镜像，使用独立卷安装当前版本。 [备份与升级](../cat-two-product-development/references/deployment.md#备份和升级) · [Compose](../../../compose.yaml)
 - 容器发布用 Cat_two Container 工作流。普通提交按路径触发检查，前端生产构建随容器验证运行。 [构建与发布](references/container-release.md)
 - Docker Hub 版本号按 `0.01` 递增，核对编号、`latest`、`sha-<完整提交 SHA>`，以及 AMD64、ARM64 两种平台。分别以 Git、Actions、注册表和 NAS 实例核实源码、构建、发布及部署状态。 [版本编号](../../../scripts/cat_two_docker_release.py) · [发布复盘](references/development-log.md)
-- 冒烟脚本覆盖 Cat_two 新装和容器重建。升级验证用 `--previous-image` 指定实际旧版镜像并使用隔离数据卷。 [冒烟脚本](../../../scripts/release_smoke_test.sh)
+- 冒烟脚本在独立数据卷覆盖 Cat_two 新装、容器重建和数据回读。 [冒烟脚本](../../../scripts/release_smoke_test.sh)
 
 ## 开发记录
 
@@ -83,3 +83,4 @@ Cat_two 是单账户、自托管的个人笔记应用。新实例首次设置时
 - **2026-11-24 22:29**　按云端审计收紧个人令牌管理，统一改密与会话撤销的事务，修复草稿、任务勾选、缓存和回收站隐私显示。SQLite 启动增加实例锁，提供离线 Markdown 检查与修复，附件清理采用持久重试，MCP 分页限制正文大小。镜像发布等待同提交检查，按摘要验收后推广标签，固定 Proto 生成器并恢复历史文档。Go 全仓、三种兼容数据库定向测试、1458 项前端测试及 Chromium 通过。本地 AMD64 候选通过新装、重建、从 `0.16` 升级、附件和回收站恢复及离线正文修复。 [发布流程](references/container-release.md) · [部署与恢复](../cat-two-product-development/references/deployment.md) · [接口](../cat-two-product-development/references/external-api.md)
 - **2026-11-24 22:43**　移除 MySQL、MariaDB 和 PostgreSQL 的驱动、迁移、查询方言及兼容测试。数据库兼容性和测试只覆盖 SQLite，日常先验证受影响的功能。Go 全仓测试、SQLite 迁移与并发专项测试、Proto 和 Compose 检查通过。隔离实例验证了新装、按标签查询，以及重启后读取笔记和附件。 [验证策略](#验证) · [发布流程](references/container-release.md)
 - **2026-11-24 23:35**　批量待办复用修订冲突保护。侧栏、编辑器和引导共享本人每日统计，1 万条笔记样本的未压缩响应从两次共 960,560 B 降至一次 1,605 B。删除孤立语音依赖、多人空间和旧归属、SSO、出站 Webhook 及 S3 附件迁移。SQLite 继续保护作者、笔记和本地附件。MCP 启动只解析已发布工具，Web 测试和文档改动跳过镜像构建，本地冒烟隔离前端产物，Go 依赖可跨 runner 缓存并离线编译。 [产品接口](../cat-two-product-development/references/external-api.md) · [升级说明](../cat-two-product-development/references/deployment.md#备份和升级) · [构建与验证](references/container-release.md)
+- **2026-11-24 23:57**　外部笔记工具统一使用 MCP 专用令牌，退役通用 REST 和 PAT。网页通过登录会话与 MCP 共用笔记服务和修订检查。首次安装创建唯一管理员，启动时检查 SQLite 结构，误挂不兼容旧库会停止启动。 [连接和权限](../cat-two-product-development/references/external-api.md) · [部署与数据目录](../cat-two-product-development/references/deployment.md#备份和升级)

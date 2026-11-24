@@ -7,10 +7,11 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
 
 	apipb "github.com/usememos/memos/proto/gen/api"
-	storepb "github.com/usememos/memos/proto/gen/store"
 	"github.com/usememos/memos/server/api"
 	"github.com/usememos/memos/store"
 )
@@ -18,192 +19,43 @@ import (
 func TestCreateUserRegistration(t *testing.T) {
 	ctx := context.Background()
 
-	t.Run("CreateUser success when registration enabled", func(t *testing.T) {
+	t.Run("only the first administrator can be created or validated", func(t *testing.T) {
 		ts := NewTestService(t)
 		defer ts.Cleanup()
 
-		// User registration is enabled by default, no need to set it explicitly
-
-		// Create user without authentication - should succeed
-		_, err := ts.Service.CreateUser(ctx, &apipb.CreateUserRequest{
-			User: &apipb.User{
-				Username: "newuser",
-				Email:    "newuser@example.com",
-				Password: "password123",
-			},
-		})
+		request := &apipb.CreateUserRequest{
+			User:         &apipb.User{Username: "owner", Email: "owner@example.com", Password: "password123", Role: apipb.User_USER},
+			ValidateOnly: true,
+		}
+		preview, err := ts.Service.CreateUser(ctx, request)
 		require.NoError(t, err)
-	})
-
-	t.Run("CreateUser blocked when registration disabled", func(t *testing.T) {
-		ts := NewTestService(t)
-		defer ts.Cleanup()
-
-		// Create a host user first so we're not in first-user setup mode
-		_, err := ts.CreateHostUser(ctx, "admin")
+		require.Equal(t, apipb.User_ADMIN, preview.Role)
+		users, err := ts.Store.ListUsers(ctx, &store.FindUser{})
 		require.NoError(t, err)
+		require.Empty(t, users, "validation does not claim the instance")
 
-		// Disable user registration
-		_, err = ts.Store.UpsertInstanceSetting(ctx, &storepb.InstanceSetting{
-			Key: storepb.InstanceSettingKey_GENERAL,
-			Value: &storepb.InstanceSetting_GeneralSetting{
-				GeneralSetting: &storepb.InstanceGeneralSetting{
-					DisallowUserRegistration: true,
-				},
-			},
-		})
+		request.ValidateOnly = false
+		created, err := ts.Service.CreateUser(ctx, request)
 		require.NoError(t, err)
-
-		// Try to create user without authentication - should fail
-		_, err = ts.Service.CreateUser(ctx, &apipb.CreateUserRequest{
-			User: &apipb.User{
-				Username: "newuser",
-				Email:    "newuser@example.com",
-				Password: "password123",
-			},
-		})
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "not allowed")
-	})
-
-	t.Run("CreateUser succeeds for superuser even when registration disabled", func(t *testing.T) {
-		ts := NewTestService(t)
-		defer ts.Cleanup()
-
-		// Create host user
-		hostUser, err := ts.CreateHostUser(ctx, "admin")
+		require.Equal(t, "users/owner", created.Name)
+		require.Equal(t, apipb.User_ADMIN, created.Role)
+		owner, err := ts.Store.GetUser(ctx, &store.FindUser{Username: &request.User.Username})
 		require.NoError(t, err)
-		hostCtx := ts.CreateUserContext(ctx, hostUser.ID)
+		require.NotNil(t, owner)
+		require.Equal(t, store.RoleAdmin, owner.Role)
 
-		// Disable user registration
-		_, err = ts.Store.UpsertInstanceSetting(ctx, &storepb.InstanceSetting{
-			Key: storepb.InstanceSettingKey_GENERAL,
-			Value: &storepb.InstanceSetting_GeneralSetting{
-				GeneralSetting: &storepb.InstanceGeneralSetting{
-					DisallowUserRegistration: true,
-				},
-			},
-		})
+		for _, caller := range []context.Context{ctx, ts.CreateUserContext(ctx, owner.ID)} {
+			for _, validateOnly := range []bool{false, true} {
+				_, err := ts.Service.CreateUser(caller, &apipb.CreateUserRequest{
+					User:         &apipb.User{Username: "other", Password: "password123", Role: apipb.User_ADMIN},
+					ValidateOnly: validateOnly,
+				})
+				require.Equal(t, codes.PermissionDenied, status.Code(err))
+			}
+		}
+		users, err = ts.Store.ListUsers(ctx, &store.FindUser{})
 		require.NoError(t, err)
-
-		// Host user can create users even when registration is disabled - should succeed
-		_, err = ts.Service.CreateUser(hostCtx, &apipb.CreateUserRequest{
-			User: &apipb.User{
-				Username: "newuser",
-				Email:    "newuser@example.com",
-				Password: "password123",
-			},
-		})
-		require.NoError(t, err)
-	})
-
-	t.Run("CreateUser regular user cannot create users when registration disabled", func(t *testing.T) {
-		ts := NewTestService(t)
-		defer ts.Cleanup()
-
-		// Create regular user
-		regularUser, err := ts.CreateRegularUser(ctx, "regularuser")
-		require.NoError(t, err)
-		regularUserCtx := ts.CreateUserContext(ctx, regularUser.ID)
-
-		// Disable user registration
-		_, err = ts.Store.UpsertInstanceSetting(ctx, &storepb.InstanceSetting{
-			Key: storepb.InstanceSettingKey_GENERAL,
-			Value: &storepb.InstanceSetting_GeneralSetting{
-				GeneralSetting: &storepb.InstanceGeneralSetting{
-					DisallowUserRegistration: true,
-				},
-			},
-		})
-		require.NoError(t, err)
-
-		// Regular user tries to create user when registration is disabled - should fail
-		_, err = ts.Service.CreateUser(regularUserCtx, &apipb.CreateUserRequest{
-			User: &apipb.User{
-				Username: "newuser",
-				Email:    "newuser@example.com",
-				Password: "password123",
-			},
-		})
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "not allowed")
-	})
-
-	t.Run("CreateUser host can assign roles", func(t *testing.T) {
-		ts := NewTestService(t)
-		defer ts.Cleanup()
-
-		// Create host user
-		hostUser, err := ts.CreateHostUser(ctx, "admin")
-		require.NoError(t, err)
-		hostCtx := ts.CreateUserContext(ctx, hostUser.ID)
-
-		// Host user can create user with specific role - should succeed
-		createdUser, err := ts.Service.CreateUser(hostCtx, &apipb.CreateUserRequest{
-			User: &apipb.User{
-				Username: "newadmin",
-				Email:    "newadmin@example.com",
-				Password: "password123",
-				Role:     apipb.User_ADMIN,
-			},
-		})
-		require.NoError(t, err)
-		require.Equal(t, "users/newadmin", createdUser.Name)
-		require.NotNil(t, createdUser)
-		require.Equal(t, apipb.User_ADMIN, createdUser.Role)
-	})
-
-	t.Run("CreateUser unauthenticated user can only create regular user", func(t *testing.T) {
-		ts := NewTestService(t)
-		defer ts.Cleanup()
-
-		// Create a host user first so we're not in first-user setup mode
-		_, err := ts.CreateHostUser(ctx, "admin")
-		require.NoError(t, err)
-
-		// User registration is enabled by default
-
-		// Unauthenticated user tries to create admin user - role should be ignored
-		createdUser, err := ts.Service.CreateUser(ctx, &apipb.CreateUserRequest{
-			User: &apipb.User{
-				Username: "wannabeadmin",
-				Email:    "wannabeadmin@example.com",
-				Password: "password123",
-				Role:     apipb.User_ADMIN, // This should be ignored
-			},
-		})
-		require.NoError(t, err)
-		require.NotNil(t, createdUser)
-		require.Equal(t, "users/wannabeadmin", createdUser.Name)
-		require.Equal(t, apipb.User_USER, createdUser.Role, "Unauthenticated users can only create USER role")
-	})
-
-	t.Run("CreateUser blocked when password auth disabled for self signup", func(t *testing.T) {
-		ts := NewTestService(t)
-		defer ts.Cleanup()
-
-		_, err := ts.CreateHostUser(ctx, "admin")
-		require.NoError(t, err)
-
-		_, err = ts.Store.UpsertInstanceSetting(ctx, &storepb.InstanceSetting{
-			Key: storepb.InstanceSettingKey_GENERAL,
-			Value: &storepb.InstanceSetting_GeneralSetting{
-				GeneralSetting: &storepb.InstanceGeneralSetting{
-					DisallowPasswordAuth: true,
-				},
-			},
-		})
-		require.NoError(t, err)
-
-		_, err = ts.Service.CreateUser(ctx, &apipb.CreateUserRequest{
-			User: &apipb.User{
-				Username: "newuser",
-				Email:    "newuser@example.com",
-				Password: "password123",
-			},
-		})
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "password signup is not allowed")
+		require.Len(t, users, 1)
 	})
 
 	t.Run("CreateUser rejects empty password", func(t *testing.T) {
@@ -327,13 +179,8 @@ func TestCreateUserRegistration(t *testing.T) {
 
 		users, err := ts.Store.ListUsers(ctx, &store.FindUser{})
 		require.NoError(t, err)
-		adminCount := 0
-		for _, user := range users {
-			if user.Role == store.RoleAdmin {
-				adminCount++
-			}
-		}
-		require.Equal(t, 1, adminCount)
+		require.Len(t, users, 1)
+		require.Equal(t, store.RoleAdmin, users[0].Role)
 	})
 
 	t.Run("UpdateUser state requires admin", func(t *testing.T) {

@@ -65,7 +65,7 @@ func CheckMemoReadContext(ctx MemoReadContext) MemoReadDecision {
 	if memo == nil || memo.DeletedTs != nil || !ctx.CreatorValid {
 		return MemoReadDecision{Denial: MemoReadDenialNotFound}
 	}
-	if memo.Visibility != store.Public && memo.Visibility != store.Protected && memo.Visibility != store.Private && memo.Visibility != store.SpaceAudience {
+	if memo.Visibility != store.Public && memo.Visibility != store.Protected && memo.Visibility != store.Private {
 		return MemoReadDecision{Denial: MemoReadDenialNotFound}
 	}
 	if memo.RowStatus != store.Normal && memo.RowStatus != store.Archived {

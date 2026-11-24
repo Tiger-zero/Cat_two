@@ -38,9 +38,6 @@ func (d *DB) DeleteUser(ctx context.Context, delete *store.DeleteUser) (*store.D
 	} else if err != nil {
 		return nil, errors.Wrap(err, "failed to read user")
 	}
-	if _, err := tx.ExecContext(ctx, "DELETE FROM space_member WHERE user_id = ?", delete.ID); err != nil {
-		return nil, errors.Wrap(err, "failed to delete the user's historical Space memberships")
-	}
 
 	targets, err := collectDeleteUserTargets(ctx, tx, delete.ID)
 	if err != nil {
@@ -121,9 +118,6 @@ func deleteUserTargetsTx(ctx context.Context, tx dbExecutor, userID int32, targe
 		return err
 	}
 	if err := deleteInboxesByIDsTx(ctx, tx, targets.inboxIDs); err != nil {
-		return err
-	}
-	if err := deleteUserIdentitiesTx(ctx, tx, userID); err != nil {
 		return err
 	}
 	if err := deleteUserSettingsTx(ctx, tx, userID); err != nil {
@@ -291,11 +285,6 @@ func deleteInboxesByIDsTx(ctx context.Context, tx dbExecutor, inboxIDs []int32) 
 		}
 	}
 	return nil
-}
-
-func deleteUserIdentitiesTx(ctx context.Context, tx dbExecutor, userID int32) error {
-	_, err := tx.ExecContext(ctx, `DELETE FROM user_identity WHERE user_id = `+deleteUserPlaceholder(1), userID)
-	return err
 }
 
 func deleteUserSettingsTx(ctx context.Context, tx dbExecutor, userID int32) error {

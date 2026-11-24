@@ -94,16 +94,15 @@ func TestMCPConnectionStore(t *testing.T) {
 
 	start := make(chan struct{})
 	type change struct {
-		status  store.MCPConnectionStatus
 		updated bool
 		err     error
 	}
 	results := make(chan change, 2)
-	for _, status := range []store.MCPConnectionStatus{store.MCPConnectionRevoked, store.MCPConnectionDenied} {
+	for range 2 {
 		go func() {
 			<-start
-			updated, err := ts.UpdateMCPConnection(ctx, owner.ID, connection.ID, store.MCPConnectionApproved, status, 0)
-			results <- change{status: status, updated: updated, err: err}
+			updated, err := ts.UpdateMCPConnection(ctx, owner.ID, connection.ID, store.MCPConnectionApproved, store.MCPConnectionRevoked, 0)
+			results <- change{updated: updated, err: err}
 		}()
 	}
 	close(start)
@@ -111,15 +110,11 @@ func TestMCPConnectionStore(t *testing.T) {
 	require.NoError(t, first.err)
 	require.NoError(t, second.err)
 	require.NotEqual(t, first.updated, second.updated, "exactly one concurrent transition may succeed")
-	winner := first
-	if second.updated {
-		winner = second
-	}
 	require.NoError(t, ts.RecordMCPConnectionFirstUse(ctx, connection.TokenHash, 130, "2001:db8::1"))
 	stored, ownerStatus, err = ts.GetMCPConnectionByHash(ctx, connection.TokenHash)
 	require.NoError(t, err)
 	require.Equal(t, store.Archived, ownerStatus)
-	require.Equal(t, winner.status, stored.Status)
+	require.Equal(t, store.MCPConnectionRevoked, stored.Status)
 	require.Zero(t, stored.ExpiresAt)
 	require.EqualValues(t, 110, stored.RequestedAt)
 	require.Equal(t, "192.0.2.1", stored.RemoteIP)
@@ -137,30 +132,23 @@ func TestMCPConnectionStore(t *testing.T) {
 	require.Equal(t, store.Normal, ownerStatus)
 }
 
-func TestMCPConnectionFirstUseSkipsInactiveStates(t *testing.T) {
+func TestMCPConnectionFirstUseSkipsRevokedToken(t *testing.T) {
 	t.Parallel()
-	ctx := context.Background()
+	ctx := t.Context()
 	ts := NewTestingStore(ctx, t)
 	t.Cleanup(func() { require.NoError(t, ts.Close()) })
 	owner, err := createTestingHostUser(ctx, ts)
 	require.NoError(t, err)
-	for _, state := range []store.MCPConnectionStatus{
-		store.MCPConnectionAwaiting, store.MCPConnectionPending, store.MCPConnectionDenied, store.MCPConnectionRevoked,
-	} {
-		t.Run(string(state), func(t *testing.T) {
-			tokenHash := "inactive-" + string(state)
-			connection := &store.MCPConnection{
-				ID: string(state), UserID: owner.ID, TokenHash: tokenHash, Label: "Historical connection",
-				Status: state, CreatedAt: 100,
-			}
-			require.NoError(t, ts.CreateMCPConnection(ctx, connection))
-			require.NoError(t, ts.RecordMCPConnectionFirstUse(ctx, tokenHash, 110, "192.0.2.1"))
-			stored, ownerStatus, err := ts.GetMCPConnectionByHash(ctx, tokenHash)
-			require.NoError(t, err)
-			require.Equal(t, connection, stored)
-			require.Equal(t, store.Normal, ownerStatus)
-		})
+	connection := &store.MCPConnection{
+		ID: "revoked", UserID: owner.ID, TokenHash: "revoked-token-hash", Label: "Revoked connection",
+		Status: store.MCPConnectionRevoked, CreatedAt: 100,
 	}
+	require.NoError(t, ts.CreateMCPConnection(ctx, connection))
+	require.NoError(t, ts.RecordMCPConnectionFirstUse(ctx, connection.TokenHash, 110, "192.0.2.1"))
+	stored, ownerStatus, err := ts.GetMCPConnectionByHash(ctx, connection.TokenHash)
+	require.NoError(t, err)
+	require.Equal(t, connection, stored)
+	require.Equal(t, store.Normal, ownerStatus)
 }
 
 func TestDeleteMCPConnectionOwnerScope(t *testing.T) {
@@ -199,55 +187,4 @@ func TestDeleteMCPConnectionOwnerScope(t *testing.T) {
 	removed, err = ts.DeleteMCPConnection(ctx, owner.ID, connection.ID)
 	require.NoError(t, err)
 	require.False(t, removed)
-}
-
-func TestMigrationMCPConnection(t *testing.T) {
-	t.Parallel()
-	ctx := context.Background()
-	ts := NewTestingStore(ctx, t)
-	t.Cleanup(func() { require.NoError(t, ts.Close()) })
-	owner, err := createTestingHostUser(ctx, ts)
-	require.NoError(t, err)
-	removeSchemaAfterMCPConnection(ctx, t, ts)
-	_, err = ts.GetDriver().GetDB().ExecContext(ctx, "DROP TABLE mcp_connection")
-	require.NoError(t, err)
-	setSchemaVersion(ctx, t, ts, "26.11.3")
-	require.NoError(t, ts.Migrate(ctx))
-	require.NoError(t, ts.Migrate(ctx), "a completed migration can restart")
-	setting, err := ts.GetUncachedInstanceSetting(ctx, &store.FindInstanceSetting{Name: "BASIC"})
-	require.NoError(t, err)
-	currentSchemaVersion, err := ts.GetCurrentSchemaVersion()
-	require.NoError(t, err)
-	require.Equal(t, currentSchemaVersion, setting.GetBasicSetting().SchemaVersion)
-	connection := &store.MCPConnection{
-		ID: "after-upgrade", UserID: owner.ID, Label: "After upgrade", TokenHash: strings.Repeat("cd", 32),
-		Status: store.MCPConnectionApproved, CreatedAt: 100, ExpiresAt: 200,
-	}
-	require.NoError(t, ts.CreateMCPConnection(ctx, connection))
-	stored, ownerStatus, err := ts.GetMCPConnectionByHash(ctx, connection.TokenHash)
-	require.NoError(t, err)
-	require.Equal(t, connection, stored)
-	require.Equal(t, store.Normal, ownerStatus)
-}
-
-func TestMigrationMCPConnectionPermissionDefaultsToReadWrite(t *testing.T) {
-	t.Parallel()
-	ctx := t.Context()
-	ts := NewTestingStore(ctx, t)
-	t.Cleanup(func() { require.NoError(t, ts.Close()) })
-	owner, err := createTestingHostUser(ctx, ts)
-	require.NoError(t, err)
-	connection := &store.MCPConnection{
-		ID: "legacy-permission", UserID: owner.ID, Label: "Existing connector", TokenHash: strings.Repeat("d1", 32),
-		Status: store.MCPConnectionApproved, CreatedAt: 100,
-	}
-	require.NoError(t, ts.CreateMCPConnection(ctx, connection))
-	removeMCPPermissionSchema(ctx, t, ts)
-	setSchemaVersion(ctx, t, ts, "26.11.9")
-	require.NoError(t, ts.Migrate(ctx))
-	stored, ownerStatus, err := ts.GetMCPConnectionByHash(ctx, connection.TokenHash)
-	require.NoError(t, err)
-	require.Equal(t, connection, stored)
-	require.Equal(t, store.MCPConnectionReadWrite, stored.Permission)
-	require.Equal(t, store.Normal, ownerStatus)
 }

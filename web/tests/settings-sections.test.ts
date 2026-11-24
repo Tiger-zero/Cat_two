@@ -28,4 +28,11 @@ describe("settings sections", () => {
     expect(resolveSettingSectionKey("resource-stats")).toBe("storage");
     expect(resolveSettingSectionKey("storage")).toBe("storage");
   });
+
+  it("opens MCP for old access-token links and keeps one MCP sidebar entry", () => {
+    expect(isSettingSectionKey("access-token")).toBe(false);
+    expect(resolveSettingSectionKey("access-token")).toBe("mcp");
+    expect(resolveSettingSectionKey("mcp")).toBe("mcp");
+    expect(SETTINGS_SECTIONS.find((section) => section.key === "mcp")?.labelKey).toBe("setting.mcp-connection.label");
+  });
 });

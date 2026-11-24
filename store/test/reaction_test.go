@@ -452,7 +452,7 @@ func newReactionTestingStoreWithDriver(ctx context.Context, t *testing.T, wrap f
 	require.NoError(t, err)
 
 	ts := store.New(wrap(databaseDriver), testingProfile)
-	require.NoError(t, ts.Migrate(ctx))
+	require.NoError(t, ts.InitializeSchema(ctx))
 	t.Cleanup(func() {
 		require.NoError(t, ts.Close())
 	})

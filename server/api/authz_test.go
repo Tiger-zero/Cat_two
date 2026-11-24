@@ -22,7 +22,7 @@ func (s stubAnonymousAccessStore) AllowsAnonymousAccess(context.Context) (bool, 
 	return s.allowsAnonymous, s.err
 }
 
-func TestWriteGatewayAuthorizationErrorMapsFailureClass(t *testing.T) {
+func TestWriteHTTPAuthorizationErrorMapsFailureClass(t *testing.T) {
 	cases := []struct {
 		name       string
 		err        error
@@ -49,7 +49,7 @@ func TestWriteGatewayAuthorizationErrorMapsFailureClass(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			response := httptest.NewRecorder()
-			writeGatewayAuthorizationError(response, tc.err)
+			writeHTTPAuthorizationError(response, tc.err)
 
 			assert.Equal(t, tc.wantStatus, response.Code)
 			assert.Equal(t, "application/json", response.Header().Get("Content-Type"))
@@ -73,7 +73,7 @@ func TestWriteGatewayAuthorizationErrorMapsFailureClass(t *testing.T) {
 // TestAuthorizerCheckAccess exercises the method-level access policy matrix.
 func TestAuthorizerCheckAccess(t *testing.T) {
 	ctx := context.Background()
-	authenticated := &auth.AuthResult{AccessToken: "token"}
+	authenticated := &auth.AuthResult{Claims: &auth.UserClaims{UserID: 1}}
 	accessStoreError := errors.New("store unavailable")
 
 	publicInstance := &Authorizer{accessStore: stubAnonymousAccessStore{allowsAnonymous: true}}

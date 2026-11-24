@@ -13,7 +13,7 @@ vi.mock("@/connect", () => ({ authenticatedFetch }));
 vi.mock("@/hooks/useCurrentUser", () => ({ default: () => ({ name: "users/admin" }) }));
 vi.mock("@/lib/toast", () => ({ showErrorToast, toast: { add: addToast } }));
 
-const blocklistPath = "/api/auth/loginBlocklist";
+const blocklistPath = "/internal/auth/loginBlocklist";
 const blockedAt = "2026-11-21T16:00:00Z";
 const firstEntry = { ip: "192.0.2.14", blockedAt };
 const secondEntry = { ip: "2001:db8::1", blockedAt };

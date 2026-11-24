@@ -61,13 +61,8 @@ func (a *Authorizer) Throttle(ctx context.Context, _ string, result *auth.AuthRe
 		return nil
 	}
 	scope, key := ratelimit.ScopeAnonymous, clientip.FromContext(ctx)
-	switch {
-	case result == nil:
-	case result.Claims != nil:
+	if result != nil && result.Claims != nil {
 		scope, key = ratelimit.ScopeAuthenticated, userKey(result.Claims.UserID)
-	case result.User != nil:
-		scope, key = ratelimit.ScopeAuthenticated, userKey(result.User.ID)
-	default:
 	}
 	if key == "" {
 		return nil
@@ -91,13 +86,13 @@ func (a *Authorizer) Authenticate(ctx context.Context, authHeader string) *auth.
 // permitted and ErrUnauthenticated otherwise.
 //
 // Policy:
-//   - Authenticated caller (access token or PAT): always permitted here.
+//   - Authenticated caller (web session): always permitted here.
 //   - Anonymous + protected method: denied.
 //   - Anonymous + auth-bootstrap method: permitted on every instance.
 //   - Anonymous + other public method: permitted only when the stored access mode
 //     is PUBLIC.
 func (a *Authorizer) CheckAccess(ctx context.Context, procedure string, result *auth.AuthResult) error {
-	if result != nil {
+	if result != nil && result.Claims != nil {
 		return nil
 	}
 	if !IsPublicMethod(procedure) {

@@ -118,13 +118,7 @@ func (s *APIService) getInstanceSettingByName(ctx context.Context, name string, 
 		setting, err = s.Store.GetInstanceGeneralSetting(ctx)
 		instanceSetting = &storepb.InstanceSetting{Key: instanceSettingKey, Value: &storepb.InstanceSetting_GeneralSetting{GeneralSetting: setting}}
 	case storepb.InstanceSettingKey_STORAGE:
-		// Report the managed storage used for new files.
-		setting := &storepb.InstanceStorageSetting{
-			StorageType:      storepb.InstanceStorageSetting_LOCAL,
-			FilepathTemplate: store.DefaultAttachmentPathTemplate,
-		}
-		store.NormalizeInstanceStorageSetting(setting)
-		instanceSetting = &storepb.InstanceSetting{Key: instanceSettingKey, Value: &storepb.InstanceSetting_StorageSetting{StorageSetting: setting}}
+		instanceSetting = &storepb.InstanceSetting{Key: instanceSettingKey}
 	case storepb.InstanceSettingKey_TAGS:
 		var setting *storepb.InstanceTagsSetting
 		setting, err = s.Store.GetInstanceTagsSetting(ctx)
@@ -148,11 +142,8 @@ func (s *APIService) getInstanceSettingByName(ctx context.Context, name string, 
 		return nil, status.Errorf(codes.Internal, "failed to get instance setting: %v", err)
 	}
 
-	// Storage and AI settings contain credentials, and legacy usage limits
-	// name users; restrict them to admins.
-	if instanceSetting.Key == storepb.InstanceSettingKey_STORAGE ||
-		instanceSetting.Key == storepb.InstanceSettingKey_NOTIFICATION ||
-		instanceSetting.Key == storepb.InstanceSettingKey_USAGE_LIMITS {
+	// Storage details and legacy usage limits are available to the administrator.
+	if instanceSetting.Key == storepb.InstanceSettingKey_STORAGE || instanceSetting.Key == storepb.InstanceSettingKey_USAGE_LIMITS {
 		user, err := caller.currentUser(ctx, s)
 		if err != nil {
 			return nil, status.Errorf(codes.Internal, "failed to get current user: %v", err)
@@ -219,8 +210,7 @@ func (s *APIService) UpdateInstanceSetting(ctx context.Context, request *apipb.U
 	switch updateSetting.Key {
 	case storepb.InstanceSettingKey_NOTIFICATION, storepb.InstanceSettingKey_ACCESS, storepb.InstanceSettingKey_USAGE_LIMITS:
 		return nil, retiredModuleError()
-	}
-	if updateSetting.Key == storepb.InstanceSettingKey_STORAGE {
+	case storepb.InstanceSettingKey_STORAGE:
 		return nil, status.Error(codes.FailedPrecondition, "attachment storage is managed by Cat_two")
 	}
 	// Preserve write-only credential fields when the caller sends an empty value.

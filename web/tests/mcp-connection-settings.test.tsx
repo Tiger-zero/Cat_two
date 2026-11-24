@@ -1,21 +1,20 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import AccessTokenSection from "@/components/Settings/AccessTokenSection";
+import MCPConnectionSection from "@/components/Settings/MCPConnectionSection";
 
-const { authenticatedFetch, copy, listPersonalAccessTokens, profile } = vi.hoisted(() => ({
+const { authenticatedFetch, copy, profile } = vi.hoisted(() => ({
   authenticatedFetch: vi.fn<(url: string, init?: RequestInit) => Promise<Response>>(),
   copy: vi.fn(),
-  listPersonalAccessTokens: vi.fn(),
   profile: { instanceUrl: "" },
 }));
 
 vi.mock("copy-to-clipboard", () => ({ default: copy }));
-vi.mock("@/connect", () => ({ authenticatedFetch, userServiceClient: { listPersonalAccessTokens } }));
+vi.mock("@/connect", () => ({ authenticatedFetch }));
 vi.mock("@/contexts/InstanceContext", () => ({ useInstance: () => ({ profile }) }));
 vi.mock("@/hooks/useCurrentUser", () => ({ default: () => ({ name: "users/note-owner" }) }));
 
-const connectionsPath = "/api/mcpConnections";
+const connectionsPath = "/internal/mcpConnections";
 const connection = {
   id: "workstation-connection",
   label: "Workstation",
@@ -32,12 +31,12 @@ function renderSettings() {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
   return render(
     <QueryClientProvider client={queryClient}>
-      <AccessTokenSection />
+      <MCPConnectionSection />
     </QueryClientProvider>,
   );
 }
 
-describe("MCP and REST setup in access token settings", () => {
+describe("MCP connection settings", () => {
   beforeEach(() => {
     authenticatedFetch.mockReset().mockImplementation(async (url) => {
       expect(url).toBe(connectionsPath);
@@ -45,16 +44,15 @@ describe("MCP and REST setup in access token settings", () => {
     });
     copy.mockClear();
     copy.mockResolvedValue(true);
-    listPersonalAccessTokens.mockResolvedValue({ personalAccessTokens: [] });
     profile.instanceUrl = "";
   });
 
-  it("copies MCP and REST examples with their respective credentials and the canonical instance URL", async () => {
+  it("copies the MCP configuration with the canonical instance URL", async () => {
     profile.instanceUrl = "https://notes.example.com/notes";
     renderSettings();
-    await screen.findByRole("heading", { name: "MCP & API" });
+    await screen.findByRole("heading", { name: "MCP" });
     expect(screen.getByRole("button", { name: "Create MCP connection" })).toBeVisible();
-    expect(screen.getByRole("button", { name: "Create your first REST API token" })).toBeVisible();
+    expect(screen.queryByRole("button", { name: /API token/i })).not.toBeInTheDocument();
     expect(screen.getByText(/leave the bearer token environment variable blank/i)).toBeVisible();
 
     fireEvent.click(screen.getByRole("button", { name: "Copy MCP client configuration" }));
@@ -67,22 +65,14 @@ describe("MCP and REST setup in access token settings", () => {
         },
       },
     });
-
-    fireEvent.click(screen.getByRole("button", { name: "Copy Create a private test note" }));
-    expect(copy.mock.lastCall?.[0]).toContain("POST 'https://notes.example.com/notes/api/memos'");
-    expect(copy.mock.lastCall?.[0]).toContain("Authorization: Bearer <YOUR_PAT>");
-    expect(copy.mock.lastCall?.[0]).toContain('"visibility":"PRIVATE"');
   });
 
   it("copies direct endpoints for the current origin with no canonical URL", async () => {
     renderSettings();
-    await screen.findByRole("heading", { name: "MCP & API" });
+    await screen.findByRole("heading", { name: "MCP" });
 
     fireEvent.click(screen.getByRole("button", { name: "Copy MCP server URL" }));
     expect(copy).toHaveBeenLastCalledWith(`${window.location.origin}/mcp`);
-    fireEvent.click(screen.getByRole("button", { name: "Copy REST API base URL" }));
-    expect(copy).toHaveBeenLastCalledWith(`${window.location.origin}/api`);
-    expect(listPersonalAccessTokens).toHaveBeenCalledWith({ parent: "users/note-owner" });
   });
 
   it.each([

@@ -20,43 +20,29 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	UserService_ListUsers_FullMethodName                   = "/memos.api.UserService/ListUsers"
-	UserService_GetUser_FullMethodName                     = "/memos.api.UserService/GetUser"
-	UserService_BatchGetUsers_FullMethodName               = "/memos.api.UserService/BatchGetUsers"
-	UserService_CreateUser_FullMethodName                  = "/memos.api.UserService/CreateUser"
-	UserService_UpdateUser_FullMethodName                  = "/memos.api.UserService/UpdateUser"
-	UserService_DeleteUser_FullMethodName                  = "/memos.api.UserService/DeleteUser"
-	UserService_ListUserSettings_FullMethodName            = "/memos.api.UserService/ListUserSettings"
-	UserService_GetUserSetting_FullMethodName              = "/memos.api.UserService/GetUserSetting"
-	UserService_UpdateUserSetting_FullMethodName           = "/memos.api.UserService/UpdateUserSetting"
-	UserService_ListUserStats_FullMethodName               = "/memos.api.UserService/ListUserStats"
-	UserService_GetUserStats_FullMethodName                = "/memos.api.UserService/GetUserStats"
-	UserService_GetUserUsage_FullMethodName                = "/memos.api.UserService/GetUserUsage"
-	UserService_ListUserNotifications_FullMethodName       = "/memos.api.UserService/ListUserNotifications"
-	UserService_UpdateUserNotification_FullMethodName      = "/memos.api.UserService/UpdateUserNotification"
-	UserService_DeleteUserNotification_FullMethodName      = "/memos.api.UserService/DeleteUserNotification"
-	UserService_ListUserWebhooks_FullMethodName            = "/memos.api.UserService/ListUserWebhooks"
-	UserService_CreateUserWebhook_FullMethodName           = "/memos.api.UserService/CreateUserWebhook"
-	UserService_UpdateUserWebhook_FullMethodName           = "/memos.api.UserService/UpdateUserWebhook"
-	UserService_DeleteUserWebhook_FullMethodName           = "/memos.api.UserService/DeleteUserWebhook"
-	UserService_GetUserWebhookSigningSecret_FullMethodName = "/memos.api.UserService/GetUserWebhookSigningSecret"
-	UserService_ListLinkedIdentities_FullMethodName        = "/memos.api.UserService/ListLinkedIdentities"
-	UserService_GetLinkedIdentity_FullMethodName           = "/memos.api.UserService/GetLinkedIdentity"
-	UserService_CreateLinkedIdentity_FullMethodName        = "/memos.api.UserService/CreateLinkedIdentity"
-	UserService_DeleteLinkedIdentity_FullMethodName        = "/memos.api.UserService/DeleteLinkedIdentity"
-	UserService_ListPersonalAccessTokens_FullMethodName    = "/memos.api.UserService/ListPersonalAccessTokens"
-	UserService_CreatePersonalAccessToken_FullMethodName   = "/memos.api.UserService/CreatePersonalAccessToken"
-	UserService_DeletePersonalAccessToken_FullMethodName   = "/memos.api.UserService/DeletePersonalAccessToken"
-	UserService_ImportMemos_FullMethodName                 = "/memos.api.UserService/ImportMemos"
+	UserService_ListUsers_FullMethodName              = "/memos.api.UserService/ListUsers"
+	UserService_GetUser_FullMethodName                = "/memos.api.UserService/GetUser"
+	UserService_BatchGetUsers_FullMethodName          = "/memos.api.UserService/BatchGetUsers"
+	UserService_CreateUser_FullMethodName             = "/memos.api.UserService/CreateUser"
+	UserService_UpdateUser_FullMethodName             = "/memos.api.UserService/UpdateUser"
+	UserService_DeleteUser_FullMethodName             = "/memos.api.UserService/DeleteUser"
+	UserService_ListUserSettings_FullMethodName       = "/memos.api.UserService/ListUserSettings"
+	UserService_GetUserSetting_FullMethodName         = "/memos.api.UserService/GetUserSetting"
+	UserService_UpdateUserSetting_FullMethodName      = "/memos.api.UserService/UpdateUserSetting"
+	UserService_ListUserStats_FullMethodName          = "/memos.api.UserService/ListUserStats"
+	UserService_GetUserStats_FullMethodName           = "/memos.api.UserService/GetUserStats"
+	UserService_GetUserUsage_FullMethodName           = "/memos.api.UserService/GetUserUsage"
+	UserService_ListUserNotifications_FullMethodName  = "/memos.api.UserService/ListUserNotifications"
+	UserService_UpdateUserNotification_FullMethodName = "/memos.api.UserService/UpdateUserNotification"
+	UserService_DeleteUserNotification_FullMethodName = "/memos.api.UserService/DeleteUserNotification"
+	UserService_ImportMemos_FullMethodName            = "/memos.api.UserService/ImportMemos"
 )
 
 // UserServiceClient is the client API for UserService service.
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 //
-// UserService manages users and the resources they own: settings, statistics,
-// notifications, webhooks, linked identities, personal access tokens, and memo
-// export files.
+// UserService manages the local account, settings and memo imports.
 type UserServiceClient interface {
 	// ListUsers lists users in every state. Only admins may call it.
 	ListUsers(ctx context.Context, in *ListUsersRequest, opts ...grpc.CallOption) (*ListUsersResponse, error)
@@ -73,7 +59,7 @@ type UserServiceClient interface {
 	// anyone. Changing the password ends the user's other sessions.
 	UpdateUser(ctx context.Context, in *UpdateUserRequest, opts ...grpc.CallOption) (*User, error)
 	// DeleteUser deletes a user. Users may delete themselves; admins may delete
-	// anyone. A user who belongs to any space cannot be deleted.
+	// anyone.
 	DeleteUser(ctx context.Context, in *DeleteUserRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	// ListUserSettings lists the settings of a user. Only the user may call it.
 	// The GENERAL setting is always included, with defaults when it was never
@@ -95,7 +81,7 @@ type UserServiceClient interface {
 	// user. Only the user or an admin may call it.
 	GetUserUsage(ctx context.Context, in *GetUserUsageRequest, opts ...grpc.CallOption) (*UserUsage, error)
 	// ListUserNotifications lists a user's notifications. Only the user may call
-	// it. Notifications whose memos or space invitation the user can no longer
+	// it. Notifications whose memos the user can no longer
 	// read are left out.
 	ListUserNotifications(ctx context.Context, in *ListUserNotificationsRequest, opts ...grpc.CallOption) (*ListUserNotificationsResponse, error)
 	// UpdateUserNotification updates a notification's status. Only the receiver
@@ -104,43 +90,6 @@ type UserServiceClient interface {
 	// DeleteUserNotification permanently deletes a notification. Only the
 	// receiver may call it.
 	DeleteUserNotification(ctx context.Context, in *DeleteUserNotificationRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
-	// ListUserWebhooks lists a user's webhooks. Only the user may call it.
-	ListUserWebhooks(ctx context.Context, in *ListUserWebhooksRequest, opts ...grpc.CallOption) (*ListUserWebhooksResponse, error)
-	// CreateUserWebhook creates a webhook for a user. Only the user may call it.
-	// The service generates a signing secret when none is given.
-	CreateUserWebhook(ctx context.Context, in *CreateUserWebhookRequest, opts ...grpc.CallOption) (*UserWebhook, error)
-	// UpdateUserWebhook updates a webhook. Only the owner may call it.
-	UpdateUserWebhook(ctx context.Context, in *UpdateUserWebhookRequest, opts ...grpc.CallOption) (*UserWebhook, error)
-	// DeleteUserWebhook deletes a webhook. Only the owner may call it.
-	DeleteUserWebhook(ctx context.Context, in *DeleteUserWebhookRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
-	// GetUserWebhookSigningSecret returns the signing secret of a webhook. Only
-	// the owner may call it. The secret is returned only through this call; it
-	// is never included in List, Create or Update responses.
-	GetUserWebhookSigningSecret(ctx context.Context, in *GetUserWebhookSigningSecretRequest, opts ...grpc.CallOption) (*GetUserWebhookSigningSecretResponse, error)
-	// ListLinkedIdentities lists the SSO identities linked to a user. The user
-	// and admins may call it.
-	ListLinkedIdentities(ctx context.Context, in *ListLinkedIdentitiesRequest, opts ...grpc.CallOption) (*ListLinkedIdentitiesResponse, error)
-	// GetLinkedIdentity gets an SSO identity linked to a user. The user and
-	// admins may call it.
-	GetLinkedIdentity(ctx context.Context, in *GetLinkedIdentityRequest, opts ...grpc.CallOption) (*LinkedIdentity, error)
-	// CreateLinkedIdentity completes an OAuth flow and links the resulting SSO
-	// identity to the authenticated user, who must be the parent.
-	CreateLinkedIdentity(ctx context.Context, in *CreateLinkedIdentityRequest, opts ...grpc.CallOption) (*LinkedIdentity, error)
-	// DeleteLinkedIdentity unlinks an SSO identity from a user. The user and
-	// admins may call it.
-	DeleteLinkedIdentity(ctx context.Context, in *DeleteLinkedIdentityRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
-	// ListPersonalAccessTokens lists a user's personal access tokens (PATs),
-	// without their token values. PATs are long-lived tokens for API and script
-	// access, distinct from short-lived JWT access tokens. The user and admins
-	// may call it.
-	ListPersonalAccessTokens(ctx context.Context, in *ListPersonalAccessTokensRequest, opts ...grpc.CallOption) (*ListPersonalAccessTokensResponse, error)
-	// CreatePersonalAccessToken creates a personal access token for a user.
-	// Only the user may call it. The token value is returned only once, in the
-	// response.
-	CreatePersonalAccessToken(ctx context.Context, in *CreatePersonalAccessTokenRequest, opts ...grpc.CallOption) (*CreatePersonalAccessTokenResponse, error)
-	// DeletePersonalAccessToken deletes a personal access token, which stops
-	// working immediately. Only the owner may call it.
-	DeletePersonalAccessToken(ctx context.Context, in *DeletePersonalAccessTokenRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	// ImportMemos uploads a Memos export file in bounded chunks and imports it
 	// into the user's memos. The first call carries the spec and returns an
 	// upload_id; later calls carry that upload_id. A finishing call with
@@ -309,126 +258,6 @@ func (c *userServiceClient) DeleteUserNotification(ctx context.Context, in *Dele
 	return out, nil
 }
 
-func (c *userServiceClient) ListUserWebhooks(ctx context.Context, in *ListUserWebhooksRequest, opts ...grpc.CallOption) (*ListUserWebhooksResponse, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(ListUserWebhooksResponse)
-	err := c.cc.Invoke(ctx, UserService_ListUserWebhooks_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *userServiceClient) CreateUserWebhook(ctx context.Context, in *CreateUserWebhookRequest, opts ...grpc.CallOption) (*UserWebhook, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(UserWebhook)
-	err := c.cc.Invoke(ctx, UserService_CreateUserWebhook_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *userServiceClient) UpdateUserWebhook(ctx context.Context, in *UpdateUserWebhookRequest, opts ...grpc.CallOption) (*UserWebhook, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(UserWebhook)
-	err := c.cc.Invoke(ctx, UserService_UpdateUserWebhook_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *userServiceClient) DeleteUserWebhook(ctx context.Context, in *DeleteUserWebhookRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(emptypb.Empty)
-	err := c.cc.Invoke(ctx, UserService_DeleteUserWebhook_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *userServiceClient) GetUserWebhookSigningSecret(ctx context.Context, in *GetUserWebhookSigningSecretRequest, opts ...grpc.CallOption) (*GetUserWebhookSigningSecretResponse, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(GetUserWebhookSigningSecretResponse)
-	err := c.cc.Invoke(ctx, UserService_GetUserWebhookSigningSecret_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *userServiceClient) ListLinkedIdentities(ctx context.Context, in *ListLinkedIdentitiesRequest, opts ...grpc.CallOption) (*ListLinkedIdentitiesResponse, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(ListLinkedIdentitiesResponse)
-	err := c.cc.Invoke(ctx, UserService_ListLinkedIdentities_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *userServiceClient) GetLinkedIdentity(ctx context.Context, in *GetLinkedIdentityRequest, opts ...grpc.CallOption) (*LinkedIdentity, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(LinkedIdentity)
-	err := c.cc.Invoke(ctx, UserService_GetLinkedIdentity_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *userServiceClient) CreateLinkedIdentity(ctx context.Context, in *CreateLinkedIdentityRequest, opts ...grpc.CallOption) (*LinkedIdentity, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(LinkedIdentity)
-	err := c.cc.Invoke(ctx, UserService_CreateLinkedIdentity_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *userServiceClient) DeleteLinkedIdentity(ctx context.Context, in *DeleteLinkedIdentityRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(emptypb.Empty)
-	err := c.cc.Invoke(ctx, UserService_DeleteLinkedIdentity_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *userServiceClient) ListPersonalAccessTokens(ctx context.Context, in *ListPersonalAccessTokensRequest, opts ...grpc.CallOption) (*ListPersonalAccessTokensResponse, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(ListPersonalAccessTokensResponse)
-	err := c.cc.Invoke(ctx, UserService_ListPersonalAccessTokens_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *userServiceClient) CreatePersonalAccessToken(ctx context.Context, in *CreatePersonalAccessTokenRequest, opts ...grpc.CallOption) (*CreatePersonalAccessTokenResponse, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(CreatePersonalAccessTokenResponse)
-	err := c.cc.Invoke(ctx, UserService_CreatePersonalAccessToken_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *userServiceClient) DeletePersonalAccessToken(ctx context.Context, in *DeletePersonalAccessTokenRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(emptypb.Empty)
-	err := c.cc.Invoke(ctx, UserService_DeletePersonalAccessToken_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
 func (c *userServiceClient) ImportMemos(ctx context.Context, in *ImportMemosRequest, opts ...grpc.CallOption) (*ImportMemosResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(ImportMemosResponse)
@@ -443,9 +272,7 @@ func (c *userServiceClient) ImportMemos(ctx context.Context, in *ImportMemosRequ
 // All implementations must embed UnimplementedUserServiceServer
 // for forward compatibility.
 //
-// UserService manages users and the resources they own: settings, statistics,
-// notifications, webhooks, linked identities, personal access tokens, and memo
-// export files.
+// UserService manages the local account, settings and memo imports.
 type UserServiceServer interface {
 	// ListUsers lists users in every state. Only admins may call it.
 	ListUsers(context.Context, *ListUsersRequest) (*ListUsersResponse, error)
@@ -462,7 +289,7 @@ type UserServiceServer interface {
 	// anyone. Changing the password ends the user's other sessions.
 	UpdateUser(context.Context, *UpdateUserRequest) (*User, error)
 	// DeleteUser deletes a user. Users may delete themselves; admins may delete
-	// anyone. A user who belongs to any space cannot be deleted.
+	// anyone.
 	DeleteUser(context.Context, *DeleteUserRequest) (*emptypb.Empty, error)
 	// ListUserSettings lists the settings of a user. Only the user may call it.
 	// The GENERAL setting is always included, with defaults when it was never
@@ -484,7 +311,7 @@ type UserServiceServer interface {
 	// user. Only the user or an admin may call it.
 	GetUserUsage(context.Context, *GetUserUsageRequest) (*UserUsage, error)
 	// ListUserNotifications lists a user's notifications. Only the user may call
-	// it. Notifications whose memos or space invitation the user can no longer
+	// it. Notifications whose memos the user can no longer
 	// read are left out.
 	ListUserNotifications(context.Context, *ListUserNotificationsRequest) (*ListUserNotificationsResponse, error)
 	// UpdateUserNotification updates a notification's status. Only the receiver
@@ -493,43 +320,6 @@ type UserServiceServer interface {
 	// DeleteUserNotification permanently deletes a notification. Only the
 	// receiver may call it.
 	DeleteUserNotification(context.Context, *DeleteUserNotificationRequest) (*emptypb.Empty, error)
-	// ListUserWebhooks lists a user's webhooks. Only the user may call it.
-	ListUserWebhooks(context.Context, *ListUserWebhooksRequest) (*ListUserWebhooksResponse, error)
-	// CreateUserWebhook creates a webhook for a user. Only the user may call it.
-	// The service generates a signing secret when none is given.
-	CreateUserWebhook(context.Context, *CreateUserWebhookRequest) (*UserWebhook, error)
-	// UpdateUserWebhook updates a webhook. Only the owner may call it.
-	UpdateUserWebhook(context.Context, *UpdateUserWebhookRequest) (*UserWebhook, error)
-	// DeleteUserWebhook deletes a webhook. Only the owner may call it.
-	DeleteUserWebhook(context.Context, *DeleteUserWebhookRequest) (*emptypb.Empty, error)
-	// GetUserWebhookSigningSecret returns the signing secret of a webhook. Only
-	// the owner may call it. The secret is returned only through this call; it
-	// is never included in List, Create or Update responses.
-	GetUserWebhookSigningSecret(context.Context, *GetUserWebhookSigningSecretRequest) (*GetUserWebhookSigningSecretResponse, error)
-	// ListLinkedIdentities lists the SSO identities linked to a user. The user
-	// and admins may call it.
-	ListLinkedIdentities(context.Context, *ListLinkedIdentitiesRequest) (*ListLinkedIdentitiesResponse, error)
-	// GetLinkedIdentity gets an SSO identity linked to a user. The user and
-	// admins may call it.
-	GetLinkedIdentity(context.Context, *GetLinkedIdentityRequest) (*LinkedIdentity, error)
-	// CreateLinkedIdentity completes an OAuth flow and links the resulting SSO
-	// identity to the authenticated user, who must be the parent.
-	CreateLinkedIdentity(context.Context, *CreateLinkedIdentityRequest) (*LinkedIdentity, error)
-	// DeleteLinkedIdentity unlinks an SSO identity from a user. The user and
-	// admins may call it.
-	DeleteLinkedIdentity(context.Context, *DeleteLinkedIdentityRequest) (*emptypb.Empty, error)
-	// ListPersonalAccessTokens lists a user's personal access tokens (PATs),
-	// without their token values. PATs are long-lived tokens for API and script
-	// access, distinct from short-lived JWT access tokens. The user and admins
-	// may call it.
-	ListPersonalAccessTokens(context.Context, *ListPersonalAccessTokensRequest) (*ListPersonalAccessTokensResponse, error)
-	// CreatePersonalAccessToken creates a personal access token for a user.
-	// Only the user may call it. The token value is returned only once, in the
-	// response.
-	CreatePersonalAccessToken(context.Context, *CreatePersonalAccessTokenRequest) (*CreatePersonalAccessTokenResponse, error)
-	// DeletePersonalAccessToken deletes a personal access token, which stops
-	// working immediately. Only the owner may call it.
-	DeletePersonalAccessToken(context.Context, *DeletePersonalAccessTokenRequest) (*emptypb.Empty, error)
 	// ImportMemos uploads a Memos export file in bounded chunks and imports it
 	// into the user's memos. The first call carries the spec and returns an
 	// upload_id; later calls carry that upload_id. A finishing call with
@@ -592,42 +382,6 @@ func (UnimplementedUserServiceServer) UpdateUserNotification(context.Context, *U
 }
 func (UnimplementedUserServiceServer) DeleteUserNotification(context.Context, *DeleteUserNotificationRequest) (*emptypb.Empty, error) {
 	return nil, status.Error(codes.Unimplemented, "method DeleteUserNotification not implemented")
-}
-func (UnimplementedUserServiceServer) ListUserWebhooks(context.Context, *ListUserWebhooksRequest) (*ListUserWebhooksResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method ListUserWebhooks not implemented")
-}
-func (UnimplementedUserServiceServer) CreateUserWebhook(context.Context, *CreateUserWebhookRequest) (*UserWebhook, error) {
-	return nil, status.Error(codes.Unimplemented, "method CreateUserWebhook not implemented")
-}
-func (UnimplementedUserServiceServer) UpdateUserWebhook(context.Context, *UpdateUserWebhookRequest) (*UserWebhook, error) {
-	return nil, status.Error(codes.Unimplemented, "method UpdateUserWebhook not implemented")
-}
-func (UnimplementedUserServiceServer) DeleteUserWebhook(context.Context, *DeleteUserWebhookRequest) (*emptypb.Empty, error) {
-	return nil, status.Error(codes.Unimplemented, "method DeleteUserWebhook not implemented")
-}
-func (UnimplementedUserServiceServer) GetUserWebhookSigningSecret(context.Context, *GetUserWebhookSigningSecretRequest) (*GetUserWebhookSigningSecretResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method GetUserWebhookSigningSecret not implemented")
-}
-func (UnimplementedUserServiceServer) ListLinkedIdentities(context.Context, *ListLinkedIdentitiesRequest) (*ListLinkedIdentitiesResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method ListLinkedIdentities not implemented")
-}
-func (UnimplementedUserServiceServer) GetLinkedIdentity(context.Context, *GetLinkedIdentityRequest) (*LinkedIdentity, error) {
-	return nil, status.Error(codes.Unimplemented, "method GetLinkedIdentity not implemented")
-}
-func (UnimplementedUserServiceServer) CreateLinkedIdentity(context.Context, *CreateLinkedIdentityRequest) (*LinkedIdentity, error) {
-	return nil, status.Error(codes.Unimplemented, "method CreateLinkedIdentity not implemented")
-}
-func (UnimplementedUserServiceServer) DeleteLinkedIdentity(context.Context, *DeleteLinkedIdentityRequest) (*emptypb.Empty, error) {
-	return nil, status.Error(codes.Unimplemented, "method DeleteLinkedIdentity not implemented")
-}
-func (UnimplementedUserServiceServer) ListPersonalAccessTokens(context.Context, *ListPersonalAccessTokensRequest) (*ListPersonalAccessTokensResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method ListPersonalAccessTokens not implemented")
-}
-func (UnimplementedUserServiceServer) CreatePersonalAccessToken(context.Context, *CreatePersonalAccessTokenRequest) (*CreatePersonalAccessTokenResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method CreatePersonalAccessToken not implemented")
-}
-func (UnimplementedUserServiceServer) DeletePersonalAccessToken(context.Context, *DeletePersonalAccessTokenRequest) (*emptypb.Empty, error) {
-	return nil, status.Error(codes.Unimplemented, "method DeletePersonalAccessToken not implemented")
 }
 func (UnimplementedUserServiceServer) ImportMemos(context.Context, *ImportMemosRequest) (*ImportMemosResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ImportMemos not implemented")
@@ -923,222 +677,6 @@ func _UserService_DeleteUserNotification_Handler(srv interface{}, ctx context.Co
 	return interceptor(ctx, in, info, handler)
 }
 
-func _UserService_ListUserWebhooks_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(ListUserWebhooksRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(UserServiceServer).ListUserWebhooks(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: UserService_ListUserWebhooks_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(UserServiceServer).ListUserWebhooks(ctx, req.(*ListUserWebhooksRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _UserService_CreateUserWebhook_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(CreateUserWebhookRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(UserServiceServer).CreateUserWebhook(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: UserService_CreateUserWebhook_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(UserServiceServer).CreateUserWebhook(ctx, req.(*CreateUserWebhookRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _UserService_UpdateUserWebhook_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(UpdateUserWebhookRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(UserServiceServer).UpdateUserWebhook(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: UserService_UpdateUserWebhook_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(UserServiceServer).UpdateUserWebhook(ctx, req.(*UpdateUserWebhookRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _UserService_DeleteUserWebhook_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(DeleteUserWebhookRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(UserServiceServer).DeleteUserWebhook(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: UserService_DeleteUserWebhook_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(UserServiceServer).DeleteUserWebhook(ctx, req.(*DeleteUserWebhookRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _UserService_GetUserWebhookSigningSecret_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(GetUserWebhookSigningSecretRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(UserServiceServer).GetUserWebhookSigningSecret(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: UserService_GetUserWebhookSigningSecret_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(UserServiceServer).GetUserWebhookSigningSecret(ctx, req.(*GetUserWebhookSigningSecretRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _UserService_ListLinkedIdentities_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(ListLinkedIdentitiesRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(UserServiceServer).ListLinkedIdentities(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: UserService_ListLinkedIdentities_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(UserServiceServer).ListLinkedIdentities(ctx, req.(*ListLinkedIdentitiesRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _UserService_GetLinkedIdentity_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(GetLinkedIdentityRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(UserServiceServer).GetLinkedIdentity(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: UserService_GetLinkedIdentity_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(UserServiceServer).GetLinkedIdentity(ctx, req.(*GetLinkedIdentityRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _UserService_CreateLinkedIdentity_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(CreateLinkedIdentityRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(UserServiceServer).CreateLinkedIdentity(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: UserService_CreateLinkedIdentity_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(UserServiceServer).CreateLinkedIdentity(ctx, req.(*CreateLinkedIdentityRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _UserService_DeleteLinkedIdentity_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(DeleteLinkedIdentityRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(UserServiceServer).DeleteLinkedIdentity(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: UserService_DeleteLinkedIdentity_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(UserServiceServer).DeleteLinkedIdentity(ctx, req.(*DeleteLinkedIdentityRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _UserService_ListPersonalAccessTokens_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(ListPersonalAccessTokensRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(UserServiceServer).ListPersonalAccessTokens(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: UserService_ListPersonalAccessTokens_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(UserServiceServer).ListPersonalAccessTokens(ctx, req.(*ListPersonalAccessTokensRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _UserService_CreatePersonalAccessToken_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(CreatePersonalAccessTokenRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(UserServiceServer).CreatePersonalAccessToken(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: UserService_CreatePersonalAccessToken_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(UserServiceServer).CreatePersonalAccessToken(ctx, req.(*CreatePersonalAccessTokenRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _UserService_DeletePersonalAccessToken_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(DeletePersonalAccessTokenRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(UserServiceServer).DeletePersonalAccessToken(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: UserService_DeletePersonalAccessToken_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(UserServiceServer).DeletePersonalAccessToken(ctx, req.(*DeletePersonalAccessTokenRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
 func _UserService_ImportMemos_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(ImportMemosRequest)
 	if err := dec(in); err != nil {
@@ -1223,54 +761,6 @@ var UserService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "DeleteUserNotification",
 			Handler:    _UserService_DeleteUserNotification_Handler,
-		},
-		{
-			MethodName: "ListUserWebhooks",
-			Handler:    _UserService_ListUserWebhooks_Handler,
-		},
-		{
-			MethodName: "CreateUserWebhook",
-			Handler:    _UserService_CreateUserWebhook_Handler,
-		},
-		{
-			MethodName: "UpdateUserWebhook",
-			Handler:    _UserService_UpdateUserWebhook_Handler,
-		},
-		{
-			MethodName: "DeleteUserWebhook",
-			Handler:    _UserService_DeleteUserWebhook_Handler,
-		},
-		{
-			MethodName: "GetUserWebhookSigningSecret",
-			Handler:    _UserService_GetUserWebhookSigningSecret_Handler,
-		},
-		{
-			MethodName: "ListLinkedIdentities",
-			Handler:    _UserService_ListLinkedIdentities_Handler,
-		},
-		{
-			MethodName: "GetLinkedIdentity",
-			Handler:    _UserService_GetLinkedIdentity_Handler,
-		},
-		{
-			MethodName: "CreateLinkedIdentity",
-			Handler:    _UserService_CreateLinkedIdentity_Handler,
-		},
-		{
-			MethodName: "DeleteLinkedIdentity",
-			Handler:    _UserService_DeleteLinkedIdentity_Handler,
-		},
-		{
-			MethodName: "ListPersonalAccessTokens",
-			Handler:    _UserService_ListPersonalAccessTokens_Handler,
-		},
-		{
-			MethodName: "CreatePersonalAccessToken",
-			Handler:    _UserService_CreatePersonalAccessToken_Handler,
-		},
-		{
-			MethodName: "DeletePersonalAccessToken",
-			Handler:    _UserService_DeletePersonalAccessToken_Handler,
 		},
 		{
 			MethodName: "ImportMemos",

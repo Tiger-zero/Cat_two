@@ -18,7 +18,7 @@ import (
 //
 // This ensures service methods can use metadata.FromIncomingContext() to access
 // headers like User-Agent, X-Forwarded-For, etc., regardless of whether the
-// request came via Connect RPC or gRPC-Gateway.
+// request came via the website Connect transport.
 type MetadataInterceptor struct{}
 
 // NewMetadataInterceptor creates a new metadata interceptor.

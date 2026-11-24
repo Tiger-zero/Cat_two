@@ -195,7 +195,6 @@ func (d *DB) ListMemos(ctx context.Context, find *store.FindMemo) ([]*store.Memo
 		"`memo`.`visibility` AS `visibility`",
 		"`memo`.`pinned` AS `pinned`",
 		"`memo`.`payload` AS `payload`",
-		"`memo`.`space_id` AS `space_id`",
 		"`memo`.`deleted_ts` AS `deleted_ts`",
 		`(SELECT parent_memo.uid
 			FROM memo_relation AS parent_relation
@@ -253,7 +252,6 @@ func (d *DB) ListMemos(ctx context.Context, find *store.FindMemo) ([]*store.Memo
 			&memo.Visibility,
 			&memo.Pinned,
 			&payloadBytes,
-			&memo.SpaceID,
 			&memo.DeletedTs,
 			&memo.ParentUID,
 			&memo.Revision,

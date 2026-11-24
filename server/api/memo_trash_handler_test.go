@@ -29,8 +29,7 @@ import (
 
 func runMemoTrashRequest(t *testing.T, svc *APIService, user *store.User, method, target string) *httptest.ResponseRecorder {
 	t.Helper()
-	handler, err := svc.NewHandler(t.Context())
-	require.NoError(t, err)
+	handler := svc.NewHandler()
 	return runMemoTrashHTTP(t, handler, svc.Secret, user, method, target)
 }
 
@@ -62,7 +61,7 @@ func TestMemoTrashAttachmentCleanupRetriesAfterReopen(t *testing.T) {
 		require.NoError(t, err)
 		st := store.New(driver, p)
 		t.Cleanup(func() { _ = st.Close() })
-		require.NoError(t, st.Migrate(ctx))
+		require.NoError(t, st.InitializeSchema(ctx))
 		return NewAPIService("test-secret", p, st)
 	}
 
@@ -90,9 +89,8 @@ func TestMemoTrashAttachmentCleanupRetriesAfterReopen(t *testing.T) {
 	require.NoError(t, err)
 	uid, err := ExtractMemoUIDFromName(memo.Name)
 	require.NoError(t, err)
-	handler, err := svc.NewHandler(ctx)
-	require.NoError(t, err)
-	response := runMemoTrashHTTPWithContext(store.WithDeleteAttachmentStorageFailpoint(ctx), t, handler, svc.Secret, owner, http.MethodDelete, "/api/trash/"+uid)
+	handler := svc.NewHandler()
+	response := runMemoTrashHTTPWithContext(store.WithDeleteAttachmentStorageFailpoint(ctx), t, handler, svc.Secret, owner, http.MethodDelete, "/internal/trash/"+uid)
 	require.Equal(t, http.StatusNoContent, response.Code, response.Body.String())
 	absent, err := svc.Store.GetMemo(ctx, &store.FindMemo{UID: &uid, Trash: store.MemoTrashInclude})
 	require.NoError(t, err)
@@ -215,14 +213,14 @@ func TestMemoTrashBrowserAndRestore(t *testing.T) {
 
 	uid, err := ExtractMemoUIDFromName(memo.Name)
 	require.NoError(t, err)
-	path := "/api/trash/" + uid
-	require.Equal(t, http.StatusUnauthorized, runMemoTrashRequest(t, svc, nil, http.MethodGet, "/api/trash").Code)
+	path := "/internal/trash/" + uid
+	require.Equal(t, http.StatusUnauthorized, runMemoTrashRequest(t, svc, nil, http.MethodGet, "/internal/trash").Code)
 	require.Equal(t, http.StatusNotFound, runMemoTrashRequest(t, svc, admin, http.MethodPost, path+"/restore").Code)
 	require.Equal(t, http.StatusNotFound, runMemoTrashRequest(t, svc, admin, http.MethodDelete, path).Code)
-	adminList := runMemoTrashRequest(t, svc, admin, http.MethodGet, "/api/trash")
+	adminList := runMemoTrashRequest(t, svc, admin, http.MethodGet, "/internal/trash")
 	require.Equal(t, http.StatusOK, adminList.Code)
 	require.JSONEq(t, `{"memos":[],"nextPageToken":""}`, adminList.Body.String())
-	request := runMemoTrashRequest(t, svc, owner, http.MethodGet, "/api/trash")
+	request := runMemoTrashRequest(t, svc, owner, http.MethodGet, "/internal/trash")
 	require.Equal(t, http.StatusOK, request.Code)
 	require.Contains(t, request.Header().Get("Cache-Control"), "no-store")
 	var page memoTrashPage
@@ -267,20 +265,20 @@ func TestMemoTrashPaginationAndExpiry(t *testing.T) {
 	expired := trashMemo("expiredmemo", now.Add(-store.MemoTrashRetention))
 	older := trashMemo("trashedolder", now.Add(-24*time.Hour))
 	newer := trashMemo("trashednewer", now)
-	first := runMemoTrashRequest(t, svc, owner, http.MethodGet, "/api/trash?pageSize=1")
+	first := runMemoTrashRequest(t, svc, owner, http.MethodGet, "/internal/trash?pageSize=1")
 	require.Equal(t, http.StatusOK, first.Code, first.Body.String())
 	var page memoTrashPage
 	require.NoError(t, json.Unmarshal(first.Body.Bytes(), &page))
 	require.Len(t, page.Memos, 1)
 	require.Contains(t, string(page.Memos[0].Memo), newer.UID)
 	require.NotEmpty(t, page.NextPageToken)
-	second := runMemoTrashRequest(t, svc, owner, http.MethodGet, "/api/trash?pageToken="+url.QueryEscape(page.NextPageToken))
+	second := runMemoTrashRequest(t, svc, owner, http.MethodGet, "/internal/trash?pageToken="+url.QueryEscape(page.NextPageToken))
 	require.Equal(t, http.StatusOK, second.Code, second.Body.String())
 	require.NoError(t, json.Unmarshal(second.Body.Bytes(), &page))
 	require.Len(t, page.Memos, 1)
 	require.Contains(t, string(page.Memos[0].Memo), older.UID)
 	require.Empty(t, page.NextPageToken)
-	require.Equal(t, http.StatusBadRequest, runMemoTrashRequest(t, svc, owner, http.MethodPost, "/api/trash/"+expired.UID+"/restore").Code)
+	require.Equal(t, http.StatusBadRequest, runMemoTrashRequest(t, svc, owner, http.MethodPost, "/internal/trash/"+expired.UID+"/restore").Code)
 	subscriber := svc.SSEHub.Subscribe()
 	defer svc.SSEHub.Unsubscribe(subscriber)
 	require.NoError(t, svc.PurgeExpiredMemoTrash(ctx, now))

@@ -12,6 +12,6 @@ func sqliteMemoAccessPredicate(access *store.MemoAccessScope, memoAlias string, 
 	return memoAlias + ".`creator_id` = ?" +
 		" AND EXISTS (SELECT 1 FROM `user` AS `access_user` WHERE `access_user`.`id` = ? AND `access_user`.`row_status` = 'NORMAL')" +
 		" AND " + memoAlias + ".`row_status` IN ('NORMAL', 'ARCHIVED')" +
-		" AND " + memoAlias + ".`visibility` IN ('PUBLIC', 'PROTECTED', 'PRIVATE', 'SPACE')" +
+		" AND " + memoAlias + ".`visibility` IN ('PUBLIC', 'PROTECTED', 'PRIVATE')" +
 		" AND " + memoAlias + ".deleted_ts IS NULL"
 }

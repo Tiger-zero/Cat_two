@@ -6,7 +6,7 @@ interface LoginBlocklistPage {
   nextPageToken?: string;
 }
 
-const loginBlocklistPath = "/api/auth/loginBlocklist";
+const loginBlocklistPath = "/internal/auth/loginBlocklist";
 
 export function useLoginBlocklist(account: string | undefined) {
   const queryClient = useQueryClient();

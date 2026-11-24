@@ -3,14 +3,18 @@ package test
 import (
 	"encoding/json"
 	"net/http"
-	"net/url"
 	"testing"
 
 	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/proto"
+
+	apipb "github.com/usememos/memos/proto/gen/api"
+	"github.com/usememos/memos/proto/gen/api/apiconnect"
 )
 
-func TestPersonalMCPAndRESTShareMemoWriteContract(t *testing.T) {
+func TestPersonalMCPAndConnectShareMemoWriteContract(t *testing.T) {
 	ctx := t.Context()
 	inst := bootInstance(ctx, t, instanceOptions{personal: true})
 	inst.createAdmin(t)
@@ -30,16 +34,22 @@ func TestPersonalMCPAndRESTShareMemoWriteContract(t *testing.T) {
 	require.False(t, created.IsError, "%v", created.Content)
 	createdJSON, err := json.Marshal(created.StructuredContent)
 	require.NoError(t, err)
-	var createdMemo struct{ Name, Revision string }
-	require.NoError(t, json.Unmarshal(createdJSON, &createdMemo))
+	var createdMemo apipb.Memo
+	require.NoError(t, protojson.Unmarshal(createdJSON, &createdMemo))
 	require.Equal(t, "memos/"+uid, createdMemo.Name)
 	require.NotEmpty(t, createdMemo.Revision)
 
-	status, response := inst.do(t, http.MethodPost, "/api/memos?memoId="+uid+"&idempotent=true", webToken, payload)
+	status, response := inst.connect(t, apiconnect.MemoServiceCreateMemoProcedure, webToken, map[string]any{
+		"memoId": uid, "idempotent": true, "memo": payload,
+	})
 	require.Equal(t, http.StatusOK, status, "%s", response)
-	require.JSONEq(t, string(createdJSON), string(response))
-	status, response = inst.do(t, http.MethodPatch, "/api/memos/"+uid+"?updateMask=content&expectedRevision="+url.QueryEscape(createdMemo.Revision), webToken,
-		map[string]string{"content": "Updated through REST"})
+	var replay apipb.Memo
+	require.NoError(t, protojson.Unmarshal(response, &replay))
+	require.True(t, proto.Equal(&createdMemo, &replay), "Connect replay returned a different memo: %s", response)
+	status, response = inst.connect(t, apiconnect.MemoServiceUpdateMemoProcedure, webToken, map[string]any{
+		"memo":       map[string]string{"name": createdMemo.Name, "content": "Updated through Connect"},
+		"updateMask": "content", "expectedRevision": createdMemo.Revision,
+	})
 	require.Equal(t, http.StatusOK, status, "%s", response)
 
 	stale, err := session.CallTool(ctx, &sdkmcp.CallToolParams{
@@ -58,5 +68,8 @@ func TestPersonalMCPAndRESTShareMemoWriteContract(t *testing.T) {
 	require.False(t, read.IsError, "%v", read.Content)
 	readJSON, err := json.Marshal(read.StructuredContent)
 	require.NoError(t, err)
-	require.JSONEq(t, string(response), string(readJSON))
+	var updatedMemo, readMemo apipb.Memo
+	require.NoError(t, protojson.Unmarshal(response, &updatedMemo))
+	require.NoError(t, protojson.Unmarshal(readJSON, &readMemo))
+	require.True(t, proto.Equal(&updatedMemo, &readMemo), "MCP read returned a different memo: %s", readJSON)
 }

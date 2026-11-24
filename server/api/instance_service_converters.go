@@ -4,6 +4,7 @@ import (
 	"github.com/usememos/memos/core/instancesetting"
 	apipb "github.com/usememos/memos/proto/gen/api"
 	storepb "github.com/usememos/memos/proto/gen/store"
+	"github.com/usememos/memos/store"
 )
 
 // The conversion between API and store settings lives in core/instancesetting,
@@ -13,24 +14,27 @@ import (
 // convertInstanceSettingFromStore converts a stored setting for a response,
 // with write-only secrets cleared.
 func convertInstanceSettingFromStore(setting *storepb.InstanceSetting) *apipb.InstanceSetting {
+	if setting.GetKey() == storepb.InstanceSettingKey_STORAGE {
+		return &apipb.InstanceSetting{
+			Name: instancesetting.NamePrefix + setting.Key.String(),
+			Value: &apipb.InstanceSetting_StorageSetting_{StorageSetting: &apipb.InstanceSetting_StorageSetting{
+				StorageType:      apipb.InstanceSetting_StorageSetting_LOCAL,
+				FilepathTemplate: store.AttachmentDirectory + "/{timestamp}_{uuid}_{filename}",
+				DefaultStorageId: "local",
+				Storages: []*apipb.InstanceSetting_Storage{{
+					Id: "local", Name: "Local", Type: apipb.InstanceSetting_LOCAL,
+				}},
+			}},
+		}
+	}
 	result := instancesetting.FromStore(setting)
 	redactInstanceSetting(result)
 	return result
 }
 
-// redactInstanceSetting clears the S3 secrets and SMTP password and replaces
+// redactInstanceSetting clears the SMTP password and replaces
 // each AI API key with whether it is set and a masked hint.
 func redactInstanceSetting(setting *apipb.InstanceSetting) {
-	if storage := setting.GetStorageSetting(); storage != nil {
-		if storage.S3Config != nil {
-			storage.S3Config.AccessKeySecret = ""
-		}
-		for _, configured := range storage.Storages {
-			if s3Config := configured.GetS3Config(); s3Config != nil {
-				s3Config.AccessKeySecret = ""
-			}
-		}
-	}
 	if email := setting.GetNotificationSetting().GetEmail(); email != nil {
 		email.SmtpPassword = ""
 	}

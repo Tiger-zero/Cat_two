@@ -12,7 +12,6 @@ import (
 
 	"github.com/usememos/memos/core/memopayload"
 	apipb "github.com/usememos/memos/proto/gen/api"
-	"github.com/usememos/memos/server/auth"
 	"github.com/usememos/memos/store"
 )
 
@@ -96,7 +95,7 @@ func (s *APIService) saveNewMemo(ctx context.Context, user *store.User, input *a
 		}
 		parentID = &parent.ID
 	}
-	addConnectionTag := parent == nil && (auth.HasPersonalAccessToken(ctx) || ctx.Value(mcpMemoCreationContextKey{}) != nil)
+	addConnectionTag := parent == nil && ctx.Value(mcpMemoCreationContextKey{}) != nil
 	prepared, err := s.prepareMemoCreate(ctx, user, input, uid, addConnectionTag)
 	if err == nil {
 		prepared.memo.CreationRequestDigest = digest
@@ -141,9 +140,6 @@ func (s *APIService) prepareMemoCreate(ctx context.Context, user *store.User, in
 		CreatorID:  user.ID,
 		Content:    input.Content,
 		Visibility: visibility,
-	}
-	if input.GetSpace() != "" {
-		return nil, retiredModuleError()
 	}
 	if input.CreateTime != nil && input.CreateTime.IsValid() {
 		memo.CreatedTs = input.CreateTime.AsTime().Unix()

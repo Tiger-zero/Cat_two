@@ -98,13 +98,23 @@ describe("the initial draft and useMemoInit", () => {
 
   it("starts an edit from the memo and drops any draft under its key", () => {
     cacheService.saveNow(draftKey, { content: "stale draft", attachments: [] });
-    const memo = create(MemoSchema, { name: "memos/one", content: "The memo", visibility: Visibility.PUBLIC, space: "spaces/work" });
+    const memo = create(MemoSchema, { name: "memos/one", content: "The memo", visibility: Visibility.PUBLIC });
 
     const state = initialEditorState({ memo, draftKey });
 
     expect(state.content).toBe("The memo");
     expect(state.ui.isFocusMode).toBe(false);
     expect(cacheService.loadDraft(draftKey).content).toBe("");
+  });
+
+  it("recovers older drafts after the server drops their old space metadata", () => {
+    const memo = create(MemoSchema, { name: "memos/one", content: "Original", revision: "r1" });
+    const oldRevision = JSON.stringify(["Original", "spaces/work", null, null, null, null, [], []]);
+    cacheService.saveNow(draftKey, { content: "Edited", attachments: [], baseRevision: oldRevision });
+
+    expect(initialEditorState({ memo, draftKey }).content).toBe("Edited");
+    expect(initialEditorState({ memo: { ...memo, content: "Newer content" }, draftKey }).content).toBe("Newer content");
+    expect(cacheService.loadDraft(draftKey).content).toBe("Edited");
   });
 
   it("restores an edit for the same revision, including attachment removals and timestamps", () => {

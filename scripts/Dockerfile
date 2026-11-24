@@ -42,7 +42,7 @@ COPY --from=backend /backend-build/memos /usr/local/memos/memos
 COPY --from=backend --chmod=755 /backend-build/scripts/entrypoint.sh /usr/local/memos/entrypoint.sh
 COPY LICENSE /usr/share/licenses/cat-two/LICENSE
 
-# Run as root to fix permissions, entrypoint will drop to nonroot
+# Start as root to prepare empty volumes before dropping privileges.
 USER root
 
 # Set working directory to the writable volume
@@ -52,7 +52,8 @@ WORKDIR /var/opt/memos
 VOLUME /var/opt/memos
 
 ENV TZ="Asia/Shanghai" \
-    MEMOS_PORT="5230"
+    MEMOS_PORT="5230" \
+    MEMOS_DATA="/var/opt/memos"
 
 EXPOSE 5230
 

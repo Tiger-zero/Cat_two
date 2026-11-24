@@ -6,7 +6,6 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	storepb "github.com/usememos/memos/proto/gen/store"
 	"github.com/usememos/memos/store"
 	storedb "github.com/usememos/memos/store/db"
 )
@@ -131,7 +130,7 @@ func TestLoginIPBlockedListUsesCanonicalIPCursor(t *testing.T) {
 	require.Equal(t, "2001:db8::2", secondPage[0].IP)
 }
 
-func TestLoginIPBlocksSurviveSQLiteMigrationAndRestart(t *testing.T) {
+func TestLoginIPBlocksSurviveSQLiteRestart(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()
 	p := getTestingProfile(t)
@@ -141,28 +140,11 @@ func TestLoginIPBlocksSurviveSQLiteMigrationAndRestart(t *testing.T) {
 		require.NoError(t, err)
 		st := store.New(driver, p)
 		t.Cleanup(func() { _ = st.Close() })
-		require.NoError(t, st.Migrate(ctx))
+		require.NoError(t, st.InitializeSchema(ctx))
 		return st
 	}
 
-	// Recreate the previous schema state by dropping only this migration's
-	// table and resetting the schema marker to the preceding migration.
 	st := openStore()
-	_, err := st.GetDriver().GetDB().ExecContext(ctx, "DROP TABLE login_ip_attempt")
-	require.NoError(t, err)
-	removeMemoBodySchema(ctx, t, st)
-	basic, err := st.GetInstanceBasicSetting(ctx)
-	require.NoError(t, err)
-	_, err = st.UpsertInstanceSetting(ctx, &storepb.InstanceSetting{
-		Key: storepb.InstanceSettingKey_BASIC,
-		Value: &storepb.InstanceSetting_BasicSetting{BasicSetting: &storepb.InstanceBasicSetting{
-			SchemaVersion: "26.11.6", SecretKey: basic.GetSecretKey(),
-		}},
-	})
-	require.NoError(t, err)
-	require.NoError(t, st.Close())
-
-	st = openStore()
 	const ip = "fe80::42"
 	const pendingIP = "2001:db8::16"
 	_, blocked, err := st.RecordLoginIPFailure(ctx, ip+"%eth0", 1)

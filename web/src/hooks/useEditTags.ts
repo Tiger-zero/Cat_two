@@ -16,7 +16,7 @@ export function useEditTags() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async ({ kind, ...payload }: TagEdit): Promise<number> => {
-      const response = await authenticatedFetch(`/api/tags/${kind}`, {
+      const response = await authenticatedFetch(`/internal/tags/${kind}`, {
         method: "POST",
         ...(kind !== "normalize" && {
           headers: { "Content-Type": "application/json" },

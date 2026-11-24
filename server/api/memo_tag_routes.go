@@ -9,7 +9,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
@@ -20,14 +19,10 @@ import (
 	"github.com/usememos/memos/store"
 )
 
-func (s *APIService) registerMemoTagRoutes(mux *runtime.ServeMux) error {
-	if err := mux.HandlePath(http.MethodPost, "/api/tags/rename", s.renameMemoTag); err != nil {
-		return err
-	}
-	if err := mux.HandlePath(http.MethodPost, "/api/tags/normalize", s.normalizeMemoTags); err != nil {
-		return err
-	}
-	return mux.HandlePath(http.MethodPost, "/api/tags/delete", s.deleteMemoTag)
+func (s *APIService) registerMemoTagRoutes(mux *http.ServeMux, authorizer *Authorizer) {
+	mux.HandleFunc("POST /internal/tags/rename", requireWebSession(authorizer, s.renameMemoTag))
+	mux.HandleFunc("POST /internal/tags/normalize", requireWebSession(authorizer, s.normalizeMemoTags))
+	mux.HandleFunc("POST /internal/tags/delete", requireWebSession(authorizer, s.deleteMemoTag))
 }
 
 func validTagPath(tag string) bool {
@@ -44,20 +39,20 @@ func tagPathInput(input string) string {
 	return strings.TrimPrefix(tag, "#")
 }
 
-func (s *APIService) renameMemoTag(w http.ResponseWriter, r *http.Request, _ map[string]string) {
+func (s *APIService) renameMemoTag(w http.ResponseWriter, r *http.Request) {
 	var request struct {
 		OldName string `json:"oldName"`
 		NewName string `json:"newName"`
 	}
-	decoder := json.NewDecoder(r.Body)
+	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxGeneralRequestBytes))
 	if err := decoder.Decode(&request); err != nil || decoder.Decode(new(any)) != io.EOF {
-		writeGatewayStatusError(w, status.Error(codes.InvalidArgument, "expected tag rename request"))
+		writeHTTPStatusError(w, status.Error(codes.InvalidArgument, "expected tag rename request"))
 		return
 	}
 	oldTag := tagPathInput(request.OldName)
 	newTag := tagPathInput(request.NewName)
 	if !validTagPath(oldTag) || !validTagPath(newTag) || strings.HasPrefix(newTag, oldTag+"/") {
-		writeGatewayStatusError(w, status.Error(codes.InvalidArgument, "enter a valid tag path outside the original branch"))
+		writeHTTPStatusError(w, status.Error(codes.InvalidArgument, "enter a valid tag path outside the original branch"))
 		return
 	}
 	s.applyTagEdit(w, r, filter.TagBranchExpression(oldTag), func(content []byte) (string, error) {
@@ -65,24 +60,24 @@ func (s *APIService) renameMemoTag(w http.ResponseWriter, r *http.Request, _ map
 	})
 }
 
-func (s *APIService) normalizeMemoTags(w http.ResponseWriter, r *http.Request, _ map[string]string) {
+func (s *APIService) normalizeMemoTags(w http.ResponseWriter, r *http.Request) {
 	s.applyTagEdit(w, r, "", s.MarkdownService.NormalizeTagWhitespace)
 }
 
-func (s *APIService) deleteMemoTag(w http.ResponseWriter, r *http.Request, _ map[string]string) {
+func (s *APIService) deleteMemoTag(w http.ResponseWriter, r *http.Request) {
 	var request struct {
 		TagName string `json:"tagName"`
 		Mode    string `json:"mode"`
 	}
-	decoder := json.NewDecoder(r.Body)
+	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxGeneralRequestBytes))
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&request); err != nil || decoder.Decode(new(any)) != io.EOF {
-		writeGatewayStatusError(w, status.Error(codes.InvalidArgument, "expected tag deletion request"))
+		writeHTTPStatusError(w, status.Error(codes.InvalidArgument, "expected tag deletion request"))
 		return
 	}
 	tag := tagPathInput(request.TagName)
 	if !validTagPath(tag) {
-		writeGatewayStatusError(w, status.Error(codes.InvalidArgument, "enter a valid tag path"))
+		writeHTTPStatusError(w, status.Error(codes.InvalidArgument, "enter a valid tag path"))
 		return
 	}
 	branchFilter := filter.TagBranchExpression(tag)
@@ -96,7 +91,7 @@ func (s *APIService) deleteMemoTag(w http.ResponseWriter, r *http.Request, _ map
 			return s.trashOwnTaggedMemos(ctx, userID, branchFilter)
 		})
 	default:
-		writeGatewayStatusError(w, status.Error(codes.InvalidArgument, "choose remove or trash for tag deletion"))
+		writeHTTPStatusError(w, status.Error(codes.InvalidArgument, "choose remove or trash for tag deletion"))
 	}
 }
 
@@ -110,11 +105,11 @@ func (s *APIService) applyTagMutation(w http.ResponseWriter, r *http.Request, mu
 	ctx := r.Context()
 	user, err := s.fetchCurrentUser(ctx)
 	if err != nil {
-		writeGatewayStatusError(w, status.Error(codes.Internal, "failed to get user"))
+		writeHTTPStatusError(w, status.Error(codes.Internal, "failed to get user"))
 		return
 	}
 	if user == nil {
-		writeGatewayStatusError(w, status.Error(codes.Unauthenticated, "authentication required"))
+		writeHTTPStatusError(w, status.Error(codes.Unauthenticated, "authentication required"))
 		return
 	}
 	count, err := mutate(ctx, user.ID)
@@ -122,7 +117,7 @@ func (s *APIService) applyTagMutation(w http.ResponseWriter, r *http.Request, mu
 		s.SSEHub.publishMemoChanged()
 	}
 	if err != nil {
-		writeGatewayStatusError(w, mapMemoWriteError(err, "failed to edit tags"))
+		writeHTTPStatusError(w, mapMemoWriteError(err, "failed to edit tags"))
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")

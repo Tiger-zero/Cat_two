@@ -242,21 +242,6 @@ describe("useLiveMemoRefresh", () => {
     expect(firstInvalidate).not.toHaveBeenCalledWith({ queryKey: ["spaces"], refetchType: "active" });
     expect(secondInvalidate).not.toHaveBeenCalledWith({ queryKey: ["spaces"], refetchType: "active" });
 
-    firstInvalidate.mockClear();
-    secondInvalidate.mockClear();
-    act(() => {
-      streamControllers[0].enqueue(new TextEncoder().encode('data: {"type":"space.changed"}\n\n'));
-    });
-
-    await waitFor(() => {
-      for (const invalidate of [firstInvalidate, secondInvalidate]) {
-        expect(invalidate).not.toHaveBeenCalledWith({ queryKey: ["spaces"], refetchType: "active" });
-        expect(invalidate).toHaveBeenCalledWith({ queryKey: ["memos"], refetchType: "active" });
-        expect(invalidate).toHaveBeenCalledWith({ queryKey: ["users", "stats"], refetchType: "active" });
-        expect(invalidate).toHaveBeenCalledWith({ queryKey: ["attachments", "list"], refetchType: "active" });
-      }
-    });
-
     first.unmount();
     second.unmount();
   });

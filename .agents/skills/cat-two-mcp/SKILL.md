@@ -7,7 +7,7 @@ description: >-
 
 # Cat_two MCP
 
-使用 Cat_two 容器自带的 `/mcp`。在「设置 → MCP 和 API」创建专用 MCP 连接令牌，选择只读或读写（默认）以及 7 天（默认）、14 天、1 个日历年或永久有效。复制 MCP 地址和完整的 Bearer 请求头值，令牌创建后即可使用。个人访问令牌（PAT）用于 REST。 [Cat_two 接入说明](../../../server/mcp/README.md#connecting-a-client)
+使用 Cat_two 容器自带的 `/mcp`。在「设置 → MCP」创建专用 MCP 连接令牌，选择只读或读写（默认）以及 7 天（默认）、14 天、1 个日历年或永久有效。复制 MCP 地址和完整的 Bearer 请求头值，令牌创建后即可使用。个人访问令牌（PAT）用于 REST。 [Cat_two 接入说明](../../../server/mcp/README.md#connecting-a-client)
 
 ## 连接实例
 

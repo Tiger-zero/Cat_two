@@ -55,11 +55,9 @@ var (
 func init() {
 	cobra.OnInitialize(initSlogDefault)
 
-	viper.SetDefault("demo", false)
 	viper.SetDefault("driver", profile.SQLiteDriver)
 	viper.SetDefault("port", 8081)
 
-	rootCmd.Flags().Bool("demo", false, "enable demo mode")
 	rootCmd.Flags().String("addr", "", "address of server")
 	rootCmd.Flags().Int("port", 8081, "port of server")
 	rootCmd.Flags().String("unix-sock", "", "path to the unix socket, overrides --addr and --port")
@@ -81,7 +79,6 @@ func init() {
 		}
 	}
 	for _, key := range []string{
-		"demo",
 		"addr",
 		"port",
 		"unix-sock",
@@ -117,7 +114,6 @@ func init() {
 
 func runServer() error {
 	instanceProfile := &profile.Profile{
-		Demo:           viper.GetBool("demo"),
 		Personal:       true,
 		Addr:           viper.GetString("addr"),
 		Port:           viper.GetInt("port"),
@@ -138,11 +134,6 @@ func runServer() error {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	releaseLock, err := lockInstance(ctx, instanceProfile)
-	if err != nil {
-		return err
-	}
-	defer releaseLock()
 
 	dbDriver, err := db.NewDBDriver(instanceProfile)
 	if err != nil {
@@ -158,11 +149,14 @@ func runServer() error {
 		}
 	}()
 
-	if err := storeInstance.Migrate(ctx); err != nil {
-		return errors.Wrap(err, "failed to migrate database")
+	releaseLock, err := lockInstance(ctx, instanceProfile)
+	if err != nil {
+		return err
 	}
-	if err := storeInstance.MigrateLocalAttachments(ctx); err != nil {
-		return errors.Wrap(err, "failed to migrate attachments to local storage")
+	defer releaseLock()
+
+	if err := storeInstance.InitializeSchema(ctx); err != nil {
+		return errors.Wrap(err, "initialize Cat_two SQLite database")
 	}
 	if err := applyConfigurationAtStartup(ctx, storeInstance); err != nil {
 		return errors.Wrap(err, "failed to apply the declarative configuration")
@@ -170,14 +164,8 @@ func runServer() error {
 	if files := legacySecretsFiles(legacySecretsDir); len(files) > 0 {
 		slog.Warn("deployment configuration files are no longer read since 26.10.0; declare them in the configuration directory instead", "files", files, "configDir", viper.GetString("config-dir"))
 	}
-	if instanceProfile.Demo {
-		// After the apply, so the demo content attaches to the declared users.
-		if err := storeInstance.Seed(ctx); err != nil {
-			return errors.Wrap(err, "failed to seed the demo content")
-		}
-	}
-	if err := storeInstance.MigrateMemoBodies(ctx); err != nil {
-		return errors.Wrap(err, "failed to migrate Markdown files to local storage")
+	if err := storeInstance.SweepMemoBodies(ctx); err != nil {
+		return errors.Wrap(err, "check Markdown body storage")
 	}
 	accessSetting, err := storeInstance.GetInstanceAccessSetting(ctx)
 	if err != nil {
@@ -205,10 +193,6 @@ func runServer() error {
 
 func printServerInfo(profile *profile.Profile, accessMode storepb.InstanceAccessMode) {
 	fmt.Printf("Memos %s started successfully!\n", profile.Version)
-
-	if profile.Demo {
-		fmt.Fprint(os.Stderr, "Demo mode is enabled\n")
-	}
 
 	// Server information
 	fmt.Printf("Data directory: %s\n", profile.Data)

@@ -4,11 +4,9 @@
 
 import type { GenEnum, GenFile, GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { enumDesc, fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
-import type { IdentityProvider } from "./idp_service_pb";
-import { file_api_idp_service } from "./idp_service_pb";
 import type { InstanceSetting } from "./instance_service_pb";
 import { file_api_instance_service } from "./instance_service_pb";
-import type { LinkedIdentity, User } from "./user_service_pb";
+import type { User } from "./user_service_pb";
 import { file_api_user_service } from "./user_service_pb";
 import { file_google_api_field_behavior } from "../google/api/field_behavior_pb";
 import type { Message } from "@bufbuild/protobuf";
@@ -17,7 +15,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file api/configuration.proto.
  */
 export const file_api_configuration: GenFile = /*@__PURE__*/
-  fileDesc("ChdhcGkvY29uZmlndXJhdGlvbi5wcm90bxIJbWVtb3MuYXBpIsECCg1Db25maWd1cmF0aW9uEjwKEmlkZW50aXR5X3Byb3ZpZGVycxgBIAMoCzIbLm1lbW9zLmFwaS5JZGVudGl0eVByb3ZpZGVyQgPgQQESOgoRaW5zdGFuY2Vfc2V0dGluZ3MYAiADKAsyGi5tZW1vcy5hcGkuSW5zdGFuY2VTZXR0aW5nQgPgQQESIwoFdXNlcnMYAyADKAsyDy5tZW1vcy5hcGkuVXNlckID4EEBEjkKEWxpbmtlZF9pZGVudGl0aWVzGAYgAygLMhkubWVtb3MuYXBpLkxpbmtlZElkZW50aXR5QgPgQQESLAoJbGlmZWN5Y2xlGAQgAygLMhQubWVtb3MuYXBpLkxpZmVjeWNsZUID4EEBEigKB3JlbW92ZWQYBSADKAsyEi5tZW1vcy5hcGkuUmVtb3ZlZEID4EEBIn4KCUxpZmVjeWNsZRIVCghyZXNvdXJjZRgBIAEoCUID4EECEhsKDmlnbm9yZV9jaGFuZ2VzGAIgAygJQgPgQQESHAoPcHJldmVudF9kZXN0cm95GAMgASgIQgPgQQESHwoSd3JpdGVfb25seV92ZXJzaW9uGAQgASgFQgPgQQEiNgoHUmVtb3ZlZBIVCghyZXNvdXJjZRgBIAEoCUID4EECEhQKB2Rlc3Ryb3kYAiABKAhCA+BBASKLAQoEUGxhbhIOCgZzZXJpYWwYASABKAMSMwoQcmVzb3VyY2VfY2hhbmdlcxgCIAMoCzIZLm1lbW9zLmFwaS5SZXNvdXJjZUNoYW5nZRIcChRzdGF0ZV9yZWNvcmRfY2hhbmdlcxgDIAEoCBIOCgZlcnJvcnMYBCADKAkSEAoId2FybmluZ3MYBSADKAkiswIKDlJlc291cmNlQ2hhbmdlEhAKCHJlc291cmNlGAEgASgJEg4KBnNvdXJjZRgCIAEoCRIwCgZhY3Rpb24YAyABKA4yIC5tZW1vcy5hcGkuUmVzb3VyY2VDaGFuZ2UuQWN0aW9uEg0KBWRyaWZ0GAQgASgIEi0KDWZpZWxkX2NoYW5nZXMYBSADKAsyFi5tZW1vcy5hcGkuRmllbGRDaGFuZ2USDwoHbWVzc2FnZRgGIAEoCSJ+CgZBY3Rpb24SFgoSQUNUSU9OX1VOU1BFQ0lGSUVEEAASCgoGQ1JFQVRFEAESCQoFQURPUFQQAhIKCgZVUERBVEUQAxIJCgVOT19PUBAEEgsKB0RFU1RST1kQBRIJCgVSRVNFVBAGEgsKB1JFTEVBU0UQBxIJCgVFUlJPUhAIIjoKC0ZpZWxkQ2hhbmdlEgwKBHBhdGgYASABKAkSDgoGYmVmb3JlGAIgASgJEg0KBWFmdGVyGAMgASgJQpEBCg1jb20ubWVtb3MuYXBpQhJDb25maWd1cmF0aW9uUHJvdG9QAVonZ2l0aHViLmNvbS91c2VtZW1vcy9tZW1vcy9wcm90by9nZW4vYXBpogIDTUFYqgIJTWVtb3MuQXBpygIJTWVtb3NcQXBp4gIVTWVtb3NcQXBpXEdQQk1ldGFkYXRh6gIKTWVtb3M6OkFwaWIGcHJvdG8z", [file_api_idp_service, file_api_instance_service, file_api_user_service, file_google_api_field_behavior]);
+  fileDesc("ChdhcGkvY29uZmlndXJhdGlvbi5wcm90bxIJbWVtb3MuYXBpIvsBCg1Db25maWd1cmF0aW9uEjoKEWluc3RhbmNlX3NldHRpbmdzGAIgAygLMhoubWVtb3MuYXBpLkluc3RhbmNlU2V0dGluZ0ID4EEBEiMKBXVzZXJzGAMgAygLMg8ubWVtb3MuYXBpLlVzZXJCA+BBARIsCglsaWZlY3ljbGUYBCADKAsyFC5tZW1vcy5hcGkuTGlmZWN5Y2xlQgPgQQESKAoHcmVtb3ZlZBgFIAMoCzISLm1lbW9zLmFwaS5SZW1vdmVkQgPgQQFKBAgBEAJKBAgGEAdSEmlkZW50aXR5X3Byb3ZpZGVyc1IRbGlua2VkX2lkZW50aXRpZXMifgoJTGlmZWN5Y2xlEhUKCHJlc291cmNlGAEgASgJQgPgQQISGwoOaWdub3JlX2NoYW5nZXMYAiADKAlCA+BBARIcCg9wcmV2ZW50X2Rlc3Ryb3kYAyABKAhCA+BBARIfChJ3cml0ZV9vbmx5X3ZlcnNpb24YBCABKAVCA+BBASI2CgdSZW1vdmVkEhUKCHJlc291cmNlGAEgASgJQgPgQQISFAoHZGVzdHJveRgCIAEoCEID4EEBIosBCgRQbGFuEg4KBnNlcmlhbBgBIAEoAxIzChByZXNvdXJjZV9jaGFuZ2VzGAIgAygLMhkubWVtb3MuYXBpLlJlc291cmNlQ2hhbmdlEhwKFHN0YXRlX3JlY29yZF9jaGFuZ2VzGAMgASgIEg4KBmVycm9ycxgEIAMoCRIQCgh3YXJuaW5ncxgFIAMoCSKzAgoOUmVzb3VyY2VDaGFuZ2USEAoIcmVzb3VyY2UYASABKAkSDgoGc291cmNlGAIgASgJEjAKBmFjdGlvbhgDIAEoDjIgLm1lbW9zLmFwaS5SZXNvdXJjZUNoYW5nZS5BY3Rpb24SDQoFZHJpZnQYBCABKAgSLQoNZmllbGRfY2hhbmdlcxgFIAMoCzIWLm1lbW9zLmFwaS5GaWVsZENoYW5nZRIPCgdtZXNzYWdlGAYgASgJIn4KBkFjdGlvbhIWChJBQ1RJT05fVU5TUEVDSUZJRUQQABIKCgZDUkVBVEUQARIJCgVBRE9QVBACEgoKBlVQREFURRADEgkKBU5PX09QEAQSCwoHREVTVFJPWRAFEgkKBVJFU0VUEAYSCwoHUkVMRUFTRRAHEgkKBUVSUk9SEAgiOgoLRmllbGRDaGFuZ2USDAoEcGF0aBgBIAEoCRIOCgZiZWZvcmUYAiABKAkSDQoFYWZ0ZXIYAyABKAlCkQEKDWNvbS5tZW1vcy5hcGlCEkNvbmZpZ3VyYXRpb25Qcm90b1ABWidnaXRodWIuY29tL3VzZW1lbW9zL21lbW9zL3Byb3RvL2dlbi9hcGmiAgNNQViqAglNZW1vcy5BcGnKAglNZW1vc1xBcGniAhVNZW1vc1xBcGlcR1BCTWV0YWRhdGHqAgpNZW1vczo6QXBpYgZwcm90bzM", [file_api_instance_service, file_api_user_service, file_google_api_field_behavior]);
 
 /**
  * Configuration is one declarative configuration document. Every file in the
@@ -27,13 +25,6 @@ export const file_api_configuration: GenFile = /*@__PURE__*/
  * @generated from message memos.api.Configuration
  */
 export type Configuration = Message<"memos.api.Configuration"> & {
-  /**
-   * Optional. Identity providers to manage, by resource name.
-   *
-   * @generated from field: repeated memos.api.IdentityProvider identity_providers = 1;
-   */
-  identityProviders: IdentityProvider[];
-
   /**
    * Optional. Instance setting groups to manage, by resource name.
    *
@@ -47,16 +38,6 @@ export type Configuration = Message<"memos.api.Configuration"> & {
    * @generated from field: repeated memos.api.User users = 3;
    */
   users: User[];
-
-  /**
-   * Optional. SSO identities of declared users, by resource name: which
-   * identity-provider subject signs in as which user. Only a user the
-   * configuration declares may have one. Intended for bootstrap administrators
-   * on instances where sign-in is through an identity provider.
-   *
-   * @generated from field: repeated memos.api.LinkedIdentity linked_identities = 6;
-   */
-  linkedIdentities: LinkedIdentity[];
 
   /**
    * Optional. Lifecycle rules for declared resources.
@@ -88,8 +69,7 @@ export const ConfigurationSchema: GenMessage<Configuration> = /*@__PURE__*/
 export type Lifecycle = Message<"memos.api.Lifecycle"> & {
   /**
    * Required. The resource name of a resource declared in the configuration.
-   * Format: identity-providers/{idp}, instance/settings/{setting}, users/{user},
-   * or users/{user}/linkedIdentities/{linked_identity}
+   * Format: instance/settings/{setting} or users/{user}
    *
    * @generated from field: string resource = 1;
    */
@@ -133,8 +113,7 @@ export const LifecycleSchema: GenMessage<Lifecycle> = /*@__PURE__*/
 export type Removed = Message<"memos.api.Removed"> & {
   /**
    * Required. The resource name of a resource the configuration manages.
-   * Format: identity-providers/{idp}, instance/settings/{setting}, users/{user},
-   * or users/{user}/linkedIdentities/{linked_identity}
+   * Format: instance/settings/{setting} or users/{user}
    *
    * @generated from field: string resource = 1;
    */
@@ -215,8 +194,7 @@ export const PlanSchema: GenMessage<Plan> = /*@__PURE__*/
 export type ResourceChange = Message<"memos.api.ResourceChange"> & {
   /**
    * The resource name.
-   * Format: identity-providers/{idp}, instance/settings/{setting}, users/{user},
-   * or users/{user}/linkedIdentities/{linked_identity}
+   * Format: instance/settings/{setting} or users/{user}
    *
    * @generated from field: string resource = 1;
    */
@@ -346,7 +324,7 @@ export const ResourceChange_ActionSchema: GenEnum<ResourceChange_Action> = /*@__
  */
 export type FieldChange = Message<"memos.api.FieldChange"> & {
   /**
-   * The field path, in JSON names from the resource, such as config.oauth2Config.scopes.
+   * The field path, in JSON names from the resource, such as displayName.
    *
    * @generated from field: string path = 1;
    */

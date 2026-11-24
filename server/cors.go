@@ -2,6 +2,7 @@ package server
 
 import (
 	"net/http"
+	"strings"
 
 	"github.com/usememos/memos/internal/httphandler"
 	"github.com/usememos/memos/internal/profile"
@@ -14,6 +15,10 @@ func newCORSMiddleware(profile *profile.Profile, mux *http.ServeMux) func(http.H
 	}
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path == "/api" || strings.HasPrefix(r.URL.Path, "/api/") {
+				httphandler.NotFound(w, r)
+				return
+			}
 			h := w.Header()
 			h.Add("Vary", "Origin")
 			origin := r.Header.Get("Origin")

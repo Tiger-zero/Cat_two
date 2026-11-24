@@ -10,68 +10,48 @@ import (
 
 	"github.com/usememos/memos/core/instancesetting"
 	coreuser "github.com/usememos/memos/core/user"
-	"github.com/usememos/memos/internal/identifier"
 	apipb "github.com/usememos/memos/proto/gen/api"
 )
 
 // Kind is the kind of a configurable resource.
 type Kind string
 
-const legacyIdentityProviderPrefix = "identity-providers/"
-
 // The configurable kinds.
 const (
-	KindIdentityProvider Kind = "IdentityProvider"
-	KindInstanceSetting  Kind = "InstanceSetting"
-	KindUser             Kind = "User"
-	KindLinkedIdentity   Kind = "LinkedIdentity"
+	KindInstanceSetting Kind = "InstanceSetting"
+	KindUser            Kind = "User"
 )
-
-// ConfigurableInstanceSettingKeys are the instance setting keys a file may declare.
-var ConfigurableInstanceSettingKeys = []string{"GENERAL", "STORAGE"}
 
 // userFields are the User fields a file may set. The rest of a profile belongs
 // to the user.
 var userFields = []protoreflect.Name{"name", "username", "display_name", "email", "password", "role"}
 
 // ParseResourceName returns the kind and identifier of a configurable resource
-// name. The identifiers of retired provider resources remain readable.
+// name.
 func ParseResourceName(name string) (Kind, string, error) {
 	switch {
-	case strings.HasPrefix(name, legacyIdentityProviderPrefix):
-		uid := strings.TrimPrefix(name, legacyIdentityProviderPrefix)
-		if !identifier.UIDMatcher.MatchString(uid) {
-			return "", "", errors.Errorf("invalid identity provider name %q", name)
-		}
-		return KindIdentityProvider, uid, nil
 	case strings.HasPrefix(name, instancesetting.NamePrefix):
 		key := strings.TrimPrefix(name, instancesetting.NamePrefix)
-		switch {
-		case slices.Contains(ConfigurableInstanceSettingKeys, key):
+		switch key {
+		case "GENERAL":
 			return KindInstanceSetting, key, nil
-		case key == "BASIC":
+		case "BASIC":
 			return "", "", errors.New("instance/settings/BASIC holds the instance secret and schema version and cannot be configured")
-		case key == "TAGS":
-			return "", "", errors.New("instance/settings/TAGS is kept only for compatibility and cannot be configured")
-		case key == "CONFIGURATION_STATE":
+		case "STORAGE":
+			return "", "", errors.New("instance/settings/STORAGE is managed by Cat_two and cannot be configured")
+		case "CONFIGURATION_STATE":
 			return "", "", errors.New("instance/settings/CONFIGURATION_STATE is the configuration state record and cannot be configured")
 		default:
 			return "", "", errors.Errorf("unknown instance setting %q", name)
 		}
 	case strings.HasPrefix(name, coreuser.NamePrefix):
-		if username, uid, ok := coreuser.SplitLinkedIdentityName(name); ok {
-			if coreuser.ValidateUsername(username) != nil || !identifier.UIDMatcher.MatchString(uid) {
-				return "", "", errors.Errorf("invalid linked identity name %q", name)
-			}
-			return KindLinkedIdentity, username + "/" + uid, nil
-		}
 		username := strings.TrimPrefix(name, coreuser.NamePrefix)
 		if err := coreuser.ValidateUsername(username); err != nil {
 			return "", "", errors.Errorf("invalid user name %q", name)
 		}
 		return KindUser, username, nil
 	default:
-		return "", "", errors.Errorf("%q is not an identity provider, instance setting, user, or linked identity name", name)
+		return "", "", errors.Errorf("%q is not an instance setting or user name", name)
 	}
 }
 
@@ -121,8 +101,12 @@ func checkDocument(document *apipb.Configuration) []string {
 		if ok && user.GetUsername() != username {
 			report("%s.username must equal %q, the username in name", path, username)
 		}
-		if user.GetRole() == apipb.User_ROLE_UNSPECIFIED {
+		switch user.GetRole() {
+		case apipb.User_ROLE_UNSPECIFIED:
 			report("%s.role is required", path)
+		case apipb.User_ADMIN:
+		default:
+			report("%s.role must be ADMIN", path)
 		}
 		user.ProtoReflect().Range(func(field protoreflect.FieldDescriptor, _ protoreflect.Value) bool {
 			if !slices.Contains(userFields, field.Name()) {
@@ -162,8 +146,11 @@ func checkDocument(document *apipb.Configuration) []string {
 			report("%s.resource is required", path)
 			continue
 		}
-		if _, _, err := ParseResourceName(removed.GetResource()); err != nil {
+		kind, _, err := ParseResourceName(removed.GetResource())
+		if err != nil {
 			report("%s.resource: %v", path, err)
+		} else if kind == KindUser && removed.GetDestroy() {
+			report("%s.destroy cannot delete the administrator", path)
 		}
 	}
 	return problems
@@ -252,12 +239,11 @@ func (m *merger) add(file string, document *apipb.Configuration, userFields map[
 }
 
 func (m *merger) checkReferences() {
+	if len(m.desired.Configuration.Users) > 1 {
+		m.problems = append(m.problems, "configuration can declare only one administrator")
+	}
 	for _, lifecycle := range m.desired.Configuration.Lifecycle {
 		if _, ok := m.desired.Sources[lifecycle.GetResource()]; !ok {
-			if strings.HasPrefix(lifecycle.GetResource(), coreuser.NamePrefix) || m.desired.preserved[lifecycle.GetResource()] {
-				m.desired.Warnings = append(m.desired.Warnings, fmt.Sprintf("%s: lifecycle for %s is ignored in Cat_two", m.lifecycleSources[lifecycle.GetResource()], lifecycle.GetResource()))
-				continue
-			}
 			m.problems = append(m.problems, fmt.Sprintf("%s: the lifecycle rule names %s, which no file declares",
 				m.lifecycleSources[lifecycle.GetResource()], lifecycle.GetResource()))
 		}

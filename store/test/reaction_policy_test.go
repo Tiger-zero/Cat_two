@@ -33,7 +33,7 @@ func TestReactionWritePolicyRejectsInactiveActorAndMemo(t *testing.T) {
 	_, err = ts.UpsertReaction(ctx, &store.Reaction{
 		CreatorID: owner.ID, MemoID: memo.ID, ReactionType: "inactive-memo", Policy: reactionWritePolicy(owner.ID),
 	})
-	require.ErrorIs(t, err, store.ErrMemoSpaceNotWritable)
+	require.ErrorIs(t, err, store.ErrMemoContextUnavailable)
 }
 
 func TestDeleteReactionAtomicallyEnforcesCreatorWithoutParticipation(t *testing.T) {

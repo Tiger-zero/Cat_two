@@ -99,16 +99,16 @@ function EmojiGrid({ searchRef, hasReacted, onSelect, onClose }: EmojiGridProps)
       }}
     >
       <div className="flex min-w-0 flex-col gap-2">
-        <Combobox.Input ref={searchRef} aria-label={t("space.icon.search-emoji")} placeholder={t("space.icon.search-emoji")} />
+        <Combobox.Input ref={searchRef} aria-label={t("memo.reaction-search-emoji")} placeholder={t("memo.reaction-search-emoji")} />
         <Combobox.List
           ref={listRef}
-          aria-label={t("space.icon.emoji")}
+          aria-label={t("memo.reaction-emoji")}
           aria-rowcount={rowCount}
           aria-colcount={COLUMNS}
           className="h-60 p-0"
           onScroll={(event) => setScrollRow(Math.floor(event.currentTarget.scrollTop / layout.rowSize))}
         >
-          <Combobox.Empty>{t("space.icon.no-results")}</Combobox.Empty>
+          <Combobox.Empty>{t("memo.reaction-no-results")}</Combobox.Empty>
           <div role="presentation" className="relative" style={{ height: rowCount * layout.rowSize }}>
             {Array.from(rows)
               .sort((a, b) => a - b)

@@ -1,15 +1,12 @@
 # API Changelog
 
-Breaking and deprecated changes to the public API in `proto/api/`, newest release first. Additive changes are not listed.
+Breaking and deprecated changes to the browser protocol, external MCP tools and related behavior, newest release first.
 
-Record schema, REST route, and behavior breaks here. API compatibility is checked during review.
+Record schema, route, tool and behavior breaks here.
 
 Add entries under a `## Unreleased` heading. After the release ships, rename it to the release tag.
 
-`IdentityProvider`, `InstanceSetting`, and `User` are also the declarative configuration file format. When a break removes or
-renames a field a configuration file can set, say that files setting it are rejected from this release and what to write
-instead, and update `core/configuration/testdata/compat/` in the same change. After a release ships, copy
-`testdata/compat/unreleased/` to a directory named for the release tag.
+`InstanceSetting` and `User` also define declarative configuration fields. Record a removed or renamed configuration field and its replacement, if available.
 
 ```markdown
 ## Unreleased
@@ -29,61 +26,23 @@ instead, and update `core/configuration/testdata/compat/` in the same change. Af
 
 ### Breaking
 
-- Cat_two uses private instance access with one-time web administrator setup. `CreateUser` rejects additional
-  registrations, and `UpdateInstanceSetting` rejects access-policy changes. Administrator password changes require an
-  interactive sign-in session.
-- Cat_two removes the saved memo view RPCs from `UserService`, the `/api/users/{user}/views` routes, and the
-  `user_list_memo_views` MCP tool. Existing saved view records remain in the database. Pass a CEL expression to
-  `MemoService.ListMemos` to filter notes.
-- Cat_two retires the Space, identity provider, linked identity, notification, webhook and configuration status APIs.
-  Affected REST and Connect calls return `UNIMPLEMENTED`. SSO sign-in is retired and the server stops dispatching
-  outgoing webhooks. Legacy database records are retained. Notes keep their authors, and access depends only on the
-  author. Memo responses omit Space placement. ZIP archives can carry historical placement metadata, which import
-  ignores with a warning.
-- Cat_two personal mode requires a dedicated connection token for `/mcp`. `POST /api/mcpConnections` accepts
-  `label`, `duration`, and `permission`. Choose `7d` (the default), `14d`, `1y` (one calendar year), or `permanent`.
-  `read_only` limits discovery and calls to read tools. `read_write` is the default for existing and new connections.
-  Tokens work immediately and retain their assigned expiration. Owners can delete their connection with
-  `DELETE /api/mcpConnections/{id}`, which returns `204` and invalidates the token on the next MCP request.
-  The legacy `POST /api/mcpConnections/{id}/decision` endpoint still accepts `{"action":"revoke"}`.
-  Replace tokens created under the old awaiting or pending flow. Denied, revoked, and expired tokens remain
-  inactive. Personal access tokens remain valid for REST.
-  [Personal MCP tool catalog](../../server/mcp/README.md#tool-surface) ·
-  [MCP setup and upgrade steps](../../plugins/cat-two-notes/README.md#连接-nas)
-- When an account enables two-step verification, password sign-in requires `password_credentials.otp_code`.
-  `ErrorInfo.reason` is `TOTP_REQUIRED` for a missing code and `TOTP_INVALID` for an invalid or reused code.
-  Changing or resetting the factor revokes the account's interactive sessions. Personal access tokens remain valid.
-- Cat_two binds browser access and refresh credentials to the same revocable session. Refresh credentials issued
-  before upgrading can establish a bound session through the normal refresh endpoint. `SignOut` invalidates both
-  kinds of credential for the current session.
-- Cat_two retires `GENERAL.additionalScript`. Settings responses omit old script content, and direct attempts to
-  supply executable customization return `FAILED_PRECONDITION`. Branding and styling remain configurable.
+- Cat_two removes the generic REST API, including `/api`, `/api/*` and the old `/memos.api.v1.*` paths. Removed paths return `404`. Personal access tokens can no longer be created or used. The web app uses `/memos.api.*` Connect and `/internal/` session routes. Attachments and ZIP downloads remain on `/file/` with browser session authentication. External note integrations use dedicated MCP connection tokens on `/mcp`. Telegram polls its Bot API, and enterprise WeChat uses the signed `/integrations/wecom` callback.
+- Cat_two requires the current single-account SQLite schema. Startup rejects incompatible databases. Keep prior databases and volumes with the original image and use an independent volume for a new installation. [Deployment and backup](../../.agents/skills/cat-two-product-development/references/deployment.md#备份和升级)
+- Declarative configuration accepts GENERAL settings and one administrator. Cat_two determines the local storage paths. Older declarations for identity providers, linked identities, access policy, executable scripts, regular users and storage must be removed before applying.
+- Private instances have a one-time administrator setup. The server rejects additional registration and access-policy changes. Password changes require a browser session.
+- The Space, saved view, identity provider, linked identity, notification, webhook and configuration status APIs are removed. `MemoService.ListMemos` accepts a CEL expression for list filtering. Note access depends on the signed-in account. Telegram and WeCom settings use the browser's native endpoints.
+- MCP connections are created in **Settings → MCP**, with read-only or read-write permissions and a duration of 7 days, 14 days, one calendar year, or permanent. Deleting a connection invalidates the token on the next request. [MCP tools](../../server/mcp/README.md#tool-surface)
+- When an account enables two-step verification, password sign-in requires `password_credentials.otp_code`. `ErrorInfo.reason` is `TOTP_REQUIRED` for a missing code and `TOTP_INVALID` for an invalid or reused code. Changing or resetting the factor revokes interactive sessions.
+- Cat_two binds browser access and refresh credentials to the same revocable session. `SignOut` invalidates both credentials for the current session.
+- Cat_two removes `GENERAL.additionalScript`. Branding and styling remain configurable.
 - Create memo and comment requests accept optional `idempotent` with an explicit `memoId` or `commentId`. An exact
   retry returns the committed note. A conflicting payload returns `ALREADY_EXISTS`. Memo responses include
   `revision`. Updates can pass `expectedRevision` for a transactional precondition, with `ABORTED` on stale edits.
-- Cat_two removed the built-in transcription service. `POST /api/ai:transcribe` and
-  `/memos.api.AIService/Transcribe` return `404 Not Found`. Existing `instance/settings/AI` values and
-  declarative configuration remain compatible. They no longer drive server-side model calls.
-- `MemoService.DeleteMemo` moves the owner's note and its replies to the recycle bin for 30 days. Owners can list
-  their deleted notes at `GET /api/trash`, restore one with `POST /api/trash/{uid}/restore`, or permanently remove
-  one with `DELETE /api/trash/{uid}`. Restoring recovers the prior normal or archived state.
-- Cat_two restricts note and attachment reads, statistics derived from notes, and memo archive exports to their owners.
-  Existing audience values stay stored and notes are returned as `PRIVATE`. Legacy share links return `NOT_FOUND`
-  and `CreateMemoShare` returns `FAILED_PRECONDITION`.
-- Cat_two no longer sets `location` through create and update requests. The API accepts and ignores the field
-  from older clients. Saved locations remain readable and can round-trip in ZIP archives.
-- Cat_two no longer enforces the `USAGE_LIMITS` instance setting on memos or attachments.
-  Existing entries and configuration files remain readable. `GetUserUsage` reports usage with empty `limits`
-  and a `limit_index` of `-1`. Request and upload chunk validation continue to apply.
-- Cat_two stores new attachment files in the managed `assets/` directory. Reading `instance/settings/STORAGE`
-  reports `LOCAL` and the managed path template. Updates return `FAILED_PRECONDITION`.
-  Upgrade still migrates legacy SQLite file bytes into `assets/`. Old S3 attachment records are retained,
-  and file downloads for S3-only attachments return `404`. Cat_two no longer fetches or removes S3 objects.
-  Admin-only `GetInstanceStats` adds the running data directory, managed Markdown directory, and managed
-  attachment directory.
-- Removed `InstanceSetting.MemoRelatedSetting`, `memo_related_setting`, and the `MEMO_RELATED` key.
-  Reactions now use the full Unicode emoji picker. Configuration files declaring `instance/settings/MEMO_RELATED` or
-  `memoRelatedSetting` are rejected; remove that setting from configuration files. Stored reactions are preserved.
+- The built-in transcription service is removed. `/memos.api.AIService/Transcribe` returns `404`.
+- `MemoService.DeleteMemo` moves notes and replies to the recycle bin for 30 days. The browser uses `GET /internal/trash`, `POST /internal/trash/{uid}/restore` and `DELETE /internal/trash/{uid}`. Restoring recovers the prior normal or archived state.
+- Cat_two restricts note and attachment reads, statistics and ZIP exports to the owning account. Notes are private. The usage limits instance setting no longer applies. Upload chunk and request validation continue to apply.
+- New attachments are written under `assets/`. `GetInstanceStats` reports the active data directory and its managed Markdown and attachment directories.
+- The `MEMO_RELATED` setting is removed. Reactions use the Unicode emoji picker.
 
 ## 26.10.0
 

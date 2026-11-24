@@ -2,7 +2,6 @@ package test
 
 import (
 	"net/http"
-	"net/url"
 	"testing"
 
 	"connectrpc.com/connect"
@@ -14,13 +13,15 @@ import (
 	"github.com/usememos/memos/proto/gen/api/apiconnect"
 )
 
-func TestMemoReplayAndRevisionAcrossRESTAndConnect(t *testing.T) {
+func TestMemoReplayAndRevisionAcrossConnectEncodings(t *testing.T) {
 	ctx := t.Context()
 	inst := bootInstance(ctx, t, instanceOptions{personal: true})
 	inst.createAdmin(t)
 	token := inst.signIn(t)
-	const memoID, content = "transport-retry", "First write over REST"
-	code, body := inst.do(t, http.MethodPost, "/api/memos?memoId="+memoID+"&idempotent=true", token, map[string]string{"content": content})
+	const memoID, content = "transport-retry", "First write over Connect JSON"
+	code, body := inst.connect(t, apiconnect.MemoServiceCreateMemoProcedure, token, map[string]any{
+		"memoId": memoID, "idempotent": true, "memo": map[string]string{"content": content},
+	})
 	require.Equal(t, http.StatusOK, code, "%s", body)
 	var memo apipb.Memo
 	require.NoError(t, protojson.Unmarshal(body, &memo))
@@ -45,10 +46,12 @@ func TestMemoReplayAndRevisionAcrossRESTAndConnect(t *testing.T) {
 	require.NoError(t, err)
 	require.NotEqual(t, memo.Revision, updated.Msg.Revision)
 
-	path := "/api/" + memo.Name
-	code, body = inst.do(t, http.MethodPatch, path+"?updateMask=content&expectedRevision="+url.QueryEscape(memo.Revision), token, map[string]string{"content": "Stale REST write"})
+	code, body = inst.connect(t, apiconnect.MemoServiceUpdateMemoProcedure, token, map[string]any{
+		"memo":       map[string]string{"name": memo.Name, "content": "Stale JSON write"},
+		"updateMask": "content", "expectedRevision": memo.Revision,
+	})
 	require.Equal(t, http.StatusConflict, code, "%s", body)
-	code, body = inst.do(t, http.MethodGet, path, token, nil)
+	code, body = inst.connect(t, apiconnect.MemoServiceGetMemoProcedure, token, map[string]string{"name": memo.Name})
 	require.Equal(t, http.StatusOK, code, "%s", body)
 	var current apipb.Memo
 	require.NoError(t, protojson.Unmarshal(body, &current))

@@ -13,9 +13,9 @@ import {
   UserIcon,
 } from "lucide-react";
 import { type ComponentType } from "react";
-import AccessTokenSection from "@/components/Settings/AccessTokenSection";
 import EditorSection from "@/components/Settings/EditorSection";
 import InstanceSection from "@/components/Settings/InstanceSection";
+import MCPConnectionSection from "@/components/Settings/MCPConnectionSection";
 import MemoExportSection from "@/components/Settings/MemoExportSection";
 import MyAccountSection from "@/components/Settings/MyAccountSection";
 import NetworkSection from "@/components/Settings/NetworkSection";
@@ -28,7 +28,7 @@ import TagsSection from "@/components/Settings/TagsSection";
 export type SettingSectionKey =
   | "my-account"
   | "memo-export"
-  | "access-token"
+  | "mcp"
   | "preference"
   | "editor"
   | "system"
@@ -43,7 +43,7 @@ type SettingSectionScope = "basic" | "admin";
 export interface SettingSectionDefinition {
   key: SettingSectionKey;
   scope: SettingSectionScope;
-  labelKey: `setting.${SettingSectionKey}.label`;
+  labelKey: `setting.${Exclude<SettingSectionKey, "mcp">}.label` | "setting.mcp-connection.label";
   icon: LucideIcon;
   component: ComponentType;
 }
@@ -57,11 +57,11 @@ export const SETTINGS_SECTIONS: SettingSectionDefinition[] = [
     component: MyAccountSection,
   },
   {
-    key: "access-token",
+    key: "mcp",
     scope: "basic",
-    labelKey: "setting.access-token.label",
+    labelKey: "setting.mcp-connection.label",
     icon: KeyRoundIcon,
-    component: AccessTokenSection,
+    component: MCPConnectionSection,
   },
   {
     key: "preference",
@@ -135,6 +135,7 @@ export const isSettingSectionKey = (value: string): value is SettingSectionKey =
 };
 
 export function resolveSettingSectionKey(value: string | null): SettingSectionKey {
+  if (value === "access-token") return "mcp";
   if (value === "resource-stats") return "storage";
   return value && isSettingSectionKey(value) ? value : DEFAULT_SETTING_SECTION;
 }

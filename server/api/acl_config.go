@@ -4,7 +4,7 @@ package api
 // All other endpoints require a valid session or access token.
 //
 // This is the SINGLE SOURCE OF TRUTH for public endpoints.
-// Both Connect interceptor and gRPC-Gateway interceptor use this map.
+// The Connect interceptor applies this policy.
 //
 // Format: Full gRPC procedure path as returned by req.Spec().Procedure (Connect)
 // or info.FullMethod (gRPC interceptor).

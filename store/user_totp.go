@@ -57,7 +57,7 @@ func (s *Store) UpdateUserTwoFactor(ctx context.Context, userID int32, expectedP
 }
 
 // ResetUserTwoFactor removes the user's factor and invalidates all existing
-// browser sessions. Personal access tokens remain independently revocable.
+// browser sessions. MCP connections have independent credentials.
 func (s *Store) ResetUserTwoFactor(ctx context.Context, userID int32) error {
 	revision := random.UUID()
 	return s.UpdateUserTwoFactor(ctx, userID, nil, func(current *UserTwoFactor) error {

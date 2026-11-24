@@ -49,25 +49,6 @@ func (d *DB) ListLocalAttachmentStorageMatches(ctx context.Context, basename, su
 	return d.db.QueryContext(ctx, query, args...)
 }
 
-func (d *DB) ListLegacyAttachmentIDs(ctx context.Context, afterID int32, limit int) (*sql.Rows, error) {
-	return d.db.QueryContext(ctx, `
-        SELECT id FROM attachment
-        WHERE id > ? AND storage_type NOT IN ('LOCAL', 'EXTERNAL', 'S3') ORDER BY id LIMIT ?`, afterID, limit)
-}
-
-func (d *DB) LocalizeAttachment(ctx context.Context, original *store.Attachment, reference, payload string) (bool, error) {
-	result, err := d.db.ExecContext(ctx, `
-        UPDATE attachment SET storage_type = 'LOCAL', reference = ?, payload = ?, blob = NULL
-        WHERE id = ? AND uid = ? AND updated_ts = ? AND reference = ?
-          AND storage_type NOT IN ('LOCAL', 'EXTERNAL', 'S3')`,
-		reference, payload, original.ID, original.UID, original.UpdatedTs, original.Reference)
-	if err != nil {
-		return false, err
-	}
-	count, err := result.RowsAffected()
-	return count == 1, err
-}
-
 func appendDeleteUserAttachments(ctx context.Context, tx dbExecutor, query string, args []any, seen map[int32]struct{}, attachments *[]*store.Attachment) error {
 	rows, err := tx.QueryContext(ctx, query, args...)
 	if err != nil {

@@ -4,7 +4,6 @@ import { UserSetting_Key } from "@/types/proto/api/user_service_pb";
 export const instanceSettingNamePrefix = "instance/settings/";
 export const userNamePrefix = "users/";
 export const memoNamePrefix = "memos/";
-export const identityProviderNamePrefix = "identity-providers/";
 
 export const buildMemoCreatorFilter = (name: string) => {
   if (!name) {
@@ -20,10 +19,6 @@ export const extractMemoIdFromName = (name: string) => {
 
 export const extractUsernameFromName = (name: string) => {
   return name.startsWith(userNamePrefix) ? name.slice(userNamePrefix.length) : name;
-};
-
-export const extractIdentityProviderUidFromName = (name: string) => {
-  return name.split(identityProviderNamePrefix).pop() || "";
 };
 
 // Helper function to convert InstanceSetting_Key enum value to string name
@@ -47,7 +42,3 @@ export const getUserSettingKeyName = (key: UserSetting_Key): string => {
 export const buildUserSettingName = (username: string, key: UserSetting_Key): string => {
   return `${username}/settings/${getUserSettingKeyName(key)}`;
 };
-
-// Namespaces an editor draft cache key by Space, so drafts never bleed across contexts.
-// Memos (no Space selected) keeps the bare key it has always used.
-export const spaceScopedCacheKey = (baseKey: string, spaceName?: string): string => (spaceName ? `${baseKey}:${spaceName}` : baseKey);

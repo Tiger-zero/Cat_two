@@ -20,9 +20,8 @@ import (
 )
 
 var (
-	referencePattern     = regexp.MustCompile(`^\$\{(env|file):([^}]*)\}$`)
-	envNamePattern       = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
-	additionalScriptPath = regexp.MustCompile(`^instance(?:Settings|_settings)\[[0-9]+\]\.general(?:Setting|_setting)\.additional(?:Script|_script)$`)
+	referencePattern = regexp.MustCompile(`^\$\{(env|file):([^}]*)\}$`)
+	envNamePattern   = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 
 	// protojson errors can quote the rejected value, which may be a
 	// substituted secret. Only these value-free forms are passed on.
@@ -35,7 +34,7 @@ var (
 // decodeDocument substitutes references in one file and decodes it strictly.
 // It also returns, for each user by index, the optional user fields the file
 // declares.
-func decodeDocument(content []byte, resolver Resolver, preserved map[string]bool) (*apipb.Configuration, map[int][]string, []string, []string) {
+func decodeDocument(content []byte, resolver Resolver) (*apipb.Configuration, map[int][]string, []string, []string) {
 	decoder := json.NewDecoder(bytes.NewReader(content))
 	decoder.UseNumber()
 	r := &jsonReader{decoder: decoder, resolver: resolver}
@@ -50,21 +49,23 @@ func decodeDocument(content []byte, resolver Resolver, preserved map[string]bool
 	if !ok {
 		return nil, nil, nil, []string{"the document must be a JSON object"}
 	}
-	r.warnings = append(r.warnings, omitRetiredDeclarations(object, preserved)...)
+	document := &apipb.Configuration{}
+	inspector := &inspector{}
+	inspector.message("", value, document.ProtoReflect().Descriptor())
+	if len(inspector.problems) > 0 {
+		return nil, nil, inspector.warnings, inspector.problems
+	}
 	if err := r.resolve("", object); err != nil {
 		return nil, nil, nil, []string{err.Error()}
 	}
 
 	// Marshalling a substituted tree cannot fail: it holds only JSON values.
 	normalized, _ := json.Marshal(value)
-	document := &apipb.Configuration{}
 	if err := (protojson.UnmarshalOptions{}).Unmarshal(normalized, document); err != nil {
 		return nil, nil, nil, []string{describeProtoJSONError(err)}
 	}
 
-	inspector := &inspector{}
-	inspector.message("", value, document.ProtoReflect().Descriptor())
-	return document, declaredUserFields(object), append(r.warnings, inspector.warnings...), inspector.problems
+	return document, declaredUserFields(object), inspector.warnings, nil
 }
 
 // optionalUserFields are the User fields managed only when a file declares them.
@@ -101,7 +102,6 @@ func declaredUserFields(document map[string]any) map[int][]string {
 type jsonReader struct {
 	decoder  *json.Decoder
 	resolver Resolver
-	warnings []string
 }
 
 func (r *jsonReader) value(path string) (any, error) {
@@ -159,7 +159,7 @@ func (r *jsonReader) value(path string) (any, error) {
 	}
 }
 
-// resolve substitutes active fields after retired declarations are discarded.
+// resolve substitutes references in fields of the configuration document.
 func (r *jsonReader) resolve(path string, value any) error {
 	substitute := func(childPath string, child any, put func(any)) error {
 		if str, ok := child.(string); ok {
@@ -185,118 +185,16 @@ func (r *jsonReader) resolve(path string, value any) error {
 				return err
 			}
 		}
+	default:
+		// Scalar values have no children to resolve.
 	}
 	return nil
-}
-
-func omitRetiredDeclarations(document map[string]any, preserved map[string]bool) []string {
-	var warnings []string
-	for _, field := range []string{"identityProviders", "identity_providers", "linkedIdentities", "linked_identities"} {
-		if value, exists := document[field]; exists {
-			delete(document, field)
-			if entries, ok := value.([]any); !ok || len(entries) > 0 {
-				warnings = append(warnings, field+" is ignored because federated sign-in is unavailable in Cat_two")
-			}
-		}
-	}
-	for _, field := range []string{"instanceSettings", "instance_settings"} {
-		if settings, ok := document[field].([]any); ok {
-			document[field] = slices.DeleteFunc(settings, func(value any) bool {
-				setting, _ := value.(map[string]any)
-				name, _ := setting["name"].(string)
-				if retiredResource(name) || (name == "instance/settings/STORAGE" && legacyStorageDeclaration(setting)) {
-					preserved[name] = true
-					warnings = append(warnings, name+" is ignored because this configuration is unavailable in Cat_two")
-					return true
-				}
-				if name == "instance/settings/GENERAL" {
-					for _, key := range []string{"generalSetting", "general_setting"} {
-						general, _ := setting[key].(map[string]any)
-						for _, flag := range []string{"disallowUserRegistration", "disallow_user_registration", "disallowPasswordAuth", "disallow_password_auth"} {
-							if _, exists := general[flag]; exists {
-								delete(general, flag)
-								warnings = append(warnings, flag+" is ignored because Cat_two uses administrator password sign-in")
-							}
-						}
-					}
-				}
-				return false
-			})
-		}
-	}
-	if users, ok := document["users"].([]any); ok {
-		document["users"] = slices.DeleteFunc(users, func(value any) bool {
-			user, _ := value.(map[string]any)
-			role, _ := user["role"].(string)
-			if role != "USER" {
-				return false
-			}
-			warnings = append(warnings, "a regular user declaration is ignored because Cat_two configures one administrator")
-			return true
-		})
-	}
-	for _, field := range []string{"lifecycle", "removed"} {
-		if entries, ok := document[field].([]any); ok {
-			document[field] = slices.DeleteFunc(entries, func(value any) bool {
-				entry, _ := value.(map[string]any)
-				name, _ := entry["resource"].(string)
-				if field == "removed" && strings.HasPrefix(name, "users/") && entry["destroy"] == true {
-					warnings = append(warnings, "a user removal is ignored because Cat_two preserves existing accounts and their data")
-					return true
-				}
-				if !retiredResource(name) && !preserved[name] {
-					return false
-				}
-				warnings = append(warnings, field+" for a retired resource is ignored in Cat_two")
-				return true
-			})
-		}
-	}
-	return warnings
-}
-
-func retiredResource(name string) bool {
-	if strings.HasPrefix(name, legacyIdentityProviderPrefix) || (strings.HasPrefix(name, "users/") && strings.Contains(name, "/linkedIdentities/")) {
-		return true
-	}
-	switch name {
-	case "instance/settings/ACCESS", "instance/settings/AI", "instance/settings/NOTIFICATION", "instance/settings/USAGE_LIMITS", "instance/settings/MEMO_RELATED":
-		return true
-	default:
-		return false
-	}
-}
-
-func legacyStorageDeclaration(setting map[string]any) bool {
-	isRetiredType := func(value any) bool {
-		return value == "S3" || value == "DATABASE" || value == "STORAGE_TYPE_S3" || value == "STORAGE_TYPE_DATABASE"
-	}
-	for _, key := range []string{"storageSetting", "storage_setting"} {
-		storage, _ := setting[key].(map[string]any)
-		if isRetiredType(storage["storageType"]) || isRetiredType(storage["storage_type"]) || storage["s3Config"] != nil || storage["s3_config"] != nil {
-			return true
-		}
-		if storages, ok := storage["storages"].([]any); ok {
-			for _, value := range storages {
-				entry, _ := value.(map[string]any)
-				if isRetiredType(entry["type"]) || entry["s3Config"] != nil || entry["s3_config"] != nil {
-					return true
-				}
-			}
-		}
-	}
-	return false
 }
 
 // substitute resolves a string that is exactly one ${env:NAME} or
 // ${file:PATH} reference, and turns each $${ into a literal ${. Errors name
 // the path and the reference, never a resolved value.
 func (r *jsonReader) substitute(path, value string) (string, error) {
-	// Drop retired scripts before reading any legacy secret or environment reference.
-	if additionalScriptPath.MatchString(path) {
-		r.warnings = append(r.warnings, path+" is ignored because custom JavaScript is unavailable in Cat_two")
-		return "", nil
-	}
 	if !hasUnescapedReference(value) {
 		return strings.ReplaceAll(value, "$${", "${"), nil
 	}
@@ -401,7 +299,11 @@ func (in *inspector) message(path string, value any, descriptor protoreflect.Mes
 		if field == nil {
 			field = descriptor.Fields().ByTextName(key)
 		}
-		if field == nil || object[key] == nil {
+		if field == nil {
+			in.problems = append(in.problems, fmt.Sprintf("%s: unknown field %q", joinKey(path, key), key))
+			continue
+		}
+		if object[key] == nil {
 			continue
 		}
 		in.field(joinKey(path, key), object[key], field)
@@ -409,6 +311,16 @@ func (in *inspector) message(path string, value any, descriptor protoreflect.Mes
 }
 
 func (in *inspector) field(path string, value any, field protoreflect.FieldDescriptor) {
+	switch field.FullName() {
+	case "memos.api.InstanceSetting.storage_setting":
+		in.problems = append(in.problems, path+" is managed by Cat_two and cannot be configured")
+		return
+	case "memos.api.InstanceSetting.GeneralSetting.additional_script",
+		"memos.api.InstanceSetting.GeneralSetting.disallow_user_registration",
+		"memos.api.InstanceSetting.GeneralSetting.disallow_password_auth":
+		in.problems = append(in.problems, path+" is unavailable in Cat_two")
+		return
+	}
 	if options, ok := field.Options().(*descriptorpb.FieldOptions); ok && options.GetDeprecated() {
 		in.warnings = append(in.warnings, path+" is deprecated")
 	}

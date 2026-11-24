@@ -101,10 +101,7 @@ func NewServer(ctx context.Context, profile *profile.Profile, store *store.Store
 		return nil, errors.Wrap(err, "failed to load message capture settings")
 	}
 
-	apiHandler, err := apiService.NewHandler(ctx)
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to create API handler")
-	}
+	apiHandler := apiService.NewHandler()
 	frontendService := frontend.NewFrontendService(profile)
 	if apiService.Challenge != nil {
 		frontendService.ChallengeProvider = apiService.Challenge.Provider()

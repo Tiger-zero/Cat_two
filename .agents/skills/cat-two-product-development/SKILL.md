@@ -1,20 +1,20 @@
 ---
 name: cat-two-product-development
-description: 开发 Cat_two 单账户笔记的功能和业务逻辑。用于笔记、标签、附件、回收站、ZIP 导入导出、账户权限、本地数据迁移、REST、MCP、Telegram 和企业微信集成。
+description: 开发 Cat_two 单账户笔记的功能和业务逻辑。用于笔记、标签、附件、回收站、ZIP 导入导出、会话权限、SQLite、网页接口、MCP、Telegram 和企业微信集成。
 ---
 
 # Cat_two 产品与业务开发
 
-Cat_two 是单账户自托管笔记应用，用于记录、整理与同步笔记。写入以 Markdown 为正文格式，旧实例的笔记、附件、引用和评论继续按原作者校验。先从本项目的行为和代码定位改动，兼容已有数据和客户端。核对部署实例时，从 `GET /api/instance/profile` 获取 `version` 和 `commit`。 [功能与实现](references/product-guide.md) · [外部接口](references/external-api.md)
+Cat_two 是单账户自托管笔记应用，用于记录、整理与同步笔记。正文使用 Markdown，笔记和附件按账户鉴权。核对部署实例时，从网页 Connect `InstanceService.GetInstanceProfile` 获取 `version` 和 `commit`。 [功能与实现](references/product-guide.md) · [外部接口](references/external-api.md)
 
 Cat_two 的唯一数据库是 SQLite。仓库开发流程、验证和镜像交付使用总体开发 Skill。部署、升级和恢复见部署指南。桌面布局、颜色、字体、编辑器控件和交互视觉验收使用 UI 开发 Skill。操作部署中的笔记或配置 Codex 时使用 MCP Skill。 [总体开发](../cat-two-development/SKILL.md) · [部署与维护](references/deployment.md) · [桌面 UI 开发](../cat-two-ui-development/SKILL.md) · [MCP 使用](../cat-two-mcp/SKILL.md)
 
 ## 笔记标识与写入
 
 - 已有笔记用稳定的 `memos/<uid>` 资源名引用，详情页为 `/memos/<uid>`。创建可以省略 `memoId` 由服务端生成，或传 1 至 36 位字母、数字及中间的连字符。数据库内部 ID 仅供存储层使用。编辑、归档和恢复延用资源名。 [笔记协议](../../../proto/api/memo_service.proto) · [标识校验](../../../internal/identifier/resource_name.go)
-- Web、REST、Connect 和个人 MCP 复用笔记服务的作者权限和写入校验。新建时一并保存正文、附件绑定及引用。创建重试沿用显式 `memoId`、`idempotent: true` 和原请求字段。同一账号以相同请求重试返回成功创建的笔记，已被使用但不匹配的 ID 返回冲突。网断后保留创建快照和已上传文件，避免重复创建或上传。 [新建](../../../server/api/memo_create_helpers.go) · [编辑器保存](../../../web/src/components/MemoEditor/edit/hooks/useMemoSave.ts)
-- 通过个人 MCP 或个人访问令牌（PAT）新建笔记时，服务端在 Markdown 正文中添加 `#MCP连接`。正文已包含解析后路径完全匹配的标签时沿用原文。自动添加只在笔记新建时执行。 [令牌创建笔记](references/external-api.md#令牌创建笔记)
-- 更新使用读取时的 `revision` 作为 `expectedRevision`。`updateMask` 明确选中的字段，更新 `content` 时提交完整 Markdown。版本冲突时保留草稿和待上传附件，重新取回服务端内容后核对。局部修改继续尊重其他字段已有状态。 [更新协议](../../../proto/api/memo_service.proto) · [REST 和 MCP 示例](references/external-api.md)
+- 网页 Connect 和个人 MCP 复用笔记服务的作者权限和写入校验。新建时一并保存正文、附件绑定及引用。创建重试沿用显式 `memoId`、`idempotent: true` 和原请求字段。同一账号以相同请求重试返回成功创建的笔记，已被使用但不匹配的 ID 返回冲突。网断后保留创建快照和已上传文件，避免重复创建或上传。 [新建](../../../server/api/memo_create_helpers.go) · [编辑器保存](../../../web/src/components/MemoEditor/edit/hooks/useMemoSave.ts)
+- 通过个人 MCP 新建笔记时，服务端在 Markdown 正文中添加 `#MCP连接`。正文已包含解析后路径完全匹配的标签时沿用原文。自动添加只在笔记新建时执行。 [令牌创建笔记](references/external-api.md#令牌创建笔记)
+- 更新使用读取时的 `revision` 作为 `expectedRevision`。`updateMask` 明确选中的字段，更新 `content` 时提交完整 Markdown。版本冲突时保留草稿和待上传附件，重新取回服务端内容后核对。局部修改继续尊重其他字段已有状态。 [更新协议](../../../proto/api/memo_service.proto) · [MCP 示例](references/external-api.md#mcp-查找与共同创作)
 - 日期筛选、按日统计与 MCP 日期使用 `Asia/Shanghai`。日历选中的日期参与新建请求，手动设置的时间随原请求重试。标签路径用 `/` 分层，选父标签时纳入子路径。笔记列表支持关键词、CEL、来源筛选、排序和归档范围，使用稳定分页参数。 [日期工具](../../../web/src/lib/calendar-utils.ts) · [统计和标签接口](references/external-api.md#统计和标签) · [CEL](../../../filter/README.md)
 
 ## 标签
@@ -31,15 +31,13 @@ Cat_two 的唯一数据库是 SQLite。仓库开发流程、验证和镜像交�
 
 ## 本地文件存储
 
-- 个人模式 SQLite 管理账户、笔记元数据、标签、引用、正文内容哈希和搜索所需的正文副本。应用从数据目录下的 `notes/` 读取并校验 Markdown 文件，新附件写入 `assets/`。文件发布成功后提交 SQLite 中的引用。通过应用、API 或 MCP 更新，保持文件、引用与搜索一致。 [正文文件](../../../store/memo_body.go) · [附件写入](../../../store/attachment_files.go)
-- 升级启动时迁移旧 SQLite 正文和数据库内的附件，并继续读取原有本地附件路径。旧 S3 记录保留，文件需从支持 S3 的旧版导出。校验旧数据、归档、回收站、失败重试和重建。完整回滚和恢复时，使用同一时间点的数据库、文件目录和部署配置。 [附件迁移](../../../store/attachment_migration.go) · [备份和升级](references/deployment.md#备份和升级)
+- 个人模式 SQLite 管理账户、笔记元数据、标签、引用、正文内容哈希和搜索所需的正文副本。应用从数据目录下的 `notes/` 读取并校验 Markdown 文件，新附件写入 `assets/`。文件发布成功后提交 SQLite 中的引用。通过网页或 MCP 更新，保持文件、引用与搜索一致。 [正文文件](../../../store/memo_body.go) · [附件写入](../../../store/attachment_files.go)
 
 ## 账户与集成
 
 - 首次设置创建唯一管理员，随后关闭网页注册。笔记和统计只对作者开放，旧资源按原所有者校验。网页登录、两步验证、Cookie 续期和退出以独立会话处理，同 IP 连续 6 次密码失败会持久封禁该地址。管理员可在「设置 → 安全」解封。 [登录与解封](references/deployment.md#登录防护和-ip-解封) · [账户与可见性](references/external-api.md#凭据和可见性)
 - 网页登录会话以登录或最近一次笔记编辑为起点。满 45 分钟未编辑后，浏览器提示重新登录，服务端拒绝旧会话的访问和续期。浏览、搜索、滚动、同步和令牌轮换均不延长此期限。 [会话记录](../../../store/user_session.go) · [网页续期](references/external-api.md#凭据和可见性)
-- REST 与文件服务支持相应权限的 Web 会话与 PAT。`/mcp` 使用专用令牌，校验有效期、撤销及读写范围。设置和管理接口按网页管理员会话授权。扩展 API 时核对实际启用的工具、数据归属、分页、写入重试、限流和被撤销会话。实时更新用 SSE，断线后重新读取。 [外部接口](references/external-api.md) · [MCP 协议](../../../server/mcp/README.md) · [公网部署](references/deployment.md#在公网部署)
-- 升级保留旧空间、身份提供方和出站 Webhook 数据，笔记访问仅由作者校验。空间归属、SSO 和通用出站 Webhook 已退出运行流程。 [旧版接口兼容](references/external-api.md#凭据和可见性)
+- 网页通过 Connect、`/internal/` 和 `/file/` 完成会话、笔记、设置和文件操作。`/mcp` 使用专用令牌，校验有效期、撤销及读写范围。设置和管理接口按网页会话校验对应权限。扩展 MCP 时核对已启用的工具、数据归属、分页、写入重试、限流和令牌撤销。网页实时更新用 SSE，断线后重新读取。 [外部接口](references/external-api.md) · [MCP 协议](../../../server/mcp/README.md) · [公网部署](references/deployment.md#在公网部署)
 - Telegram 私聊和企业微信自建应用只接收授权发件人的文本，通过消息 ID 去重，保存成管理员的私有笔记并添加 `#Telegram` 或 `#微信`。保存成功后在原会话回复 `Yes!`。企业微信走签名加密的 `/integrations/wecom` 回调，Telegram 主动轮询。 [收件部署](references/deployment.md#telegram-和企业微信收件) · [写入和去重](../../../server/api/memo_capture.go)
 - 企业微信公网回调可在「设置 → 通知」单独保存。域名可带端口，默认用 HTTPS 并补齐 `/integrations/wecom`。已明确填写的 HTTP 或 HTTPS URL 保留协议与端口，公网入口把请求转发给固定回调路由。企业微信保存配置时发出验签解密的 GET 请求，之后用 POST 推送消息。 [部署示例](references/deployment.md#企业微信自建应用) · [企业微信回调配置](https://developer.work.weixin.qq.com/document/path/90930)
 - 「设置 → 通知」可分别启停两条收件渠道。首次保存前各自沿用容器配置，保存后按渠道即时生效。令牌和密钥留空保留原值。「设置 → 网络」配置 Telegram 轮询和回复的出站代理，首次保存前遵循 `HTTPS_PROXY` 和 `NO_PROXY`，手动关闭后直连。渠道密钥和代理 URL 加密存入实例数据库，查询返回状态、渠道标识和凭据是否已设置。 [设置接口](../../../server/api/capture_settings.go) · [加密持久化](../../../core/messagecapture/repository.go) · [网络代理](references/deployment.md#telegram-网络代理)
@@ -62,6 +60,6 @@ Cat_two 的唯一数据库是 SQLite。仓库开发流程、验证和镜像交�
 
 ## 验证改动
 
-1. 在隔离 SQLite 数据库或容器卷按实际入口验证新建、编辑、草稿恢复、归档、回收站、附件及 ZIP 导出再导入。修改存储格式时同时覆盖新实例和旧版本迁移。 [SQLite 验证命令](../../../store/test/README.md)
-2. 覆盖匿名请求、当前账号、旧数据作者、过期与撤销凭据。用实际 REST、Connect 或 MCP 路径验证写入和可见性。检查 MCP 工具发现、只读拒绝写入、分页和上海日期边界。 [API 用例](../../../server/test/) · [MCP 用例](../../../server/mcp/)
+1. 在新建 SQLite 数据库或独立容器卷按实际入口验证新建、编辑、草稿恢复、归档、回收站、附件及当前 ZIP 导出再导入。涉及存储格式时验证重启回读和不兼容数据库拒绝启动。 [SQLite 验证命令](../../../store/test/README.md)
+2. 覆盖匿名请求、当前账号、过期与撤销凭据。用实际网页 Connect、原生 HTTP 或 MCP 路径验证写入和可见性。检查 MCP 工具发现、只读拒绝写入、分页和上海日期边界。 [API 用例](../../../server/test/) · [MCP 用例](../../../server/mcp/)
 3. 收件和代理改动验证设置保存、重启后还原、渠道停用、允许和拒绝的发件人、重复投递、成功确认及代理的独立生效。更新对应功能和接口说明，在总体开发 Skill 记录改动与验证结果。 [收件运行时](../../../server/message_capture.go) · [总体开发记录](../cat-two-development/SKILL.md#开发记录)

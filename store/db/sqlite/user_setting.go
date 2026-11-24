@@ -5,8 +5,6 @@ import (
 	"database/sql"
 	"strings"
 
-	"github.com/pkg/errors"
-
 	storepb "github.com/usememos/memos/proto/gen/store"
 	"github.com/usememos/memos/store"
 )
@@ -107,46 +105,4 @@ func (d *DB) DeleteUserSettings(ctx context.Context, delete *store.DeleteUserSet
 		return err
 	}
 	return nil
-}
-
-func (d *DB) GetUserByPATHash(ctx context.Context, tokenHash string) (*store.PATQueryResult, error) {
-	query := `
-		SELECT
-			user_setting.user_id,
-			user_setting.value
-		FROM user_setting
-		WHERE user_setting.key = 'PERSONAL_ACCESS_TOKENS'
-			AND EXISTS (
-				SELECT 1
-				FROM json_each(json_extract(user_setting.value, '$.tokens')) AS token
-				WHERE json_extract(token.value, '$.tokenHash') = ?
-			)
-	`
-
-	var userID int32
-	var tokensJSON string
-
-	err := d.db.QueryRowContext(ctx, query, tokenHash).Scan(&userID, &tokensJSON)
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return nil, nil
-		}
-		return nil, err
-	}
-
-	patsUserSetting := &storepb.PersonalAccessTokensUserSetting{}
-	if err := protojsonUnmarshaler.Unmarshal([]byte(tokensJSON), patsUserSetting); err != nil {
-		return nil, err
-	}
-
-	for _, pat := range patsUserSetting.Tokens {
-		if pat.TokenHash == tokenHash {
-			return &store.PATQueryResult{
-				UserID: userID,
-				PAT:    pat,
-			}, nil
-		}
-	}
-
-	return nil, nil
 }

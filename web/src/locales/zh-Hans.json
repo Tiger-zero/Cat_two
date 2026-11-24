@@ -107,7 +107,6 @@
     "expand": "展开",
     "language": "语言",
     "last-updated-at": "最后更新时间",
-    "learn-more": "了解更多",
     "memo": "备忘录",
     "memos": "备忘录",
     "month-navigation": "月份导航",
@@ -348,6 +347,9 @@
     "recording-failed": "无法开始录音。"
   },
   "memo": {
+    "reaction-emoji": "表情",
+    "reaction-search-emoji": "搜索或粘贴表情…",
+    "reaction-no-results": "没有匹配项",
     "no-memos-yet": "还没有备忘录",
     "no-matching-memos": "没有符合条件的 Memo",
     "clear-filters": "清除筛选",
@@ -438,7 +440,6 @@
   "message": {
     "archived-successfully": "归档成功",
     "copied": "已复制",
-    "description-is-required": "请填写说明",
     "fill-all": "请填写所有栏目。",
     "new-password-not-match": "新密码不一致。",
     "no-data": "未找到任何数据。",
@@ -582,51 +583,13 @@
       "server-name": "服务器名称",
       "label": "系统"
     },
-    "access-token": {
-      "access-token-copied-to-clipboard": "访问令牌已复制到剪贴板",
-      "access-token-deleted": "访问令牌 `{{description}}` 已删除",
-      "access-token-deletion": "您确定要删除访问令牌 `{{description}}` 吗？",
-      "access-token-deletion-description": "此操作是不可逆的。您需要将所有正在使用该令牌的服务更新为新的访问令牌。",
-      "create-dialog": {
-        "access-token-created": "访问令牌 `{{description}}` 已创建",
-        "create-access-token": "创建 REST API 令牌",
-        "description": "描述",
-        "duration-1m": "1 个月",
-        "duration-never": "从不",
-        "expiration": "过期时间",
-        "some-description": "请输入描述...",
-        "duration-90d": "90 天"
-      },
-      "description": "创建或撤销供 REST API 客户端使用的个人访问令牌。",
-      "title": "REST API 访问令牌",
-      "token": "令牌",
-      "expires": "到期时间",
-      "label": "MCP 和 API",
-      "create-first": "创建第一个 REST API 令牌",
-      "about-description": "持有个人访问令牌（PAT）的应用或脚本可使用你的账号权限，直至令牌过期或被撤销。",
-      "empty-description": "令牌允许脚本或应用程序以您的身份调用 API。令牌在创建时显示一次，然后在此处列出，以便您可以撤销它。",
-      "empty-title": "暂无访问令牌",
-      "guideline-shown-once": "令牌仅在您创建后立即显示一次（它会被复制到您的剪贴板）。请将其存储在安全的地方，例如密码管理器。",
-      "guideline-one-per-app": "为每个应用程序或脚本创建一个单独的令牌，这样您就可以撤销其中一个而不会影响其他令牌。",
-      "guideline-expiration": "优先使用会过期的令牌。如果令牌泄露，长期有效的令牌风险更大。",
-      "guideline-review": "定期检查最后使用时间，删除您不认识或不再需要的令牌。",
-      "how-to-use": "如何使用令牌",
-      "last-used": "上次使用时间",
-      "never-used": "从未使用",
-      "no-expiration": "无过期时间",
-      "integration-description": "管理访问笔记的 MCP 连接和个人访问令牌。",
-      "mcp-description": "在 Codex 中选择 Streamable HTTP 并填入服务地址。将 Bearer 令牌环境变量留空，在 HTTP 请求头中添加 Authorization，粘贴创建连接时显示的完整 Bearer 值。",
-      "mcp-url": "MCP 服务地址",
-      "mcp-config": "MCP 客户端配置",
-      "api-description": "通过 REST API 读写笔记时，将示例中的 <YOUR_PAT> 替换为个人访问令牌。请求沿用你的账号权限。",
-      "api-url": "REST API 基础地址",
-      "api-list-notes": "列出笔记",
-      "api-create-note": "创建一条私人测试笔记",
+    "mcp-connection": {
+      "label": "MCP",
+      "url": "MCP 服务地址",
+      "client-description": "在 Codex 中选择 Streamable HTTP 并填入服务地址。将 Bearer 令牌环境变量留空，在 HTTP 请求头中添加 Authorization，粘贴创建连接时显示的完整 Bearer 值。",
+      "client-config": "MCP 客户端配置",
       "copy-value": "复制{{label}}",
       "copy-failed": "复制失败，请选中文本后手动复制。",
-      "web-clipper-title": "将令牌与 Memos Web Clipper 配合使用"
-    },
-    "mcp-connection": {
       "title": "MCP 连接",
       "description": "为 Codex 或其他 MCP 客户端创建令牌。令牌创建后立即有效，使用该令牌的连接与令牌同时到期。",
       "create": "创建 MCP 连接",
@@ -648,10 +611,8 @@
       "load-error": "无法加载 MCP 连接。",
       "unsupported": "当前实例不提供 MCP 连接令牌。",
       "status": {
-        "legacy": "需创建新令牌",
         "not-connected": "未连接",
         "connected": "已连接",
-        "denied": "已拒绝",
         "revoked": "已撤销",
         "expired": "已过期"
       },
@@ -817,13 +778,6 @@
     },
     "timezone-unknown": "未知时区",
     "title": "详情"
-  },
-  "space": {
-    "icon": {
-      "emoji": "表情",
-      "search-emoji": "搜索或粘贴表情…",
-      "no-results": "没有匹配项"
-    }
   },
   "search": {
     "retry": "重试",

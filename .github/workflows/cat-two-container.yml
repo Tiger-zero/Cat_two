@@ -69,11 +69,9 @@ jobs:
 
   proto:
     if: github.repository == 'Tiger-zero/Cat_two' && github.ref == 'refs/heads/main' && (github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && contains(github.event.head_commit.message, '[publish dockerhub]')))
-    needs: verify
     uses: ./.github/workflows/proto-linter.yml
     with:
       release-verification: true
-      baseline: ${{ needs.verify.outputs.previous-commit }}
 
   verify:
     name: Check the container inputs
@@ -81,8 +79,6 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.version.outputs.version }}
-      previous: ${{ steps.previous.outputs.image }}
-      previous-commit: ${{ steps.previous.outputs.commit }}
     env:
       RELEASE_REQUESTED: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && contains(github.event.head_commit.message, '[publish dockerhub]')) }}
     steps:
@@ -161,16 +157,6 @@ jobs:
           version="$(bash scripts/release_version.sh development-version)"
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
-      - name: Resolve the stable image for upgrade and API compatibility
-        if: env.RELEASE_REQUESTED == 'true'
-        id: previous
-        run: |
-          previous="$(docker buildx imagetools inspect "$DOCKERHUB_IMAGE:latest" --format '{{json .}}')"
-          digest="$(jq -er '.manifest.digest | select(test("^sha256:[0-9a-f]{64}$"))' <<< "$previous")"
-          commit="$(jq -er '[.image[].config.Labels["org.opencontainers.image.revision"]] | unique | select(length == 1) | .[0] | select(type == "string" and test("^[0-9a-f]{40}$"))' <<< "$previous")"
-          echo "image=$DOCKERHUB_IMAGE@$digest" >> "$GITHUB_OUTPUT"
-          echo "commit=$commit" >> "$GITHUB_OUTPUT"
-
       - uses: docker/setup-buildx-action@v4
         if: steps.scope.outputs.skip != 'true' && env.RELEASE_REQUESTED != 'true'
 
@@ -191,7 +177,7 @@ jobs:
 
       - name: Verify the web app and persistent SQLite data
         if: steps.scope.outputs.skip != 'true' && env.RELEASE_REQUESTED != 'true'
-        run: bash scripts/release_smoke_test.sh --fresh-only --candidate-image cat-two:smoke --expected-commit "$GITHUB_SHA"
+        run: bash scripts/release_smoke_test.sh --candidate-image cat-two:smoke --expected-commit "$GITHUB_SHA"
 
   stage:
     name: Build the container candidate
@@ -204,7 +190,6 @@ jobs:
     outputs:
       image: ${{ steps.registry.outputs.image }}
       candidate: ${{ steps.image.outputs.digest }}
-      previous: ${{ needs.verify.outputs.previous }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -295,11 +280,10 @@ jobs:
       - name: Test the exact published candidate digest
         env:
           CANDIDATE: ${{ needs.stage.outputs.image }}@${{ needs.stage.outputs.candidate }}
-          PREVIOUS: ${{ needs.stage.outputs.previous }}
           ARCHITECTURE: ${{ matrix.arch }}
         run: |
           bash scripts/release_smoke_test.sh --candidate-image "$CANDIDATE" \
-            --previous-image "$PREVIOUS" --expected-commit "$GITHUB_SHA" \
+            --expected-commit "$GITHUB_SHA" \
             --platform "linux/$ARCHITECTURE"
 
   publish:

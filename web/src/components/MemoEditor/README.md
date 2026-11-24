@@ -107,7 +107,7 @@ The session's code is a chunk of its own. The authenticated Home route loads `pr
 
 ### Personal notes
 
-New memos go into the personal workspace with private visibility. The service preserves the saved placement when editing a note from an older Space.
+New notes are private. Browser drafts saved with an older record format can be recovered against the same note even after the server removes the retired Space field from its response.
 
 ## Directory structure
 

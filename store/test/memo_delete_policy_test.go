@@ -2,12 +2,10 @@ package test
 
 import (
 	"context"
-	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/usememos/memos/internal/testutil/legacyspace"
 	storepb "github.com/usememos/memos/proto/gen/store"
 	"github.com/usememos/memos/store"
 )
@@ -133,7 +131,6 @@ func TestMemoDeleteActorCanReadAudienceMatrix(t *testing.T) {
 		{name: "public", rowStatus: store.Normal, visibility: store.Public, actorCanRead: true},
 		{name: "protected", rowStatus: store.Normal, visibility: store.Protected, actorCanRead: true},
 		{name: "private", rowStatus: store.Normal, visibility: store.Private, actorCanRead: true},
-		{name: "legacy workspace audience", rowStatus: store.Normal, visibility: store.SpaceAudience, actorCanRead: true},
 		{name: "unknown audience", rowStatus: store.Normal, visibility: store.Visibility("UNKNOWN")},
 		{name: "invalid lifecycle", rowStatus: store.RowStatus("UNKNOWN"), visibility: store.Public},
 		{name: "archived author", rowStatus: store.Archived, visibility: store.Private, actorCanRead: true},
@@ -143,37 +140,5 @@ func TestMemoDeleteActorCanReadAudienceMatrix(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			require.Equal(t, test.actorCanRead, store.MemoDeleteActorCanRead(test.rowStatus, test.visibility))
 		})
-	}
-}
-
-func TestDeleteMemoWithPolicyUsesLegacyMemoAuthorWithoutMembership(t *testing.T) {
-	ctx := t.Context()
-	ts := NewTestingStore(ctx, t)
-	t.Cleanup(func() { require.NoError(t, ts.Close()) })
-
-	author, err := ts.CreateUser(ctx, &store.User{Username: "delete-legacy-author", Role: store.RoleUser, PasswordHash: "hash"})
-	require.NoError(t, err)
-	peer, err := ts.CreateUser(ctx, &store.User{Username: "delete-legacy-peer", Role: store.RoleUser, PasswordHash: "hash"})
-	require.NoError(t, err)
-	sqlite := ts.GetDriver().GetDB()
-	spaceID, err := legacyspace.Seed(ctx, sqlite, "delete-legacy-space", "Legacy Workspace", peer.ID)
-	require.NoError(t, err)
-
-	for index, placement := range []any{spaceID, int32(2147483000), nil} {
-		memo, err := ts.CreateMemo(ctx, &store.Memo{
-			UID:        fmt.Sprintf("delete-legacy-note-%d", index),
-			CreatorID:  author.ID,
-			Content:    "Legacy memo",
-			Visibility: store.Private,
-		})
-		require.NoError(t, err)
-		_, err = sqlite.ExecContext(ctx, `UPDATE memo SET visibility = 'SPACE', space_id = ? WHERE id = ?`, placement, memo.ID)
-		require.NoError(t, err)
-
-		_, err = ts.DeleteMemoWithPolicy(ctx, &store.DeleteMemoWithPolicy{MemoID: memo.ID, ActorUserID: peer.ID})
-		require.ErrorIs(t, err, store.ErrMemoPermissionDenied)
-		result, err := ts.DeleteMemoWithPolicy(ctx, &store.DeleteMemoWithPolicy{MemoID: memo.ID, ActorUserID: author.ID})
-		require.NoError(t, err)
-		require.True(t, result.ActorCanRead)
 	}
 }

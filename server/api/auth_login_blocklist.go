@@ -14,7 +14,7 @@ import (
 )
 
 const (
-	loginBlocklistPath     = "/api/auth/loginBlocklist"
+	loginBlocklistPath     = "/internal/auth/loginBlocklist"
 	loginBlocklistPageSize = 100
 	loginIPFailureLimit    = 6
 )
@@ -46,11 +46,9 @@ type loginBlocklistPage struct {
 	NextPageToken string              `json:"nextPageToken,omitempty"`
 }
 
-func (s *APIService) newLoginBlocklistHandler(authorizer *Authorizer) http.Handler {
-	mux := http.NewServeMux()
+func (s *APIService) registerLoginBlocklistRoutes(mux *http.ServeMux, authorizer *Authorizer) {
 	mux.HandleFunc("GET "+loginBlocklistPath, s.authorizeAdminSession(authorizer, s.listLoginBlocklist))
 	mux.HandleFunc("DELETE "+loginBlocklistPath+"/{ip}", s.authorizeAdminSession(authorizer, s.removeLoginBlock))
-	return mux
 }
 
 func (s *APIService) listLoginBlocklist(w http.ResponseWriter, r *http.Request) error {

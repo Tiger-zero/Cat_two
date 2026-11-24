@@ -1,7 +1,6 @@
 package profile
 
 import (
-	"fmt"
 	"log/slog"
 	"net/url"
 	"os"
@@ -66,6 +65,14 @@ func checkDataDir(dataDir string) (string, error) {
 	return dataDir, nil
 }
 
+func defaultDataDir(containerDir string) string {
+	// Inspect an existing mount without modifying it before the schema check.
+	if info, err := os.Stat(containerDir); err == nil && info.IsDir() {
+		return containerDir
+	}
+	return "."
+}
+
 func (p *Profile) Validate() error {
 	if p.Driver != "" && p.Driver != SQLiteDriver {
 		return errors.Errorf("unsupported database driver %q: Cat_two requires SQLite", p.Driver)
@@ -83,22 +90,7 @@ func (p *Profile) Validate() error {
 		if runtime.GOOS == "windows" {
 			p.Data = filepath.Join(os.Getenv("ProgramData"), "memos")
 		} else {
-			// On Linux/macOS, check if /var/opt/memos exists and is writable (Docker scenario)
-			if info, err := os.Stat("/var/opt/memos"); err == nil && info.IsDir() {
-				// Check if we can write to this directory
-				testFile := filepath.Join("/var/opt/memos", ".write-test")
-				if err := os.WriteFile(testFile, []byte("test"), 0600); err == nil {
-					os.Remove(testFile)
-					p.Data = "/var/opt/memos"
-				} else {
-					// /var/opt/memos exists but is not writable, use current directory
-					slog.Warn("/var/opt/memos is not writable, using current directory")
-					p.Data = "."
-				}
-			} else {
-				// /var/opt/memos doesn't exist, use current directory (local development)
-				p.Data = "."
-			}
+			p.Data = defaultDataDir("/var/opt/memos")
 		}
 	}
 
@@ -118,12 +110,7 @@ func (p *Profile) Validate() error {
 
 	p.Data = dataDir
 	if p.DSN == "" {
-		mode := "prod"
-		if p.Demo {
-			mode = "demo"
-		}
-		dbFile := fmt.Sprintf("memos_%s.db", mode)
-		p.DSN = filepath.Join(dataDir, dbFile)
+		p.DSN = filepath.Join(dataDir, "memos_prod.db")
 	}
 
 	return nil

@@ -50,7 +50,6 @@ func TestCaptureMemoKeepsSourceAndDeduplicatesTrashedMemo(t *testing.T) {
 		require.NotNil(t, memo)
 		require.Equal(t, owner.ID, memo.CreatorID)
 		require.Equal(t, store.Private, memo.Visibility)
-		require.Nil(t, memo.SpaceID)
 		require.Nil(t, memo.ParentUID)
 		require.Equal(t, "#"+test.tag+"\n\n"+test.text, memo.Content)
 		require.Equal(t, test.channel, memo.Payload.GetCreationChannel())

@@ -82,7 +82,7 @@ esac
 `)
 	cmd := exec.Command("bash", filepath.Join(repo, "scripts/release_smoke_test.sh"))
 	cmd.Env = append(os.Environ(), "PATH="+mockBin+string(os.PathListSeparator)+os.Getenv("PATH"),
-		"SMOKE_TEST_REPO="+repo, "MEMOS_SMOKE_CANDIDATE_IMAGE=", "MEMOS_SMOKE_PREVIOUS_IMAGE=", "MEMOS_SMOKE_KEEP_RESOURCES=")
+		"SMOKE_TEST_REPO="+repo, "MEMOS_SMOKE_CANDIDATE_IMAGE=", "MEMOS_SMOKE_KEEP_RESOURCES=")
 	output, err := cmd.CombinedOutput()
 	var exitErr *exec.ExitError
 	require.ErrorAs(t, err, &exitErr, string(output))

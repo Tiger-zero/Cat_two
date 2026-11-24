@@ -1,19 +1,27 @@
 #!/usr/bin/env sh
 
-# Fix ownership of the data directory (e.g. for users upgrading from older
-# versions where files were created as root) and drop to a non-root user.
+# Prepare an empty data directory, then drop to a non-root user.
 MEMOS_UID=${MEMOS_UID:-${PUID:-10001}}
 MEMOS_GID=${MEMOS_GID:-${PGID:-10001}}
-DATA_DIR="/var/opt/memos"
+DATA_DIR=${MEMOS_DATA:-/var/opt/memos}
+
+empty_data_directory() {
+    [ -d "$DATA_DIR" ] || return 1
+    for entry in "$DATA_DIR"/* "$DATA_DIR"/.[!.]* "$DATA_DIR"/..?*; do
+        if [ -e "$entry" ] || [ -L "$entry" ]; then
+            return 1
+        fi
+    done
+    return 0
+}
 
 # MEMOS_ENTRYPOINT_SWITCHED marks that the privilege drop below has already run.
 # su-exec preserves the environment, so the marker survives the re-exec. Without
 # it, a target of UID 0 (e.g. MEMOS_UID=0, common under rootless Docker) would
 # stay root after su-exec, re-enter this block, and loop forever.
 if [ "$(id -u)" = "0" ] && [ -z "${MEMOS_ENTRYPOINT_SWITCHED:-}" ]; then
-    # Started as root: fix permissions, then re-exec as the target user.
-    if [ -d "$DATA_DIR" ]; then
-        chown -R "$MEMOS_UID:$MEMOS_GID" "$DATA_DIR" 2>/dev/null || true
+    if empty_data_directory; then
+        chown "$MEMOS_UID:$MEMOS_GID" "$DATA_DIR" 2>/dev/null || true
     fi
     echo "memos: starting as UID:GID ${MEMOS_UID}:${MEMOS_GID}"
     export MEMOS_ENTRYPOINT_SWITCHED=1

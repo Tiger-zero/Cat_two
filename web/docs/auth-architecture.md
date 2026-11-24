@@ -15,4 +15,4 @@
 - In Cat_two, a web session expires after 45 minutes without editing a note. The server deadline applies to requests and refreshes. The browser observes the deadline, shares it across tabs, and returns to sign-in when it expires. Activity such as browsing and background synchronization does not extend the deadline. [Browser idle monitor](../src/lib/session-idle.ts) · [Session storage](../../store/user_session.go)
 - Successful sign-out and session end clear the active identity and the React Query cache. Results from an earlier initialization are ignored when the user session changes. [Auth provider](../src/contexts/AuthContext.tsx)
 
-The REST and MCP integration credentials have their own permissions and expiry rules. [External API credentials](../../.agents/skills/cat-two-product-development/references/external-api.md#凭据和可见性)
+The browser calls Connect, `/internal/`, and `/file/` with its session credentials. External MCP clients use dedicated connection tokens with their own permissions and expiry. [Integration credentials](../../.agents/skills/cat-two-product-development/references/external-api.md#凭据和可见性)

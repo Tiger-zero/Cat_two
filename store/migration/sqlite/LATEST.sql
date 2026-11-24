@@ -41,7 +41,7 @@ CREATE TABLE mcp_connection (
   user_id INTEGER NOT NULL REFERENCES user(id) ON DELETE CASCADE,
   label TEXT NOT NULL,
   token_hash TEXT NOT NULL UNIQUE,
-  status TEXT NOT NULL CHECK (status IN ('awaiting', 'pending', 'approved', 'denied', 'revoked')),
+  status TEXT NOT NULL CHECK (status IN ('approved', 'revoked')),
   created_ts BIGINT NOT NULL,
   requested_ts BIGINT NOT NULL DEFAULT 0,
   expires_ts BIGINT NOT NULL DEFAULT 0,
@@ -68,26 +68,6 @@ CREATE TABLE user_setting (
   UNIQUE(user_id, key)
 );
 
--- space
-CREATE TABLE space (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  uid TEXT NOT NULL UNIQUE,
-  title TEXT NOT NULL,
-  description TEXT NOT NULL DEFAULT '',
-  payload TEXT NOT NULL DEFAULT '{}'
-);
-
--- space membership
-CREATE TABLE space_member (
-  space_id INTEGER NOT NULL,
-  user_id INTEGER NOT NULL,
-  status TEXT NOT NULL,
-  role TEXT NOT NULL CHECK (role IN ('ADMIN', 'USER')),
-  PRIMARY KEY (space_id, user_id)
-);
-
-CREATE INDEX idx_space_member_user_id ON space_member(user_id, space_id);
-
 -- memo
 CREATE TABLE memo (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -102,18 +82,15 @@ CREATE TABLE memo (
   creation_request_digest TEXT NOT NULL DEFAULT '',
   deleted_ts INTEGER,
   trash_root_id INTEGER,
-  visibility TEXT NOT NULL CHECK (visibility IN ('PUBLIC', 'PROTECTED', 'PRIVATE', 'SPACE')) DEFAULT 'PRIVATE',
+  visibility TEXT NOT NULL CHECK (visibility IN ('PUBLIC', 'PROTECTED', 'PRIVATE')) DEFAULT 'PRIVATE',
   pinned INTEGER NOT NULL CHECK (pinned IN (0, 1)) DEFAULT 0,
-  payload TEXT NOT NULL DEFAULT '{}',
-  space_id INTEGER DEFAULT NULL
+  payload TEXT NOT NULL DEFAULT '{}'
 );
 
 CREATE INDEX idx_memo_creator_id ON memo(creator_id);
-CREATE INDEX idx_memo_space_id ON memo(space_id, row_status, created_ts DESC, id DESC);
 CREATE INDEX idx_memo_trash_expiry ON memo(deleted_ts, id);
 CREATE INDEX idx_memo_trash_creator ON memo(creator_id, deleted_ts, id);
 CREATE INDEX idx_memo_trash_root ON memo(trash_root_id);
-CREATE INDEX idx_memo_legacy_body ON memo(id) WHERE body_digest = '';
 CREATE INDEX idx_memo_body_digest ON memo(body_digest) WHERE body_digest != '';
 CREATE INDEX idx_memo_owner_pinned_created
   ON memo(creator_id, row_status, pinned DESC, created_ts DESC, id DESC)
@@ -157,8 +134,6 @@ CREATE TABLE attachment (
 
 CREATE INDEX idx_attachment_creator_id ON attachment(creator_id);
 CREATE INDEX idx_attachment_memo_id_type ON attachment(memo_id, type);
-CREATE INDEX idx_attachment_legacy_storage
-  ON attachment(id) WHERE storage_type NOT IN ('LOCAL', 'EXTERNAL', 'S3');
 
 -- Removed attachment metadata for retrying trash storage cleanup after commit.
 CREATE TABLE attachment_storage_cleanup (
@@ -170,16 +145,6 @@ CREATE TABLE attachment_storage_cleanup (
   reference TEXT NOT NULL,
   payload TEXT NOT NULL,
   next_attempt_ts BIGINT NOT NULL DEFAULT 0
-);
-
--- idp
-CREATE TABLE idp (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  uid TEXT NOT NULL UNIQUE,
-  name TEXT NOT NULL,
-  type TEXT NOT NULL,
-  identifier_filter TEXT NOT NULL DEFAULT '',
-  config TEXT NOT NULL DEFAULT '{}'
 );
 
 -- inbox
@@ -214,17 +179,3 @@ CREATE TABLE memo_share (
 );
 
 CREATE INDEX idx_memo_share_memo_id ON memo_share(memo_id);
-
--- user_identity
-CREATE TABLE user_identity (
-  id         INTEGER PRIMARY KEY AUTOINCREMENT,
-  user_id    INTEGER NOT NULL,
-  provider   TEXT    NOT NULL,
-  extern_uid TEXT    NOT NULL,
-  created_ts BIGINT  NOT NULL DEFAULT (strftime('%s', 'now')),
-  updated_ts BIGINT  NOT NULL DEFAULT (strftime('%s', 'now')),
-  UNIQUE (provider, extern_uid),
-  UNIQUE (user_id, provider)
-);
-
-CREATE INDEX idx_user_identity_user_id ON user_identity(user_id);

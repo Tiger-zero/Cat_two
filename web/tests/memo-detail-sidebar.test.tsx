@@ -204,7 +204,7 @@ describe("MemoDetailSidebar", () => {
 
   it.each([
     ["an archived memo", State.ARCHIVED, Visibility.PUBLIC],
-    ["a Space memo", State.NORMAL, Visibility.SPACE],
+    ["a private memo", State.NORMAL, Visibility.PRIVATE],
   ])("lets users copy the direct link for %s", async (_label, state, visibility) => {
     const memo = create(MemoSchema, {
       name: "memos/restricted-share",

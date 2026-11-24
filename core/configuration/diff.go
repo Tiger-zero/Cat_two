@@ -29,11 +29,6 @@ const (
 // secrets API responses leave out. User.password is write-only and is never
 // read back to compare at all.
 var sensitiveFields = []protoreflect.FullName{
-	"memos.api.OAuth2Config.client_secret",
-	"memos.api.InstanceSetting.StorageSetting.S3Config.access_key_secret",
-	"memos.api.InstanceSetting.Storage.S3Config.access_key_secret",
-	"memos.api.InstanceSetting.NotificationSetting.EmailSetting.smtp_password",
-	"memos.api.InstanceSetting.AIProviderConfig.api_key",
 	"memos.api.User.password",
 }
 
@@ -96,7 +91,7 @@ func (d *differ) field(path string, field protoreflect.FieldDescriptor, before, 
 	switch {
 	case field.IsList() && isMessageKind(field) && beforeValue.List().Len() == afterValue.List().Len():
 		// Lists of the same length are compared element by element, so a change
-		// deep in one storage or AI provider names its own path.
+		// deep in an element names its own path.
 		for i := range afterValue.List().Len() {
 			d.message(fmt.Sprintf("%s[%d]", path, i), beforeValue.List().Get(i).Message(), afterValue.List().Get(i).Message())
 		}

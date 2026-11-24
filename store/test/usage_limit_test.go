@@ -7,7 +7,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
 
-	"github.com/usememos/memos/internal/testutil/legacyspace"
 	storepb "github.com/usememos/memos/proto/gen/store"
 	"github.com/usememos/memos/store"
 )
@@ -61,13 +60,6 @@ func TestCountUserMemos(t *testing.T) {
 	require.NoError(t, err)
 	archivedStatus := store.Archived
 	require.NoError(t, ts.UpdateMemo(ctx, &store.UpdateMemo{ID: archived.ID, RowStatus: &archivedStatus}))
-	sqlite := ts.GetDriver().GetDB()
-	spaceID, err := legacyspace.Seed(ctx, sqlite, "count-space", "Count", owner.ID)
-	require.NoError(t, err)
-	legacyMemo, err := ts.CreateMemo(ctx, &store.Memo{UID: "count-space-memo", CreatorID: owner.ID, Content: "space", Visibility: store.Private})
-	require.NoError(t, err)
-	_, err = sqlite.ExecContext(ctx, `UPDATE memo SET space_id = ?, visibility = 'SPACE' WHERE id = ?`, spaceID, legacyMemo.ID)
-	require.NoError(t, err)
 	_, err = ts.CreateMemoComment(ctx, &store.Memo{UID: "count-comment", CreatorID: owner.ID, Content: "comment", Visibility: store.Public}, root.ID, owner.ID)
 	require.NoError(t, err)
 	_, err = ts.CreateMemo(ctx, &store.Memo{UID: "count-other-memo", CreatorID: other.ID, Content: "other", Visibility: store.Public})
@@ -75,12 +67,12 @@ func TestCountUserMemos(t *testing.T) {
 
 	count, err = ts.CountUserMemos(ctx, owner.ID)
 	require.NoError(t, err)
-	require.Equal(t, int64(4), count, "archived memos, Space memos, and comments count; other users' memos do not")
+	require.Equal(t, int64(3), count, "counts archived notes and comments for the owner")
 
 	require.NoError(t, ts.DeleteMemo(ctx, &store.DeleteMemo{ID: archived.ID}))
 	count, err = ts.CountUserMemos(ctx, owner.ID)
 	require.NoError(t, err)
-	require.Equal(t, int64(3), count, "deleting a memo frees a slot")
+	require.Equal(t, int64(2), count, "deleting a memo frees a slot")
 }
 
 func TestUpdateInstanceSettingIfUnchanged(t *testing.T) {

@@ -21,7 +21,7 @@ func TestMapReactionMutationError(t *testing.T) {
 		{name: "reaction ownership", err: store.ErrReactionPermissionDenied, code: codes.PermissionDenied},
 		{name: "private memo", err: store.ErrMemoPermissionDenied, code: codes.PermissionDenied},
 		{name: "stale memo snapshot", err: store.ErrMemoMutationConflict, code: codes.FailedPrecondition},
-		{name: "invalid space", err: store.ErrMemoSpaceNotWritable, code: codes.FailedPrecondition},
+		{name: "unavailable memo context", err: store.ErrMemoContextUnavailable, code: codes.FailedPrecondition},
 		{name: "unexpected storage failure", err: errors.New("database unavailable"), code: codes.Internal},
 	}
 

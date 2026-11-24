@@ -1,15 +1,18 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button, Dialog, Field, Fieldset, Input, List, Radio, RadioGroup } from "@usememos/ui";
 import { PlusIcon } from "lucide-react";
-import { type FormEvent, useId, useState } from "react";
+import { type FormEvent, useState } from "react";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import { authenticatedFetch } from "@/connect";
+import { useInstance } from "@/contexts/InstanceContext";
+import useCurrentUser from "@/hooks/useCurrentUser";
 import { APP_DATE_TIME_FORMAT, inAppTimeZone } from "@/lib/time-zone";
 import { showErrorToast } from "@/lib/toast";
 import { useTranslate } from "@/utils/i18n";
 import CopyableSettingValue from "./CopyableSettingValue";
+import SettingSection from "./SettingSection";
 
-type MCPConnectionStatus = "awaiting" | "pending" | "approved" | "denied" | "revoked" | "expired";
+type MCPConnectionStatus = "approved" | "revoked" | "expired";
 
 const durationOptions = [
   { value: "7d", label: "setting.mcp-connection.duration-seven-days" },
@@ -26,10 +29,7 @@ const permissionOptions = [
 type MCPConnectionPermission = (typeof permissionOptions)[number]["value"];
 
 const statusLabels = {
-  awaiting: "setting.mcp-connection.status.legacy",
-  pending: "setting.mcp-connection.status.legacy",
   approved: "setting.mcp-connection.status.not-connected",
-  denied: "setting.mcp-connection.status.denied",
   revoked: "setting.mcp-connection.status.revoked",
   expired: "setting.mcp-connection.status.expired",
 } as const;
@@ -45,7 +45,7 @@ interface MCPConnection {
   permission?: MCPConnectionPermission;
 }
 
-const connectionsPath = "/api/mcpConnections";
+const connectionsPath = "/internal/mcpConnections";
 
 class MCPConnectionRequestError extends Error {
   constructor(readonly status: number) {
@@ -104,7 +104,7 @@ function CreateMCPConnectionDialog({ serverURL, onClose, onCreated }: { serverUR
           <>
             <Dialog.Description>{t("setting.mcp-connection.token-shown-once")}</Dialog.Description>
             <div className="flex min-w-0 flex-col gap-3">
-              <CopyableSettingValue label={t("setting.access-token.mcp-url")} value={serverURL} />
+              <CopyableSettingValue label={t("setting.mcp-connection.url")} value={serverURL} />
               <CopyableSettingValue label={t("setting.mcp-connection.bearer-value")} value={`Bearer ${token}`} />
             </div>
             <Dialog.Footer>
@@ -205,7 +205,6 @@ function MCPConnectionRow({
 }) {
   const t = useTranslate();
   const { label, status, createdAt, requestedAt, expiresAt, remoteIp, permission } = connection;
-  const legacy = status === "awaiting" || status === "pending";
   const active = status === "approved";
   const hasConnected = requestedAt > 0 && (active || status === "expired");
   const statusLabel = active && hasConnected ? "setting.mcp-connection.status.connected" : statusLabels[status];
@@ -214,7 +213,7 @@ function MCPConnectionRow({
       <div className="min-w-0 flex-1">
         <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5">
           <span className="mu-label-sm break-words text-mu-text">{label}</span>
-          <span className={legacy ? "mu-caption text-mu-warning" : "mu-caption text-mu-text-secondary"}>{t(statusLabel)}</span>
+          <span className="mu-caption text-mu-text-secondary">{t(statusLabel)}</span>
         </div>
         <div className="mt-0.5 flex flex-wrap gap-x-3 mu-caption text-mu-text-secondary">
           <span>
@@ -237,9 +236,8 @@ function MCPConnectionRow({
   );
 }
 
-export default function MCPConnectionSection({ account, serverURL }: { account: string; serverURL: string }) {
+function MCPConnections({ account, serverURL }: { account: string; serverURL: string }) {
   const t = useTranslate();
-  const titleId = useId();
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<MCPConnection>();
@@ -269,7 +267,6 @@ export default function MCPConnectionSection({ account, serverURL }: { account: 
   });
   const unsupported = error instanceof MCPConnectionRequestError && error.status === 404;
   const connections = data?.connections ?? [];
-  const title = t("setting.mcp-connection.title");
   const config = JSON.stringify(
     { mcpServers: { "cat-two": { type: "http", url: serverURL, headers: { Authorization: "Bearer <YOUR_MCP_TOKEN>" } } } },
     null,
@@ -277,20 +274,17 @@ export default function MCPConnectionSection({ account, serverURL }: { account: 
   );
 
   return (
-    <section aria-labelledby={titleId} className="flex min-w-0 flex-col gap-3">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0 sm:flex-1">
-          <h2 id={titleId} className="mu-label text-mu-text">
-            {title}
-          </h2>
-          <p className="mu-body text-mu-text-secondary">{t("setting.mcp-connection.description")}</p>
-        </div>
-        {!unsupported && (
+    <SettingSection
+      title={t("setting.mcp-connection.label")}
+      description={t("setting.mcp-connection.description")}
+      actions={
+        !unsupported && (
           <Button variant="primary" disabled={!data || isError} icon={<PlusIcon />} onClick={() => setOpen(true)}>
             {t("setting.mcp-connection.create")}
           </Button>
-        )}
-      </div>
+        )
+      }
+    >
       {isError ? (
         <div className="flex flex-wrap items-center gap-2">
           <p className="mu-caption text-mu-text-secondary" role="status">
@@ -307,7 +301,7 @@ export default function MCPConnectionSection({ account, serverURL }: { account: 
           {t(data ? "setting.mcp-connection.empty" : "setting.mcp-connection.loading")}
         </p>
       ) : (
-        <List.Root aria-label={title}>
+        <List.Root aria-label={t("setting.mcp-connection.title")}>
           {connections.map((connection) => (
             <MCPConnectionRow
               key={connection.id}
@@ -321,10 +315,10 @@ export default function MCPConnectionSection({ account, serverURL }: { account: 
       {!unsupported && (
         <div className="grid gap-3 lg:grid-cols-2">
           <div className="flex min-w-0 flex-col gap-3">
-            <p className="mu-body text-mu-text-secondary">{t("setting.access-token.mcp-description")}</p>
-            <CopyableSettingValue label={t("setting.access-token.mcp-url")} value={serverURL} />
+            <p className="mu-body text-mu-text-secondary">{t("setting.mcp-connection.client-description")}</p>
+            <CopyableSettingValue label={t("setting.mcp-connection.url")} value={serverURL} />
           </div>
-          <CopyableSettingValue label={t("setting.access-token.mcp-config")} value={config} />
+          <CopyableSettingValue label={t("setting.mcp-connection.client-config")} value={config} />
         </div>
       )}
       {open && <CreateMCPConnectionDialog serverURL={serverURL} onClose={() => setOpen(false)} onCreated={() => void refresh()} />}
@@ -340,6 +334,13 @@ export default function MCPConnectionSection({ account, serverURL }: { account: 
           if (deleteTarget) await deleteConnection.mutateAsync(deleteTarget.id);
         }}
       />
-    </section>
+    </SettingSection>
   );
+}
+
+export default function MCPConnectionSection() {
+  const account = useCurrentUser()?.name;
+  const { profile } = useInstance();
+  const baseURL = (profile.instanceUrl || window.location.origin).replace(/\/+$/, "");
+  return account ? <MCPConnections key={account} account={account} serverURL={`${baseURL}/mcp`} /> : null;
 }

@@ -8,6 +8,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/usememos/memos/proto/gen/api/apiconnect"
 	storepb "github.com/usememos/memos/proto/gen/store"
 )
 
@@ -29,7 +30,7 @@ func TestPersonalAdministratorSetupAndAccess(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	code, body := inst.do(t, http.MethodGet, "/api/instance/profile", "", nil)
+	code, body := inst.connect(t, apiconnect.InstanceServiceGetInstanceProfileProcedure, "", nil)
 	require.Equal(t, http.StatusOK, code, "%s", body)
 	var instanceProfile struct {
 		NeedsSetup bool   `json:"needsSetup"`
@@ -41,31 +42,26 @@ func TestPersonalAdministratorSetupAndAccess(t *testing.T) {
 
 	inst.createAdmin(t)
 	session := inst.signIn(t)
-	code, body = inst.do(t, http.MethodPatch, "/api/instance/settings/GENERAL", session, map[string]any{
-		"generalSetting": map[string]any{"disallowPasswordAuth": true},
+	code, body = inst.connect(t, apiconnect.InstanceServiceUpdateInstanceSettingProcedure, session, map[string]any{
+		"instanceSetting": map[string]any{
+			"name": "instance/settings/GENERAL", "generalSetting": map[string]bool{"disallowPasswordAuth": true},
+		},
 	})
 	require.Equal(t, http.StatusBadRequest, code, "%s", body)
 	for _, bearer := range []string{"", session} {
-		code, _ := inst.do(t, http.MethodPost, "/api/users", bearer, map[string]string{
-			"username": "second-account", "password": testAdminPassword,
+		code, body := inst.connect(t, apiconnect.UserServiceCreateUserProcedure, bearer, map[string]any{
+			"user": map[string]string{"username": "second-account", "password": testAdminPassword},
 		})
-		require.Equal(t, http.StatusForbidden, code)
+		require.Equal(t, http.StatusForbidden, code, "%s", body)
 	}
-	code, _ = inst.do(t, http.MethodGet, "/api/users/"+testAdminUsername, "", nil)
-	require.Equal(t, http.StatusUnauthorized, code)
+	userName := "users/" + testAdminUsername
+	code, body = inst.connect(t, apiconnect.UserServiceGetUserProcedure, "", map[string]string{"name": userName})
+	require.Equal(t, http.StatusUnauthorized, code, "%s", body)
 
-	code, body = inst.do(t, http.MethodPost, "/api/users/"+testAdminUsername+"/personalAccessTokens", session, map[string]any{
-		"description": "external client", "expiresInDays": 1,
+	_, mcpToken := createMCPConnection(t, inst, session, "Browser authorization fixture", "")
+	code, body = inst.connect(t, apiconnect.UserServiceUpdateUserProcedure, mcpToken, map[string]any{
+		"user": map[string]string{"name": userName, "password": "different-password"}, "updateMask": "password",
 	})
-	require.Equal(t, http.StatusOK, code, "%s", body)
-	var issued struct {
-		Token string `json:"token"`
-	}
-	require.NoError(t, json.Unmarshal(body, &issued))
-	require.NotEmpty(t, issued.Token)
-	code, _ = inst.do(t, http.MethodPatch, "/api/users/"+testAdminUsername+"?updateMask=password", issued.Token, map[string]string{
-		"password": "different-password",
-	})
-	require.Equal(t, http.StatusForbidden, code)
+	require.Equal(t, http.StatusUnauthorized, code, "%s", body)
 	inst.signIn(t)
 }

@@ -43,10 +43,7 @@ func Validate(setting *storepb.InstanceSetting) error {
 			return errors.New("week_start_day_offset must be between -1 and 6")
 		}
 	case storepb.InstanceSettingKey_STORAGE:
-		if setting.GetStorageSetting() == nil {
-			return errors.New("storage setting is required")
-		}
-		return validateStorageSetting(setting.GetStorageSetting())
+		return errors.New("attachment storage is managed by Cat_two")
 	case storepb.InstanceSettingKey_TAGS:
 		if setting.GetTagsSetting() == nil {
 			return errors.New("tags setting is required")
@@ -87,65 +84,6 @@ func Validate(setting *storepb.InstanceSetting) error {
 	return nil
 }
 
-// validateStorageSetting checks a declarative registry for legacy attachment
-// migration. The original top-level configuration remains accepted.
-func validateStorageSetting(setting *storepb.InstanceStorageSetting) error {
-	if len(setting.Storages) == 0 {
-		if setting.StorageType == storepb.InstanceStorageSetting_S3 {
-			if setting.S3Config == nil {
-				return errors.New("s3_config is required for S3 storage")
-			}
-			return validateS3Config("s3_config", setting.S3Config)
-		}
-		return nil
-	}
-
-	seenIDs := make(map[string]bool, len(setting.Storages))
-	for i, storage := range setting.Storages {
-		if storage == nil || strings.TrimSpace(storage.Id) == "" {
-			return errors.Errorf("storages[%d].id is required", i)
-		}
-		if seenIDs[storage.Id] {
-			return errors.Errorf("storage ID %q is duplicated", storage.Id)
-		}
-		seenIDs[storage.Id] = true
-		switch storage.Type {
-		case storepb.StorageType_STORAGE_TYPE_DATABASE, storepb.StorageType_STORAGE_TYPE_LOCAL:
-		case storepb.StorageType_STORAGE_TYPE_S3:
-			if storage.GetS3Config() == nil {
-				return errors.Errorf("storage %q S3 config is required", storage.Id)
-			}
-			if err := validateS3Config("storage "+storage.Id, storage.GetS3Config()); err != nil {
-				return err
-			}
-		default:
-			return errors.Errorf("storage %q type is required", storage.Id)
-		}
-	}
-	if !seenIDs[setting.DefaultStorageId] {
-		return errors.Errorf("default storage %q is not configured", setting.DefaultStorageId)
-	}
-	return nil
-}
-
-func validateS3Config(subject string, config *storepb.StorageS3Config) error {
-	for _, field := range []struct {
-		name  string
-		value string
-	}{
-		{name: "endpoint", value: config.Endpoint},
-		{name: "region", value: config.Region},
-		{name: "bucket", value: config.Bucket},
-		{name: "access_key_id", value: config.AccessKeyId},
-		{name: "access_key_secret", value: config.AccessKeySecret},
-	} {
-		if strings.TrimSpace(field.value) == "" {
-			return errors.Errorf("%s %s is required", subject, field.name)
-		}
-	}
-	return nil
-}
-
 // validateNotificationSetting requires enabled email to have a host, a
 // positive port, and a from address, and keeps TLS and SSL mutually exclusive.
 func validateNotificationSetting(setting *storepb.InstanceNotificationSetting) error {
@@ -162,15 +100,10 @@ func validateNotificationSetting(setting *storepb.InstanceNotificationSetting) e
 	return nil
 }
 
-// Normalize applies to a setting the normalization every stored write applies:
-// trimmed AI providers with default endpoints, and a normalized storage registry.
+// Normalize trims AI providers and fills their default endpoints.
 func Normalize(setting *storepb.InstanceSetting) {
-	switch setting.Key {
-	case storepb.InstanceSettingKey_AI:
+	if setting.Key == storepb.InstanceSettingKey_AI {
 		NormalizeAISetting(setting.GetAiSetting())
-	case storepb.InstanceSettingKey_STORAGE:
-		store.NormalizeInstanceStorageSetting(setting.GetStorageSetting())
-	default:
 	}
 }
 

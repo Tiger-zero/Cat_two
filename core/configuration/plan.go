@@ -165,15 +165,8 @@ func (p *planner) declared(rank int, name string, kind Kind, exists bool, change
 
 func (p *planner) planInstanceSettings() error {
 	for _, declared := range sortedByName(p.desired.Configuration.InstanceSettings, (*apipb.InstanceSetting).GetName) {
-		if retiredResource(declared.Name) {
-			continue
-		}
 		desiredStore := instancesetting.ToStore(declared)
 		instancesetting.Normalize(desiredStore)
-		if legacyStorage(desiredStore.GetStorageSetting()) {
-			p.message.Warnings = append(p.message.Warnings, declared.Name+" is ignored because Cat_two only configures local attachment storage")
-			continue
-		}
 		actual, err := p.reader.GetUncachedInstanceSetting(p.ctx, &store.FindInstanceSetting{Name: desiredStore.Key.String()})
 		if err != nil {
 			return errors.Wrapf(err, "failed to read %s", declared.Name)
@@ -186,13 +179,6 @@ func (p *planner) planInstanceSettings() error {
 		}
 		op := &operation{setting: desiredStore, settingKey: desiredStore.Key}
 		if actual != nil {
-			if legacyStorage(actual.GetStorageSetting()) {
-				if managed := p.managed[declared.Name]; managed != nil {
-					p.next = append(p.next, managed)
-				}
-				p.message.Warnings = append(p.message.Warnings, declared.Name+" is unchanged to preserve existing non-local storage metadata")
-				continue
-			}
 			instancesetting.Normalize(actual)
 			actualAPI = instancesetting.FromStore(actual)
 			if len(ignored) > 0 {
@@ -212,51 +198,29 @@ func (p *planner) planInstanceSettings() error {
 	return nil
 }
 
-// legacyStorage recognizes persisted non-local storage without reading its credentials.
-func legacyStorage(setting *storepb.InstanceStorageSetting) bool {
-	return setting.GetS3Config() != nil || setting.GetStorageType() == storepb.InstanceStorageSetting_S3 ||
-		setting.GetStorageType() == storepb.InstanceStorageSetting_DATABASE || slices.ContainsFunc(setting.GetStorages(), func(storage *storepb.Storage) bool {
-		return storage.GetType() != storepb.StorageType_STORAGE_TYPE_LOCAL
-	})
-}
-
 func (p *planner) planUsers() error {
 	declaredUsers := p.desired.Configuration.Users
 	if len(declaredUsers) == 0 {
 		return nil
 	}
-	users, err := p.reader.ListUsers(p.ctx, &store.FindUser{})
+	if len(declaredUsers) != 1 || declaredUsers[0].GetRole() != apipb.User_ADMIN {
+		p.fail("users", "configuration can declare only one administrator")
+		return nil
+	}
+	declared := declaredUsers[0]
+	name := declared.Name
+	users, err := p.reader.ListUsers(p.ctx, &store.FindUser{Limit: new(2)})
 	if err != nil {
 		return errors.Wrap(err, "failed to read users")
 	}
-	adminByName := map[string]*store.User{}
-	for _, user := range users {
-		if user.Role == store.RoleAdmin && user.RowStatus != store.Archived {
-			adminByName[user.Username] = user
+	var actual *store.User
+	if len(users) != 0 {
+		if len(users) != 1 || users[0].Username != declared.Username || users[0].Role != store.RoleAdmin || users[0].RowStatus == store.Archived {
+			p.fail(name, "the declared administrator must match the existing account")
+			return nil
 		}
+		actual = users[0]
 	}
-	eligible := make([]*apipb.User, 0, len(declaredUsers))
-	for _, user := range declaredUsers {
-		if user.Role == apipb.User_ADMIN && (len(users) == 0 || adminByName[user.Username] != nil) {
-			eligible = append(eligible, user)
-		}
-	}
-	if len(eligible) > 1 && len(users) > 0 {
-		managed := slices.DeleteFunc(slices.Clone(eligible), func(user *apipb.User) bool { return p.managed[user.Name] == nil })
-		if len(managed) == 1 {
-			eligible = managed
-		}
-	}
-	if len(eligible) != 1 {
-		p.message.Warnings = append(p.message.Warnings, "user declarations are ignored: Cat_two configures only one administrator and never creates an additional account")
-		return nil
-	}
-	declared := eligible[0]
-	if len(declaredUsers) > 1 {
-		p.message.Warnings = append(p.message.Warnings, "additional user declarations are ignored; only the existing administrator can be configured")
-	}
-	name := declared.Name
-	actual := adminByName[declared.Username]
 	lifecycle := p.lifecycle[name]
 	optional := p.desired.UserFields[name]
 	version := lifecycle.GetWriteOnlyVersion()
@@ -343,17 +307,17 @@ func (p *planner) userChanges(view *apipb.User, actual *store.User, sendPassword
 func (p *planner) planUndeclared() error {
 	for _, managed := range p.state.Resources {
 		name := managed.Name
-		if retiredResource(name) || p.desired.preserved[name] {
-			p.next = append(p.next, managed)
-			continue
-		}
 		if name == p.plannedAdmin {
 			continue
 		}
 		kind, id, err := ParseResourceName(name)
 		if kind == KindUser {
 			removed := p.removed[name]
-			if removed == nil || removed.Destroy {
+			if removed.GetDestroy() {
+				p.fail(name, "cannot delete the administrator")
+				continue
+			}
+			if removed == nil {
 				p.next = append(p.next, managed)
 				continue
 			}
@@ -370,17 +334,6 @@ func (p *planner) planUndeclared() error {
 			continue
 		}
 		removed := p.removed[name]
-		if id == storepb.InstanceSettingKey_STORAGE.String() && (removed == nil || removed.Destroy) {
-			actual, err := p.reader.GetUncachedInstanceSetting(p.ctx, &store.FindInstanceSetting{Name: id})
-			if err != nil {
-				return errors.Wrapf(err, "failed to read %s", name)
-			}
-			if legacyStorage(actual.GetStorageSetting()) {
-				p.next = append(p.next, managed)
-				p.message.Warnings = append(p.message.Warnings, name+" is unchanged to preserve existing non-local storage metadata")
-				continue
-			}
-		}
 		change := &apipb.ResourceChange{Resource: name}
 		op := &operation{change: change, kind: kind}
 		switch {

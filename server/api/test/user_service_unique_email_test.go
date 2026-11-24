@@ -16,19 +16,11 @@ import (
 func TestUserServiceUniqueEmail(t *testing.T) {
 	ctx := context.Background()
 
-	newAdminContext := func(t *testing.T, ts *TestService) context.Context {
-		t.Helper()
-		admin, err := ts.CreateHostUser(ctx, "admin")
-		require.NoError(t, err)
-		return ts.CreateUserContext(ctx, admin.ID)
-	}
-
 	t.Run("CreateUser stores the canonical form", func(t *testing.T) {
 		ts := NewTestService(t)
 		defer ts.Cleanup()
-		adminCtx := newAdminContext(t, ts)
 
-		created, err := ts.Service.CreateUser(adminCtx, &apipb.CreateUserRequest{
+		created, err := ts.Service.CreateUser(ctx, &apipb.CreateUserRequest{
 			User: &apipb.User{Username: "bob", Email: "  Bob@Example.COM ", Password: "password123"},
 		})
 		require.NoError(t, err)
@@ -38,41 +30,27 @@ func TestUserServiceUniqueEmail(t *testing.T) {
 	t.Run("CreateUser rejects a malformed address", func(t *testing.T) {
 		ts := NewTestService(t)
 		defer ts.Cleanup()
-		adminCtx := newAdminContext(t, ts)
 
 		for _, email := range []string{"not-an-address", "Bob <bob@example.com>", "bob@example.com@example.com"} {
-			_, err := ts.Service.CreateUser(adminCtx, &apipb.CreateUserRequest{
+			_, err := ts.Service.CreateUser(ctx, &apipb.CreateUserRequest{
 				User: &apipb.User{Username: "bob", Email: email, Password: "password123"},
 			})
 			require.Equal(t, codes.InvalidArgument, status.Code(err), "email %q", email)
 		}
 	})
 
-	t.Run("CreateUser refuses an address another account holds", func(t *testing.T) {
+	t.Run("initial setup validates a normalized email without storing a user", func(t *testing.T) {
 		ts := NewTestService(t)
 		defer ts.Cleanup()
-		adminCtx := newAdminContext(t, ts)
-
-		_, err := ts.CreateRegularUser(ctx, "holder")
-		require.NoError(t, err)
-
-		_, err = ts.Service.CreateUser(adminCtx, &apipb.CreateUserRequest{
-			User: &apipb.User{Username: "claimant", Email: "Holder@Example.com", Password: "password123"},
-		})
-		require.Equal(t, codes.AlreadyExists, status.Code(err))
-
-		_, err = ts.Service.CreateUser(adminCtx, &apipb.CreateUserRequest{
-			User:         &apipb.User{Username: "claimant", Email: "holder@example.com", Password: "password123"},
-			ValidateOnly: true,
-		})
-		require.Equal(t, codes.AlreadyExists, status.Code(err), "validate_only gives the same answer")
-
-		validated, err := ts.Service.CreateUser(adminCtx, &apipb.CreateUserRequest{
-			User:         &apipb.User{Username: "claimant", Email: "Claimant@Example.com", Password: "password123"},
+		validated, err := ts.Service.CreateUser(ctx, &apipb.CreateUserRequest{
+			User:         &apipb.User{Username: "owner", Email: "Owner@Example.com", Password: "password123"},
 			ValidateOnly: true,
 		})
 		require.NoError(t, err)
-		require.Equal(t, "claimant@example.com", validated.Email)
+		require.Equal(t, "owner@example.com", validated.Email)
+		users, err := ts.Store.ListUsers(ctx, &store.FindUser{})
+		require.NoError(t, err)
+		require.Empty(t, users)
 	})
 
 	t.Run("first user setup applies the same rules", func(t *testing.T) {

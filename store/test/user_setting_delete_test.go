@@ -47,7 +47,7 @@ func TestDeleteUserSettingsInvalidatesOnlyMatchingCacheEntries(t *testing.T) {
 			case "missing user":
 				delete.UserID = new(int32(99999))
 			case "missing key":
-				delete.Key = storepb.UserSetting_WEBHOOKS
+				delete.Key = storepb.UserSetting_TAGS
 			default:
 			}
 			for range 2 { // Repeated deletion must remain harmless.

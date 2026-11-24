@@ -140,8 +140,6 @@ message ListAttachmentsRequest {
   // Supported fields: creator, filename, mime_type, create_time, memo_id, space.
   // `creator` is the linked memo's creator, or the uploader for an unlinked attachment. It supports equality with a
   // User resource name.
-  // `space` is the linked memo's Space resource name, or null when the attachment is unlinked or its memo has no
-  // space. It supports only a non-negated `==` comparison with a Space resource name or null.
   string filter = 3 [(google.api.field_behavior) = OPTIONAL];
 
   // Optional. The order to sort results by, such as "create_time desc" or "filename asc". The service does not apply

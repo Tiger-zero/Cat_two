@@ -107,8 +107,8 @@ type MemoServiceClient interface {
 	UpdateMemo(context.Context, *connect.Request[api.UpdateMemoRequest]) (*connect.Response[api.Memo], error)
 	// DeleteMemo moves the named memo and its comment subtree to the recycle bin.
 	// Only the memo creator can move it. The owner can restore it within 30 days
-	// with POST /api/trash/{uid}/restore or permanently delete it sooner with
-	// DELETE /api/trash/{uid}. The server purges expired entries.
+	// with POST /internal/trash/{uid}/restore or permanently delete it sooner with
+	// DELETE /internal/trash/{uid}. The server purges expired entries.
 	DeleteMemo(context.Context, *connect.Request[api.DeleteMemoRequest]) (*connect.Response[emptypb.Empty], error)
 	// ListMemoAttachments lists the attachments of a memo. Requires read access
 	// to the memo.
@@ -147,8 +147,7 @@ type MemoServiceClient interface {
 	// or an instance administrator.
 	ListMemoShares(context.Context, *connect.Request[api.ListMemoSharesRequest]) (*connect.Response[api.ListMemoSharesResponse], error)
 	// CreateMemoShare creates a share link for a memo. Requires the memo creator
-	// or an instance administrator. Only active memos without SPACE visibility
-	// can be shared.
+	// or an instance administrator. Only active memos can be shared.
 	CreateMemoShare(context.Context, *connect.Request[api.CreateMemoShareRequest]) (*connect.Response[api.MemoShare], error)
 	// DeleteMemoShare revokes a share link. Requires the memo creator or an
 	// instance administrator.
@@ -436,8 +435,8 @@ type MemoServiceHandler interface {
 	UpdateMemo(context.Context, *connect.Request[api.UpdateMemoRequest]) (*connect.Response[api.Memo], error)
 	// DeleteMemo moves the named memo and its comment subtree to the recycle bin.
 	// Only the memo creator can move it. The owner can restore it within 30 days
-	// with POST /api/trash/{uid}/restore or permanently delete it sooner with
-	// DELETE /api/trash/{uid}. The server purges expired entries.
+	// with POST /internal/trash/{uid}/restore or permanently delete it sooner with
+	// DELETE /internal/trash/{uid}. The server purges expired entries.
 	DeleteMemo(context.Context, *connect.Request[api.DeleteMemoRequest]) (*connect.Response[emptypb.Empty], error)
 	// ListMemoAttachments lists the attachments of a memo. Requires read access
 	// to the memo.
@@ -476,8 +475,7 @@ type MemoServiceHandler interface {
 	// or an instance administrator.
 	ListMemoShares(context.Context, *connect.Request[api.ListMemoSharesRequest]) (*connect.Response[api.ListMemoSharesResponse], error)
 	// CreateMemoShare creates a share link for a memo. Requires the memo creator
-	// or an instance administrator. Only active memos without SPACE visibility
-	// can be shared.
+	// or an instance administrator. Only active memos can be shared.
 	CreateMemoShare(context.Context, *connect.Request[api.CreateMemoShareRequest]) (*connect.Response[api.MemoShare], error)
 	// DeleteMemoShare revokes a share link. Requires the memo creator or an
 	// instance administrator.

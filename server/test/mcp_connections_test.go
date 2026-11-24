@@ -2,9 +2,6 @@ package test
 
 import (
 	"context"
-	"crypto/rand"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"net/http"
 	"slices"
@@ -14,8 +11,8 @@ import (
 
 	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
-	"golang.org/x/crypto/bcrypt"
 
+	"github.com/usememos/memos/proto/gen/api/apiconnect"
 	"github.com/usememos/memos/store"
 )
 
@@ -30,7 +27,7 @@ type observedMCPConnection struct {
 	Permission  string `json:"permission"`
 }
 
-const mcpConnectionsPath = "/api/mcpConnections"
+const mcpConnectionsPath = "/internal/mcpConnections"
 
 func createMCPConnection(t *testing.T, inst *instance, browserToken, label, duration string) (observedMCPConnection, string) {
 	t.Helper()
@@ -139,23 +136,14 @@ func TestPersonalMCPConnectionImmediateAccess(t *testing.T) {
 	inst := bootInstance(ctx, t, instanceOptions{personal: true})
 	inst.createAdmin(t)
 	browserToken := inst.signIn(t)
-	status, body := inst.do(t, http.MethodPost, "/api/users/"+testAdminUsername+"/personalAccessTokens", browserToken, map[string]string{
-		"description": "REST client",
-	})
-	require.Equal(t, http.StatusOK, status, "%s", body)
-	var pat struct {
-		Token string `json:"token"`
-	}
-	require.NoError(t, json.Unmarshal(body, &pat))
-	require.NotEmpty(t, pat.Token)
-
-	status, _ = inst.do(t, http.MethodGet, mcpConnectionsPath, "", nil)
+	const legacyPAT = "memos_pat_retired-client"
+	status, _ := inst.do(t, http.MethodGet, mcpConnectionsPath, "", nil)
 	require.Equal(t, http.StatusUnauthorized, status)
-	status, _ = inst.do(t, http.MethodGet, mcpConnectionsPath, pat.Token, nil)
-	require.Equal(t, http.StatusForbidden, status)
-	status, _ = inst.do(t, http.MethodPost, mcpConnectionsPath, pat.Token, map[string]string{"label": "untrusted"})
-	require.Equal(t, http.StatusForbidden, status)
-	status, body = inst.do(t, http.MethodPost, mcpConnectionsPath, browserToken, map[string]string{
+	status, _ = inst.do(t, http.MethodGet, mcpConnectionsPath, legacyPAT, nil)
+	require.Equal(t, http.StatusUnauthorized, status)
+	status, _ = inst.do(t, http.MethodPost, mcpConnectionsPath, legacyPAT, map[string]string{"label": "untrusted"})
+	require.Equal(t, http.StatusUnauthorized, status)
+	status, body := inst.do(t, http.MethodPost, mcpConnectionsPath, browserToken, map[string]string{
 		"label": "Invalid duration", "duration": "week",
 	})
 	require.Equal(t, http.StatusBadRequest, status, "%s", body)
@@ -165,8 +153,8 @@ func TestPersonalMCPConnectionImmediateAccess(t *testing.T) {
 	connectionPath := mcpConnectionsPath + "/" + connection.ID
 	status, _ = inst.do(t, http.MethodDelete, connectionPath, "", nil)
 	require.Equal(t, http.StatusUnauthorized, status)
-	status, _ = inst.do(t, http.MethodDelete, connectionPath, pat.Token, nil)
-	require.Equal(t, http.StatusForbidden, status)
+	status, _ = inst.do(t, http.MethodDelete, connectionPath, legacyPAT, nil)
+	require.Equal(t, http.StatusUnauthorized, status)
 	status, _ = inst.do(t, http.MethodDelete, connectionPath, token, nil)
 	require.Equal(t, http.StatusUnauthorized, status)
 	for _, action := range []string{"approve_day", "approve_permanent", "deny"} {
@@ -174,33 +162,14 @@ func TestPersonalMCPConnectionImmediateAccess(t *testing.T) {
 		require.Equal(t, http.StatusBadRequest, status, "%s", body)
 	}
 
-	for _, ineligible := range []string{"", pat.Token, browserToken} {
+	for _, ineligible := range []string{"", legacyPAT, browserToken} {
 		status, _ = sendMCPInitialize(t, inst, ineligible)
 		require.Contains(t, []int{http.StatusUnauthorized, http.StatusForbidden}, status)
 	}
 	inst.do(t, http.MethodGet, "/mcp", token, nil)
 	require.Equal(t, connection, getMCPConnection(t, inst, browserToken, connection.ID, token))
-	status, _ = mcpDecision(t, inst, pat.Token, connection.ID, "revoke")
-	require.Equal(t, http.StatusForbidden, status)
-
-	// Existing accounts can still sign in after an upgrade. Their sessions
-	// must neither enumerate, revoke, nor delete another account's connections.
-	hash, err := bcrypt.GenerateFromPassword([]byte(testAdminPassword), bcrypt.MinCost)
-	require.NoError(t, err)
-	legacy, err := inst.server.Store.CreateUser(ctx, &store.User{
-		Username: "legacy-user", Role: store.RoleUser, PasswordHash: string(hash),
-	})
-	require.NoError(t, err)
-	legacyToken := inst.signInUser(t, legacy.Username, testAdminPassword)
-	const legacyMemoID = "legacy-private-note"
-	inst.createMemo(t, legacyToken, legacyMemoID, "Owned by the legacy account")
-	status, body = inst.do(t, http.MethodGet, mcpConnectionsPath, legacyToken, nil)
-	require.Equal(t, http.StatusOK, status, "%s", body)
-	require.JSONEq(t, `{"connections":[]}`, string(body))
-	status, _ = mcpDecision(t, inst, legacyToken, connection.ID, "revoke")
-	require.Contains(t, []int{http.StatusConflict, http.StatusNotFound}, status)
-	status, _ = inst.do(t, http.MethodDelete, connectionPath, legacyToken, nil)
-	require.Equal(t, http.StatusNotFound, status)
+	status, _ = mcpDecision(t, inst, legacyPAT, connection.ID, "revoke")
+	require.Equal(t, http.StatusUnauthorized, status)
 
 	mcp, lastHTTPStatus := connectMCP(ctx, t, inst, token)
 	firstUse := getMCPConnection(t, inst, browserToken, connection.ID, token)
@@ -253,7 +222,7 @@ func TestPersonalMCPConnectionImmediateAccess(t *testing.T) {
 		"memoId": "already-tagged-note",
 		"body":   map[string]any{"content": taggedContent},
 	}))
-	inst.requireMemo(t, pat.Token, memoID, taggedContent)
+	inst.requireMemo(t, browserToken, memoID, taggedContent)
 	updated := call("memo_update_memo", map[string]any{
 		"memo": memoID,
 		"body": map[string]any{"content": "Updated by the integration"},
@@ -262,20 +231,17 @@ func TestPersonalMCPConnectionImmediateAccess(t *testing.T) {
 	require.True(t, ok, "expected structured memo response")
 	require.Equal(t, "Updated by the integration", content["content"])
 	require.Empty(t, content["tags"])
-	inaccessible, err := mcp.CallTool(ctx, &sdkmcp.CallToolParams{
-		Name: "memo_get_memo", Arguments: map[string]any{"memo": legacyMemoID},
-	})
-	require.NoError(t, err)
-	require.True(t, inaccessible.IsError, "approved clients inherit note ownership")
 	require.Equal(t, firstUse, getMCPConnection(t, inst, browserToken, connection.ID, token))
 
 	status, _ = inst.do(t, http.MethodGet, "/api/memos/"+memoID, token, nil)
-	require.Contains(t, []int{http.StatusUnauthorized, http.StatusForbidden}, status)
+	require.Equal(t, http.StatusNotFound, status)
+	status, _ = inst.connect(t, apiconnect.MemoServiceGetMemoProcedure, token, map[string]string{"name": "memos/" + memoID})
+	require.Equal(t, http.StatusUnauthorized, status)
 	status, _ = inst.do(t, http.MethodGet, mcpConnectionsPath, token, nil)
 	require.Contains(t, []int{http.StatusUnauthorized, http.StatusForbidden}, status)
 	status, _ = mcpDecision(t, inst, token, connection.ID, "revoke")
 	require.Contains(t, []int{http.StatusUnauthorized, http.StatusForbidden}, status)
-	inst.requireMemo(t, pat.Token, memoID, "Updated by the integration")
+	inst.requireMemo(t, browserToken, memoID, "Updated by the integration")
 
 	status, body = inst.do(t, http.MethodDelete, connectionPath, browserToken, nil)
 	require.Equal(t, http.StatusNoContent, status, "%s", body)
@@ -291,24 +257,6 @@ func TestPersonalMCPConnectionImmediateAccess(t *testing.T) {
 	require.EqualValues(t, http.StatusUnauthorized, lastHTTPStatus.Load())
 	status, _ = sendMCPInitialize(t, inst, token)
 	require.Equal(t, http.StatusUnauthorized, status)
-
-	_, legacyConnectionToken := createMCPConnection(t, inst, legacyToken, "Legacy account client", "permanent")
-	legacyMCP, legacyHTTPStatus := connectMCP(ctx, t, inst, legacyConnectionToken)
-	legacyRead := &sdkmcp.CallToolParams{Name: "memo_get_memo", Arguments: map[string]any{"memo": legacyMemoID}}
-	result, err := legacyMCP.CallTool(ctx, legacyRead)
-	require.NoError(t, err)
-	require.False(t, result.IsError, "%v", result.Content)
-	require.EqualValues(t, http.StatusOK, legacyHTTPStatus.Load())
-
-	// Archive through the driver so a warm Store cache can still hold the
-	// account as active. The next MCP request must read its database state.
-	archived := store.Archived
-	archivedOwner, err := inst.server.Store.GetDriver().UpdateUser(ctx, &store.UpdateUser{ID: legacy.ID, RowStatus: &archived})
-	require.NoError(t, err)
-	require.Equal(t, store.Archived, archivedOwner.RowStatus)
-	_, err = legacyMCP.CallTool(ctx, legacyRead)
-	require.Error(t, err, "archiving the owner must cut off an initialized client")
-	require.EqualValues(t, http.StatusUnauthorized, legacyHTTPStatus.Load())
 }
 
 func TestPersonalMCPNoteDiscovery(t *testing.T) {
@@ -316,14 +264,6 @@ func TestPersonalMCPNoteDiscovery(t *testing.T) {
 	inst := bootInstance(ctx, t, instanceOptions{personal: true})
 	inst.createAdmin(t)
 	ownerToken := inst.signIn(t)
-	passwordHash, err := bcrypt.GenerateFromPassword([]byte(testAdminPassword), bcrypt.MinCost)
-	require.NoError(t, err)
-	foreignOwner, err := inst.server.Store.CreateUser(ctx, &store.User{
-		Username: "discovery-legacy-user", Role: store.RoleUser, PasswordHash: string(passwordHash),
-	})
-	require.NoError(t, err)
-	foreignToken := inst.signInUser(t, foreignOwner.Username, testAdminPassword)
-
 	// In Shanghai, November 21 begins at 16:00 UTC on November 20.
 	const query = "查询 A_%"
 	const undecidedTask = "\n\n- [ ] 排期"
@@ -336,28 +276,22 @@ func TestPersonalMCPNoteDiscovery(t *testing.T) {
 		{"after-end", "2026-11-21T16:00:00Z", query + " #项目/结束" + undecidedTask},
 		{"wrong-tag", "2026-11-21T04:00:00Z", query + " #杂项" + undecidedTask},
 		{"wrong-query", "2026-11-21T04:00:00Z", "查询 AXx #项目/发布" + undecidedTask},
-		{"foreign", "2026-11-21T04:00:00Z", query + " #项目/外部 #Team/ReleaseExternal" + undecidedTask},
 		{"untagged", "2026-11-21T04:00:00Z", query + " \\#正文 `#代码`"},
-		{"foreign-untagged", "2026-11-21T04:00:00Z", query},
 		{"archived", "2026-11-21T04:00:00Z", query + " #项目/归档 #Team/ReleaseArchived" + undecidedTask},
 		{"trashed", "2026-11-21T04:00:00Z", query + " #项目/回收 #Team/ReleaseTrashed" + undecidedTask},
 	} {
-		token := ownerToken
-		if memo.id == "foreign" || memo.id == "foreign-untagged" {
-			token = foreignToken
-		}
-		status, body := inst.do(t, http.MethodPost, "/api/memos?memoId="+memo.id, token, map[string]string{
-			"content": memo.content, "createTime": memo.timestamp, "visibility": "PRIVATE",
+		status, body := inst.connect(t, apiconnect.MemoServiceCreateMemoProcedure, ownerToken, map[string]any{
+			"memoId": memo.id, "memo": map[string]string{"content": memo.content, "createTime": memo.timestamp, "visibility": "PRIVATE"},
 		})
 		require.Equal(t, http.StatusOK, status, "%s: %s", memo.id, body)
 	}
-	status, body := inst.do(t, http.MethodPatch, "/api/memos/archived?updateMask=state", ownerToken, map[string]string{"state": "ARCHIVED"})
+	status, body := inst.connect(t, apiconnect.MemoServiceUpdateMemoProcedure, ownerToken, map[string]any{"memo": map[string]string{"name": "memos/archived", "state": "ARCHIVED"}, "updateMask": "state"})
 	require.Equal(t, http.StatusOK, status, "%s", body)
-	status, body = inst.do(t, http.MethodDelete, "/api/memos/trashed", ownerToken, nil)
+	status, body = inst.connect(t, apiconnect.MemoServiceDeleteMemoProcedure, ownerToken, map[string]string{"name": "memos/trashed"})
 	require.Equal(t, http.StatusOK, status, "%s", body)
-	status, body = inst.do(t, http.MethodPost, "/api/memos/at-start/comments", ownerToken, map[string]string{
+	status, body = inst.connect(t, apiconnect.MemoServiceCreateMemoCommentProcedure, ownerToken, map[string]any{"parent": "memos/at-start", "comment": map[string]string{
 		"content": query + " #项目/评论" + undecidedTask, "createTime": "2026-11-21T04:00:00Z", "visibility": "PRIVATE",
-	})
+	}})
 	require.Equal(t, http.StatusOK, status, "%s", body)
 
 	_, connectionToken := createMCPConnection(t, inst, ownerToken, "Read tools fixture", "permanent")
@@ -418,9 +352,9 @@ func TestPersonalMCPNoteDiscovery(t *testing.T) {
 			Unavailable []string
 		}
 		call(t, "memo_batch_get", map[string]any{
-			"names": []string{"memos/missing", "memos/at-end", "memos/foreign", "memos/archived", "memos/trashed", "memos/at-start", "memos/at-end"},
+			"names": []string{"memos/missing", "memos/at-end", "memos/archived", "memos/trashed", "memos/at-start", "memos/at-end"},
 		}, &result)
-		require.Equal(t, []string{"memos/missing", "memos/foreign", "memos/trashed"}, result.Unavailable)
+		require.Equal(t, []string{"memos/missing", "memos/trashed"}, result.Unavailable)
 		require.Len(t, result.Memos, 3)
 		require.Equal(t, "memos/at-end", result.Memos[0].Name)
 		require.Equal(t, "NORMAL", result.Memos[0].State)
@@ -470,7 +404,7 @@ func TestPersonalMCPNoteDiscovery(t *testing.T) {
 	})
 }
 
-func TestPersonalMCPConnectionsSurviveRestartAndKeepLegacyAccess(t *testing.T) {
+func TestPersonalMCPConnectionsSurviveRestart(t *testing.T) {
 	ctx := context.Background()
 	dataDir := t.TempDir()
 	inst := bootInstance(ctx, t, instanceOptions{personal: true, dataDir: dataDir})
@@ -492,30 +426,6 @@ func TestPersonalMCPConnectionsSurviveRestartAndKeepLegacyAccess(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, updated)
 
-	// Use the same token and persisted fields as the pre-upgrade issuance flow.
-	legacyCreated := time.Now().Add(-time.Hour).Unix()
-	legacyExpires := legacyCreated + int64(24*time.Hour/time.Second)
-	legacy := map[store.MCPConnectionStatus]string{}
-	for _, state := range []store.MCPConnectionStatus{
-		store.MCPConnectionApproved, store.MCPConnectionAwaiting, store.MCPConnectionPending, store.MCPConnectionDenied,
-	} {
-		token := "cat_two_mcp_" + rand.Text()
-		digest := sha256.Sum256([]byte(token))
-		connection := &store.MCPConnection{
-			ID: "legacy-" + string(state), UserID: owner.ID, Label: "Legacy " + string(state),
-			TokenHash: hex.EncodeToString(digest[:]), Status: state, CreatedAt: legacyCreated,
-		}
-		if state != store.MCPConnectionAwaiting {
-			connection.RequestedAt = legacyCreated + 60
-			connection.RemoteIP = "192.0.2.55"
-		}
-		if state == store.MCPConnectionApproved {
-			connection.ExpiresAt = legacyExpires
-		}
-		require.NoError(t, inst.server.Store.CreateMCPConnection(ctx, connection))
-		legacy[state] = token
-	}
-
 	inst.shutdown(ctx)
 	inst = bootInstance(ctx, t, instanceOptions{personal: true, dataDir: dataDir})
 	browserToken = inst.signIn(t)
@@ -531,29 +441,6 @@ func TestPersonalMCPConnectionsSurviveRestartAndKeepLegacyAccess(t *testing.T) {
 	status, _ = sendMCPInitialize(t, inst, permanentToken)
 	require.Contains(t, []int{http.StatusUnauthorized, http.StatusForbidden}, status)
 
-	legacyApproved, _ := connectMCP(ctx, t, inst, legacy[store.MCPConnectionApproved])
-	_, err = legacyApproved.ListTools(ctx, nil)
-	require.NoError(t, err)
-	approved := getMCPConnection(t, inst, browserToken, "legacy-approved", legacy[store.MCPConnectionApproved])
-	require.Equal(t, "approved", approved.Status)
-	require.Equal(t, legacyCreated+60, approved.RequestedAt)
-	require.Equal(t, legacyExpires, approved.ExpiresAt)
-	require.Equal(t, "192.0.2.55", approved.RemoteIP)
-
-	for _, state := range []store.MCPConnectionStatus{store.MCPConnectionAwaiting, store.MCPConnectionPending, store.MCPConnectionDenied} {
-		token := legacy[state]
-		id := "legacy-" + string(state)
-		status, _ := sendMCPInitialize(t, inst, token)
-		require.Contains(t, []int{http.StatusUnauthorized, http.StatusForbidden}, status)
-		require.Equal(t, string(state), getMCPConnection(t, inst, browserToken, id, token).Status)
-		if state != store.MCPConnectionDenied {
-			status, body := mcpDecision(t, inst, browserToken, id, "revoke")
-			require.Equal(t, http.StatusNoContent, status, "%s", body)
-			require.Equal(t, "revoked", getMCPConnection(t, inst, browserToken, id, token).Status)
-			status, _ = sendMCPInitialize(t, inst, token)
-			require.Contains(t, []int{http.StatusUnauthorized, http.StatusForbidden}, status)
-		}
-	}
 	status, _ = sendMCPInitialize(t, inst, expiredToken)
 	require.Contains(t, []int{http.StatusUnauthorized, http.StatusForbidden}, status)
 	require.Equal(t, "expired", getMCPConnection(t, inst, browserToken, expiredConnection.ID, expiredToken).Status)

@@ -8,7 +8,7 @@ import (
 	"github.com/usememos/memos/store"
 )
 
-func TestMigrationMemoOwnerPinnedCreatedIndex(t *testing.T) {
+func TestMemoOwnerPinnedCreatedIndex(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()
 	ts := NewTestingStore(ctx, t)
@@ -75,11 +75,5 @@ func TestMigrationMemoOwnerPinnedCreatedIndex(t *testing.T) {
 		require.Len(t, page, 1)
 		require.Equal(t, archived.ID, page[0].ID)
 	}
-	requireFeed()
-
-	removeSchemaAfterMCPConnection(ctx, t, ts)
-	setSchemaVersion(ctx, t, ts, "26.11.4")
-	require.NoError(t, ts.Migrate(ctx))
-	requireIndex()
 	requireFeed()
 }

@@ -120,7 +120,7 @@ describe("locale key usage", () => {
       "fixture.ts": `
         t(\`memo.\${key}\`);
         i18n.t(\`live-update.\${status}\` as Translations);
-        const unrelated = \`space.icon.\${name}\`;
+        const unrelated = \`custom.\${name}\`;
       `,
     });
 

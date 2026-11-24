@@ -8,7 +8,6 @@ require (
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/google/cel-go v0.31.0
 	github.com/google/jsonschema-go v0.4.3
-	github.com/grpc-ecosystem/grpc-gateway/v2 v2.30.0
 	github.com/lithammer/shortuuid/v4 v4.2.0
 	github.com/modelcontextprotocol/go-sdk v1.7.0
 	github.com/pkg/errors v0.9.1
@@ -17,7 +16,6 @@ require (
 	github.com/stretchr/testify v1.12.1
 	github.com/yuin/goldmark v1.8.5
 	golang.org/x/crypto v0.58.0
-	golang.org/x/mod v0.41.0
 	golang.org/x/net v0.62.0
 	golang.org/x/sync v0.24.0
 	golang.org/x/text v0.43.0

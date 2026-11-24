@@ -15,8 +15,8 @@ import (
 )
 
 const (
-	notificationSettingsPath = "/api/notificationSettings"
-	networkSettingsPath      = "/api/networkSettings"
+	notificationSettingsPath = "/internal/notificationSettings"
+	networkSettingsPath      = "/internal/networkSettings"
 	maxCaptureSettingsBytes  = 8 << 10
 )
 
@@ -67,8 +67,7 @@ type networkSettingsView struct {
 	Source      messagecapture.Source `json:"source"`
 }
 
-func (s *APIService) newCaptureSettingsHandler(authorizer *Authorizer) http.Handler {
-	mux := http.NewServeMux()
+func (s *APIService) registerCaptureSettingsRoutes(mux *http.ServeMux, authorizer *Authorizer) {
 	if s.personalMode() && !s.Profile.Demo {
 		if s.NotificationSettings != nil {
 			for _, method := range []string{http.MethodGet, http.MethodPatch} {
@@ -81,14 +80,6 @@ func (s *APIService) newCaptureSettingsHandler(authorizer *Authorizer) http.Hand
 			}
 		}
 	}
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		setAPIResponseNoStoreHeaders(w.Header())
-		if rejectsBrowserOrigin(r, s.Profile.InstanceURL) {
-			writeGatewayStatusError(w, status.Error(codes.PermissionDenied, "browser origin is not allowed for this settings request"))
-			return
-		}
-		mux.ServeHTTP(w, r)
-	})
 }
 
 func (s *APIService) serveNotificationSettings(w http.ResponseWriter, r *http.Request) error {

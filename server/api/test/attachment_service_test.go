@@ -17,7 +17,6 @@ import (
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
 
 	"github.com/usememos/memos/internal/testutil"
-	"github.com/usememos/memos/internal/testutil/legacyspace"
 	apipb "github.com/usememos/memos/proto/gen/api"
 	storepb "github.com/usememos/memos/proto/gen/store"
 	"github.com/usememos/memos/server/api"
@@ -451,64 +450,51 @@ func TestCreateAttachmentMemoPermission(t *testing.T) {
 	})
 }
 
-func TestLinkedAttachmentWritesDoNotDependOnHistoricalSpaceMembership(t *testing.T) {
-	ctx := context.Background()
+func TestOwnerCanManageAttachmentsLinkedToMemoComment(t *testing.T) {
+	ctx := t.Context()
 	ts := NewTestService(t)
 	defer ts.Cleanup()
 
-	owner, err := ts.CreateRegularUser(ctx, "attachment-lifecycle-owner")
+	owner, err := ts.CreateHostUser(ctx, "attachment-owner")
 	require.NoError(t, err)
-	member, err := ts.CreateRegularUser(ctx, "attachment-lifecycle-member")
-	require.NoError(t, err)
-	memberCtx := ts.CreateUserContext(ctx, member.ID)
-	db := ts.Store.GetDriver().GetDB()
-	spaceID, err := legacyspace.Seed(ctx, db, "attachment-lifecycle-space", "Attachment Lifecycle", owner.ID)
-	require.NoError(t, err)
-	require.NoError(t, legacyspace.AddMember(ctx, db, spaceID, member.ID, "USER"))
-	root, err := ts.Store.CreateMemo(ctx, &store.Memo{
-		UID: "attachment-lifecycle-root", CreatorID: member.ID, Content: "root", Visibility: store.Private,
+	ownerCtx := ts.CreateUserContext(ctx, owner.ID)
+	root, err := ts.Service.CreateMemo(ownerCtx, &apipb.CreateMemoRequest{
+		Memo: &apipb.Memo{Content: "Parent", Visibility: apipb.Visibility_PRIVATE},
 	})
 	require.NoError(t, err)
-	comment, err := ts.Store.CreateMemoComment(ctx, &store.Memo{
-		UID: "attachment-lifecycle-comment", CreatorID: member.ID, Content: "comment", Visibility: store.Private,
-	}, root.ID, member.ID)
+	comment, err := ts.Service.CreateMemoComment(ownerCtx, &apipb.CreateMemoCommentRequest{
+		Parent: root.Name, Comment: &apipb.Memo{Content: "Comment"},
+	})
 	require.NoError(t, err)
-	require.NoError(t, legacyspace.PlaceMemo(ctx, db, root.ID, spaceID, "SPACE"))
-	require.NoError(t, legacyspace.PlaceMemo(ctx, db, comment.ID, spaceID, "SPACE"))
-	memoName := api.MemoNamePrefix + comment.UID
 
 	createLinked := func(filename string) *apipb.Attachment {
 		t.Helper()
-		attachment, createErr := ts.Service.CreateAttachment(memberCtx, &apipb.CreateAttachmentRequest{Attachment: &apipb.Attachment{
-			Filename: filename,
-			Type:     "text/plain",
-			Content:  []byte(filename),
-			Memo:     &memoName,
-		}})
-		require.NoError(t, createErr)
-		return attachment
+		created, err := ts.Service.CreateAttachment(ownerCtx, &apipb.CreateAttachmentRequest{
+			Attachment: &apipb.Attachment{
+				Filename: filename,
+				Type:     "text/plain",
+				Content:  []byte(filename),
+				Memo:     &comment.Name,
+			},
+		})
+		require.NoError(t, err)
+		linked, err := ts.Service.GetAttachment(ownerCtx, &apipb.GetAttachmentRequest{Name: created.Name})
+		require.NoError(t, err)
+		require.Equal(t, comment.Name, linked.GetMemo())
+		return linked
 	}
-	updateTarget := createLinked("update-before-revoke.txt")
-	deleteTarget := createLinked("delete-after-revoke.txt")
-	batchTarget := createLinked("batch-after-revoke.txt")
-
-	_, err = ts.Service.UpdateAttachment(memberCtx, &apipb.UpdateAttachmentRequest{
-		Attachment: &apipb.Attachment{Name: updateTarget.Name, Filename: "updated-before-revoke.txt"},
+	first := createLinked("first.txt")
+	second := createLinked("second.txt")
+	updated, err := ts.Service.UpdateAttachment(ownerCtx, &apipb.UpdateAttachmentRequest{
+		Attachment: &apipb.Attachment{Name: first.Name, Filename: "renamed.txt"},
 		UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"filename"}},
 	})
 	require.NoError(t, err)
-	require.NoError(t, legacyspace.RemoveMember(ctx, db, spaceID, member.ID))
-
-	created := createLinked("create-after-revoke.txt")
-	require.NotEmpty(t, created.Name)
-	_, err = ts.Service.UpdateAttachment(memberCtx, &apipb.UpdateAttachmentRequest{
-		Attachment: &apipb.Attachment{Name: updateTarget.Name, Filename: "renamed-after-revoke.txt"},
-		UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"filename"}},
-	})
+	require.Equal(t, "renamed.txt", updated.GetFilename())
+	require.Equal(t, comment.Name, updated.GetMemo())
+	_, err = ts.Service.DeleteAttachment(ownerCtx, &apipb.DeleteAttachmentRequest{Name: first.Name})
 	require.NoError(t, err)
-	_, err = ts.Service.DeleteAttachment(memberCtx, &apipb.DeleteAttachmentRequest{Name: deleteTarget.Name})
-	require.NoError(t, err)
-	_, err = ts.Service.BatchDeleteAttachments(memberCtx, &apipb.BatchDeleteAttachmentsRequest{Names: []string{batchTarget.Name}})
+	_, err = ts.Service.BatchDeleteAttachments(ownerCtx, &apipb.BatchDeleteAttachmentsRequest{Names: []string{second.Name}})
 	require.NoError(t, err)
 }
 

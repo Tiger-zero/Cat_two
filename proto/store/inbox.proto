@@ -15,18 +15,14 @@ message InboxMessage {
     int32 related_memo_id = 2;
   }
 
-  message SpaceInvitationPayload {
-    // The space the receiver was invited to join. The offered role and the
-    // invitation state are resolved from the space membership at read time.
-    int32 space_id = 1;
-  }
+  reserved 4;
+  reserved "space_invitation";
 
   // The type of the inbox message.
   Type type = 1;
   oneof payload {
     MemoCommentPayload memo_comment = 2;
     MemoMentionPayload memo_mention = 3;
-    SpaceInvitationPayload space_invitation = 4;
   }
 
   enum Type {
@@ -35,7 +31,7 @@ message InboxMessage {
     MEMO_COMMENT = 1;
     // Memo mention notification.
     MEMO_MENTION = 2;
-    // Space invitation notification.
-    SPACE_INVITATION = 3;
+    reserved 3;
+    reserved "SPACE_INVITATION";
   }
 }

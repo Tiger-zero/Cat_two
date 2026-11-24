@@ -119,6 +119,7 @@ func shouldSkipFrontendStatic(requestPath string) bool {
 		return true
 	}
 	return hasPathPrefix(requestPath, "/api") ||
+		hasPathPrefix(requestPath, "/internal") ||
 		hasPathPrefix(requestPath, "/file") ||
 		// RFC 8615 reserves this namespace for protocol metadata. The SPA
 		// fallback already refuses it (see shouldServeFrontendHTML), but the

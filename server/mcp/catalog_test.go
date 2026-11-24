@@ -31,11 +31,10 @@ func TestBuildToolFromOperationIncludesSchemasAndMetadata(t *testing.T) {
 	require.Equal(t, "memo_list_memos", tool.Name)
 	require.Equal(t, "Memo List Memos", tool.Title)
 	require.Equal(t, "MemoService_ListMemos", operation.OperationID)
-	require.Equal(t, "GET", operation.Method)
-	require.Equal(t, "/api/memos", operation.Path)
+	require.Equal(t, "GET", operation.Operation.Method)
 	require.Equal(t, "MemoService_ListMemos", tool.Meta["operationId"])
-	require.Equal(t, "GET", tool.Meta["method"])
-	require.Equal(t, "/api/memos", tool.Meta["path"])
+	require.NotContains(t, tool.Meta, "method")
+	require.NotContains(t, tool.Meta, "path")
 	require.NotEmpty(t, tool.Description)
 	require.NotNil(t, tool.InputSchema)
 	require.NotNil(t, tool.OutputSchema)
@@ -62,7 +61,7 @@ func TestBuildToolFromOperationIncludesRequestBodySchema(t *testing.T) {
 	require.NoError(t, err)
 
 	tool, operation := buildToolFromOperation(registry["MemoService_CreateMemo"])
-	require.Equal(t, "POST", operation.Method)
+	require.Equal(t, "POST", operation.Operation.Method)
 	require.False(t, tool.Annotations.ReadOnlyHint)
 	require.False(t, *tool.Annotations.DestructiveHint)
 	require.False(t, tool.Annotations.IdempotentHint)
@@ -98,7 +97,7 @@ func TestBuildToolFromOperationRejectsEmptyMemoUpdateBody(t *testing.T) {
 	require.True(t, ok)
 
 	// An empty body carries no fields to update; reject it at the schema instead of
-	// letting the gateway infer an empty field mask and fail late.
+	// passing an empty field mask to the note service.
 	require.Error(t, validateToolArguments(input, map[string]any{
 		"memo": "memos/abc123",
 		"body": map[string]any{},
@@ -117,7 +116,7 @@ func TestBuildToolFromOperationExposesCurrentUser(t *testing.T) {
 
 	tool, operation := buildToolFromOperation(registry["AuthService_GetCurrentUser"])
 	require.Equal(t, "auth_get_current_user", tool.Name)
-	require.Equal(t, "GET", operation.Method)
+	require.Equal(t, "GET", operation.Operation.Method)
 	require.True(t, tool.Annotations.ReadOnlyHint)
 }
 
@@ -128,7 +127,7 @@ func TestBuildToolFromOperationMarksUpdateMemoDestructive(t *testing.T) {
 	require.NoError(t, err)
 
 	tool, operation := buildToolFromOperation(registry["MemoService_UpdateMemo"])
-	require.Equal(t, "PATCH", operation.Method)
+	require.Equal(t, "PATCH", operation.Operation.Method)
 	require.False(t, tool.Annotations.ReadOnlyHint)
 	require.True(t, *tool.Annotations.DestructiveHint)
 	require.False(t, tool.Annotations.IdempotentHint)
@@ -151,7 +150,7 @@ func TestBuildCuratedToolsHasUniqueNames(t *testing.T) {
 		require.NotEmpty(t, tool.Name)
 		require.NotContains(t, names, tool.Name)
 		names[tool.Name] = struct{}{}
-		require.Equal(t, tool.Name, operations[tool.Name].ToolName)
+		require.Equal(t, tool.Name, toolNameFromOperationID(operations[tool.Name].OperationID))
 
 		inputBytes, err := json.Marshal(tool.InputSchema)
 		require.NoError(t, err)
@@ -188,7 +187,6 @@ func TestBuildCuratedToolsRejectsDuplicateToolNames(t *testing.T) {
 			OperationID:    operationID,
 			Description:    operationID,
 			Method:         "GET",
-			Path:           "/api/test",
 			ResponseSchema: okSchema(),
 		}
 	}

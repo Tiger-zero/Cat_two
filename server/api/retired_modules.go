@@ -2,7 +2,6 @@ package api
 
 import (
 	"context"
-	"strings"
 
 	"connectrpc.com/connect"
 	"google.golang.org/grpc/codes"
@@ -20,19 +19,10 @@ func (s *APIService) personalMode() bool { return s.Profile != nil && s.Profile.
 // isRetiredProcedure is shared by the two transports while the legacy protobuf
 // declarations remain available to clients built against older versions.
 func isRetiredProcedure(procedure string) bool {
-	if strings.HasPrefix(procedure, "/"+apiconnect.SpaceServiceName+"/") ||
-		strings.HasPrefix(procedure, "/"+apiconnect.IdentityProviderServiceName+"/") {
-		return true
-	}
 	switch procedure {
 	case apiconnect.InstanceServiceGetConfigurationStatusProcedure, apiconnect.InstanceServiceTestInstanceEmailSettingProcedure,
 		apiconnect.UserServiceListUserNotificationsProcedure, apiconnect.UserServiceUpdateUserNotificationProcedure,
-		apiconnect.UserServiceDeleteUserNotificationProcedure,
-		apiconnect.UserServiceListUserWebhooksProcedure, apiconnect.UserServiceCreateUserWebhookProcedure,
-		apiconnect.UserServiceUpdateUserWebhookProcedure, apiconnect.UserServiceDeleteUserWebhookProcedure,
-		apiconnect.UserServiceGetUserWebhookSigningSecretProcedure,
-		apiconnect.UserServiceListLinkedIdentitiesProcedure, apiconnect.UserServiceGetLinkedIdentityProcedure,
-		apiconnect.UserServiceCreateLinkedIdentityProcedure, apiconnect.UserServiceDeleteLinkedIdentityProcedure:
+		apiconnect.UserServiceDeleteUserNotificationProcedure:
 		return true
 	default:
 		return false

@@ -4,7 +4,7 @@
 
 在 GitHub Actions 打开 **Cat_two Container**，选择 `main` 和 `dockerhub` 并运行工作流。Docker Hub 使用仓库 Secrets `DOCKERHUB_USERNAME` 和 `DOCKERHUB_TOKEN`。推送到 `main` 的最新提交消息中包含 `[publish dockerhub]` 时也会触发发布。手动选择 `ghcr` 会将镜像推送到 `ghcr.io/tiger-zero/cat_two`。 [容器工作流](../../../../.github/workflows/cat-two-container.yml)
 
-发布流程核对同一提交的后端、前端和 Proto 检查，数据库验证统一使用 SQLite。按镜像摘要分别在 Linux AMD64 和 ARM64 上验证新装、重建、附件及从发布前镜像升级。通过后才更新发布标签。Docker Hub 版本从 `0.01` 起递增，提供编号、`latest` 和 `sha-<完整提交 SHA>` 三种标签。GHCR 提供 `latest` 和提交标签。部署时可把 `compose.yaml` 中的 `image` 改为 `docker.io/tiger2896/cat_two:<版本号>` 来固定镜像。 [Docker Hub](https://hub.docker.com/r/tiger2896/cat_two) · [版本编号脚本](../../../../scripts/cat_two_docker_release.py)
+发布流程核对同一提交的后端、前端和 Proto 检查，数据库验证统一使用 SQLite。按镜像摘要分别在 Linux AMD64 和 ARM64 上使用全新数据卷验证候选镜像，随后用同一镜像和数据卷重建容器。通过后才更新发布标签。Docker Hub 版本从 `0.01` 起递增，提供编号、`latest` 和 `sha-<完整提交 SHA>` 三种标签。GHCR 提供 `latest` 和提交标签。部署时可把 `compose.yaml` 中的 `image` 改为 `docker.io/tiger2896/cat_two:<版本号>` 来固定镜像。 [Docker Hub](https://hub.docker.com/r/tiger2896/cat_two) · [版本编号脚本](../../../../scripts/cat_two_docker_release.py)
 
 ## 本地构建
 
@@ -24,11 +24,10 @@ docker build -f scripts/Dockerfile \
 
 ## 验证发布
 
-核对工作流结论及两种平台的镜像提交。Docker Hub 的编号、`latest` 和对应提交标签应指向同一镜像索引。手动复测时用候选镜像和实际要验证的旧镜像，例如下面的本地构建和 `0.16`。脚本使用独立数据卷检查新装、重建和升级。 [冒烟脚本](../../../../scripts/release_smoke_test.sh) · [已有部署升级](../../cat-two-product-development/references/deployment.md#备份和升级)
+核对工作流结论及两种平台的镜像提交。Docker Hub 的编号、`latest` 和对应提交标签应指向同一镜像索引。冒烟脚本使用网页的 Connect 登录和会话刷新，创建笔记并上传附件，重建容器后核对笔记、附件字节和回收站恢复。候选镜像的旧 `/api` 路由应返回 HTTP 404。 [冒烟脚本](../../../../scripts/release_smoke_test.sh)
 
 ```sh
 bash scripts/release_smoke_test.sh \
   --candidate-image cat-two:local \
-  --previous-image docker.io/tiger2896/cat_two:0.16 \
   --expected-commit "$(git rev-parse HEAD)"
 ```

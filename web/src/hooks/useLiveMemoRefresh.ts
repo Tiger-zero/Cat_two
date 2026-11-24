@@ -20,7 +20,6 @@ const SSE_CONNECTION_LOCK_NAME = "memos-sse-connection";
 const SSE_SYNC_CHANNEL_NAME = "memos-sse-sync";
 
 const MEMO_CHANGED_SSE_EVENT_TYPE = "memo.changed" as const;
-const SPACE_CHANGED_SSE_EVENT_TYPE = "space.changed" as const;
 
 // ---------------------------------------------------------------------------
 // Shared connection status store (singleton)
@@ -58,7 +57,7 @@ export function useSSEConnectionStatus(): SSEConnectionStatus {
 }
 
 interface SSEChangeEvent {
-  type: typeof MEMO_CHANGED_SSE_EVENT_TYPE | typeof SPACE_CHANGED_SSE_EVENT_TYPE;
+  type: typeof MEMO_CHANGED_SSE_EVENT_TYPE;
 }
 
 type SSESyncMessage =
@@ -399,7 +398,7 @@ async function cancelResponseBody(response: Response): Promise<void> {
 }
 
 function fetchSSEStream(token: string, signal: AbortSignal): Promise<Response> {
-  return fetch("/api/sse", {
+  return fetch("/internal/sse", {
     headers: {
       Accept: "text/event-stream",
       Authorization: `Bearer ${token}`,
@@ -460,12 +459,7 @@ async function consumeSSEStream(body: ReadableStream<Uint8Array>, signal: AbortS
 }
 
 function handleSSEEvent(event: SSEChangeEvent, queryClient: ReturnType<typeof useQueryClient>) {
-  switch (event.type) {
-    case MEMO_CHANGED_SSE_EVENT_TYPE:
-    case SPACE_CHANGED_SSE_EVENT_TYPE:
-      invalidateLiveMemoQueries(queryClient);
-      break;
-  }
+  if (event.type === MEMO_CHANGED_SSE_EVENT_TYPE) invalidateLiveMemoQueries(queryClient);
 }
 
 function invalidateLiveMemoQueries(queryClient: ReturnType<typeof useQueryClient>) {

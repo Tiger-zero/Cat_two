@@ -61,7 +61,7 @@ it("asks for confirmation before normalizing and refreshes note and tag queries"
   fireEvent.click(within(dialog).getByRole("button", { name: "setting.tags.normalize" }));
 
   await waitFor(() => expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument());
-  expect(authenticatedFetch).toHaveBeenCalledWith("/api/tags/normalize", { method: "POST" });
+  expect(authenticatedFetch).toHaveBeenCalledWith("/internal/tags/normalize", { method: "POST" });
   expect(invalidate).toHaveBeenCalledWith({ queryKey: ["memos"] });
   expect(invalidate).toHaveBeenCalledWith({ queryKey: ["users", "stats"] });
   expect(toast).toHaveBeenCalledWith({ title: "2 memos", type: "success" });

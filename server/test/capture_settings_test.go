@@ -2,7 +2,6 @@ package test
 
 import (
 	"encoding/base64"
-	"encoding/json"
 	"net/http"
 	"strings"
 	"testing"
@@ -12,8 +11,8 @@ import (
 
 func TestPersonalCaptureSettings(t *testing.T) {
 	const (
-		notificationPath = "/api/notificationSettings"
-		networkPath      = "/api/networkSettings"
+		notificationPath = "/internal/notificationSettings"
+		networkPath      = "/internal/networkSettings"
 		callbackPath     = "/integrations/wecom"
 		publicCallback   = "https://notes.example.test:8443" + callbackPath
 		defaultCallback  = "https://fallback.example.test:9443/notes" + callbackPath
@@ -34,17 +33,13 @@ func TestPersonalCaptureSettings(t *testing.T) {
 	inst := bootInstance(t.Context(), t, opts)
 	inst.createAdmin(t)
 	admin := inst.signIn(t)
-	code, body := inst.do(t, http.MethodPost, "/api/users/"+testAdminUsername+"/personalAccessTokens", admin, map[string]string{"description": "external client fixture"})
-	require.Equal(t, http.StatusOK, code)
-	var pat struct{ Token string }
-	require.NoError(t, json.Unmarshal(body, &pat))
-	require.NotEmpty(t, pat.Token)
+	_, mcpToken := createMCPConnection(t, inst, admin, "External client fixture", "")
 	for _, path := range []string{notificationPath, networkPath} {
 		for _, method := range []string{http.MethodGet, http.MethodPatch} {
-			code, _ = inst.do(t, method, path, "", nil)
+			code, _ := inst.do(t, method, path, "", nil)
 			require.Equal(t, http.StatusUnauthorized, code)
-			code, _ = inst.do(t, method, path, pat.Token, nil)
-			require.Equal(t, http.StatusForbidden, code)
+			code, _ = inst.do(t, method, path, mcpToken, nil)
+			require.Equal(t, http.StatusUnauthorized, code)
 		}
 		req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, inst.baseURL+path, nil)
 		require.NoError(t, err)
@@ -57,7 +52,7 @@ func TestPersonalCaptureSettings(t *testing.T) {
 		require.Contains(t, resp.Header.Get("Cache-Control"), "no-store")
 	}
 
-	code, body = inst.do(t, http.MethodGet, notificationPath, admin, nil)
+	code, body := inst.do(t, http.MethodGet, notificationPath, admin, nil)
 	require.Equal(t, http.StatusOK, code)
 	require.JSONEq(t, `{"telegram":{"enabled":false,"configured":false,"source":"","userId":"","hasBotToken":false},
 		"wecom":{"enabled":true,"configured":true,"source":"environment","corpId":"wwfixture","agentId":"1000001",

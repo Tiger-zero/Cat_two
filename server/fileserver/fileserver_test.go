@@ -1041,7 +1041,7 @@ func newSharedProfileTestServices(ctx context.Context, t *testing.T) (*api.APISe
 	dbDriver, err := db.NewDBDriver(testProfile)
 	require.NoError(t, err)
 	testStore := store.New(dbDriver, testProfile)
-	require.NoError(t, testStore.Migrate(ctx))
+	require.NoError(t, testStore.InitializeSchema(ctx))
 	setInstanceAccessMode(ctx, t, testStore, storepb.InstanceAccessMode_INSTANCE_ACCESS_MODE_PUBLIC)
 	secret := "test-secret"
 	apiService := &api.APIService{

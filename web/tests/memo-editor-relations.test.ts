@@ -69,7 +69,6 @@ describe("memo editor relation updates", () => {
     expect(clients.createMemo).toHaveBeenCalledWith({
       memo: expect.objectContaining({ content: "Roadmap", visibility: Visibility.PRIVATE }),
     });
-    expect(clients.createMemo.mock.calls[0][0].memo.space).toBeUndefined();
   });
 
   it("creates a comment on its parent memo", async () => {
@@ -83,8 +82,8 @@ describe("memo editor relation updates", () => {
     expect(request.comment.content).toBe("Reply");
   });
 
-  it("edits the body of a legacy note without rewriting its space or visibility", async () => {
-    const memo = create(MemoSchema, { name: "memos/legacy", content: "Original", space: "spaces/work", visibility: Visibility.SPACE });
+  it("edits a note's body without rewriting its visibility", async () => {
+    const memo = create(MemoSchema, { name: "memos/note", content: "Original", visibility: Visibility.PRIVATE });
     clients.getMemo.mockResolvedValue(memo);
 
     await memoService.save({ ...createEditorState(memo), content: "Edited" }, { memoName: memo.name }, ops);
@@ -92,7 +91,6 @@ describe("memo editor relation updates", () => {
     const { memo: patch, updateMask } = clients.updateMemo.mock.calls[0][0];
     expect(updateMask.paths).toEqual(["content", "update_time"]);
     expect(patch).toMatchObject({ content: "Edited", visibility: Visibility.VISIBILITY_UNSPECIFIED });
-    expect(patch.space).toBeUndefined();
   });
 
   it("sends only mutable references when editing a comment", async () => {

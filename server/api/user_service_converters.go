@@ -75,8 +75,6 @@ func convertSettingKeyToStore(key string) (storepb.UserSetting_Key, error) {
 	switch key {
 	case apipb.UserSetting_Key_name[int32(apipb.UserSetting_GENERAL)]:
 		return storepb.UserSetting_GENERAL, nil
-	case apipb.UserSetting_Key_name[int32(apipb.UserSetting_WEBHOOKS)]:
-		return storepb.UserSetting_WEBHOOKS, nil
 	case apipb.UserSetting_Key_name[int32(apipb.UserSetting_TAGS)]:
 		return storepb.UserSetting_TAGS, nil
 	case apipb.UserSetting_Key_name[int32(apipb.UserSetting_EDITOR)]:

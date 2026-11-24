@@ -84,15 +84,16 @@ func StatusAt(connection *store.MCPConnection, now time.Time) store.MCPConnectio
 	return connection.Status
 }
 
-// Revoke disables the owner's active token or retires an old, unapproved connection.
+// Revoke disables an active token owned by the specified user.
 func Revoke(ctx context.Context, db *store.Store, userID int32, id string) error {
-	for _, state := range []store.MCPConnectionStatus{store.MCPConnectionApproved, store.MCPConnectionAwaiting, store.MCPConnectionPending} {
-		updated, err := db.UpdateMCPConnection(ctx, userID, id, state, store.MCPConnectionRevoked, 0)
-		if err != nil || updated {
-			return err
-		}
+	updated, err := db.UpdateMCPConnection(ctx, userID, id, store.MCPConnectionApproved, store.MCPConnectionRevoked, 0)
+	if err != nil {
+		return err
 	}
-	return ErrRevocationConflict
+	if !updated {
+		return ErrRevocationConflict
+	}
+	return nil
 }
 
 // Authenticate returns the active connection and records its first authenticated POST.

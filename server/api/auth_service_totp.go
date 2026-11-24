@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"golang.org/x/crypto/bcrypt"
 	"google.golang.org/genproto/googleapis/rpc/errdetails"
 	"google.golang.org/grpc/codes"
@@ -50,28 +49,22 @@ type twoFactorProvisioning struct {
 	OTPAuthURL string `json:"otpauthUrl"`
 }
 
-func (s *APIService) registerTwoFactorRoutes(mux *runtime.ServeMux) error {
-	if err := mux.HandlePath(http.MethodGet, "/api/auth/totp", s.getTwoFactorStatus); err != nil {
-		return err
-	}
-	if err := mux.HandlePath(http.MethodPost, "/api/auth/totp/setup", s.changeTwoFactor(twoFactorSetup)); err != nil {
-		return err
-	}
-	if err := mux.HandlePath(http.MethodPost, "/api/auth/totp/enable", s.changeTwoFactor(twoFactorEnable)); err != nil {
-		return err
-	}
-	return mux.HandlePath(http.MethodPost, "/api/auth/totp/disable", s.changeTwoFactor(twoFactorDisable))
+func (s *APIService) registerTwoFactorRoutes(mux *http.ServeMux, authorizer *Authorizer) {
+	mux.HandleFunc("GET /internal/auth/totp", requireWebSession(authorizer, s.getTwoFactorStatus))
+	mux.HandleFunc("POST /internal/auth/totp/setup", requireWebSession(authorizer, s.changeTwoFactor(twoFactorSetup)))
+	mux.HandleFunc("POST /internal/auth/totp/enable", requireWebSession(authorizer, s.changeTwoFactor(twoFactorEnable)))
+	mux.HandleFunc("POST /internal/auth/totp/disable", requireWebSession(authorizer, s.changeTwoFactor(twoFactorDisable)))
 }
 
-func (s *APIService) getTwoFactorStatus(w http.ResponseWriter, r *http.Request, _ map[string]string) {
+func (s *APIService) getTwoFactorStatus(w http.ResponseWriter, r *http.Request) {
 	user, err := s.twoFactorUser(r.Context())
 	if err != nil {
-		writeGatewayStatusError(w, err)
+		writeHTTPStatusError(w, err)
 		return
 	}
 	state, err := s.Store.GetUserTwoFactor(r.Context(), user.ID)
 	if err != nil {
-		writeGatewayStatusError(w, status.Error(codes.Internal, twoFactorUnavailable))
+		writeHTTPStatusError(w, status.Error(codes.Internal, twoFactorUnavailable))
 		return
 	}
 	_ = httphandler.JSON(w, http.StatusOK, twoFactorStatus{Enabled: state.ActiveSecret != ""})
@@ -91,12 +84,12 @@ func (s *APIService) twoFactorUser(ctx context.Context) (*store.User, error) {
 	return user, nil
 }
 
-func (s *APIService) changeTwoFactor(action twoFactorAction) runtime.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request, _ map[string]string) {
+func (s *APIService) changeTwoFactor(action twoFactorAction) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
 		user, err := s.twoFactorUser(ctx)
 		if err != nil {
-			writeGatewayStatusError(w, err)
+			writeHTTPStatusError(w, err)
 			return
 		}
 		var body struct {
@@ -105,16 +98,16 @@ func (s *APIService) changeTwoFactor(action twoFactorAction) runtime.HandlerFunc
 		}
 		decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4096))
 		if err := decoder.Decode(&body); err != nil || decoder.Decode(new(any)) != io.EOF {
-			writeGatewayStatusError(w, status.Error(codes.InvalidArgument, "expected a two-factor settings request"))
+			writeHTTPStatusError(w, status.Error(codes.InvalidArgument, "expected a two-factor settings request"))
 			return
 		}
 		username := accountKey(user.Username)
 		if err := s.throttleAndCharge(ratelimit.ScopeSignInAccount, username, 1); err != nil {
-			writeGatewayStatusError(w, err)
+			writeHTTPStatusError(w, err)
 			return
 		}
 		if bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(body.Password)) != nil {
-			writeGatewayStatusError(w, status.Error(codes.InvalidArgument, "current password is incorrect"))
+			writeHTTPStatusError(w, status.Error(codes.InvalidArgument, "current password is incorrect"))
 			return
 		}
 		s.refund(ratelimit.ScopeSignInAccount, username, 1)
@@ -127,7 +120,7 @@ func (s *APIService) changeTwoFactor(action twoFactorAction) runtime.HandlerFunc
 			response, err = s.confirmTwoFactor(ctx, user, revision, action, body.Code)
 		}
 		if err != nil {
-			writeGatewayStatusError(w, err)
+			writeHTTPStatusError(w, err)
 			return
 		}
 		_ = httphandler.JSON(w, http.StatusOK, response)

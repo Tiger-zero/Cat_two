@@ -6,7 +6,7 @@ import type { Memo } from "@/types/proto/api/memo_service_pb";
 function legacyMemoDraftRevision(memo: Memo): string {
   return JSON.stringify([
     memo.content,
-    memo.space,
+    null, // Reserved slot in saved browser drafts for the retired Space field.
     memo.createTime?.seconds.toString(),
     memo.createTime?.nanos,
     memo.updateTime?.seconds.toString(),
@@ -22,7 +22,17 @@ export function memoDraftRevision(memo: Memo): string {
 
 /** Allow a draft saved before the server upgrade to retain its original baseline. */
 export function matchesMemoDraftRevision(memo: Memo, revision: string | undefined): boolean {
-  return revision === memoDraftRevision(memo) || (revision?.startsWith("[") === true && revision === legacyMemoDraftRevision(memo));
+  if (revision === memoDraftRevision(memo)) return true;
+  if (!revision?.startsWith("[")) return false;
+  try {
+    const fields: unknown = JSON.parse(revision);
+    if (!Array.isArray(fields) || fields.length !== 8) return false;
+    if (fields[1] !== null && typeof fields[1] !== "string") return false;
+    fields[1] = null;
+    return JSON.stringify(fields) === legacyMemoDraftRevision(memo);
+  } catch {
+    return false;
+  }
 }
 
 /** The day a new memo is being composed for, independent of other feed filters. */

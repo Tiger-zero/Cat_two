@@ -85,8 +85,6 @@ func TestDeleteUserBatchBoundariesAndRollback(t *testing.T) {
 			_, err = ts.UpsertUserSetting(ctx, &storepb.UserSetting{UserId: owner.ID, Key: storepb.UserSetting_GENERAL,
 				Value: &storepb.UserSetting_General{General: &storepb.GeneralUserSetting{Locale: "en"}}})
 			require.NoError(t, err)
-			_, err = ts.GetDriver().GetDB().ExecContext(ctx, "INSERT INTO user_identity (user_id, provider, extern_uid) VALUES (?, ?, ?)", owner.ID, "test", "batch-owner")
-			require.NoError(t, err)
 			// Prime facade caches before forcing a failure after every delete statement.
 			_, err = ts.GetUser(ctx, &store.FindUser{ID: &owner.ID})
 			require.NoError(t, err)
@@ -135,7 +133,6 @@ func TestDeleteUserBatchBoundariesAndRollback(t *testing.T) {
 			require.Equal(t, keepInbox.ID, after.inboxes[0].ID)
 			require.Empty(t, after.relations)
 			require.Empty(t, after.settings)
-			require.Zero(t, after.identityCount)
 			cachedUser, err := ts.GetUser(ctx, &store.FindUser{ID: &owner.ID})
 			require.NoError(t, err)
 			require.Nil(t, cachedUser)
@@ -147,15 +144,14 @@ func TestDeleteUserBatchBoundariesAndRollback(t *testing.T) {
 }
 
 type userDeletionSnapshot struct {
-	users         []*store.User
-	memos         []*store.Memo
-	attachments   []*store.Attachment
-	shares        []*store.MemoShare
-	reactions     []*store.Reaction
-	inboxes       []*store.Inbox
-	relations     []*store.MemoRelation
-	settings      []*storepb.UserSetting
-	identityCount int
+	users       []*store.User
+	memos       []*store.Memo
+	attachments []*store.Attachment
+	shares      []*store.MemoShare
+	reactions   []*store.Reaction
+	inboxes     []*store.Inbox
+	relations   []*store.MemoRelation
+	settings    []*storepb.UserSetting
 }
 
 func snapshotUserDeletion(t *testing.T, ts *store.Store) userDeletionSnapshot {
@@ -179,7 +175,6 @@ func snapshotUserDeletion(t *testing.T, ts *store.Store) userDeletionSnapshot {
 	require.NoError(t, err)
 	result.settings, err = ts.ListUserSettings(ctx, &store.FindUserSetting{})
 	require.NoError(t, err)
-	require.NoError(t, ts.GetDriver().GetDB().QueryRowContext(ctx, "SELECT COUNT(*) FROM user_identity").Scan(&result.identityCount))
 	return result
 }
 
@@ -321,15 +316,6 @@ func TestDeleteUserCleansRelatedData(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	_, err = ts.GetDriver().GetDB().ExecContext(ctx, "INSERT INTO user_identity (user_id, provider, extern_uid) VALUES (?, ?, ?)", user.ID, "google", "delete-user-sub")
-	require.NoError(t, err)
-	err = ts.AddUserPersonalAccessToken(ctx, user.ID, &storepb.PersonalAccessTokensUserSetting_PersonalAccessToken{
-		TokenId:     "delete-user-pat",
-		TokenHash:   "delete-user-pat-hash",
-		Description: "delete user pat",
-	})
-	require.NoError(t, err)
-
 	_, err = ts.DeleteUser(ctx, &store.DeleteUser{ID: user.ID})
 	require.NoError(t, err)
 
@@ -393,13 +379,4 @@ func TestDeleteUserCleansRelatedData(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, keptInboxes, 1)
 
-	var identities int
-	require.NoError(t, ts.GetDriver().GetDB().QueryRowContext(ctx, "SELECT COUNT(*) FROM user_identity WHERE user_id = ?", user.ID).Scan(&identities))
-	require.Zero(t, identities)
-	setting, err := ts.GetUserSetting(ctx, &store.FindUserSetting{
-		UserID: &user.ID,
-		Key:    storepb.UserSetting_PERSONAL_ACCESS_TOKENS,
-	})
-	require.NoError(t, err)
-	require.Nil(t, setting)
 }

@@ -3,7 +3,6 @@ package test
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"io"
 	"net/http"
 	"testing"
@@ -18,8 +17,8 @@ func TestPersonalLoginAccountPrivacy(t *testing.T) {
 	ctx := context.Background()
 	inst := bootInstance(ctx, t, instanceOptions{personal: true})
 	const email = "startup-admin@example.test"
-	status, created := inst.do(t, http.MethodPost, "/api/users", "", map[string]string{
-		"username": testAdminUsername, "password": testAdminPassword, "email": email,
+	status, created := inst.connect(t, apiconnect.UserServiceCreateUserProcedure, "", map[string]any{
+		"user": map[string]string{"username": testAdminUsername, "password": testAdminPassword, "email": email},
 	})
 	require.Equal(t, http.StatusOK, status, "%s", created)
 	username := testAdminUsername
@@ -35,55 +34,49 @@ func TestPersonalLoginAccountPrivacy(t *testing.T) {
 	}
 	assertNoSecrets(t, created)
 
-	for _, route := range []struct{ method, path string }{
-		{http.MethodGet, "/auth"},
-		{http.MethodGet, "/auth/admin"},
-		{http.MethodGet, "/api/instance/profile"},
-		{http.MethodPost, apiconnect.InstanceServiceGetInstanceProfileProcedure},
-		{http.MethodGet, "/api/instance/settings/BASIC"},
-		{http.MethodGet, "/api/instance/settings/GENERAL"},
-	} {
-		t.Run(route.path, func(t *testing.T) {
-			var request any
-			if route.method == http.MethodPost {
-				request = map[string]string{}
-			}
-			status, body := inst.do(t, route.method, route.path, "", request)
-			require.Equal(t, http.StatusOK, status, "%s", body)
-			require.NotContains(t, string(body), testAdminUsername)
-			require.NotContains(t, string(body), email)
-			assertNoSecrets(t, body)
-		})
-	}
-	for _, route := range []string{"/api/users/" + testAdminUsername, "/api/auth/me", "/file/users/" + testAdminUsername + "/avatar"} {
-		status, body := inst.do(t, http.MethodGet, route, "", nil)
-		require.Equal(t, http.StatusUnauthorized, status, "%s: %s", route, body)
+	assertPublicResponse := func(status int, body []byte) {
+		t.Helper()
+		require.Equal(t, http.StatusOK, status, "%s", body)
+		require.NotContains(t, string(body), testAdminUsername)
 		require.NotContains(t, string(body), email)
 		assertNoSecrets(t, body)
 	}
+	for _, path := range []string{"/auth", "/auth/admin"} {
+		assertPublicResponse(inst.do(t, http.MethodGet, path, "", nil))
+	}
+	assertPublicResponse(inst.connect(t, apiconnect.InstanceServiceGetInstanceProfileProcedure, "", nil))
+	for _, name := range []string{"instance/settings/BASIC", "instance/settings/GENERAL"} {
+		assertPublicResponse(inst.connect(t, apiconnect.InstanceServiceGetInstanceSettingProcedure, "", map[string]string{"name": name}))
+	}
 
-	for _, path := range []string{"/api/auth/signin", apiconnect.AuthServiceSignInProcedure} {
-		t.Run(path, func(t *testing.T) {
-			signIn := func(username, password string) (int, []byte) {
-				return inst.do(t, http.MethodPost, path, "", map[string]any{
-					"passwordCredentials": map[string]string{"username": username, "password": password},
-				})
-			}
-			status, body := signIn(testAdminUsername, testAdminPassword)
-			require.Equal(t, http.StatusOK, status, "%s", body)
-			require.Contains(t, string(body), testAdminUsername)
-			assertNoSecrets(t, body)
+	assertProtectedResponse := func(status int, body []byte) {
+		t.Helper()
+		require.Equal(t, http.StatusUnauthorized, status, "%s", body)
+		require.NotContains(t, string(body), email)
+		assertNoSecrets(t, body)
+	}
+	assertProtectedResponse(inst.connect(t, apiconnect.UserServiceGetUserProcedure, "", map[string]string{"name": "users/" + username}))
+	assertProtectedResponse(inst.connect(t, apiconnect.AuthServiceGetCurrentUserProcedure, "", nil))
+	assertProtectedResponse(inst.do(t, http.MethodGet, "/file/users/"+username+"/avatar", "", nil))
 
-			knownStatus, knownBody := signIn(testAdminUsername, "incorrect-password")
-			unknownStatus, unknownBody := signIn("missing-account", "incorrect-password")
-			require.GreaterOrEqual(t, knownStatus, http.StatusBadRequest)
-			require.Less(t, knownStatus, http.StatusInternalServerError)
-			require.Equal(t, knownStatus, unknownStatus)
-			require.JSONEq(t, string(knownBody), string(unknownBody))
-			require.NotContains(t, string(knownBody), testAdminUsername)
-			assertNoSecrets(t, knownBody)
+	signIn := func(username, password string) (int, []byte) {
+		return inst.connect(t, apiconnect.AuthServiceSignInProcedure, "", map[string]any{
+			"passwordCredentials": map[string]string{"username": username, "password": password},
 		})
 	}
+	status, body := signIn(testAdminUsername, testAdminPassword)
+	require.Equal(t, http.StatusOK, status, "%s", body)
+	require.Contains(t, string(body), testAdminUsername)
+	assertNoSecrets(t, body)
+
+	knownStatus, knownBody := signIn(testAdminUsername, "incorrect-password")
+	unknownStatus, unknownBody := signIn("missing-account", "incorrect-password")
+	require.GreaterOrEqual(t, knownStatus, http.StatusBadRequest)
+	require.Less(t, knownStatus, http.StatusInternalServerError)
+	require.Equal(t, knownStatus, unknownStatus)
+	require.JSONEq(t, string(knownBody), string(unknownBody))
+	require.NotContains(t, string(knownBody), testAdminUsername)
+	assertNoSecrets(t, knownBody)
 }
 
 func TestBrowserSessionOrigin(t *testing.T) {
@@ -91,21 +84,18 @@ func TestBrowserSessionOrigin(t *testing.T) {
 	const canonicalOrigin = "https://cat-two.example.test"
 	inst := bootInstance(ctx, t, instanceOptions{personal: true, instanceURL: canonicalOrigin})
 	inst.createAdmin(t)
-	credentials, err := json.Marshal(map[string]any{
+	credentials := map[string]any{
 		"passwordCredentials": map[string]string{"username": testAdminUsername, "password": testAdminPassword},
-	})
-	require.NoError(t, err)
+	}
 
 	type authResponse struct {
 		status  int
 		headers http.Header
 		cookies []*http.Cookie
 	}
-	post := func(t *testing.T, path, origin, fetchSite string, body []byte, cookie *http.Cookie, legacyCookie string) (authResponse, string) {
+	post := func(t *testing.T, path, origin, fetchSite string, body any, cookie *http.Cookie, legacyCookie string) (authResponse, string) {
 		t.Helper()
-		req, err := http.NewRequestWithContext(ctx, http.MethodPost, inst.baseURL+path, bytes.NewReader(body))
-		require.NoError(t, err)
-		req.Header.Set("Content-Type", "application/json")
+		req := inst.connectRequest(t, path, "", body)
 		if origin != "" {
 			req.Header.Set("Origin", origin)
 		}
@@ -125,59 +115,50 @@ func TestBrowserSessionOrigin(t *testing.T) {
 		require.NoError(t, err)
 		return authResponse{status: response.StatusCode, headers: response.Header, cookies: response.Cookies()}, string(message)
 	}
-	for _, transport := range []struct {
-		name, signIn, refresh string
-	}{
-		{"REST", "/api/auth/signin", "/api/auth/refresh"},
-		{"Connect", apiconnect.AuthServiceSignInProcedure, apiconnect.AuthServiceRefreshTokenProcedure},
+	for _, origin := range []struct{ url, fetchSite string }{
+		{"https://untrusted.example.test", "same-site"},
+		{"null", "cross-site"},
 	} {
-		t.Run(transport.name, func(t *testing.T) {
-			for _, origin := range []struct{ url, fetchSite string }{
-				{"https://untrusted.example.test", "same-site"},
-				{"null", "cross-site"},
-			} {
-				response, body := post(t, transport.signIn, origin.url, origin.fetchSite, credentials, nil, "")
-				require.Equal(t, http.StatusForbidden, response.status, "%s", body)
-				require.Empty(t, response.cookies)
-				require.Contains(t, response.headers.Get("Cache-Control"), "no-store")
-			}
-			for _, origin := range []struct{ url, fetchSite string }{
-				{canonicalOrigin, ""},
-				{inst.baseURL, ""},
-				{"https://proxy-rewritten.example.test", "same-origin"},
-				{"", ""},
-			} {
-				response, body := post(t, transport.signIn, origin.url, origin.fetchSite, credentials, nil, "")
-				require.Equal(t, http.StatusOK, response.status, "%s", body)
-				require.Len(t, response.cookies, 1)
-				cookie := response.cookies[0]
-				require.True(t, cookie.HttpOnly)
-				require.True(t, cookie.Secure)
-				require.Equal(t, http.SameSiteLaxMode, cookie.SameSite)
-				require.Empty(t, response.headers.Values("Grpc-Metadata-Set-Cookie"))
-				response, body = post(t, transport.refresh, "https://untrusted.example.test", "same-site", []byte("{}"), cookie, "")
-				require.Equal(t, http.StatusForbidden, response.status, "%s", body)
-				require.Empty(t, response.cookies)
-				response, body = post(t, transport.refresh, origin.url, origin.fetchSite, []byte("{}"), cookie, "")
-				require.Equal(t, http.StatusOK, response.status, "%s", body)
-				require.Len(t, response.cookies, 1)
-				require.NotEqual(t, cookie.Value, response.cookies[0].Value)
-				require.Empty(t, response.headers.Values("Grpc-Metadata-Set-Cookie"))
-				require.Contains(t, response.headers.Get("Cache-Control"), "no-store")
-			}
-		})
+		response, body := post(t, apiconnect.AuthServiceSignInProcedure, origin.url, origin.fetchSite, credentials, nil, "")
+		require.Equal(t, http.StatusForbidden, response.status, "%s", body)
+		require.Empty(t, response.cookies)
+		require.Contains(t, response.headers.Get("Cache-Control"), "no-store")
+	}
+	for _, origin := range []struct{ url, fetchSite string }{
+		{canonicalOrigin, ""},
+		{inst.baseURL, ""},
+		{"https://proxy-rewritten.example.test", "same-origin"},
+		{"", ""},
+	} {
+		response, body := post(t, apiconnect.AuthServiceSignInProcedure, origin.url, origin.fetchSite, credentials, nil, "")
+		require.Equal(t, http.StatusOK, response.status, "%s", body)
+		require.Len(t, response.cookies, 1)
+		cookie := response.cookies[0]
+		require.True(t, cookie.HttpOnly)
+		require.True(t, cookie.Secure)
+		require.Equal(t, http.SameSiteLaxMode, cookie.SameSite)
+		require.Empty(t, response.headers.Values("Grpc-Metadata-Set-Cookie"))
+		response, body = post(t, apiconnect.AuthServiceRefreshTokenProcedure, "https://untrusted.example.test", "same-site", nil, cookie, "")
+		require.Equal(t, http.StatusForbidden, response.status, "%s", body)
+		require.Empty(t, response.cookies)
+		response, body = post(t, apiconnect.AuthServiceRefreshTokenProcedure, origin.url, origin.fetchSite, nil, cookie, "")
+		require.Equal(t, http.StatusOK, response.status, "%s", body)
+		require.Len(t, response.cookies, 1)
+		require.NotEqual(t, cookie.Value, response.cookies[0].Value)
+		require.Empty(t, response.headers.Values("Grpc-Metadata-Set-Cookie"))
+		require.Contains(t, response.headers.Get("Cache-Control"), "no-store")
 	}
 
-	t.Run("REST legacy cookie input", func(t *testing.T) {
-		response, body := post(t, "/api/auth/signin", "", "", credentials, nil, "")
+	t.Run("legacy gateway cookie header is ignored", func(t *testing.T) {
+		response, body := post(t, apiconnect.AuthServiceSignInProcedure, "", "", credentials, nil, "")
 		require.Equal(t, http.StatusOK, response.status, "%s", body)
 		require.Len(t, response.cookies, 1)
-		legacyCookie := response.cookies[0]
-		response, body = post(t, "/api/auth/refresh", "", "", []byte("{}"), nil, legacyCookie.Name+"="+legacyCookie.Value)
+		cookie := response.cookies[0]
+		response, body = post(t, apiconnect.AuthServiceRefreshTokenProcedure, "", "", nil, nil, cookie.Name+"="+cookie.Value)
+		require.Equal(t, http.StatusUnauthorized, response.status, "%s", body)
+		require.Empty(t, response.cookies)
+		response, body = post(t, apiconnect.AuthServiceRefreshTokenProcedure, "", "", nil, cookie, cookie.Name+"=invalid-value")
 		require.Equal(t, http.StatusOK, response.status, "%s", body)
 		require.Len(t, response.cookies, 1)
-		// When both are present, the real HTTP cookie wins over stale legacy metadata.
-		response, body = post(t, "/api/auth/refresh", "", "", []byte("{}"), response.cookies[0], legacyCookie.Name+"="+legacyCookie.Value)
-		require.Equal(t, http.StatusOK, response.status, "%s", body)
 	})
 }

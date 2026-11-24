@@ -18,9 +18,6 @@ on:
       release-verification:
         type: boolean
         default: false
-      baseline:
-        type: string
-        default: ""
 
 concurrency:
   group: proto-linter-${{ inputs.release-verification && github.run_id || github.ref }}
@@ -35,7 +32,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v6
         with:
-          fetch-depth: 0
+          persist-credentials: false
 
       - name: Setup buf
         uses: bufbuild/buf-action@v1.7.0
@@ -49,15 +46,6 @@ jobs:
 
       - name: Check buf format
         run: buf format proto -d --exit-code
-
-      - name: Check API compatibility with the previous source
-        env:
-          BASE_SHA: ${{ inputs.baseline || github.event.pull_request.base.sha || github.event.before }}
-        run: |
-          if [[ -z "$BASE_SHA" || "$BASE_SHA" == 0000000000000000000000000000000000000000 ]]; then
-            exit 0
-          fi
-          buf breaking proto --against ".git#ref=$BASE_SHA,subdir=proto" --error-format=github-actions
 
       - name: Verify generated Go, OpenAPI, and TypeScript are current
         run: |

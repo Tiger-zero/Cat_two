@@ -15,13 +15,11 @@ import (
 	"github.com/usememos/memos/store"
 )
 
-func (s *APIService) newMCPConnectionHandler(authorizer *Authorizer) http.Handler {
-	mux := http.NewServeMux()
-	mux.HandleFunc("GET /api/mcpConnections", authorizeMCPConnectionManagement(authorizer, s.listMCPConnections))
-	mux.HandleFunc("POST /api/mcpConnections", authorizeMCPConnectionManagement(authorizer, s.createMCPConnection))
-	mux.HandleFunc("DELETE /api/mcpConnections/{id}", authorizeMCPConnectionManagement(authorizer, s.deleteMCPConnection))
-	mux.HandleFunc("POST /api/mcpConnections/{id}/decision", authorizeMCPConnectionManagement(authorizer, s.revokeMCPConnection))
-	return mux
+func (s *APIService) registerMCPConnectionRoutes(mux *http.ServeMux, authorizer *Authorizer) {
+	mux.HandleFunc("GET /internal/mcpConnections", authorizeMCPConnectionManagement(authorizer, s.listMCPConnections))
+	mux.HandleFunc("POST /internal/mcpConnections", authorizeMCPConnectionManagement(authorizer, s.createMCPConnection))
+	mux.HandleFunc("DELETE /internal/mcpConnections/{id}", authorizeMCPConnectionManagement(authorizer, s.deleteMCPConnection))
+	mux.HandleFunc("POST /internal/mcpConnections/{id}/decision", authorizeMCPConnectionManagement(authorizer, s.revokeMCPConnection))
 }
 
 func authorizeMCPConnectionManagement(authorizer *Authorizer, handler func(http.ResponseWriter, *http.Request, int32) error) http.HandlerFunc {
@@ -30,22 +28,16 @@ func authorizeMCPConnectionManagement(authorizer *Authorizer, handler func(http.
 		ctx := r.Context()
 		result := authorizer.Authenticate(ctx, r.Header.Get("Authorization"))
 		if result == nil {
-			writeGatewayAuthorizationError(w, ErrUnauthenticated)
-			return
-		}
-		// A web sign-in is required to grant or manage access. A general API
-		// token cannot authorize itself or mint a connection.
-		if result.Claims == nil {
-			writeGatewayStatusError(w, status.Error(codes.PermissionDenied, "sign in to manage MCP connections"))
+			writeHTTPAuthorizationError(w, ErrUnauthenticated)
 			return
 		}
 		if err := authorizer.Throttle(ctx, "", result); err != nil {
-			writeGatewayStatusError(w, err)
+			writeHTTPStatusError(w, err)
 			return
 		}
 		r.Body = http.MaxBytesReader(w, r.Body, 2048)
 		if err := handler(w, r, result.Claims.UserID); err != nil {
-			writeGatewayStatusError(w, err)
+			writeHTTPStatusError(w, err)
 		}
 	}
 }

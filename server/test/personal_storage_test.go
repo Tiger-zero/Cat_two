@@ -8,7 +8,6 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/encoding/protojson"
-	"google.golang.org/protobuf/proto"
 
 	apipb "github.com/usememos/memos/proto/gen/api"
 	"github.com/usememos/memos/proto/gen/api/apiconnect"
@@ -22,56 +21,51 @@ func TestPersonalStorageSettingIsLocalAndReadOnly(t *testing.T) {
 	inst.createAdmin(t)
 	token := inst.signIn(t)
 
-	_, err := inst.server.Store.UpsertInstanceSetting(ctx, &storepb.InstanceSetting{
-		Key: storepb.InstanceSettingKey_STORAGE,
-		Value: &storepb.InstanceSetting_StorageSetting{StorageSetting: &storepb.InstanceStorageSetting{
-			StorageType: storepb.InstanceStorageSetting_S3, FilepathTemplate: "legacy/{filename}",
-			S3Config: &storepb.StorageS3Config{
-				Endpoint: "https://private-storage.example.test", Bucket: "previous-bucket",
-				AccessKeyId: "private-id", AccessKeySecret: "private-secret",
-			},
-		}},
-	})
-	require.NoError(t, err)
-	before, err := inst.server.Store.GetInstanceStorageSetting(ctx)
-	require.NoError(t, err)
-	require.Equal(t, storepb.InstanceStorageSetting_S3, before.StorageType)
-
 	const name = "instance/settings/STORAGE"
-	const path = "/api/" + name
-	status, body := inst.do(t, http.MethodGet, path, "", nil)
+	request := map[string]string{"name": name}
+	status, body := inst.connect(t, apiconnect.InstanceServiceGetInstanceSettingProcedure, "", request)
 	require.Equal(t, http.StatusUnauthorized, status, "%s", body)
-	for _, request := range []struct {
-		method, path string
-		body         any
-	}{
-		{http.MethodGet, path, nil},
-		{http.MethodPost, apiconnect.InstanceServiceGetInstanceSettingProcedure, map[string]string{"name": name}},
-	} {
-		status, body = inst.do(t, request.method, request.path, token, request.body)
-		require.Equal(t, http.StatusOK, status, "%s", body)
-		var got apipb.InstanceSetting
-		require.NoError(t, protojson.Unmarshal(body, &got))
-		setting := got.GetStorageSetting()
-		require.NotNil(t, setting)
-		require.Equal(t, apipb.InstanceSetting_StorageSetting_LOCAL, setting.GetStorageType())
-		require.Equal(t, "local", setting.GetDefaultStorageId())
-		require.Equal(t, store.DefaultAttachmentPathTemplate, setting.GetFilepathTemplate())
-		require.Len(t, setting.GetStorages(), 1)
-		require.Nil(t, setting.GetS3Config())
-		require.NotContains(t, string(body), "private-storage.example.test")
-	}
+	status, body = inst.connect(t, apiconnect.InstanceServiceGetInstanceSettingProcedure, token, request)
+	require.Equal(t, http.StatusOK, status, "%s", body)
+	var got apipb.InstanceSetting
+	require.NoError(t, protojson.Unmarshal(body, &got))
+	setting := got.GetStorageSetting()
+	require.NotNil(t, setting)
+	require.Equal(t, apipb.InstanceSetting_StorageSetting_LOCAL, setting.GetStorageType())
+	require.Equal(t, "local", setting.GetDefaultStorageId())
+	require.Equal(t, store.AttachmentDirectory+"/{timestamp}_{uuid}_{filename}", setting.GetFilepathTemplate())
+	require.Len(t, setting.GetStorages(), 1)
+	require.Nil(t, setting.GetS3Config())
+
 	for _, update := range []map[string]string{
 		{"storageType": "DATABASE"},
 		{"storageType": "LOCAL", "filepathTemplate": "../alternative/{filename}"},
 	} {
-		status, body = inst.do(t, http.MethodPatch, path, token, map[string]any{"storageSetting": update})
+		status, body = inst.connect(t, apiconnect.InstanceServiceUpdateInstanceSettingProcedure, token, map[string]any{
+			"instanceSetting": map[string]any{"name": name, "storageSetting": update},
+		})
 		require.Equal(t, http.StatusBadRequest, status, "%s", body)
 		require.Contains(t, string(body), "attachment storage is managed by Cat_two")
 	}
-	after, err := inst.server.Store.GetInstanceStorageSetting(ctx)
+	const attachmentID = "storage-layout"
+	status, body = inst.connect(t, apiconnect.AttachmentServiceCreateAttachmentProcedure, token, map[string]any{
+		"attachmentId": attachmentID,
+		"attachment": map[string]any{
+			"filename": "storage.txt", "content": []byte("Stored locally."),
+		},
+	})
+	require.Equal(t, http.StatusOK, status, "%s", body)
+	attachment, err := inst.server.Store.GetAttachment(ctx, &store.FindAttachment{UID: new(attachmentID), GetBlob: true})
 	require.NoError(t, err)
-	require.True(t, proto.Equal(before, after), "the legacy provider registry is kept for migration")
+	require.NotNil(t, attachment)
+	require.Equal(t, storepb.AttachmentStorageType_LOCAL, attachment.StorageType)
+	require.Nil(t, attachment.Blob)
+	require.Regexp(t, `^assets/[0-9]+_[a-f0-9-]+_storage\.txt$`, attachment.Reference)
+	require.FileExists(t, filepath.Join(inst.profile.Data, attachment.Reference))
+
+	stored, err := inst.server.Store.GetUncachedInstanceSetting(ctx, &store.FindInstanceSetting{Name: "STORAGE"})
+	require.NoError(t, err)
+	require.Nil(t, stored)
 }
 
 func TestPersonalInstanceStatsReportManagedDirectories(t *testing.T) {
@@ -79,12 +73,11 @@ func TestPersonalInstanceStatsReportManagedDirectories(t *testing.T) {
 	inst.createAdmin(t)
 	token := inst.signIn(t)
 
-	const path = "/api/instance/stats"
-	status, body := inst.do(t, http.MethodGet, path, "", nil)
+	status, body := inst.connect(t, apiconnect.InstanceServiceGetInstanceStatsProcedure, "", nil)
 	require.Equal(t, http.StatusUnauthorized, status, "%s", body)
 	require.NotContains(t, string(body), inst.profile.Data)
 
-	status, body = inst.do(t, http.MethodGet, path, token, nil)
+	status, body = inst.connect(t, apiconnect.InstanceServiceGetInstanceStatsProcedure, token, nil)
 	require.Equal(t, http.StatusOK, status, "%s", body)
 	var stats apipb.InstanceStats
 	require.NoError(t, protojson.Unmarshal(body, &stats))

@@ -1,16 +1,18 @@
 package mcp
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
+	"maps"
+	"net/http"
+	"slices"
 	"strings"
 
-	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
-	"github.com/grpc-ecosystem/grpc-gateway/v2/utilities"
 	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 
 	apipb "github.com/usememos/memos/proto/gen/api"
@@ -18,80 +20,74 @@ import (
 	"github.com/usememos/memos/server/auth"
 )
 
-// personalAPI binds the public tool arguments to the same typed requests used
-// by REST and Connect. Only authenticated MCP routes install the user identity.
+// personalAPI binds the five schema-derived tools directly to the note service.
 type personalAPI struct {
-	service   *api.APIService
-	marshaler runtime.Marshaler
+	service *api.APIService
 }
 
 func (a personalAPI) execute(ctx context.Context, operation *openAPIOperation, arguments map[string]any) (*sdkmcp.CallToolResult, error) {
 	if auth.GetUserID(ctx) == 0 {
 		return personalToolError(status.Error(codes.Unauthenticated, "MCP connection required")), nil
 	}
+	fields := make(map[string]any)
+	for _, parameter := range operation.Parameters {
+		if value := arguments[parameter.Name]; parameter.In == "query" && value != nil {
+			fields[parameter.Name] = value
+		}
+	}
+
 	switch operation.OperationID {
 	case "AuthService_GetCurrentUser":
-		return invokePersonal(ctx, a, operation, arguments, &apipb.GetCurrentUserRequest{}, a.service.GetCurrentUser)
+		return invokePersonal(ctx, fields, &apipb.GetCurrentUserRequest{}, a.service.GetCurrentUser)
 	case "MemoService_ListMemos":
-		return invokePersonal(ctx, a, operation, arguments, &apipb.ListMemosRequest{}, a.service.ListMCPMemos)
+		return invokePersonal(ctx, fields, &apipb.ListMemosRequest{}, a.service.ListMCPMemos)
 	case "MemoService_GetMemo":
-		request := &apipb.GetMemoRequest{Name: personalMemoName(arguments)}
-		return invokePersonal(ctx, a, operation, arguments, request, a.service.GetMemo)
+		fields["name"] = personalMemoName(arguments)
+		return invokePersonal(ctx, fields, &apipb.GetMemoRequest{}, a.service.GetMemo)
 	case "MemoService_CreateMemo":
-		memo, _, err := a.memoBody(arguments)
-		if err != nil {
-			return personalToolError(err), nil
-		}
-		return invokePersonal(ctx, a, operation, arguments, &apipb.CreateMemoRequest{Memo: memo}, a.service.CreateMemo)
+		fields["memo"] = arguments["body"]
+		return invokePersonal(ctx, fields, &apipb.CreateMemoRequest{}, a.service.CreateMemo)
 	case "MemoService_UpdateMemo":
-		memo, body, err := a.memoBody(arguments)
-		if err != nil {
-			return personalToolError(err), nil
+		body, ok := arguments["body"].(map[string]any)
+		if !ok {
+			return personalToolError(status.Error(codes.InvalidArgument, "memo body is required")), nil
 		}
-		memo.Name = personalMemoName(arguments)
-		mask, err := runtime.FieldMaskFromRequestBody(bytes.NewReader(body), memo)
-		if err != nil {
-			return personalToolError(status.Error(codes.InvalidArgument, err.Error())), nil
+		if fields["updateMask"] == nil {
+			// Include keys explicitly set to false, zero or an empty list.
+			fields["updateMask"] = strings.Join(slices.Sorted(maps.Keys(body)), ",")
 		}
-		request := &apipb.UpdateMemoRequest{Memo: memo, UpdateMask: mask}
-		return invokePersonal(ctx, a, operation, arguments, request, a.service.UpdateMemo)
+		memo := maps.Clone(body)
+		memo["name"] = personalMemoName(arguments)
+		fields["memo"] = memo
+		return invokePersonal(ctx, fields, &apipb.UpdateMemoRequest{}, a.service.UpdateMemo)
 	default:
-		return personalToolError(status.Error(codes.PermissionDenied, "MCP connection cannot access this API procedure")), nil
+		return personalToolError(status.Error(codes.PermissionDenied, "MCP connection cannot access this procedure")), nil
 	}
-}
-
-func (a personalAPI) memoBody(arguments map[string]any) (*apipb.Memo, []byte, error) {
-	body, err := json.Marshal(arguments["body"])
-	if err != nil {
-		return nil, nil, status.Error(codes.InvalidArgument, err.Error())
-	}
-	memo := &apipb.Memo{}
-	if err := a.marshaler.Unmarshal(body, memo); err != nil {
-		return nil, nil, status.Error(codes.InvalidArgument, err.Error())
-	}
-	return memo, body, nil
 }
 
 func personalMemoName(arguments map[string]any) string {
-	name := valueToString(arguments["memo"])
-	if id, ok := strings.CutPrefix(name, api.MemoNamePrefix); ok && id != "" && !strings.Contains(id, "/") {
-		return name
+	name, ok := arguments["memo"].(string)
+	if !ok || name == "" {
+		return ""
 	}
-	return api.MemoNamePrefix + name
+	return api.MemoNamePrefix + strings.TrimPrefix(name, api.MemoNamePrefix)
 }
 
 func invokePersonal[Request proto.Message, Response proto.Message](
-	ctx context.Context, a personalAPI, operation *openAPIOperation, arguments map[string]any,
-	request Request, call func(context.Context, Request) (Response, error),
+	ctx context.Context, fields map[string]any, request Request, call func(context.Context, Request) (Response, error),
 ) (*sdkmcp.CallToolResult, error) {
-	if err := runtime.PopulateQueryParameters(request, operationQuery(operation, arguments), &utilities.DoubleArray{}); err != nil {
+	input, err := json.Marshal(fields)
+	if err != nil {
+		return personalToolError(status.Error(codes.InvalidArgument, err.Error())), nil
+	}
+	if err := protojson.Unmarshal(input, request); err != nil {
 		return personalToolError(status.Error(codes.InvalidArgument, err.Error())), nil
 	}
 	response, err := call(ctx, request)
 	if err != nil {
 		return personalToolError(err), nil
 	}
-	encoded, err := a.marshaler.Marshal(response)
+	encoded, err := (protojson.MarshalOptions{EmitDefaultValues: true}).Marshal(response)
 	if err != nil {
 		return nil, err
 	}
@@ -102,6 +98,7 @@ func invokePersonal[Request proto.Message, Response proto.Message](
 }
 
 func personalToolError(err error) *sdkmcp.CallToolResult {
-	grpcStatus := status.Convert(err)
-	return newToolErrorResult(apiErrorMessage(runtime.HTTPStatusFromCode(grpcStatus.Code()), map[string]any{"message": grpcStatus.Message()}))
+	st := status.Convert(err)
+	code := api.HTTPStatusFromCode(st.Code())
+	return newToolErrorResult(fmt.Sprintf("%d %s: %s", code, http.StatusText(code), st.Message()))
 }

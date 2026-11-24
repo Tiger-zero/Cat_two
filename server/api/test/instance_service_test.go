@@ -507,18 +507,6 @@ func TestUpdateInstanceSetting(t *testing.T) {
 		hostUser, err := ts.CreateHostUser(ctx, "admin")
 		require.NoError(t, err)
 		adminCtx := ts.CreateUserContext(ctx, hostUser.ID)
-		_, err = ts.Store.UpsertInstanceSetting(ctx, &storepb.InstanceSetting{
-			Key: storepb.InstanceSettingKey_STORAGE,
-			Value: &storepb.InstanceSetting_StorageSetting{StorageSetting: &storepb.InstanceStorageSetting{
-				StorageType: storepb.InstanceStorageSetting_S3,
-				S3Config: &storepb.StorageS3Config{
-					AccessKeyId: "original-id", AccessKeySecret: "original-secret",
-					Endpoint: "https://original.example.test", Region: "test", Bucket: "memos",
-				},
-			}},
-		})
-		require.NoError(t, err)
-
 		_, err = ts.Service.UpdateInstanceSetting(adminCtx, &apipb.UpdateInstanceSettingRequest{
 			InstanceSetting: &apipb.InstanceSetting{
 				Name: "instance/settings/STORAGE",
@@ -544,11 +532,6 @@ func TestUpdateInstanceSetting(t *testing.T) {
 		require.Nil(t, setting.GetS3Config())
 		require.Len(t, setting.GetStorages(), 1)
 		require.Nil(t, setting.GetStorages()[0].GetS3Config())
-
-		stored, err := ts.Store.GetInstanceStorageSetting(ctx)
-		require.NoError(t, err)
-		require.Equal(t, "original-secret", stored.GetS3Config().GetAccessKeySecret())
-		require.Equal(t, "https://original.example.test", stored.GetS3Config().GetEndpoint())
 	})
 
 	t.Run("UpdateInstanceSetting - AI provider keys are write-only and preserved on empty", func(t *testing.T) {

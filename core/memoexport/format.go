@@ -81,7 +81,6 @@ type Memo struct {
 	ContentPath     string       `json:"contentPath"`
 	Tags            []string     `json:"tags,omitempty"`
 	Location        *Location    `json:"location,omitempty"`
-	Space           *Space       `json:"space,omitempty"`
 	Parent          string       `json:"parent,omitempty"`
 	Relations       []Relation   `json:"relations,omitempty"`
 	Attachments     []Attachment `json:"attachments,omitempty"`
@@ -93,12 +92,6 @@ type Location struct {
 	Placeholder string  `json:"placeholder,omitempty"`
 	Latitude    float64 `json:"latitude"`
 	Longitude   float64 `json:"longitude"`
-}
-
-// Space names the Space a memo was placed in.
-type Space struct {
-	UID   string `json:"uid"`
-	Title string `json:"title,omitempty"`
 }
 
 // Relation is an outgoing REFERENCE relation.

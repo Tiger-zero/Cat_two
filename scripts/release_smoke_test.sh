@@ -11,38 +11,30 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 candidate_image="${MEMOS_SMOKE_CANDIDATE_IMAGE:-}"
-previous_image="${MEMOS_SMOKE_PREVIOUS_IMAGE:-}"
 expected_commit=""
 platform=""
 keep_resources="${MEMOS_SMOKE_KEEP_RESOURCES:-0}"
-fresh_only=0
 
 usage() {
   cat <<'EOF'
 Usage: ./scripts/release_smoke_test.sh [options]
 
-Verifies a fresh Cat_two install and persistent data. Provide a previous
-Cat_two image to also verify an upgrade.
+Verifies a fresh Cat_two install and data persistence after recreating its container.
 
 Options:
   --candidate-image IMAGE  Test an existing image instead of building locally.
-  --previous-image IMAGE   Cat_two image used to seed an optional upgrade test.
   --expected-commit SHA    Check the running candidate's complete commit SHA.
   --platform PLATFORM      Pull and run a specific platform, such as linux/arm64.
-  --fresh-only             Run fresh install and persistence checks regardless of the previous image.
   --keep-resources         Keep containers and volumes after the test for debugging.
   -h, --help               Show this help text.
 
 Environment equivalents:
   MEMOS_SMOKE_CANDIDATE_IMAGE
-  MEMOS_SMOKE_PREVIOUS_IMAGE
   MEMOS_SMOKE_KEEP_RESOURCES=1
 
 Examples:
   ./scripts/release_smoke_test.sh
-  ./scripts/release_smoke_test.sh \
-    --candidate-image cat-two:local \
-    --previous-image docker.io/tiger2896/cat_two:0.06
+  ./scripts/release_smoke_test.sh --candidate-image cat-two:local
 EOF
 }
 
@@ -62,11 +54,6 @@ while (($# > 0)); do
       candidate_image="$2"
       shift 2
       ;;
-    --previous-image)
-      (($# >= 2)) || die "--previous-image requires a value"
-      previous_image="$2"
-      shift 2
-      ;;
     --expected-commit)
       (($# >= 2)) || die "--expected-commit requires a value"
       expected_commit="$2"
@@ -79,10 +66,6 @@ while (($# > 0)); do
       ;;
     --keep-resources)
       keep_resources=1
-      shift
-      ;;
-    --fresh-only)
-      fresh_only=1
       shift
       ;;
     -h|--help)
@@ -105,10 +88,6 @@ if [[ -n "$platform" ]]; then
   esac
 fi
 
-if [[ -z "$previous_image" ]]; then
-  fresh_only=1
-fi
-
 for command_name in cmp curl docker git jq; do
   command -v "$command_name" >/dev/null 2>&1 || die "$command_name is required"
 done
@@ -117,10 +96,7 @@ docker info >/dev/null 2>&1 || die "Docker is not running"
 
 run_id="${GITHUB_RUN_ID:-local}-$(date +%s)-$$"
 fresh_container="memos-smoke-fresh-$run_id"
-upgrade_old_container="memos-smoke-upgrade-old-$run_id"
-upgrade_new_container="memos-smoke-upgrade-new-$run_id"
 fresh_volume="memos-smoke-fresh-$run_id"
-upgrade_volume="memos-smoke-upgrade-$run_id"
 temp_dir="$(mktemp -d)"
 
 container_exists() {
@@ -131,22 +107,18 @@ cleanup() {
   local status=$?
   trap - EXIT
 
-  if ((status != 0)); then
-    for container_name in "$fresh_container" "$upgrade_old_container" "$upgrade_new_container"; do
-      if container_exists "$container_name"; then
-        printf '\n--- docker logs: %s ---\n' "$container_name" >&2
-        docker logs "$container_name" >&2 || true
-      fi
-    done
+  if ((status != 0)) && container_exists "$fresh_container"; then
+    printf '\n--- docker logs: %s ---\n' "$fresh_container" >&2
+    docker logs "$fresh_container" >&2 || true
   fi
 
   if [[ "$keep_resources" == "1" ]]; then
     printf '\nKept smoke-test resources for debugging:\n'
-    printf '  containers: %s %s %s\n' "$fresh_container" "$upgrade_old_container" "$upgrade_new_container"
-    printf '  volumes:    %s %s\n' "$fresh_volume" "$upgrade_volume"
+    printf '  container: %s\n' "$fresh_container"
+    printf '  volume:    %s\n' "$fresh_volume"
   else
-    docker rm -f "$fresh_container" "$upgrade_old_container" "$upgrade_new_container" >/dev/null 2>&1 || true
-    docker volume rm "$fresh_volume" "$upgrade_volume" >/dev/null 2>&1 || true
+    docker rm -f "$fresh_container" >/dev/null 2>&1 || true
+    docker volume rm "$fresh_volume" >/dev/null 2>&1 || true
   fi
 
   rm -rf "$temp_dir"
@@ -224,6 +196,8 @@ wait_until_ready() {
 }
 
 current_base_url=""
+session_cookies="$temp_dir/session.cookies"
+: > "$session_cookies"
 
 set_current_base_url() {
   local container_name="$1"
@@ -235,14 +209,20 @@ set_current_base_url() {
   current_base_url="http://127.0.0.1:$port"
 }
 
-# api_url prints the API root of the running container. Older releases serve the
-# API under /api/v1; current releases serve it under /api.
-api_url() {
-  if curl --fail --silent --output /dev/null --max-time 2 "$current_base_url/api/instance/profile"; then
-    printf '%s/api\n' "$current_base_url"
-  else
-    printf '%s/api/v1\n' "$current_base_url"
+# Use unary Connect JSON with a browser session.
+connect_rpc() {
+  local procedure="$1" payload="$2" token="${3:-}"
+  local -a authorization=()
+  if [[ -n "$token" ]]; then
+    authorization=(--header "Authorization: Bearer $token")
   fi
+  curl --fail-with-body --silent --show-error --max-time 30 \
+    --header 'Content-Type: application/json' \
+    --header 'Connect-Protocol-Version: 1' \
+    --header "Origin: $current_base_url" \
+    --cookie "$session_cookies" --cookie-jar "$session_cookies" \
+    "${authorization[@]}" --data-binary "$payload" \
+    "$current_base_url/memos.api.$procedure"
 }
 
 start_container() {
@@ -255,8 +235,6 @@ start_container() {
     --name "$container_name" \
     --label "org.usememos.release-smoke=$run_id" \
     --publish "127.0.0.1::5230" \
-    --env MEMOS_MODE=prod \
-    --env MEMOS_INSTANCE_URL=http://localhost \
     --mount "type=volume,source=$volume,target=/var/opt/memos" \
     "$image" >/dev/null
 
@@ -283,28 +261,27 @@ assert_candidate_commit() {
   if [[ -z "$expected_commit" ]]; then
     return
   fi
-  curl --fail --silent --show-error "$(api_url)/instance/profile" |
+  connect_rpc 'InstanceService/GetInstanceProfile' '{}' |
     jq -e --arg commit "$expected_commit" '.commit == $commit' >/dev/null ||
     die "running candidate did not report commit $expected_commit"
 }
 
 create_admin() {
   local payload response
-  payload="$(jq -nc '{username:"smoke-admin",password:"smoke-password",email:"smoke@example.test"}')"
-  response="$(curl --fail --silent --show-error \
-    --header 'Content-Type: application/json' \
-    --data "$payload" \
-    "$(api_url)/users")"
+  payload='{"user":{"username":"smoke-admin","password":"smoke-password","email":"smoke@example.test"}}'
+  response="$(connect_rpc 'UserService/CreateUser' "$payload")"
   jq -e '.username == "smoke-admin" and .role == "ADMIN"' <<<"$response" >/dev/null
 }
 
 sign_in() {
-  local payload
-  payload="$(jq -nc '{passwordCredentials:{username:"smoke-admin",password:"smoke-password"}}')"
-  curl --fail --silent --show-error \
-    --header 'Content-Type: application/json' \
-    --data "$payload" \
-    "$(api_url)/auth/signin" | jq -er '.accessToken'
+  local payload='{"passwordCredentials":{"username":"smoke-admin","password":"smoke-password"}}'
+  connect_rpc 'AuthService/SignIn' "$payload" | jq -er '.accessToken | strings | select(length > 0)' >/dev/null || return
+  # A cookie-only refresh exercises the Web session used after a page reload.
+  refresh_session
+}
+
+refresh_session() {
+  connect_rpc 'AuthService/RefreshToken' '{}' | jq -er '.accessToken | strings | select(length > 0)'
 }
 
 create_memo() {
@@ -312,23 +289,44 @@ create_memo() {
   local memo_id="$2"
   local content="$3"
   local payload response
-  payload="$(jq -nc --arg content "$content" '{content:$content,visibility:"PRIVATE"}')"
-  response="$(curl --fail --silent --show-error \
-    --header "Authorization: Bearer $token" \
-    --header 'Content-Type: application/json' \
-    --data "$payload" \
-    "$(api_url)/memos?memoId=$memo_id")"
+  payload="$(jq -nc --arg id "$memo_id" --arg content "$content" '{memoId:$id,memo:{content:$content,visibility:"PRIVATE"}}')"
+  response="$(connect_rpc 'MemoService/CreateMemo' "$payload" "$token")"
   jq -e --arg name "memos/$memo_id" --arg content "$content" '.name == $name and .content == $content' <<<"$response" >/dev/null
 }
 
 assert_memo() {
-  local token="$1"
-  local memo_id="$2"
-  local content="$3"
-  curl --fail --silent --show-error \
-    --header "Authorization: Bearer $token" \
-    "$(api_url)/memos/$memo_id" |
-    jq -e --arg content "$content" '.content == $content' >/dev/null
+  local token="$1" memo_id="$2" content="$3" payload
+  payload="$(jq -nc --arg name "memos/$memo_id" '{name:$name}')"
+  connect_rpc 'MemoService/GetMemo' "$payload" "$token" |
+    jq -e --arg name "memos/$memo_id" --arg content "$content" '.name == $name and .content == $content' >/dev/null
+}
+
+trash_memo() {
+  local token="$1" memo_id="$2" payload
+  payload="$(jq -nc --arg name "memos/$memo_id" '{name:$name}')"
+  connect_rpc 'MemoService/DeleteMemo' "$payload" "$token" >/dev/null
+}
+
+assert_restore_memo() {
+  local token="$1" memo_id="$2" content="$3"
+  curl --fail --silent --show-error --max-time 30 \
+    --header "Authorization: Bearer $token" --header "Origin: $current_base_url" \
+    "$current_base_url/internal/trash" |
+    jq -e --arg name "memos/$memo_id" --arg content "$content" \
+      '.memos | any(.memo.name == $name and .memo.content == $content)' >/dev/null
+  curl --fail --silent --show-error --max-time 30 --request POST \
+    --header "Authorization: Bearer $token" --header "Origin: $current_base_url" \
+    "$current_base_url/internal/trash/$memo_id/restore" >/dev/null
+  assert_memo "$token" "$memo_id" "$content"
+}
+
+assert_rest_retired() {
+  local token="$1" path status
+  for path in /api /api/instance/profile /api/memos /api/v1/memos /api/users/smoke-admin/personalAccessTokens; do
+    status="$(curl --silent --show-error --max-time 30 --output /dev/null --write-out '%{http_code}' \
+      --header "Authorization: Bearer $token" "$current_base_url$path")"
+    [[ "$status" == "404" ]] || die "retired REST route $path returned HTTP $status, expected 404"
+  done
 }
 
 attachment_filename="release-smoke.txt"
@@ -337,20 +335,18 @@ attachment_contents="Cat_two release smoke attachment"
 create_attachment() {
   local token="$1" memo_id="$2" payload
   payload="$(jq -nc --arg filename "$attachment_filename" --arg contents "$attachment_contents" \
-    --arg memo "memos/$memo_id" '{filename:$filename,type:"text/plain",content:($contents|@base64),memo:$memo}')"
-  curl --fail --silent --show-error \
-    --header "Authorization: Bearer $token" \
-    --header 'Content-Type: application/json' \
-    --data "$payload" "$(api_url)/attachments" |
+    --arg memo "memos/$memo_id" '{attachment:{filename:$filename,type:"text/plain",content:($contents|@base64),memo:$memo}}')"
+  connect_rpc 'AttachmentService/CreateAttachment' "$payload" "$token" |
     jq -er '.name | select(test("^attachments/[A-Za-z0-9-]+$"))'
 }
 
 assert_attachment() {
-  local token="$1" attachment="$2" memo_id="$3"
-  curl --fail --silent --show-error --header "Authorization: Bearer $token" "$(api_url)/$attachment" |
+  local token="$1" attachment="$2" memo_id="$3" payload
+  payload="$(jq -nc --arg name "$attachment" '{name:$name}')"
+  connect_rpc 'AttachmentService/GetAttachment' "$payload" "$token" |
     jq -e --arg memo "memos/$memo_id" --arg filename "$attachment_filename" \
       '.memo == $memo and .filename == $filename' >/dev/null
-  curl --fail --silent --show-error --header "Authorization: Bearer $token" \
+  curl --fail --silent --show-error --max-time 30 --header "Authorization: Bearer $token" \
     "$current_base_url/file/$attachment/$attachment_filename" --output "$temp_dir/attachment"
   printf '%s' "$attachment_contents" | cmp -s - "$temp_dir/attachment" || die "downloaded attachment bytes changed"
 }
@@ -359,12 +355,6 @@ if [[ -z "$candidate_image" ]]; then
   build_local_candidate
 else
   ensure_image "$candidate_image"
-fi
-
-if [[ "$fresh_only" == "0" ]]; then
-  ensure_image "$previous_image"
-  [[ "$candidate_image" != "$previous_image" ]] || die "candidate and previous images must be different"
-  log "Previous image:  $previous_image"
 fi
 
 log "Candidate image: $candidate_image"
@@ -376,45 +366,21 @@ assert_candidate_commit
 assert_frontend_assets
 create_admin
 fresh_token="$(sign_in)"
+assert_rest_retired "$fresh_token"
 create_memo "$fresh_token" "release-smoke" "fresh install smoke sentinel"
 fresh_attachment="$(create_attachment "$fresh_token" "release-smoke")"
+create_memo "$fresh_token" "release-smoke-trash" "trashed before volume reuse"
+trash_memo "$fresh_token" "release-smoke-trash"
 
+log "Recreating the candidate with the same SQLite volume"
 docker rm -f "$fresh_container" >/dev/null
 start_container "$fresh_container" "$candidate_image" "$fresh_volume"
-fresh_token="$(sign_in)"
+assert_candidate_commit
+fresh_token="$(refresh_session)"
 assert_memo "$fresh_token" "release-smoke" "fresh install smoke sentinel"
 assert_attachment "$fresh_token" "$fresh_attachment" "release-smoke"
-docker rm -f "$fresh_container" >/dev/null
+assert_restore_memo "$fresh_token" "release-smoke-trash" "trashed before volume reuse"
+create_memo "$fresh_token" "after-recreate-smoke" "created after container recreation"
+assert_memo "$fresh_token" "after-recreate-smoke" "created after container recreation"
 
-if [[ "$fresh_only" == "1" ]]; then
-  log "Fresh-install and volume persistence smoke tests passed"
-  exit 0
-fi
-
-log "Running $previous_image to $candidate_image upgrade smoke test"
-docker volume create "$upgrade_volume" >/dev/null
-start_container "$upgrade_old_container" "$previous_image" "$upgrade_volume"
-create_admin
-upgrade_token="$(sign_in)"
-create_memo "$upgrade_token" "pre-upgrade-smoke" "created before release upgrade"
-upgrade_attachment="$(create_attachment "$upgrade_token" "pre-upgrade-smoke")"
-create_memo "$upgrade_token" "pre-upgrade-trash" "trashed before release upgrade"
-curl --fail --silent --show-error --request DELETE --header "Authorization: Bearer $upgrade_token" \
-  "$(api_url)/memos/pre-upgrade-trash" >/dev/null
-docker rm -f "$upgrade_old_container" >/dev/null
-
-start_container "$upgrade_new_container" "$candidate_image" "$upgrade_volume"
-assert_candidate_commit
-assert_frontend_assets
-upgrade_token="$(sign_in)"
-assert_memo "$upgrade_token" "pre-upgrade-smoke" "created before release upgrade"
-assert_attachment "$upgrade_token" "$upgrade_attachment" "pre-upgrade-smoke"
-curl --fail --silent --show-error --header "Authorization: Bearer $upgrade_token" "$current_base_url/api/trash" |
-  jq -e '.memos | any(.memo.name == "memos/pre-upgrade-trash" and .memo.content == "trashed before release upgrade")' >/dev/null
-curl --fail --silent --show-error --request POST --header "Authorization: Bearer $upgrade_token" \
-  "$current_base_url/api/trash/pre-upgrade-trash/restore" >/dev/null
-assert_memo "$upgrade_token" "pre-upgrade-trash" "trashed before release upgrade"
-create_memo "$upgrade_token" "post-upgrade-smoke" "created after release upgrade"
-assert_memo "$upgrade_token" "post-upgrade-smoke" "created after release upgrade"
-
-log "Release smoke tests passed"
+log "Fresh-install and volume persistence smoke tests passed"

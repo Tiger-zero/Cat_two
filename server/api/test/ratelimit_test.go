@@ -162,46 +162,9 @@ func TestCreateUserRateLimits(t *testing.T) {
 		return err
 	}
 
-	t.Run("self-service signup is bounded per address", func(t *testing.T) {
+	t.Run("initial setup bounds validation and creation separately", func(t *testing.T) {
 		ts := NewTestService(t)
 		defer ts.Cleanup()
-		_, err := ts.CreateHostUser(ctx, "admin")
-		require.NoError(t, err)
-		ts.Service.RateLimiter = ratelimit.NewMemoryLimiter(limitedPolicy(ratelimit.ScopeSignupIP, 1))
-
-		require.NoError(t, signup(ts, ctx, "first", false))
-		requireRateLimited(t, signup(ts, ctx, "second", false), ratelimit.ScopeSignupIP)
-		// validate_only has its own scope and is still allowed.
-		require.NoError(t, signup(ts, ctx, "third", true))
-		// Another address is unaffected.
-		require.NoError(t, signup(ts, withClientIP(context.Background(), "203.0.113.21"), "fourth", false))
-	})
-
-	t.Run("admin creation is exempt", func(t *testing.T) {
-		ts := NewTestService(t)
-		defer ts.Cleanup()
-		admin, err := ts.CreateHostUser(ctx, "admin")
-		require.NoError(t, err)
-		ts.Service.RateLimiter = ratelimit.NewMemoryLimiter(limitedPolicy(ratelimit.ScopeSignupIP, 1))
-		adminCtx := ts.CreateUserContext(ctx, admin.ID)
-		for i := range 3 {
-			require.NoError(t, signup(ts, adminCtx, "staff"+strconv.Itoa(i), false))
-		}
-	})
-
-	t.Run("legacy first user setup is exempt", func(t *testing.T) {
-		ts := NewTestService(t)
-		defer ts.Cleanup()
-		limiter := ratelimit.NewMemoryLimiter(limitedPolicy(ratelimit.ScopeSignupIP, 1))
-		ts.Service.RateLimiter = limiter
-		require.NoError(t, signup(ts, ctx, "owner", false))
-		require.Equal(t, 1, limiter.Allowed(ratelimit.ScopeSignupIP, "203.0.113.20", 1).Remaining, "setup did not spend the signup budget")
-	})
-
-	t.Run("personal setup bounds validation and creation separately", func(t *testing.T) {
-		ts := NewTestService(t)
-		defer ts.Cleanup()
-		ts.Profile.Personal = true
 		policy := limitedPolicy(ratelimit.ScopeSignupIP, 1)
 		policy[ratelimit.ScopeValidateIP] = ratelimit.Rule{Limit: 1, Window: time.Hour}
 		limiter := ratelimit.NewMemoryLimiter(policy)
@@ -249,23 +212,17 @@ func requireChallengeRequired(t *testing.T, err error) {
 func TestChallengeSeam(t *testing.T) {
 	ctx := withClientIP(context.Background(), "203.0.113.30")
 
-	t.Run("signup requires a valid token when configured", func(t *testing.T) {
+	t.Run("initial setup skips the sign-in challenge", func(t *testing.T) {
 		ts := NewTestService(t)
 		defer ts.Cleanup()
-		_, err := ts.CreateHostUser(ctx, "admin")
-		require.NoError(t, err)
 		challenge := &fakeChallenge{accept: "good"}
 		ts.Service.Challenge = challenge
 
-		request := func(ctx context.Context) error {
-			_, err := ts.Service.CreateUser(ctx, &apipb.CreateUserRequest{User: &apipb.User{Username: "newcomer", Password: "password123"}})
-			return err
-		}
-		requireChallengeRequired(t, request(ctx))
-		requireChallengeRequired(t, request(withChallengeToken(ctx, "bad")))
-		require.NoError(t, request(withChallengeToken(ctx, "good")))
-		require.Equal(t, []string{"203.0.113.30", "203.0.113.30"}, challenge.seen, "the resolver's address is handed to the verifier")
-
+		_, err := ts.Service.CreateUser(ctx, &apipb.CreateUserRequest{
+			User: &apipb.User{Username: "owner", Password: "password123"},
+		})
+		require.NoError(t, err)
+		require.Empty(t, challenge.seen)
 		profile, err := ts.Service.GetInstanceProfile(ctx, &apipb.GetInstanceProfileRequest{})
 		require.NoError(t, err)
 		require.Equal(t, "fake", profile.GetChallenge().GetProvider())
@@ -282,16 +239,6 @@ func TestChallengeSeam(t *testing.T) {
 		require.NoError(t, passwordSignIn(withChallengeToken(ctx, "good"), ts, "alice", "correct-password"))
 	})
 
-	t.Run("admin creation skips the challenge", func(t *testing.T) {
-		ts := NewTestService(t)
-		defer ts.Cleanup()
-		admin, err := ts.CreateHostUser(ctx, "admin")
-		require.NoError(t, err)
-		ts.Service.Challenge = &fakeChallenge{accept: "good"}
-		_, err = ts.Service.CreateUser(ts.CreateUserContext(ctx, admin.ID), &apipb.CreateUserRequest{User: &apipb.User{Username: "staff", Password: "password123"}})
-		require.NoError(t, err)
-	})
-
 	t.Run("no challenge configured means no profile entry and no requirement", func(t *testing.T) {
 		ts := NewTestService(t)
 		defer ts.Cleanup()
@@ -299,35 +246,6 @@ func TestChallengeSeam(t *testing.T) {
 		require.NoError(t, err)
 		require.Nil(t, profile.GetChallenge())
 	})
-}
-
-type denyDomainPolicy struct{ domain string }
-
-func (p denyDomainPolicy) AllowSignup(_ context.Context, email string, _ string) error {
-	if len(email) > len(p.domain) && email[len(email)-len(p.domain):] == p.domain {
-		return errors.New("addresses at " + p.domain + " are not accepted")
-	}
-	return nil
-}
-
-func TestSignupPolicySeam(t *testing.T) {
-	ctx := withClientIP(context.Background(), "203.0.113.40")
-	ts := NewTestService(t)
-	defer ts.Cleanup()
-	admin, err := ts.CreateHostUser(ctx, "admin")
-	require.NoError(t, err)
-	ts.Service.SignupPolicy = denyDomainPolicy{domain: "@blocked.example"}
-
-	_, err = ts.Service.CreateUser(ctx, &apipb.CreateUserRequest{User: &apipb.User{Username: "spammer", Email: "Spam@Blocked.Example", Password: "password123"}})
-	require.Equal(t, codes.PermissionDenied, status.Code(err))
-	require.Contains(t, status.Convert(err).Message(), "blocked.example")
-
-	_, err = ts.Service.CreateUser(ctx, &apipb.CreateUserRequest{User: &apipb.User{Username: "welcome", Email: "hi@allowed.example", Password: "password123"}})
-	require.NoError(t, err)
-
-	// The policy is consulted for self-service signups only.
-	_, err = ts.Service.CreateUser(ts.CreateUserContext(ctx, admin.ID), &apipb.CreateUserRequest{User: &apipb.User{Username: "staff", Email: "staff@blocked.example", Password: "password123"}})
-	require.NoError(t, err)
 }
 
 func TestLinkMetadataRateLimit(t *testing.T) {
@@ -397,14 +315,13 @@ func TestAuthorizerBudgets(t *testing.T) {
 	requireRateLimited(t, authorizer.Throttle(ctx, procedure, nil), ratelimit.ScopeAnonymous)
 	require.NoError(t, authorizer.Throttle(withClientIP(context.Background(), "203.0.113.71"), procedure, nil))
 
-	// Authenticated callers are keyed by user, whether the identity came from
-	// access-token claims or from a personal access token.
+	// Different web sessions of the same user share a request budget.
 	claims := &auth.AuthResult{Claims: &auth.UserClaims{UserID: 7}}
-	pat := &auth.AuthResult{User: &store.User{ID: 7}}
+	otherSession := &auth.AuthResult{Claims: &auth.UserClaims{UserID: 7, SessionID: "other-session"}}
 	require.NoError(t, authorizer.Throttle(ctx, procedure, claims))
-	require.NoError(t, authorizer.Throttle(ctx, procedure, pat))
+	require.NoError(t, authorizer.Throttle(ctx, procedure, otherSession))
 	require.NoError(t, authorizer.Throttle(ctx, procedure, claims))
-	requireRateLimited(t, authorizer.Throttle(ctx, procedure, pat), ratelimit.ScopeAuthenticated)
+	requireRateLimited(t, authorizer.Throttle(ctx, procedure, otherSession), ratelimit.ScopeAuthenticated)
 	require.NoError(t, authorizer.Throttle(ctx, procedure, &auth.AuthResult{Claims: &auth.UserClaims{UserID: 8}}))
 
 	// A request with no resolvable address is not counted rather than lumped together.

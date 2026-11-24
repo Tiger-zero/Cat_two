@@ -38,6 +38,7 @@ Cat_two 是单账户自托管笔记。以桌面浏览器里的记录、检索和
 ## 设置和反馈
 
 - 账户菜单从全局页面骨架打开设置弹窗，使用设置自身的左侧分区、右侧内容和滚动。通过 `settingSections.ts` 注册栏目和权限范围，管理员配置归入管理员分区。点关闭按钮或按 Esc 时保留笔记区域的浏览位置、筛选与草稿。从菜单打开时，关闭后返还焦点。旧版 `/setting#分区` 链接沿用相应兼容入口。 [设置弹窗](../../../web/src/components/Settings/SettingsDialog.tsx) · [栏目注册](../../../web/src/components/Settings/settingSections.ts)
+- 「MCP」分区只管理 MCP 专用连接。用当前页面的 Connect 和会话请求完成设置、附件上传、回收站及 ZIP 验收。文件下载走 `/file/`。 [网页接口](../cat-two-product-development/references/external-api.md#网页接口)
 - 设置左侧当前项与标签共用 `SidebarRow` 的选中样式。浅色和深色均使用 `#397354` 底色、白色文字和白色图标，纸张模式使用自身的选中色。 [设置导航](../../../web/src/components/Settings/SettingsContent.tsx) · [统一行状态](../../../web/src/components/AppSidebar/SidebarRow.tsx)
 - 设置使用 `SettingSection`、`SettingGroup`、`SettingListItem` 组织标题、分组、字段与说明。采用现有的加载、空态和重试样式，错误反馈放在发生的位置。字段校验放在字段下方，使用 `Field.Error` 与 `useFieldErrors`。通用操作失败走 `showErrorToast`。敏感连接设置使用掩码输入，只显示已配置状态，留空按对应接口规则保留旧值。 [设置字段](../../../web/src/components/Settings/SettingList.tsx) · [通知](../../../web/src/components/Settings/NotificationSection.tsx) · [网络](../../../web/src/components/Settings/NetworkSection.tsx) · [错误反馈](../../../web/src/lib/toast.ts)
 - 企业微信的复制入口优先显示服务端保存的公网回调地址，其次显示实例级默认值。配置来自局域网且未提供公网地址时，显示输入与保存入口。验收覆盖带端口的保存与复制、清空后恢复默认值和错误提示。 [通知设置](../../../web/src/components/Settings/NotificationSection.tsx)

@@ -48,90 +48,74 @@ func changePassword(ctx context.Context, ts *TestService, user *store.User, pass
 	return err
 }
 
-// Old access tokens must be rejected by both transports before they can change
+// Old access tokens must be rejected before they can change
 // the password again, even while their JWT signature and expiry remain valid.
 func TestPasswordChangeRejectsOldAccessToken(t *testing.T) {
-	for _, transport := range []string{"REST", "Connect"} {
-		t.Run(transport, func(t *testing.T) {
-			ts := NewTestService(t)
-			defer ts.Cleanup()
-			ctx := context.Background()
-			user, err := ts.CreateRegularUser(ctx, "password-victim")
-			require.NoError(t, err)
-			addSession(ctx, t, ts, user.ID, "owner-browser")
-			addSession(ctx, t, ts, user.ID, "stolen-session")
-			ownerRefresh, _, err := auth.GenerateRefreshToken(user.ID, "owner-browser", []byte(ts.Secret))
-			require.NoError(t, err)
-			stolenRefresh, _, err := auth.GenerateRefreshToken(user.ID, "stolen-session", []byte(ts.Secret))
-			require.NoError(t, err)
-			oldAccess, _, err := auth.GenerateAccessTokenV2(user.ID, user.Username, string(user.Role), string(user.RowStatus), user.PasswordHash, []byte(ts.Secret))
-			require.NoError(t, err)
-			authenticator := auth.NewAuthenticator(ts.Store, ts.Secret)
-			require.NotNil(t, authenticator.Authenticate(ctx, "Bearer "+oldAccess))
+	ts := NewTestService(t)
+	defer ts.Cleanup()
+	ctx := context.Background()
+	user, err := ts.CreateRegularUser(ctx, "password-victim")
+	require.NoError(t, err)
+	addSession(ctx, t, ts, user.ID, "owner-browser")
+	addSession(ctx, t, ts, user.ID, "stolen-session")
+	ownerRefresh, _, err := auth.GenerateRefreshToken(user.ID, "owner-browser", []byte(ts.Secret))
+	require.NoError(t, err)
+	stolenRefresh, _, err := auth.GenerateRefreshToken(user.ID, "stolen-session", []byte(ts.Secret))
+	require.NoError(t, err)
+	oldAccess, _, err := auth.GenerateAccessTokenV2(user.ID, user.Username, string(user.Role), string(user.RowStatus), user.PasswordHash, []byte(ts.Secret))
+	require.NoError(t, err)
+	authenticator := auth.NewAuthenticator(ts.Store, ts.Secret)
+	require.NotNil(t, authenticator.Authenticate(ctx, "Bearer "+oldAccess))
 
-			e := http.NewServeMux()
-			apiHandler, handlerErr := ts.Service.NewHandler(ctx)
-			require.NoError(t, handlerErr)
-			e.Handle("/", apiHandler)
-			updatePassword := func(password, cookie string) *httptest.ResponseRecorder {
-				t.Helper()
-				method, path := http.MethodPatch, "/api/users/password-victim?updateMask=password"
-				body := `{"password":"` + password + `"}`
-				if transport == "Connect" {
-					method, path = http.MethodPost, "/memos.api.UserService/UpdateUser"
-					body = `{"user":{"name":"users/password-victim","password":"` + password + `"},"updateMask":"password"}`
-				}
-				req := httptest.NewRequest(method, path, strings.NewReader(body))
-				req.Header.Set("Content-Type", "application/json")
-				req.Header.Set("Authorization", "Bearer "+oldAccess)
-				if cookie != "" {
-					req.Header.Set("Cookie", auth.RefreshTokenCookieName+"="+cookie)
-					if transport == "REST" {
-						// Direct gRPC-Gateway calls pass service cookie metadata explicitly.
-						req.Header.Set("Grpc-Metadata-Cookie", auth.RefreshTokenCookieName+"="+cookie)
-					}
-				}
-				rec := httptest.NewRecorder()
-				e.ServeHTTP(rec, req)
-				return rec
-			}
-
-			rec := updatePassword("owner-new-password", ownerRefresh)
-			require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
-			// The token is still cryptographically valid; password revocation must
-			// reject it without waiting for its 15-minute expiry.
-			_, err = auth.ParseAccessTokenV2(oldAccess, []byte(ts.Secret))
-			require.NoError(t, err)
-			rec = updatePassword("attacker-password", "")
-			require.Equal(t, http.StatusUnauthorized, rec.Code, rec.Body.String())
-			require.Nil(t, authenticator.Authenticate(ctx, "Bearer "+oldAccess))
-			resolved, err := authenticator.AuthenticateToUser(ctx, "Bearer "+oldAccess, "")
-			require.NoError(t, err)
-			require.Nil(t, resolved)
-			updated, err := ts.Store.GetUser(ctx, &store.FindUser{ID: &user.ID})
-			require.NoError(t, err)
-			require.NoError(t, bcrypt.CompareHashAndPassword([]byte(updated.PasswordHash), []byte("owner-new-password")))
-			_, _, err = authenticator.AuthenticateByRefreshToken(ctx, stolenRefresh)
-			require.ErrorContains(t, err, "revoked")
-			resolved, err = authenticator.AuthenticateToUser(ctx, "Bearer "+oldAccess, auth.RefreshTokenCookieName+"="+stolenRefresh)
-			require.NoError(t, err)
-			require.Nil(t, resolved)
-
-			// The owner browser can refresh, and a fresh password sign-in also
-			// issues an access token bound to the new password.
-			refreshCtx := metadata.NewIncomingContext(api.WithHeaderCarrier(ctx), metadata.Pairs("cookie", auth.RefreshTokenCookieName+"="+ownerRefresh))
-			refreshed, err := ts.Service.RefreshToken(refreshCtx, &apipb.RefreshTokenRequest{})
-			require.NoError(t, err)
-			require.NotNil(t, authenticator.Authenticate(ctx, "Bearer "+refreshed.AccessToken))
-			signedIn, err := ts.Service.SignIn(api.WithHeaderCarrier(ctx), &apipb.SignInRequest{
-				Credentials: &apipb.SignInRequest_PasswordCredentials_{PasswordCredentials: &apipb.SignInRequest_PasswordCredentials{
-					Username: user.Username, Password: "owner-new-password",
-				}},
-			})
-			require.NoError(t, err)
-			require.NotNil(t, authenticator.Authenticate(ctx, "Bearer "+signedIn.AccessToken))
-		})
+	handler := ts.Service.NewHandler()
+	updatePassword := func(password, cookie string) *httptest.ResponseRecorder {
+		t.Helper()
+		body := `{"user":{"name":"users/password-victim","password":"` + password + `"},"updateMask":"password"}`
+		req := httptest.NewRequest(http.MethodPost, "/memos.api.UserService/UpdateUser", strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+oldAccess)
+		if cookie != "" {
+			req.Header.Set("Cookie", auth.RefreshTokenCookieName+"="+cookie)
+		}
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
+		return rec
 	}
+
+	rec := updatePassword("owner-new-password", ownerRefresh)
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	// The token is still cryptographically valid; password revocation must
+	// reject it without waiting for its 15-minute expiry.
+	_, err = auth.ParseAccessTokenV2(oldAccess, []byte(ts.Secret))
+	require.NoError(t, err)
+	rec = updatePassword("attacker-password", "")
+	require.Equal(t, http.StatusUnauthorized, rec.Code, rec.Body.String())
+	require.Nil(t, authenticator.Authenticate(ctx, "Bearer "+oldAccess))
+	resolved, err := authenticator.AuthenticateToUser(ctx, "Bearer "+oldAccess, "")
+	require.NoError(t, err)
+	require.Nil(t, resolved)
+	updated, err := ts.Store.GetUser(ctx, &store.FindUser{ID: &user.ID})
+	require.NoError(t, err)
+	require.NoError(t, bcrypt.CompareHashAndPassword([]byte(updated.PasswordHash), []byte("owner-new-password")))
+	_, _, err = authenticator.AuthenticateByRefreshToken(ctx, stolenRefresh)
+	require.ErrorContains(t, err, "revoked")
+	resolved, err = authenticator.AuthenticateToUser(ctx, "Bearer "+oldAccess, auth.RefreshTokenCookieName+"="+stolenRefresh)
+	require.NoError(t, err)
+	require.Nil(t, resolved)
+
+	// The owner browser can refresh, and a fresh password sign-in also
+	// issues an access token bound to the new password.
+	refreshCtx := metadata.NewIncomingContext(api.WithHeaderCarrier(ctx), metadata.Pairs("cookie", auth.RefreshTokenCookieName+"="+ownerRefresh))
+	refreshed, err := ts.Service.RefreshToken(refreshCtx, &apipb.RefreshTokenRequest{})
+	require.NoError(t, err)
+	require.NotNil(t, authenticator.Authenticate(ctx, "Bearer "+refreshed.AccessToken))
+	signedIn, err := ts.Service.SignIn(api.WithHeaderCarrier(ctx), &apipb.SignInRequest{
+		Credentials: &apipb.SignInRequest_PasswordCredentials_{PasswordCredentials: &apipb.SignInRequest_PasswordCredentials{
+			Username: user.Username, Password: "owner-new-password",
+		}},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, authenticator.Authenticate(ctx, "Bearer "+signedIn.AccessToken))
 }
 
 // Changing a password ends every other session of the account; the browser
@@ -153,7 +137,7 @@ func TestUpdateUserPasswordRevokesOtherSessions(t *testing.T) {
 	require.NoError(t, changePassword(userCtx, ts, user, "new-password"))
 	require.Equal(t, []string{"current-browser"}, sessionIDs(ctx, t, ts, user.ID))
 
-	// Without a refresh cookie (an API token caller) every session is revoked.
+	// Without a refresh cookie every session is revoked.
 	addSession(ctx, t, ts, user.ID, "another")
 	require.NoError(t, changePassword(ts.CreateUserContext(ctx, user.ID), ts, user, "newer-password"))
 	require.Empty(t, sessionIDs(ctx, t, ts, user.ID))

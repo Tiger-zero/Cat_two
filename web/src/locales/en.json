@@ -138,7 +138,6 @@
     "expand": "Expand",
     "language": "Language",
     "last-updated-at": "Last updated at",
-    "learn-more": "Learn more",
     "memo": "Memo",
     "memos": "Memos",
     "month-navigation": "Month navigation",
@@ -384,6 +383,9 @@
     "disconnected": "Live updates unavailable"
   },
   "memo": {
+    "reaction-emoji": "Emoji",
+    "reaction-search-emoji": "Search or paste emoji…",
+    "reaction-no-results": "No matches",
     "no-memos-yet": "No memos yet",
     "no-matching-memos": "No matching memos",
     "clear-filters": "Clear filters",
@@ -474,7 +476,6 @@
   "message": {
     "archived-successfully": "Archived successfully",
     "copied": "Copied",
-    "description-is-required": "Description is required",
     "fill-all": "Please fill in all fields.",
     "new-password-not-match": "New passwords do not match.",
     "no-data": "No data found.",
@@ -572,51 +573,13 @@
       "unblocked": "Unblocked {{ip}}",
       "unblock-error": "Could not unblock this IP address. Try again."
     },
-    "access-token": {
-      "access-token-copied-to-clipboard": "Access token copied to clipboard",
-      "access-token-deleted": "Access token `{{description}}` deleted",
-      "access-token-deletion": "Are you sure you want to delete access token `{{description}}`?",
-      "access-token-deletion-description": "This action is irreversible. You will need to update any services using this token to use a new token.",
-      "create-dialog": {
-        "access-token-created": "Access token `{{description}}` created",
-        "create-access-token": "Create REST API Token",
-        "description": "Description",
-        "duration-1m": "1 Month",
-        "duration-90d": "90 Days",
-        "duration-never": "Never",
-        "expiration": "Expiration",
-        "some-description": "Some description..."
-      },
-      "create-first": "Create your first REST API token",
-      "description": "Create and revoke personal access tokens for REST API clients.",
-      "about-description": "An app or script holding a personal access token (PAT) can act as your account until the token expires or you revoke it.",
-      "empty-description": "A token lets a script or app call the API as you. It is shown once at creation, then listed here so you can revoke it.",
-      "empty-title": "No access tokens yet",
-      "expires": "Expires",
-      "guideline-shown-once": "A token is shown only once, right after you create it (it is copied to your clipboard). Store it somewhere safe, like a password manager.",
-      "guideline-one-per-app": "Create a separate token for each app or script, so you can revoke one without breaking the others.",
-      "guideline-expiration": "Prefer tokens that expire. Long-lived tokens are a bigger risk if they leak.",
-      "guideline-review": "Check the last-used time from time to time, and delete tokens you no longer recognize or need.",
-      "how-to-use": "How to use a token",
-      "label": "MCP & API",
-      "last-used": "Last used",
-      "never-used": "Never used",
-      "no-expiration": "No expiration",
-      "title": "REST API access tokens",
-      "token": "Token",
-      "integration-description": "Manage MCP connections and personal access tokens for your notes.",
-      "mcp-description": "Choose Streamable HTTP in Codex and enter this URL. Leave the Bearer token environment variable blank. Under HTTP headers, add Authorization and paste the full Bearer value shown when you create the connection.",
-      "mcp-url": "MCP server URL",
-      "mcp-config": "MCP client configuration",
-      "api-description": "To read and write notes through the REST API, replace <YOUR_PAT> with a personal access token. Requests follow your account's note permissions.",
-      "api-url": "REST API base URL",
-      "api-list-notes": "List notes",
-      "api-create-note": "Create a private test note",
+    "mcp-connection": {
+      "label": "MCP",
+      "url": "MCP server URL",
+      "client-description": "Choose Streamable HTTP in Codex and enter this URL. Leave the Bearer token environment variable blank. Under HTTP headers, add Authorization and paste the full Bearer value shown when you create the connection.",
+      "client-config": "MCP client configuration",
       "copy-value": "Copy {{label}}",
       "copy-failed": "Could not copy. Select and copy the text manually.",
-      "web-clipper-title": "Use a token with Memos Web Clipper"
-    },
-    "mcp-connection": {
       "title": "MCP connections",
       "description": "Create an MCP token for Codex or another client. The token works immediately and shares its validity period with connections using it.",
       "create": "Create MCP connection",
@@ -638,10 +601,8 @@
       "load-error": "Could not load MCP connections.",
       "unsupported": "This instance does not offer MCP connection tokens.",
       "status": {
-        "legacy": "New token required",
         "not-connected": "Not connected yet",
         "connected": "Connected",
-        "denied": "Denied",
         "revoked": "Revoked",
         "expired": "Expired"
       },
@@ -828,13 +789,6 @@
       "normalize-failed": "Could not normalize tag paths.",
       "updated-notes_one": "Updated {{count}} note",
       "updated-notes_other": "Updated {{count}} notes"
-    }
-  },
-  "space": {
-    "icon": {
-      "emoji": "Emoji",
-      "search-emoji": "Search or paste emoji…",
-      "no-results": "No matches"
     }
   },
   "tooltip": {

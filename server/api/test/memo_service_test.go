@@ -13,7 +13,6 @@ import (
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	"github.com/usememos/memos/internal/testutil/legacyspace"
 	apipb "github.com/usememos/memos/proto/gen/api"
 	storepb "github.com/usememos/memos/proto/gen/store"
 	"github.com/usememos/memos/store"
@@ -93,17 +92,12 @@ func TestInstanceAdminCannotReadOrModifyAnotherCreatorsMemos(t *testing.T) {
 	admin, err := ts.CreateHostUser(ctx, "admin")
 	require.NoError(t, err)
 	adminCtx := ts.CreateUserContext(ctx, admin.ID)
-	db := ts.Store.GetDriver().GetDB()
-	spaceID, err := legacyspace.Seed(ctx, db, "creator-space", "Creator space", owner.ID)
-	require.NoError(t, err)
 
 	private, err := ts.Service.CreateMemo(ownerCtx, &apipb.CreateMemoRequest{Memo: &apipb.Memo{
 		Content: "private content", Visibility: apipb.Visibility_PUBLIC,
 	}})
 	require.NoError(t, err)
 	require.Equal(t, apipb.Visibility_PRIVATE, private.Visibility)
-	require.NoError(t, legacyspace.PlaceMemo(ctx, db, parseMemoIDFromNameForTest(t, ts, private.Name), spaceID, "PRIVATE"))
-	require.Nil(t, private.Space)
 
 	_, err = ts.Service.GetMemo(adminCtx, &apipb.GetMemoRequest{Name: private.Name})
 	require.Equal(t, codes.PermissionDenied, status.Code(err))
@@ -154,39 +148,6 @@ func TestArchivedCreatorDoesNotMakeMemosReadableByOthers(t *testing.T) {
 	require.Equal(t, codes.Unauthenticated, status.Code(err))
 	_, err = ts.Service.GetMemo(viewerCtx, &apipb.GetMemoRequest{Name: protectedMemo.Name})
 	require.Equal(t, codes.PermissionDenied, status.Code(err))
-}
-
-func TestDanglingLegacySpaceDoesNotObscureAuthoredNotes(t *testing.T) {
-	ctx := context.Background()
-	ts := NewTestService(t)
-	defer ts.Cleanup()
-
-	creator, err := ts.CreateRegularUser(ctx, "dangling-placement-creator")
-	require.NoError(t, err)
-	creatorCtx := ts.CreateUserContext(ctx, creator.ID)
-	memo, err := ts.Service.CreateMemo(creatorCtx, &apipb.CreateMemoRequest{Memo: &apipb.Memo{
-		Content: "public memo with corrupt placement", Visibility: apipb.Visibility_PUBLIC,
-	}})
-	require.NoError(t, err)
-	memoID := parseMemoIDFromNameForTest(t, ts, memo.Name)
-	_, err = ts.Store.GetDriver().GetDB().ExecContext(ctx,
-		fmt.Sprintf("UPDATE memo SET space_id = 2147483000, visibility = 'SPACE' WHERE id = %d", memoID))
-	require.NoError(t, err)
-
-	got, err := ts.Service.GetMemo(creatorCtx, &apipb.GetMemoRequest{Name: memo.Name})
-	require.NoError(t, err)
-	require.Nil(t, got.Space, "an invalid placement must be omitted")
-
-	listed, err := ts.Service.ListMemos(creatorCtx, &apipb.ListMemosRequest{})
-	require.NoError(t, err)
-	require.Len(t, listed.Memos, 1)
-	require.Equal(t, memo.Name, listed.Memos[0].Name)
-	require.Nil(t, listed.Memos[0].Space)
-
-	_, err = ts.Service.CreateMemoComment(creatorCtx, &apipb.CreateMemoCommentRequest{
-		Parent: memo.Name, Comment: &apipb.Memo{Content: "legacy note still accepts comments", Visibility: apipb.Visibility_PUBLIC},
-	})
-	require.NoError(t, err, "legacy placement must not prevent the author from commenting")
 }
 
 func TestMemoReadFailsClosedForMissingCreatorBeforePaginationAndChildren(t *testing.T) {
@@ -1048,55 +1009,6 @@ func TestGetMemoCommentUsesMemoLocalReadAccessAndConcealsContext(t *testing.T) {
 	comments, err := ts.Service.ListMemoComments(ownerCtx, &apipb.ListMemoCommentsRequest{Parent: parent.Name})
 	require.NoError(t, err)
 	require.Empty(t, comments.Comments, "the parent creator cannot read a foreign author's comment")
-}
-
-func TestAssignedMemoCommentListingUsesMemoLocalReadAccess(t *testing.T) {
-	ctx := context.Background()
-	ts := NewTestService(t)
-	defer ts.Cleanup()
-
-	owner, err := ts.CreateRegularUser(ctx, "assigned-comment-owner")
-	require.NoError(t, err)
-	member, err := ts.CreateRegularUser(ctx, "assigned-comment-member")
-	require.NoError(t, err)
-	outsider, err := ts.CreateRegularUser(ctx, "assigned-comment-outsider")
-	require.NoError(t, err)
-	ownerCtx := ts.CreateUserContext(ctx, owner.ID)
-	memberCtx := ts.CreateUserContext(ctx, member.ID)
-	outsiderCtx := ts.CreateUserContext(ctx, outsider.ID)
-
-	db := ts.Store.GetDriver().GetDB()
-	spaceID, err := legacyspace.Seed(ctx, db, "assigned-comment-space", "Assigned comments", owner.ID)
-	require.NoError(t, err)
-	require.NoError(t, legacyspace.AddMember(ctx, db, spaceID, member.ID, "ADMIN"))
-	contextMemo, err := ts.Service.CreateMemo(ownerCtx, &apipb.CreateMemoRequest{Memo: &apipb.Memo{
-		Content:    "assigned public comment context",
-		Visibility: apipb.Visibility_PUBLIC,
-	}})
-	require.NoError(t, err)
-	require.NoError(t, legacyspace.PlaceMemo(ctx, db, parseMemoIDFromNameForTest(t, ts, contextMemo.Name), spaceID, "SPACE"))
-	comment, err := ts.Service.CreateMemoComment(ownerCtx, &apipb.CreateMemoCommentRequest{
-		Parent: contextMemo.Name,
-		Comment: &apipb.Memo{
-			Content:    "public independently readable comment",
-			Visibility: apipb.Visibility_PUBLIC,
-		},
-	})
-	require.NoError(t, err)
-
-	for _, viewerCtx := range []context.Context{memberCtx, outsiderCtx} {
-		_, err = ts.Service.ListMemoComments(viewerCtx, &apipb.ListMemoCommentsRequest{Parent: contextMemo.Name})
-		require.Equal(t, codes.PermissionDenied, status.Code(err))
-		_, err = ts.Service.GetMemo(viewerCtx, &apipb.GetMemoRequest{Name: comment.Name})
-		require.Equal(t, codes.PermissionDenied, status.Code(err))
-	}
-	_, err = ts.Service.ListMemoComments(ctx, &apipb.ListMemoCommentsRequest{Parent: contextMemo.Name})
-	require.Equal(t, codes.Unauthenticated, status.Code(err))
-
-	require.NoError(t, legacyspace.RemoveMember(ctx, db, spaceID, owner.ID))
-	comments, err := ts.Service.ListMemoComments(ownerCtx, &apipb.ListMemoCommentsRequest{Parent: contextMemo.Name})
-	require.NoError(t, err)
-	require.Len(t, comments.Comments, 1, "the removed author still reads their private notes")
 }
 
 func TestMemoCommentDoesNotFollowParentVisibilityChanges(t *testing.T) {

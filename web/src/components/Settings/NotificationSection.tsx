@@ -173,7 +173,7 @@ const readField = (fields: FormData, name: FieldName) => String(fields.get(name)
 
 export default function NotificationSection() {
   const t = useTranslate();
-  const { query, saving, save } = useAdminSettingsRequest<NotificationSettings, SettingsUpdate>("/api/notificationSettings");
+  const { query, saving, save } = useAdminSettingsRequest<NotificationSettings, SettingsUpdate>("/internal/notificationSettings");
   const callbackUrl = query.data?.wecom.callbackUrl || query.data?.wecomDefaultCallbackUrl;
 
   return (

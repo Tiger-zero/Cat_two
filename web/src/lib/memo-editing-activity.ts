@@ -13,7 +13,7 @@ function sendEditingActivity(session: string): void {
   const token = getAccessToken();
   if (accessSessionID(token) !== session || hasIdleDeadlineElapsed(token)) return;
   lastSentAt = Date.now();
-  void authenticatedFetch("/api/session/activity", { method: "POST", keepalive: true }, session)
+  void authenticatedFetch("/internal/session/activity", { method: "POST", keepalive: true }, session)
     .then(async (response) => {
       if (session !== accessSessionID(getAccessToken())) return;
       if (response.ok) {

@@ -19,7 +19,6 @@ func TestLoadOpenAPIOperationsIncludesCuratedIDs(t *testing.T) {
 		operation, ok := registry[operationID]
 		require.True(t, ok, "missing curated operation %s", operationID)
 		require.NotEmpty(t, operation.Method, operationID)
-		require.NotEmpty(t, operation.Path, operationID)
 		require.NotEmpty(t, operation.Description, operationID)
 		require.NotNil(t, operation.ResponseSchema, operationID)
 	}

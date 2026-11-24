@@ -215,7 +215,7 @@ describe("TagsSection", () => {
     fireEvent.click(save);
 
     await waitFor(() => expect(selectedFilters()).toEqual([{ factor: "tagSearch", value: "2027/09" }]));
-    expect(mocks.authenticatedFetch).toHaveBeenCalledWith("/api/tags/rename", {
+    expect(mocks.authenticatedFetch).toHaveBeenCalledWith("/internal/tags/rename", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ oldName: "2027/08", newName: "2027/09" }),
@@ -255,7 +255,7 @@ describe("TagsSection", () => {
     fireEvent.click(dialog.getByRole("button", { name: mode === "trash" ? "setting.tags.delete-trash" : "setting.tags.delete-remove" }));
 
     await waitFor(() => expect(selectedFilters()).toEqual([filters[0], filters[2]]));
-    expect(mocks.authenticatedFetch).toHaveBeenCalledWith("/api/tags/delete", {
+    expect(mocks.authenticatedFetch).toHaveBeenCalledWith("/internal/tags/delete", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ tagName: "work", mode }),

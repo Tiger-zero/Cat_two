@@ -53,8 +53,8 @@ service MemoService {
 
   // DeleteMemo moves the named memo and its comment subtree to the recycle bin.
   // Only the memo creator can move it. The owner can restore it within 30 days
-  // with POST /api/trash/{uid}/restore or permanently delete it sooner with
-  // DELETE /api/trash/{uid}. The server purges expired entries.
+  // with POST /internal/trash/{uid}/restore or permanently delete it sooner with
+  // DELETE /internal/trash/{uid}. The server purges expired entries.
   rpc DeleteMemo(DeleteMemoRequest) returns (google.protobuf.Empty) {
     option (google.api.http) = {delete: "/api/{name=memos/*}"};
     option (google.api.method_signature) = "name";
@@ -149,8 +149,7 @@ service MemoService {
   }
 
   // CreateMemoShare creates a share link for a memo. Requires the memo creator
-  // or an instance administrator. Only active memos without SPACE visibility
-  // can be shared.
+  // or an instance administrator. Only active memos can be shared.
   rpc CreateMemoShare(CreateMemoShareRequest) returns (MemoShare) {
     option (google.api.http) = {
       post: "/api/{parent=memos/*}/shares"
@@ -196,8 +195,8 @@ enum Visibility {
   // Signed-in users can read the memo; anonymous visitors can read it when
   // instance policy permits.
   PUBLIC = 3;
-  // Active members of the memo's space can read the memo.
-  SPACE = 4;
+  reserved 4;
+  reserved "SPACE";
 }
 
 // Memo is a Markdown note written by a user.
@@ -221,13 +220,8 @@ message Memo {
     (google.api.resource_reference) = {type: "memos.api/User"}
   ];
 
-  // Optional. The space in which the memo is placed. Every memo, including a
-  // comment, owns its placement independently.
-  // Format: spaces/{space}
-  optional string space = 3 [
-    (google.api.field_behavior) = OPTIONAL,
-    (google.api.resource_reference) = {type: "memos.api/Space"}
-  ];
+  reserved 3;
+  reserved "space";
 
   // Required. The content of the memo in Markdown. Must not exceed the
   // instance's content length limit.
@@ -237,7 +231,7 @@ message Memo {
   optional Location location = 5 [(google.api.field_behavior) = OPTIONAL];
 
   // Required. The visibility of the memo. Defaults to PRIVATE on creation when
-  // unspecified. SPACE requires the memo to be placed in a space.
+  // unspecified.
   Visibility visibility = 6 [(google.api.field_behavior) = REQUIRED];
 
   // Required. The state of the memo. New memos are always NORMAL; change it
@@ -333,9 +327,7 @@ message ListMemosRequest {
   //   content (string), creator (string, e.g. "users/1"),
   //   created_ts / updated_ts (timestamp), pinned (bool),
   //   creation_channel (string: web | telegram | browser_extension | wechat | unknown),
-  //   visibility (string: PRIVATE | PROTECTED | PUBLIC | SPACE),
-  //   space (string resource name, or null when the memo has no space;
-  //     supports == and comparisons against null, e.g. space != null),
+  //   visibility (string: PRIVATE | PROTECTED | PUBLIC),
   //   tags (list<string>; match with `"work" in tags`, not `tag == "work"`),
   //   has_task_list / has_link / has_code / has_incomplete_tasks (bool),
   //   has_location (bool; true when the memo has a location attached),
@@ -407,7 +399,7 @@ message UpdateMemoRequest {
   Memo memo = 1 [(google.api.field_behavior) = REQUIRED];
 
   // Required. The fields to update. Supported paths: content, visibility,
-  // space, pinned, state, create_time, update_time, location, attachments,
+  // pinned, state, create_time, update_time, location, attachments,
   // relations.
   google.protobuf.FieldMask update_mask = 2 [(google.api.field_behavior) = REQUIRED];
 

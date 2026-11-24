@@ -75,7 +75,7 @@ describe("rotation of the refresh cookie shared by tabs", () => {
     first.setAccessToken("old-access-token", testTokenExpiry());
     const second = await openTab();
     const fetch = vi.fn(async (input: URL, init: RequestInit) => {
-      expect(input.pathname).toBe("/api/trash");
+      expect(input.pathname).toBe("/internal/trash");
       const authorization = new Headers(init.headers).get("Authorization");
       if (authorization === "Bearer old-access-token") {
         first.setAccessToken("new-access-token", testTokenExpiry());
@@ -86,7 +86,7 @@ describe("rotation of the refresh cookie shared by tabs", () => {
     });
     vi.stubGlobal("fetch", fetch);
 
-    expect(await second.authenticatedFetch("/api/trash")).toMatchObject({ status: 200 });
+    expect(await second.authenticatedFetch("/internal/trash")).toMatchObject({ status: 200 });
     expect(fetch).toHaveBeenCalledTimes(2);
     expect(redirectOnAuthFailure).not.toHaveBeenCalled();
   });
@@ -135,7 +135,7 @@ describe("rotation of the refresh cookie shared by tabs", () => {
     });
     vi.stubGlobal("fetch", fetch);
 
-    await expect(tab.authenticatedFetch("/api/trash")).resolves.toMatchObject({ status: 200 });
+    await expect(tab.authenticatedFetch("/internal/trash")).resolves.toMatchObject({ status: 200 });
     expect(tab.getAccessToken()).toBe(upgraded);
     expect(fetch).toHaveBeenCalledTimes(3);
   });

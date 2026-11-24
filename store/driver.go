@@ -11,8 +11,6 @@ type Driver interface {
 	GetDB() *sql.DB
 	Close() error
 
-	IsInitialized(ctx context.Context) (bool, error)
-
 	// GetDatabaseSize returns the database size in bytes, or -1 if unavailable.
 	// A non-nil error indicates a hard failure; -1 with nil error means the
 	// driver cannot report a size from the underlying database.
@@ -23,8 +21,6 @@ type Driver interface {
 	ListAttachments(ctx context.Context, find *FindAttachment) ([]*Attachment, error)
 	GetAttachmentStorageUsage(ctx context.Context, creatorID int32) (int64, error)
 	UpdateAttachment(ctx context.Context, update *UpdateAttachment) error
-	ListLegacyAttachmentIDs(ctx context.Context, afterID int32, limit int) (*sql.Rows, error)
-	LocalizeAttachment(ctx context.Context, original *Attachment, reference, payload string) (bool, error)
 	DeleteAttachment(ctx context.Context, delete *DeleteAttachment) error
 	DeleteAttachments(ctx context.Context, deletes []*DeleteAttachment) error
 	DeleteAttachmentsWithPolicy(ctx context.Context, policy *AttachmentDeletionPolicy, attachmentIDs []int32) error
@@ -91,10 +87,6 @@ type Driver interface {
 	// ListUserSettings uses the database directly if tx is nil.
 	ListUserSettings(ctx context.Context, tx *sql.Tx, find *FindUserSetting) ([]*UserSetting, error)
 	DeleteUserSettings(ctx context.Context, delete *DeleteUserSetting) error
-	// GetUserByPATHash returns the token matching tokenHash with its owner ID, or
-	// (nil, nil) when no stored token matches. An error means the lookup itself
-	// failed, including a stored row that cannot be decoded.
-	GetUserByPATHash(ctx context.Context, tokenHash string) (*PATQueryResult, error)
 
 	// Persistent login attempts and manual IP blocks.
 	IsLoginIPBlocked(ctx context.Context, ip string) (bool, error)

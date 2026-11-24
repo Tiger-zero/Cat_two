@@ -37,8 +37,6 @@ const (
 	// Signed-in users can read the memo; anonymous visitors can read it when
 	// instance policy permits.
 	Visibility_PUBLIC Visibility = 3
-	// Active members of the memo's space can read the memo.
-	Visibility_SPACE Visibility = 4
 )
 
 // Enum value maps for Visibility.
@@ -48,14 +46,12 @@ var (
 		1: "PRIVATE",
 		2: "PROTECTED",
 		3: "PUBLIC",
-		4: "SPACE",
 	}
 	Visibility_value = map[string]int32{
 		"VISIBILITY_UNSPECIFIED": 0,
 		"PRIVATE":                1,
 		"PROTECTED":              2,
 		"PUBLIC":                 3,
-		"SPACE":                  4,
 	}
 )
 
@@ -148,17 +144,13 @@ type Memo struct {
 	// Output only. The resource name of the creator.
 	// Format: users/{user}
 	Creator string `protobuf:"bytes,2,opt,name=creator,proto3" json:"creator,omitempty"`
-	// Optional. The space in which the memo is placed. Every memo, including a
-	// comment, owns its placement independently.
-	// Format: spaces/{space}
-	Space *string `protobuf:"bytes,3,opt,name=space,proto3,oneof" json:"space,omitempty"`
 	// Required. The content of the memo in Markdown. Must not exceed the
 	// instance's content length limit.
 	Content string `protobuf:"bytes,4,opt,name=content,proto3" json:"content,omitempty"`
 	// Optional. The location of the memo.
 	Location *Location `protobuf:"bytes,5,opt,name=location,proto3,oneof" json:"location,omitempty"`
 	// Required. The visibility of the memo. Defaults to PRIVATE on creation when
-	// unspecified. SPACE requires the memo to be placed in a space.
+	// unspecified.
 	Visibility Visibility `protobuf:"varint,6,opt,name=visibility,proto3,enum=memos.api.Visibility" json:"visibility,omitempty"`
 	// Required. The state of the memo. New memos are always NORMAL; change it
 	// with UpdateMemo.
@@ -241,13 +233,6 @@ func (x *Memo) GetName() string {
 func (x *Memo) GetCreator() string {
 	if x != nil {
 		return x.Creator
-	}
-	return ""
-}
-
-func (x *Memo) GetSpace() string {
-	if x != nil && x.Space != nil {
-		return *x.Space
 	}
 	return ""
 }
@@ -379,9 +364,7 @@ type ListMemosRequest struct {
 	//	content (string), creator (string, e.g. "users/1"),
 	//	created_ts / updated_ts (timestamp), pinned (bool),
 	//	creation_channel (string: web | telegram | browser_extension | wechat | unknown),
-	//	visibility (string: PRIVATE | PROTECTED | PUBLIC | SPACE),
-	//	space (string resource name, or null when the memo has no space;
-	//	  supports == and comparisons against null, e.g. space != null),
+	//	visibility (string: PRIVATE | PROTECTED | PUBLIC),
 	//	tags (list<string>; match with `"work" in tags`, not `tag == "work"`),
 	//	has_task_list / has_link / has_code / has_incomplete_tasks (bool),
 	//	has_location (bool; true when the memo has a location attached),
@@ -661,7 +644,7 @@ type UpdateMemoRequest struct {
 	// Required. The memo to update. Its name identifies the memo.
 	Memo *Memo `protobuf:"bytes,1,opt,name=memo,proto3" json:"memo,omitempty"`
 	// Required. The fields to update. Supported paths: content, visibility,
-	// space, pinned, state, create_time, update_time, location, attachments,
+	// pinned, state, create_time, update_time, location, attachments,
 	// relations.
 	UpdateMask *fieldmaskpb.FieldMask `protobuf:"bytes,2,opt,name=update_mask,json=updateMask,proto3" json:"update_mask,omitempty"`
 	// Optional. The revision returned by the read on which these changes are
@@ -2445,15 +2428,13 @@ var File_api_memo_service_proto protoreflect.FileDescriptor
 
 const file_api_memo_service_proto_rawDesc = "" +
 	"\n" +
-	"\x16api/memo_service.proto\x12\tmemos.api\x1a\x1capi/attachment_service.proto\x1a\x10api/common.proto\x1a\x1cgoogle/api/annotations.proto\x1a\x17google/api/client.proto\x1a\x1fgoogle/api/field_behavior.proto\x1a\x19google/api/resource.proto\x1a\x1bgoogle/protobuf/empty.proto\x1a google/protobuf/field_mask.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xc2\t\n" +
+	"\x16api/memo_service.proto\x12\tmemos.api\x1a\x1capi/attachment_service.proto\x1a\x10api/common.proto\x1a\x1cgoogle/api/annotations.proto\x1a\x17google/api/client.proto\x1a\x1fgoogle/api/field_behavior.proto\x1a\x19google/api/resource.proto\x1a\x1bgoogle/protobuf/empty.proto\x1a google/protobuf/field_mask.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\x91\t\n" +
 	"\x04Memo\x12\x17\n" +
 	"\x04name\x18\x01 \x01(\tB\x03\xe0A\bR\x04name\x120\n" +
 	"\acreator\x18\x02 \x01(\tB\x16\xe0A\x03\xfaA\x10\n" +
-	"\x0ememos.api/UserR\acreator\x122\n" +
-	"\x05space\x18\x03 \x01(\tB\x17\xe0A\x01\xfaA\x11\n" +
-	"\x0fmemos.api/SpaceH\x00R\x05space\x88\x01\x01\x12\x1d\n" +
+	"\x0ememos.api/UserR\acreator\x12\x1d\n" +
 	"\acontent\x18\x04 \x01(\tB\x03\xe0A\x02R\acontent\x129\n" +
-	"\blocation\x18\x05 \x01(\v2\x13.memos.api.LocationB\x03\xe0A\x01H\x01R\blocation\x88\x01\x01\x12:\n" +
+	"\blocation\x18\x05 \x01(\v2\x13.memos.api.LocationB\x03\xe0A\x01H\x00R\blocation\x88\x01\x01\x12:\n" +
 	"\n" +
 	"visibility\x18\x06 \x01(\x0e2\x15.memos.api.VisibilityB\x03\xe0A\x02R\n" +
 	"visibility\x12+\n" +
@@ -2464,7 +2445,7 @@ const file_api_memo_service_proto_rawDesc = "" +
 	" \x03(\v2\x17.memos.api.MemoRelationB\x03\xe0A\x01R\trelations\x126\n" +
 	"\treactions\x18\v \x03(\v2\x13.memos.api.ReactionB\x03\xe0A\x03R\treactions\x123\n" +
 	"\x06parent\x18\f \x01(\tB\x16\xe0A\x03\xfaA\x10\n" +
-	"\x0ememos.api/MemoH\x02R\x06parent\x88\x01\x01\x12\x17\n" +
+	"\x0ememos.api/MemoH\x01R\x06parent\x88\x01\x01\x12\x17\n" +
 	"\x04tags\x18\r \x03(\tB\x03\xe0A\x03R\x04tags\x129\n" +
 	"\bproperty\x18\x0e \x01(\v2\x18.memos.api.Memo.PropertyB\x03\xe0A\x03R\bproperty\x12\x1d\n" +
 	"\asnippet\x18\x0f \x01(\tB\x03\xe0A\x03R\asnippet\x12@\n" +
@@ -2481,10 +2462,9 @@ const file_api_memo_service_proto_rawDesc = "" +
 	"\rhas_task_list\x18\x04 \x01(\bR\vhasTaskList\x120\n" +
 	"\x14has_incomplete_tasks\x18\x05 \x01(\bR\x12hasIncompleteTasks\x12(\n" +
 	"\x10has_inline_image\x18\x06 \x01(\bR\x0ehasInlineImage:.\xeaA+\n" +
-	"\x0ememos.api/Memo\x12\fmemos/{memo}*\x05memos2\x04memoB\b\n" +
-	"\x06_spaceB\v\n" +
+	"\x0ememos.api/Memo\x12\fmemos/{memo}*\x05memos2\x04memoB\v\n" +
 	"\t_locationB\t\n" +
-	"\a_parent\"\xea\x01\n" +
+	"\a_parentJ\x04\b\x03\x10\x04R\x05space\"\xea\x01\n" +
 	"\x10ListMemosRequest\x12 \n" +
 	"\tpage_size\x18\x01 \x01(\x05B\x03\xe0A\x01R\bpageSize\x12\"\n" +
 	"\n" +
@@ -2635,15 +2615,14 @@ const file_api_memo_service_proto_rawDesc = "" +
 	"\x1bBatchGetLinkMetadataRequest\x12\x17\n" +
 	"\x04urls\x18\x01 \x03(\tB\x03\xe0A\x02R\x04urls\"\\\n" +
 	"\x1cBatchGetLinkMetadataResponse\x12<\n" +
-	"\rlink_metadata\x18\x01 \x03(\v2\x17.memos.api.LinkMetadataR\flinkMetadata*[\n" +
+	"\rlink_metadata\x18\x01 \x03(\v2\x17.memos.api.LinkMetadataR\flinkMetadata*]\n" +
 	"\n" +
 	"Visibility\x12\x1a\n" +
 	"\x16VISIBILITY_UNSPECIFIED\x10\x00\x12\v\n" +
 	"\aPRIVATE\x10\x01\x12\r\n" +
 	"\tPROTECTED\x10\x02\x12\n" +
 	"\n" +
-	"\x06PUBLIC\x10\x03\x12\t\n" +
-	"\x05SPACE\x10\x042\x83\x14\n" +
+	"\x06PUBLIC\x10\x03\"\x04\b\x04\x10\x04*\x05SPACE2\x83\x14\n" +
 	"\vMemoService\x12]\n" +
 	"\tListMemos\x12\x1b.memos.api.ListMemosRequest\x1a\x1c.memos.api.ListMemosResponse\"\x15\xdaA\x00\x82\xd3\xe4\x93\x02\f\x12\n" +
 	"/api/memos\x12Y\n" +

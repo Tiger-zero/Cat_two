@@ -18,7 +18,7 @@ func TestArchivedCommentRestorationRequiresActiveOwner(t *testing.T) {
 		ContextRowStatus:  store.Archived,
 		ContextVisibility: store.Public,
 	}
-	require.ErrorIs(t, store.ValidateMemoCommentAuthorization(snapshot), store.ErrMemoSpaceNotWritable)
+	require.ErrorIs(t, store.ValidateMemoCommentAuthorization(snapshot), store.ErrMemoContextUnavailable)
 
 	restore := &store.MemoMutation{RestoreArchivedComment: true}
 	require.NoError(t, restore.AuthorizeCommentContext(snapshot))
@@ -72,16 +72,6 @@ func TestMemoMutationRejectsInvalidInputBeforeWriting(t *testing.T) {
 			m.MemoCreate.Visibility = "INVALID"
 			return m
 		}, "invalid visibility"},
-		{"space audience without placement", func() *store.MemoMutation {
-			m := creation()
-			m.MemoCreate.Visibility = store.SpaceAudience
-			return m
-		}, "SPACE visibility requires a space"},
-		{"retired placement", func() *store.MemoMutation {
-			m := creation()
-			m.MemoCreate.SpaceID = new(int32(7))
-			return m
-		}, "memo space is not writable"},
 		{"invalid comment context", func() *store.MemoMutation {
 			m := creation()
 			m.CommentContextMemoID = new(int32(0))

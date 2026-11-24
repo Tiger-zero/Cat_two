@@ -1,7 +1,7 @@
 // Package test contains black-box startup smoke tests for the full server.
 //
 // Every other server test constructs api.APIService directly, which skips
-// server.NewServer entirely. That leaves route registration, gRPC-gateway
+// server.NewServer entirely. That leaves route registration, Connect RPC
 // wiring, MCP/fileserver/frontend mounting, CORS and the secret bootstrap
 // covered only by the Docker release script. These tests boot the real server
 // the same way cmd/memos/main.go does so a wiring regression fails in CI.
@@ -28,6 +28,7 @@ import (
 	"github.com/usememos/memos/core/configuration"
 	"github.com/usememos/memos/internal/profile"
 	"github.com/usememos/memos/internal/version"
+	"github.com/usememos/memos/proto/gen/api/apiconnect"
 	storepb "github.com/usememos/memos/proto/gen/store"
 	"github.com/usememos/memos/server"
 	"github.com/usememos/memos/store"
@@ -41,19 +42,14 @@ const (
 
 // instanceOptions configures a single server boot.
 type instanceOptions struct {
-	// demo enables demo mode, which seeds the database during migration.
-	demo bool
 	// personal uses the policy enabled by the Cat_two executable.
 	personal bool
-	// instanceURL is the canonical external instance URL. On the first boot of
-	// a database without ACCESS, it is also the legacy compatibility input used
-	// to initialize that dedicated setting exactly once.
+	// instanceURL is the canonical external address used by browser origin checks.
 	instanceURL string
 	// rateLimit enables the request rate limiter, which the other tests leave
 	// off so that their request volume never trips a budget.
 	rateLimit bool
-	// dataDir reuses an existing data directory instead of a fresh one, which
-	// is how a restart against an already-migrated database is simulated.
+	// dataDir reuses the same data directory for restart tests.
 	dataDir string
 	// configDir is the declarative configuration directory applied at
 	// startup; empty means a directory that does not exist.
@@ -69,8 +65,8 @@ type instance struct {
 }
 
 // bootInstance starts a full server following the same sequence as
-// cmd/memos/main.go: validate profile, open the driver, migrate, apply the
-// declarative configuration, construct the server, then listen.
+// cmd/memos/main.go: validate profile, open SQLite, initialize the schema,
+// apply declarative configuration, construct the server, then listen.
 //
 // Keep this in lockstep with main.go. The value of these tests comes from
 // exercising the real startup path rather than a hand-assembled subset of it.
@@ -83,7 +79,6 @@ func bootInstance(ctx context.Context, t *testing.T, opts instanceOptions) *inst
 	}
 
 	instanceProfile := &profile.Profile{
-		Demo:        opts.demo,
 		Personal:    opts.personal,
 		Addr:        "127.0.0.1",
 		Port:        unusedPort(t),
@@ -100,8 +95,7 @@ func bootInstance(ctx context.Context, t *testing.T, opts instanceOptions) *inst
 	require.NoError(t, err, "should open database driver")
 
 	storeInstance := store.New(dbDriver, instanceProfile)
-	require.NoError(t, storeInstance.Migrate(ctx), "should migrate database")
-	require.NoError(t, storeInstance.MigrateLocalAttachments(ctx), "should migrate legacy attachments")
+	require.NoError(t, storeInstance.InitializeSchema(ctx), "should migrate database")
 
 	configDir := opts.configDir
 	if configDir == "" {
@@ -112,11 +106,7 @@ func bootInstance(ctx context.Context, t *testing.T, opts instanceOptions) *inst
 	plan, _, err := configuration.Apply(ctx, desired, storeInstance, configuration.ApplyMetadata{AppliedBy: "startup test", Now: time.Now()})
 	require.NoError(t, err, "should apply the configuration")
 	require.True(t, plan.Valid(), "the configuration should be applicable: %v", plan.Message.Errors)
-	if opts.demo {
-		// As the server does: after the apply, so content attaches to declared users.
-		require.NoError(t, storeInstance.Seed(ctx), "should seed the demo content")
-	}
-	require.NoError(t, storeInstance.MigrateMemoBodies(ctx), "should migrate legacy Markdown bodies")
+	require.NoError(t, storeInstance.SweepMemoBodies(ctx), "should check Markdown body storage")
 
 	s, err := server.NewServer(ctx, instanceProfile, storeInstance)
 	require.NoError(t, err, "should construct server")
@@ -158,20 +148,37 @@ func (i *instance) waitUntilReady(t *testing.T) {
 	}, 30*time.Second, 100*time.Millisecond, "server should become ready")
 }
 
-// do issues a request against the instance and returns the status and body.
+// do issues a native HTTP request against the instance.
 func (i *instance) do(t *testing.T, method, path, token string, body any) (int, []byte) {
 	t.Helper()
+	return i.readResponse(t, i.newRequest(t, method, path, token, body))
+}
 
-	var reader *bytes.Reader
-	if body != nil {
-		encoded, err := json.Marshal(body)
-		require.NoError(t, err)
-		reader = bytes.NewReader(encoded)
-	} else {
-		reader = bytes.NewReader(nil)
+// connect sends a real unary Connect JSON POST to a generated procedure path.
+func (i *instance) connect(t *testing.T, procedure, token string, body any) (int, []byte) {
+	t.Helper()
+	return i.readResponse(t, i.connectRequest(t, procedure, token, body))
+}
+
+func (i *instance) connectRequest(t *testing.T, procedure, token string, body any) *http.Request {
+	t.Helper()
+	if body == nil {
+		body = struct{}{}
 	}
+	req := i.newRequest(t, http.MethodPost, procedure, token, body)
+	req.Header.Set("Connect-Protocol-Version", "1")
+	return req
+}
 
-	req, err := http.NewRequestWithContext(context.Background(), method, i.baseURL+path, reader)
+func (i *instance) newRequest(t *testing.T, method, path, token string, body any) *http.Request {
+	t.Helper()
+	var encoded []byte
+	if body != nil {
+		var err error
+		encoded, err = json.Marshal(body)
+		require.NoError(t, err)
+	}
+	req, err := http.NewRequestWithContext(t.Context(), method, i.baseURL+path, bytes.NewReader(encoded))
 	require.NoError(t, err)
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
@@ -179,11 +186,14 @@ func (i *instance) do(t *testing.T, method, path, token string, body any) (int, 
 	if token != "" {
 		req.Header.Set("Authorization", "Bearer "+token)
 	}
+	return req
+}
 
+func (i *instance) readResponse(t *testing.T, req *http.Request) (int, []byte) {
+	t.Helper()
 	resp, err := i.client.Do(req)
-	require.NoError(t, err, "%s %s should not fail at the transport level", method, path)
+	require.NoError(t, err, "%s %s should not fail at the transport level", req.Method, req.URL.Path)
 	defer resp.Body.Close()
-
 	payload := new(bytes.Buffer)
 	_, err = payload.ReadFrom(resp.Body)
 	require.NoError(t, err)
@@ -194,11 +204,11 @@ func (i *instance) do(t *testing.T, method, path, token string, body any) (int, 
 func (i *instance) createAdmin(t *testing.T) {
 	t.Helper()
 
-	status, body := i.do(t, http.MethodPost, "/api/users", "", map[string]any{
+	status, body := i.connect(t, apiconnect.UserServiceCreateUserProcedure, "", map[string]any{"user": map[string]any{
 		"username": testAdminUsername,
 		"password": testAdminPassword,
 		"email":    "startup-admin@example.test",
-	})
+	}})
 	require.Equal(t, http.StatusOK, status, "creating the first user should succeed: %s", body)
 
 	var created struct {
@@ -219,7 +229,7 @@ func (i *instance) signIn(t *testing.T) string {
 func (i *instance) signInUser(t *testing.T, username, password string) string {
 	t.Helper()
 
-	status, body := i.do(t, http.MethodPost, "/api/auth/signin", "", map[string]any{
+	status, body := i.connect(t, apiconnect.AuthServiceSignInProcedure, "", map[string]any{
 		"passwordCredentials": map[string]any{
 			"username": username,
 			"password": password,
@@ -239,9 +249,8 @@ func (i *instance) signInUser(t *testing.T, username, password string) string {
 func (i *instance) createMemo(t *testing.T, token, memoID, content string) {
 	t.Helper()
 
-	status, body := i.do(t, http.MethodPost, "/api/memos?memoId="+memoID, token, map[string]any{
-		"content":    content,
-		"visibility": "PRIVATE",
+	status, body := i.connect(t, apiconnect.MemoServiceCreateMemoProcedure, token, map[string]any{
+		"memoId": memoID, "memo": map[string]any{"content": content, "visibility": "PRIVATE"},
 	})
 	require.Equal(t, http.StatusOK, status, "creating a memo should succeed: %s", body)
 
@@ -258,7 +267,7 @@ func (i *instance) createMemo(t *testing.T, token, memoID, content string) {
 func (i *instance) requireMemo(t *testing.T, token, memoID, content string) {
 	t.Helper()
 
-	status, body := i.do(t, http.MethodGet, "/api/memos/"+memoID, token, nil)
+	status, body := i.connect(t, apiconnect.MemoServiceGetMemoProcedure, token, map[string]string{"name": "memos/" + memoID})
 	require.Equal(t, http.StatusOK, status, "reading memo %s should succeed: %s", memoID, body)
 
 	var fetched struct {
@@ -313,22 +322,14 @@ func TestStartupServesEveryRegisteredRouter(t *testing.T) {
 		require.Contains(t, strings.ToLower(string(body)), "<!doctype html>")
 	})
 
-	t.Run("api gateway", func(t *testing.T) {
-		status, body := inst.do(t, http.MethodGet, "/api/instance/profile", "", nil)
+	t.Run("Connect RPC", func(t *testing.T) {
+		status, body := inst.connect(t, apiconnect.InstanceServiceGetInstanceProfileProcedure, "", nil)
 		require.Equal(t, http.StatusOK, status, "instance profile should be public: %s", body)
-		require.Contains(t, string(body), "version")
-	})
-
-	t.Run("api gateway form post fallback", func(t *testing.T) {
-		req, err := http.NewRequestWithContext(ctx, http.MethodPost, inst.baseURL+"/api/instance/profile", strings.NewReader(""))
-		require.NoError(t, err)
-		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-
-		resp, err := inst.client.Do(req)
-		require.NoError(t, err)
-		defer resp.Body.Close()
-
-		require.Equal(t, http.StatusOK, resp.StatusCode, "public GET fallback should permit anonymous form posts")
+		var profile struct {
+			NeedsSetup bool
+		}
+		require.NoError(t, json.Unmarshal(body, &profile))
+		require.True(t, profile.NeedsSetup)
 	})
 
 	t.Run("mcp", func(t *testing.T) {
@@ -344,7 +345,7 @@ func TestStartupServesEveryRegisteredRouter(t *testing.T) {
 
 	t.Run("oauth discovery is not advertised", func(t *testing.T) {
 		// MCP clients probe RFC 9728 metadata before trusting the endpoint.
-		// The MCP server authenticates with personal access tokens, so the
+		// The MCP server authenticates with connection credentials, so the
 		// well-known paths must 404 instead of falling back to the SPA.
 		for _, requestPath := range []string{"/.well-known/oauth-protected-resource", "/.well-known/oauth-protected-resource/mcp"} {
 			req, err := http.NewRequestWithContext(ctx, http.MethodGet, inst.baseURL+requestPath, nil)
@@ -359,9 +360,40 @@ func TestStartupServesEveryRegisteredRouter(t *testing.T) {
 	})
 }
 
+func TestLegacyRESTRoutesAreRetired(t *testing.T) {
+	inst := bootInstance(t.Context(), t, instanceOptions{personal: true})
+	inst.createAdmin(t)
+	session := inst.signIn(t)
+
+	for _, route := range []struct{ method, path string }{
+		{http.MethodGet, "/api"},
+		{http.MethodGet, "/api/"},
+		{http.MethodGet, "/api/instance/profile"},
+		{http.MethodGet, "/api/v1/instance/profile"},
+		{http.MethodPost, "/api/auth/signin"},
+		{http.MethodPost, "/api/memos"},
+		{http.MethodPost, "/api/users/" + testAdminUsername + "/personalAccessTokens"},
+		{http.MethodGet, "/api/mcpConnections"},
+		{http.MethodGet, "/api/auth/loginBlocklist"},
+		{http.MethodGet, "/api/sse"},
+		{http.MethodPost, "/memos.api.v1.AuthService/GetCurrentUser"},
+	} {
+		t.Run(route.method+" "+route.path, func(t *testing.T) {
+			for _, credential := range []string{"", session} {
+				req := inst.newRequest(t, route.method, route.path, credential, nil)
+				resp, err := inst.client.Do(req)
+				require.NoError(t, err)
+				require.NoError(t, resp.Body.Close())
+				require.Equal(t, http.StatusNotFound, resp.StatusCode)
+				require.NotContains(t, resp.Header.Get("Content-Type"), "text/html")
+			}
+		})
+	}
+}
+
 // TestStartupFreshInstallRoundTrip covers the new-install path end to end:
 // register the first user, authenticate, then write and read a memo through
-// the gRPC gateway.
+// Connect RPC.
 func TestStartupFreshInstallRoundTrip(t *testing.T) {
 	ctx := context.Background()
 	inst := bootInstance(ctx, t, instanceOptions{instanceURL: "http://localhost"})
@@ -385,22 +417,8 @@ func TestStartupFreshInstallRoundTrip(t *testing.T) {
 	}
 }
 
-func TestStartupRetiredTranscriptionAcceptsLegacyConfiguration(t *testing.T) {
-	ctx := context.Background()
-	configDir := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(configDir, "legacy-ai.json"), []byte(`{
-		"instanceSettings": [{
-			"name": "instance/settings/AI",
-			"aiSetting": {
-				"providers": [{"id": "legacy", "title": "Legacy", "type": "OPENAI", "endpoint": "http://127.0.0.1:1", "apiKey": "${file:/missing/legacy-ai-key}"}],
-				"transcription": {"providerId": "legacy"}
-			}
-		}]
-	}`), 0o600))
-	inst := bootInstance(ctx, t, instanceOptions{configDir: configDir, personal: true})
-	legacySetting, err := inst.server.Store.GetUncachedInstanceSetting(ctx, &store.FindInstanceSetting{Name: "AI"})
-	require.NoError(t, err)
-	require.Nil(t, legacySetting, "startup ignores retired AI declarations before reading their secrets")
+func TestStartupRetiredTranscriptionRoutes(t *testing.T) {
+	inst := bootInstance(t.Context(), t, instanceOptions{personal: true})
 
 	inst.createAdmin(t)
 	token := inst.signIn(t)
@@ -413,9 +431,8 @@ func TestStartupRetiredTranscriptionAcceptsLegacyConfiguration(t *testing.T) {
 }
 
 // TestStartupRestartPreservesData boots, writes data, shuts down, then boots a
-// second time against the same data directory. This is the path every upgrade
-// and every container restart takes, and it verifies migration is idempotent
-// through the real startup sequence rather than through store.Migrate alone.
+// second time against the same data directory. It checks that schema
+// initialization and startup preserve notes and administrator credentials.
 func TestStartupRestartPreservesData(t *testing.T) {
 	ctx := context.Background()
 	dataDir := t.TempDir()
@@ -454,15 +471,15 @@ func TestStartupPrivateInstance(t *testing.T) {
 	require.Equal(t, storepb.InstanceAccessMode_INSTANCE_ACCESS_MODE_PRIVATE, accessSetting.AccessMode)
 
 	// Bootstrap methods stay reachable so the sign-in page can render.
-	status, body := inst.do(t, http.MethodGet, "/api/instance/profile", "", nil)
+	status, body := inst.connect(t, apiconnect.InstanceServiceGetInstanceProfileProcedure, "", nil)
 	require.Equal(t, http.StatusOK, status, "instance profile is an auth bootstrap method: %s", body)
 
 	// Protected procedures are refused for anonymous callers.
-	status, _ = inst.do(t, http.MethodGet, "/api/users", "", nil)
+	status, _ = inst.connect(t, apiconnect.UserServiceListUsersProcedure, "", nil)
 	require.Equal(t, http.StatusUnauthorized, status, "anonymous ListUsers should be refused")
 
-	// Memo content requires authentication on both transports.
-	status, _ = inst.do(t, http.MethodPost, "/memos.api.MemoService/ListMemos", "", map[string]any{})
+	// Memo content requires authentication on Connect.
+	status, _ = inst.connect(t, apiconnect.MemoServiceListMemosProcedure, "", nil)
 	require.Equal(t, http.StatusUnauthorized, status,
 		"anonymous ListMemos over Connect should be refused on a private instance")
 
@@ -473,60 +490,9 @@ func TestStartupPrivateInstance(t *testing.T) {
 	inst.requireMemo(t, token, "startup-private", "private instance sentinel")
 }
 
-// TestStartupInitializesLegacyAccessOnce verifies the compatibility bridge from
-// the former instance-URL-derived policy to the database-backed ACCESS setting.
-// Later URL changes must not silently change authorization behavior.
-func TestStartupInitializesLegacyAccessOnce(t *testing.T) {
-	ctx := context.Background()
-
-	t.Run("public remains public after URL removal", func(t *testing.T) {
-		dataDir := t.TempDir()
-		first := bootInstance(ctx, t, instanceOptions{instanceURL: "https://memos.example.com", dataDir: dataDir})
-		accessSetting, err := first.server.Store.GetInstanceAccessSetting(ctx)
-		require.NoError(t, err)
-		require.Equal(t, storepb.InstanceAccessMode_INSTANCE_ACCESS_MODE_PUBLIC, accessSetting.AccessMode)
-		first.shutdown(ctx)
-
-		second := bootInstance(ctx, t, instanceOptions{instanceURL: "", dataDir: dataDir})
-		accessSetting, err = second.server.Store.GetInstanceAccessSetting(ctx)
-		require.NoError(t, err)
-		require.Equal(t, storepb.InstanceAccessMode_INSTANCE_ACCESS_MODE_PUBLIC, accessSetting.AccessMode)
-
-		status, body := second.do(t, http.MethodGet, "/api/instance/settings/GENERAL", "", nil)
-		require.Equal(t, http.StatusOK, status, "persisted PUBLIC mode still allows anonymous instance discovery: %s", body)
-		status, _ = second.do(t, http.MethodGet, "/api/memos", "", nil)
-		require.Equal(t, http.StatusUnauthorized, status, "PUBLIC mode does not expose personal notes")
-	})
-
-	t.Run("private remains private after URL addition", func(t *testing.T) {
-		dataDir := t.TempDir()
-		first := bootInstance(ctx, t, instanceOptions{instanceURL: "", dataDir: dataDir})
-		accessSetting, err := first.server.Store.GetInstanceAccessSetting(ctx)
-		require.NoError(t, err)
-		require.Equal(t, storepb.InstanceAccessMode_INSTANCE_ACCESS_MODE_PRIVATE, accessSetting.AccessMode)
-		first.shutdown(ctx)
-
-		second := bootInstance(ctx, t, instanceOptions{instanceURL: "https://memos.example.com", dataDir: dataDir})
-		accessSetting, err = second.server.Store.GetInstanceAccessSetting(ctx)
-		require.NoError(t, err)
-		require.Equal(t, storepb.InstanceAccessMode_INSTANCE_ACCESS_MODE_PRIVATE, accessSetting.AccessMode)
-
-		status, _ := second.do(t, http.MethodGet, "/api/memos", "", nil)
-		require.Equal(t, http.StatusUnauthorized, status, "canonical URL must not reopen a persisted PRIVATE instance")
-	})
-}
-
-// TestStartupPrivateInstanceGatewayPolicy asserts the private-instance policy is
-// enforced on the gRPC-Gateway transport, not just on Connect.
-//
-// This is a regression test for a real gap: the middleware used to read
-// runtime.RPCMethod(ctx) to decide the procedure, but grpc-gateway wraps
-// middlewares *around* the generated handler, and it is the generated handler
-// that annotates the context with the RPC method. runtime.RPCMethod therefore
-// always reported "not set", the guard skipped Authorizer.CheckAccess entirely,
-// and anonymous callers could read PUBLIC memos over REST on a private instance.
-// The gateway now resolves the procedure from the proto HTTP bindings instead.
-func TestStartupPrivateInstanceGatewayPolicy(t *testing.T) {
+// TestStartupPrivateInstanceConnectPolicy checks that historical PUBLIC notes
+// cannot be read anonymously through the live Connect router.
+func TestStartupPrivateInstanceConnectPolicy(t *testing.T) {
 	ctx := context.Background()
 	inst := bootInstance(ctx, t, instanceOptions{instanceURL: ""})
 
@@ -540,23 +506,18 @@ func TestStartupPrivateInstanceGatewayPolicy(t *testing.T) {
 	require.NoError(t, err)
 	inst.requireMemo(t, token, "startup-private-public", "legacy public note")
 
-	status, _ := inst.do(t, http.MethodGet, "/api/memos", "", nil)
+	status, _ := inst.connect(t, apiconnect.MemoServiceListMemosProcedure, "", nil)
 	require.Equal(t, http.StatusUnauthorized, status,
-		"anonymous ListMemos over REST should be refused on a private instance")
+		"anonymous ListMemos through Connect should be refused on a private instance")
 
-	status, _ = inst.do(t, http.MethodGet, "/api/memos/startup-private-public", "", nil)
+	status, _ = inst.connect(t, apiconnect.MemoServiceGetMemoProcedure, "", map[string]string{"name": "memos/startup-private-public"})
 	require.Equal(t, http.StatusUnauthorized, status,
-		"anonymous GetMemo over REST should be refused on a private instance")
+		"anonymous GetMemo through Connect should be refused on a private instance")
 }
 
-// TestStartupGatewayOmitsNullMessageFields checks the JSON the gateway actually
-// puts on the wire against the contract the generated OpenAPI schema publishes.
-// grpc-gateway's stock marshaler emits `"motionMedia": null` for a plain image
-// attachment; the schema types that field as an object, so clients validating
-// responses against it — MCP clients serve that schema as the tool outputSchema
-// — reject every memo carrying an attachment. The marshaler override lives in
-// NewHandler, so only a booted server proves it is wired in.
-func TestStartupGatewayOmitsNullMessageFields(t *testing.T) {
+// TestStartupConnectOmitsNullMessageFields checks the live JSON codec for
+// attachments without motion media.
+func TestStartupConnectOmitsNullMessageFields(t *testing.T) {
 	ctx := context.Background()
 	inst := bootInstance(ctx, t, instanceOptions{instanceURL: "http://localhost"})
 
@@ -566,11 +527,11 @@ func TestStartupGatewayOmitsNullMessageFields(t *testing.T) {
 	// A 1x1 GIF: small enough to inline, real enough for the type sniffing the
 	// attachment service runs on upload.
 	const onePixelGIF = "R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7"
-	status, body := inst.do(t, http.MethodPost, "/api/attachments", token, map[string]any{
+	status, body := inst.connect(t, apiconnect.AttachmentServiceCreateAttachmentProcedure, token, map[string]any{"attachment": map[string]any{
 		"filename": "pixel.gif",
 		"type":     "image/gif",
 		"content":  onePixelGIF,
-	})
+	}})
 	require.Equal(t, http.StatusOK, status, "creating an attachment should succeed: %s", body)
 
 	var created struct {
@@ -579,33 +540,14 @@ func TestStartupGatewayOmitsNullMessageFields(t *testing.T) {
 	require.NoError(t, json.Unmarshal(body, &created))
 	require.NotEmpty(t, created.Name, "the created attachment should carry a name: %s", body)
 
-	status, body = inst.do(t, http.MethodGet, "/api/"+created.Name, token, nil)
+	status, body = inst.connect(t, apiconnect.AttachmentServiceGetAttachmentProcedure, token, map[string]string{"name": created.Name})
 	require.Equal(t, http.StatusOK, status, "reading the attachment should succeed: %s", body)
 
 	fetched := map[string]any{}
 	require.NoError(t, json.Unmarshal(body, &fetched))
 	require.NotContains(t, fetched, "motionMedia", "an unset message field must be omitted, not null: %s", body)
-	// Scalar defaults still ship, so schema-required fields stay present.
-	require.Equal(t, "", fetched["externalLink"])
 	require.Equal(t, "pixel.gif", fetched["filename"])
 	require.Equal(t, "image/gif", fetched["type"])
-}
-
-// TestStartupDemoMode verifies demo mode boots, which exercises the seed step
-// that prod-mode startups never run.
-func TestStartupDemoMode(t *testing.T) {
-	ctx := context.Background()
-	inst := bootInstance(ctx, t, instanceOptions{
-		demo:        true,
-		instanceURL: "http://localhost",
-	})
-
-	memos, err := inst.server.Store.ListMemos(ctx, &store.FindMemo{})
-	require.NoError(t, err)
-	require.NotEmpty(t, memos, "demo mode should seed memos")
-
-	status, _ := inst.do(t, http.MethodGet, "/api/memos", "", nil)
-	require.Equal(t, http.StatusUnauthorized, status, "demo fixture memos are still private")
 }
 
 // TestStartupAppliesConfiguration boots a headless instance from files alone:
@@ -616,7 +558,6 @@ func TestStartupAppliesConfiguration(t *testing.T) {
 	configDir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(configDir, "instance.json"), []byte(`{
 		"instanceSettings": [
-			{"name": "instance/settings/ACCESS", "accessSetting": {"accessMode": "INSTANCE_ACCESS_MODE_PUBLIC"}},
 			{"name": "instance/settings/GENERAL", "generalSetting": {"customProfile": {"title": "Configured Memos"}}}
 		],
 		"users": [{"name": "users/`+testAdminUsername+`", "username": "`+testAdminUsername+`", "role": "ADMIN", "password": "${env:MEMOS_TEST_ADMIN_PASSWORD}"}]
@@ -625,11 +566,11 @@ func TestStartupAppliesConfiguration(t *testing.T) {
 	inst := bootInstance(ctx, t, instanceOptions{configDir: configDir, personal: true})
 
 	token := inst.signIn(t)
-	status, body := inst.do(t, http.MethodGet, "/api/instance/settings/GENERAL", token, nil)
+	status, body := inst.connect(t, apiconnect.InstanceServiceGetInstanceSettingProcedure, token, map[string]string{"name": "instance/settings/GENERAL"})
 	require.Equal(t, http.StatusOK, status, "%s", body)
 	require.Contains(t, string(body), "Configured Memos")
 
-	status, body = inst.do(t, http.MethodGet, "/api/instance/configuration", token, nil)
+	status, body = inst.connect(t, apiconnect.InstanceServiceGetConfigurationStatusProcedure, token, nil)
 	require.Equal(t, http.StatusNotImplemented, status, "%s", body)
 	state, err := inst.server.Store.GetConfigurationState(ctx)
 	require.NoError(t, err)

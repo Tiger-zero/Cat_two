@@ -19,7 +19,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"golang.org/x/crypto/bcrypt"
 
-	apipb "github.com/usememos/memos/proto/gen/api"
 	"github.com/usememos/memos/server/auth"
 	"github.com/usememos/memos/store"
 )
@@ -28,17 +27,13 @@ func TestTwoFactorAuthenticationAndSessionReset(t *testing.T) {
 	ctx := context.Background()
 	ts := NewTestService(t)
 	t.Cleanup(ts.Cleanup)
-	handler, err := ts.Service.NewHandler(ctx)
-	require.NoError(t, err)
+	handler := ts.Service.NewHandler()
 	const password = "integration password"
 	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.MinCost)
 	require.NoError(t, err)
 	user, err := ts.Store.CreateUser(ctx, &store.User{Username: "authenticator-owner", Role: store.RoleAdmin, PasswordHash: string(hash)})
 	require.NoError(t, err)
-	pat, err := ts.Service.CreatePersonalAccessToken(ts.CreateSessionContext(ctx, user.ID), &apipb.CreatePersonalAccessTokenRequest{
-		Parent: "users/" + user.Username, Description: "integration client",
-	})
-	require.NoError(t, err)
+	const legacyPAT = "memos_pat_test-retired-2fa"
 
 	call := func(method, path, token string, cookie *http.Cookie, payload any) *httptest.ResponseRecorder {
 		t.Helper()
@@ -101,11 +96,11 @@ func TestTwoFactorAuthenticationAndSessionReset(t *testing.T) {
 	}
 
 	preEnrollmentAccess, preEnrollmentRefresh := session(signIn(""))
-	requireStatus(call(http.MethodGet, "/api/auth/totp", pat.GetToken(), nil, nil), http.StatusForbidden)
-	requireStatus(call(http.MethodGet, "/api/auth/totp", "", nil, nil), http.StatusUnauthorized)
-	requireStatus(call(http.MethodPost, "/api/auth/totp/setup", preEnrollmentAccess, nil, map[string]string{"password": "wrong"}), http.StatusBadRequest)
+	requireStatus(call(http.MethodGet, "/internal/auth/totp", legacyPAT, nil, nil), http.StatusUnauthorized)
+	requireStatus(call(http.MethodGet, "/internal/auth/totp", "", nil, nil), http.StatusUnauthorized)
+	requireStatus(call(http.MethodPost, "/internal/auth/totp/setup", preEnrollmentAccess, nil, map[string]string{"password": "wrong"}), http.StatusBadRequest)
 
-	setup := call(http.MethodPost, "/api/auth/totp/setup", preEnrollmentAccess, nil, map[string]string{"password": password})
+	setup := call(http.MethodPost, "/internal/auth/totp/setup", preEnrollmentAccess, nil, map[string]string{"password": password})
 	requireStatus(setup, http.StatusOK)
 	require.Contains(t, setup.Header().Get("Cache-Control"), "no-store")
 	var provision struct {
@@ -125,17 +120,14 @@ func TestTwoFactorAuthenticationAndSessionReset(t *testing.T) {
 	require.Empty(t, pending.ActiveSecret)
 
 	enrollCode := generateIntegrationOTP(t, provision.Secret, time.Now().Unix()/30)
-	requireStatus(call(http.MethodPost, "/api/auth/totp/enable", preEnrollmentAccess, nil, map[string]string{
+	requireStatus(call(http.MethodPost, "/internal/auth/totp/enable", preEnrollmentAccess, nil, map[string]string{
 		"password": password, "code": enrollCode,
 	}), http.StatusOK)
-	requireStatus(call(http.MethodGet, "/api/auth/me", preEnrollmentAccess, nil, nil), http.StatusUnauthorized)
+	requireStatus(call(http.MethodPost, "/memos.api.AuthService/GetCurrentUser", preEnrollmentAccess, nil, map[string]any{}), http.StatusUnauthorized)
 	requireStatus(refresh(preEnrollmentRefresh), http.StatusUnauthorized)
-	requireStatus(call(http.MethodGet, "/api/auth/me", pat.GetToken(), nil, nil), http.StatusOK)
+	requireStatus(call(http.MethodPost, "/memos.api.AuthService/GetCurrentUser", legacyPAT, nil, map[string]any{}), http.StatusUnauthorized)
 
 	rejectSignIn(signIn(""), http.StatusBadRequest, "TOTP_REQUIRED")
-	rejectSignIn(call(http.MethodPost, "/api/auth/signin", "", nil, map[string]any{
-		"passwordCredentials": map[string]string{"username": user.Username, "password": password},
-	}), http.StatusBadRequest, "TOTP_REQUIRED")
 	rejectSignIn(signIn(enrollCode), http.StatusBadRequest, "TOTP_INVALID")
 
 	// An adjacent fresh code makes this test independent of the wall-clock
@@ -153,7 +145,7 @@ func TestTwoFactorAuthenticationAndSessionReset(t *testing.T) {
 	}
 	enrolledAccess, enrolledRefresh := session(accepted)
 	rejectSignIn(replayed, http.StatusBadRequest, "TOTP_INVALID")
-	requireStatus(call(http.MethodGet, "/api/auth/totp", enrolledAccess, nil, nil), http.StatusOK)
+	requireStatus(call(http.MethodGet, "/internal/auth/totp", enrolledAccess, nil, nil), http.StatusOK)
 	refreshedAccess, refreshedRefresh := session(refresh(enrolledRefresh))
 
 	// The persisted budget does not depend on the optional HTTP rate limiter.
@@ -167,11 +159,11 @@ func TestTwoFactorAuthenticationAndSessionReset(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, reset.ActiveSecret)
 	require.Empty(t, reset.PendingSecret)
-	requireStatus(call(http.MethodGet, "/api/auth/me", refreshedAccess, nil, nil), http.StatusUnauthorized)
+	requireStatus(call(http.MethodPost, "/memos.api.AuthService/GetCurrentUser", refreshedAccess, nil, map[string]any{}), http.StatusUnauthorized)
 	requireStatus(refresh(refreshedRefresh), http.StatusUnauthorized)
-	requireStatus(call(http.MethodGet, "/api/auth/me", pat.GetToken(), nil, nil), http.StatusOK)
+	requireStatus(call(http.MethodPost, "/memos.api.AuthService/GetCurrentUser", legacyPAT, nil, map[string]any{}), http.StatusUnauthorized)
 	access, _ := session(signIn(""))
-	requireStatus(call(http.MethodGet, "/api/auth/me", access, nil, nil), http.StatusOK)
+	requireStatus(call(http.MethodPost, "/memos.api.AuthService/GetCurrentUser", access, nil, map[string]any{}), http.StatusOK)
 }
 
 func generateIntegrationOTP(t *testing.T, secret string, step int64) string {

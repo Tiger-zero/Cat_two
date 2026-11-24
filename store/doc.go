@@ -1,6 +1,5 @@
-// Package store is the persistence layer: the Store facade, the Driver
-// interface implemented by store/db/sqlite, migrations, seed
-// data, and the in-memory cache.
+// Package store provides the persistence facade, SQLite schema, driver
+// interface, and in-memory cache.
 //
 // Writes that must validate what they read run in runSerializable, which owns
 // the transaction and its retries. The SQLite methods take the shared *sql.Tx.

@@ -142,8 +142,6 @@ export type ListAttachmentsRequest = Message<"memos.api.ListAttachmentsRequest">
    * Supported fields: creator, filename, mime_type, create_time, memo_id, space.
    * `creator` is the linked memo's creator, or the uploader for an unlinked attachment. It supports equality with a
    * User resource name.
-   * `space` is the linked memo's Space resource name, or null when the attachment is unlinked or its memo has no
-   * space. It supports only a non-negated `==` comparison with a Space resource name or null.
    *
    * @generated from field: string filter = 3;
    */

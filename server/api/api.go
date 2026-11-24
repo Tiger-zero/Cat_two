@@ -1,7 +1,6 @@
 package api
 
 import (
-	"context"
 	"log/slog"
 	"mime"
 	"net/http"
@@ -12,7 +11,6 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 
 	"connectrpc.com/connect"
-	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/semaphore"
 
@@ -23,13 +21,11 @@ import (
 	"github.com/usememos/memos/markdown"
 	apipb "github.com/usememos/memos/proto/gen/api"
 	"github.com/usememos/memos/proto/gen/api/apiconnect"
-	"github.com/usememos/memos/server/auth"
 	"github.com/usememos/memos/store"
 )
 
 // MaxAPIRequestBytes caps the size of a request body accepted by the API. The
-// in-process MCP endpoint forwards every tool call through these same routes, so
-// it derives its own limit from this constant to keep the two gates in lockstep.
+// in-process MCP transport also shares this bound.
 const MaxAPIRequestBytes = 256 << 20
 
 // maxGeneralRequestBytes caps every procedure that does not carry file bytes.
@@ -100,9 +96,6 @@ type APIService struct {
 	// Challenge verifies proof-of-humanity tokens on signup and password
 	// sign-in; nil means no challenge is configured.
 	Challenge ratelimit.Challenge
-	// SignupPolicy decides whether a self-service registration may proceed;
-	// nil allows every registration.
-	SignupPolicy ratelimit.SignupPolicy
 
 	// thumbnailSemaphore limits concurrent thumbnail generation to prevent memory exhaustion
 	thumbnailSemaphore       *semaphore.Weighted
@@ -117,7 +110,7 @@ type APIService struct {
 	memoImports         memoImports
 }
 
-// NewAPIService creates an API v1 service with its shared dependencies.
+// NewAPIService initializes the shared website and tool service.
 func NewAPIService(secret string, profile *profile.Profile, store *store.Store) *APIService {
 	markdownService := markdown.NewService(
 		markdown.WithTagExtension(),
@@ -137,124 +130,11 @@ func NewAPIService(secret string, profile *profile.Profile, store *store.Store) 
 	return service
 }
 
-// NewJSONMarshaler mirrors grpc-gateway's default JSON marshaler with one
-// change: EmitDefaultValues replaces EmitUnpopulated. Both keep proto3 scalar
-// defaults ("" / 0 / false) and empty lists in the payload — the generated
-// OpenAPI schema declares several of them required — but EmitUnpopulated also
-// writes `null` for every unset message field (e.g. Attachment.motion_media on
-// a plain image). No schema marks those fields nullable, so a client that
-// validates responses against the spec rejects them; the MCP tools serve the
-// same schema as their outputSchema, and strict MCP clients fail every call
-// that returns an attachment. EmitDefaultValues omits unset message fields
-// instead, which the schema already allows.
-func NewJSONMarshaler() *runtime.HTTPBodyMarshaler {
-	return &runtime.HTTPBodyMarshaler{
-		Marshaler: &runtime.JSONPb{
-			EmitDefaultValues: true,
-			DiscardUnknown:    true,
-		},
-	}
-}
-
-// NewHandler serves REST, Connect, and SSE with shared authentication policies.
-func (s *APIService) NewHandler(ctx context.Context) (http.Handler, error) {
-	// Shared authorizer: one source of truth for authentication and anonymous-access
-	// policy, used by both the gRPC-Gateway middleware and the Connect interceptor.
+// NewHandler serves the website's Connect and session-scoped HTTP requests.
+func (s *APIService) NewHandler() http.Handler {
 	authorizer := NewAuthorizer(s.Store, s.Secret).WithRateLimiter(s.RateLimiter)
 
-	// grpc-gateway does not hand the matched procedure to middleware:
-	// runtime.RPCMethod is only populated by the generated handler, which runs
-	// after middleware. Resolve the procedure from the proto HTTP bindings
-	// instead so the policy check actually runs on this transport.
-	routeResolver, err := newGatewayRouteResolver()
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to build gateway route resolver")
-	}
-
-	gatewayAuthMiddleware := func(next runtime.HandlerFunc) runtime.HandlerFunc {
-		return func(w http.ResponseWriter, r *http.Request, pathParams map[string]string) {
-			// grpc-gateway does not pass through the Connect metadata interceptor.
-			// Apply the same no-store policy here so a memo that later loses access
-			// cannot remain readable from a browser or intermediary response cache.
-			setAPIResponseNoStoreHeaders(w.Header())
-			ctx := r.Context()
-
-			// An unresolved path yields an empty procedure, which CheckAccess
-			// treats as protected: authenticated callers pass and anonymous ones
-			// are refused. Failing closed keeps a routing gap from becoming an
-			// access-control gap.
-			procedure, _ := routeResolver.resolveRequest(r)
-			if isRetiredProcedure(procedure) {
-				writeGatewayStatusError(w, retiredModuleError())
-				return
-			}
-			if rejectsAuthBrowserOrigin(r, procedure, s.Profile.InstanceURL) {
-				writeGatewayStatusError(w, status.Error(codes.PermissionDenied, authBrowserOriginError))
-				return
-			}
-			result := authorizer.Authenticate(ctx, r.Header.Get("Authorization"))
-			if err := authorizer.CheckAccess(ctx, procedure, result); err != nil {
-				writeGatewayAuthorizationError(w, err)
-				return
-			}
-			if err := authorizer.Throttle(ctx, procedure, result); err != nil {
-				writeGatewayStatusError(w, err)
-				return
-			}
-
-			// Apply the identity to the context (no-op for permitted anonymous requests).
-			if result != nil {
-				r = r.WithContext(auth.ApplyToContext(ctx, result))
-			}
-			// A real browser cookie takes precedence over the older gateway
-			// metadata header. Do not depend on header iteration order.
-			if len(r.Header.Values("Cookie")) != 0 && len(r.Header.Values(gatewayMetadataCookieHeader)) != 0 {
-				r = r.Clone(r.Context())
-				r.Header.Del(gatewayMetadataCookieHeader)
-			}
-			r.Body = http.MaxBytesReader(w, r.Body, requestBodyLimit(procedure))
-
-			next(w, r, pathParams)
-		}
-	}
-
-	// Create gRPC-Gateway mux with auth middleware.
-	gwMux := runtime.NewServeMux(
-		runtime.WithMarshalerOption(runtime.MIMEWildcard, NewJSONMarshaler()),
-		runtime.WithMiddlewares(gatewayAuthMiddleware),
-		runtime.WithErrorHandler(gatewayErrorHandler),
-		runtime.WithIncomingHeaderMatcher(gatewayIncomingHeaderMatcher),
-		runtime.WithOutgoingHeaderMatcher(gatewayOutgoingHeaderMatcher),
-	)
-	if err := apipb.RegisterInstanceServiceHandlerServer(ctx, gwMux, s); err != nil {
-		return nil, err
-	}
-	if err := apipb.RegisterAuthServiceHandlerServer(ctx, gwMux, s); err != nil {
-		return nil, err
-	}
-	if err := s.registerTwoFactorRoutes(gwMux); err != nil {
-		return nil, err
-	}
-	if err := apipb.RegisterUserServiceHandlerServer(ctx, gwMux, s); err != nil {
-		return nil, err
-	}
-	if err := apipb.RegisterMemoServiceHandlerServer(ctx, gwMux, s); err != nil {
-		return nil, err
-	}
-	if err := s.registerMemoTagRoutes(gwMux); err != nil {
-		return nil, err
-	}
-	if err := apipb.RegisterSpaceServiceHandlerServer(ctx, gwMux, apipb.UnimplementedSpaceServiceServer{}); err != nil {
-		return nil, err
-	}
-	if err := apipb.RegisterAttachmentServiceHandlerServer(ctx, gwMux, s); err != nil {
-		return nil, err
-	}
-	if err := apipb.RegisterIdentityProviderServiceHandlerServer(ctx, gwMux, apipb.UnimplementedIdentityProviderServiceServer{}); err != nil {
-		return nil, err
-	}
-
-	// Connect handlers for browser clients (replaces grpc-web).
+	// Connect handlers for browser clients.
 	logStacktraces := s.Profile.Demo
 	connectInterceptors := connect.WithInterceptors(
 		NewMetadataInterceptor(), // Convert HTTP headers to gRPC metadata first
@@ -272,37 +152,12 @@ func (s *APIService) NewHandler(ctx context.Context) (http.Handler, error) {
 			return []connect.HandlerOption{connect.WithReadMaxBytes(int(requestBodyLimit(spec.Procedure)))}
 		}))
 
-	// Prefixes within a path segment (memos.api.*) are dispatched explicitly;
-	// ServeMux wildcards match complete segments only.
-	sseMux := http.NewServeMux()
-	RegisterSSERoutes(sseMux, s.SSEHub, s.Store, s.Secret)
-	trashHandler := s.newMemoTrashHandler(authorizer)
-	mcpConnectionHandler := s.newMCPConnectionHandler(authorizer)
-	loginBlocklistHandler := s.newLoginBlocklistHandler(authorizer)
-	captureSettingsHandler := s.newCaptureSettingsHandler(authorizer)
+	internalMux := s.newInternalHandler(authorizer)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		requestPath := r.URL.Path
-		if r.URL.RawPath != "" {
-			requestPath = r.URL.RawPath
-		}
 		switch {
-		case requestPath == "/api/sse" && r.Method == http.MethodGet:
-			sseMux.ServeHTTP(w, r)
-		case s.personalMode() && requestPath == sessionActivityPath:
-			s.recordSessionActivity(w, r, authorizer)
-		case requestPath == "/api/trash" || strings.HasPrefix(requestPath, "/api/trash/"):
-			trashHandler.ServeHTTP(w, r)
-		case s.Profile.Personal && (requestPath == "/api/mcpConnections" || strings.HasPrefix(requestPath, "/api/mcpConnections/")):
-			mcpConnectionHandler.ServeHTTP(w, r)
-		case s.personalMode() && (requestPath == loginBlocklistPath || strings.HasPrefix(requestPath, loginBlocklistPath+"/")):
-			loginBlocklistHandler.ServeHTTP(w, r)
-		case requestPath == notificationSettingsPath || requestPath == networkSettingsPath:
-			captureSettingsHandler.ServeHTTP(w, r)
-		case strings.HasPrefix(requestPath, "/api/v1/"):
-			removedAPIVersionHandler(false).ServeHTTP(w, r)
-		case strings.HasPrefix(requestPath, "/memos.api.v1."):
-			removedAPIVersionHandler(true).ServeHTTP(w, r)
-		case strings.HasPrefix(requestPath, "/memos.api."):
+		case strings.HasPrefix(r.URL.Path, "/internal/"):
+			internalMux.ServeHTTP(w, r)
+		case strings.HasPrefix(r.URL.Path, "/memos.api."):
 			if r.Method == http.MethodPost && rejectsAuthBrowserOrigin(r, r.URL.Path, s.Profile.InstanceURL) && connectErrors.IsSupported(r) {
 				setAPIResponseNoStoreHeaders(w.Header())
 				_ = connectErrors.Write(w, r, connect.NewError(connect.CodePermissionDenied, errors.New(authBrowserOriginError)))
@@ -319,28 +174,9 @@ func (s *APIService) NewHandler(ctx context.Context) (http.Handler, error) {
 			}
 			r.Body = http.MaxBytesReader(w, r.Body, requestBodyLimit(r.URL.Path))
 			connectMux.ServeHTTP(w, r)
-		case strings.HasPrefix(requestPath, "/api/") || strings.HasPrefix(requestPath, "/file/"):
-			gwMux.ServeHTTP(w, r)
 		default:
 			httphandler.NotFound(w, r)
 		}
-	}), nil
-}
-
-// removedAPIMessage tells clients of the removed v1 API where it went.
-const removedAPIMessage = "API v1 has been removed. Use /api/... for REST and /memos.api.<Service>/<Method> for Connect. " +
-	"See https://github.com/usememos/memos/blob/main/proto/api/CHANGELOG.md"
-
-// removedAPIVersionHandler answers requests to the removed /api/v1 and
-// memos.api.v1 routes with 410 Gone, in the error body shape each transport's
-// clients decode. It exists for one release so old clients fail with a
-// pointer to the migration; delete it in the release after.
-func removedAPIVersionHandler(connectProtocol bool) http.Handler {
-	return httphandler.Func(func(w http.ResponseWriter, _ *http.Request) error {
-		if connectProtocol {
-			return httphandler.JSON(w, http.StatusGone, map[string]string{"code": connect.CodeUnimplemented.String(), "message": removedAPIMessage})
-		}
-		return httphandler.JSON(w, http.StatusGone, map[string]any{"code": int(codes.Unimplemented), "message": removedAPIMessage})
 	})
 }
 
@@ -359,48 +195,9 @@ func newProfileRateLimiter(profile *profile.Profile) ratelimit.Limiter {
 	return ratelimit.NewMemoryLimiter(ratelimit.DefaultPolicy())
 }
 
-const gatewayMetadataCookieHeader = runtime.MetadataHeaderPrefix + "Cookie"
-
-// gatewayIncomingHeaderMatcher forwards the challenge token and the headers
-// used to read a refresh cookie and determine its security attributes.
-func gatewayIncomingHeaderMatcher(key string) (string, bool) {
-	switch http.CanonicalHeaderKey(key) {
-	case challengeTokenHeader:
-		return challengeTokenMetadataKey, true
-	case "Cookie", "Origin", "X-Forwarded-Proto", "Forwarded", "X-Memos-Session-Id":
-		return strings.ToLower(key), true
-	}
-	return runtime.DefaultHeaderMatcher(key)
-}
-
-// Set-Cookie is a browser-managed header. Prefixing it as ordinary gRPC
-// metadata would expose the refresh token to scripts and leave it unstored.
-func gatewayOutgoingHeaderMatcher(key string) (string, bool) {
-	if strings.EqualFold(key, "Set-Cookie") {
-		return "Set-Cookie", true
-	}
-	if strings.EqualFold(key, sessionIdleExpiryHeader) {
-		return sessionIdleExpiryHeader, true
-	}
-	return runtime.MetadataHeaderPrefix + key, true
-}
-
-// gatewayErrorHandler adds the rate-limit header fields to a refusal before
-// the default handler writes the status body.
-func gatewayErrorHandler(ctx context.Context, mux *runtime.ServeMux, marshaler runtime.Marshaler, w http.ResponseWriter, r *http.Request, err error) {
-	if st, ok := status.FromError(err); ok {
-		for key, values := range rateLimitHTTPHeaders(st) {
-			for _, value := range values {
-				w.Header().Add(key, value)
-			}
-		}
-	}
-	runtime.DefaultHTTPErrorHandler(ctx, mux, marshaler, w, r, err)
-}
-
-// writeGatewayStatusError writes a gRPC status as the gateway's JSON error body,
+// writeHTTPStatusError writes a structured status for a native web route,
 // including its details and any rate-limit header fields.
-func writeGatewayStatusError(w http.ResponseWriter, err error) {
+func writeHTTPStatusError(w http.ResponseWriter, err error) {
 	st := status.Convert(err)
 	for key, values := range rateLimitHTTPHeaders(st) {
 		for _, value := range values {
@@ -413,15 +210,15 @@ func writeGatewayStatusError(w http.ResponseWriter, err error) {
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(runtime.HTTPStatusFromCode(st.Code()))
+	w.WriteHeader(HTTPStatusFromCode(st.Code()))
 	_, _ = w.Write(body)
 }
 
-func writeGatewayAuthorizationError(w http.ResponseWriter, err error) {
+func writeHTTPAuthorizationError(w http.ResponseWriter, err error) {
 	if errors.Is(err, ErrUnauthenticated) {
-		writeGatewayStatusError(w, status.Error(codes.Unauthenticated, "authentication required"))
+		writeHTTPStatusError(w, status.Error(codes.Unauthenticated, "authentication required"))
 		return
 	}
 	slog.Error("failed to resolve API access policy", "error", err)
-	writeGatewayStatusError(w, status.Error(codes.Internal, "failed to resolve API access policy"))
+	writeHTTPStatusError(w, status.Error(codes.Internal, "failed to resolve API access policy"))
 }
