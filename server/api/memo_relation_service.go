@@ -43,11 +43,7 @@ func (s *APIService) SetMemoRelations(ctx context.Context, request *apipb.SetMem
 	if err := s.applyMemoMutation(ctx, memo, nil, &store.UpdateMemo{ID: memo.ID, UpdatedTs: &updatedTsSec}, nil, &relations); err != nil {
 		return nil, err
 	}
-	_, _, memoMessage, err := s.buildUpdatedMemoState(ctx, memo.ID)
-	if err != nil {
-		return nil, status.Errorf(codes.Internal, "failed to build updated memo state")
-	}
-	s.dispatchMemoUpdatedSideEffects(ctx, memoMessage)
+	s.SSEHub.publishMemoChanged()
 
 	return &emptypb.Empty{}, nil
 }

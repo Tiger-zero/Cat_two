@@ -101,7 +101,7 @@ func TestMemoRevisionTracksBindingsAndLifecycle(t *testing.T) {
 	require.NoError(t, ts.UpdateAttachment(ctx, &store.UpdateAttachment{
 		ID: attachment.ID, Filename: new("replaced.txt"),
 		Content: &store.AttachmentContent{Type: "text/plain", Blob: []byte("new")},
-		Policy:  &store.MemoWritePolicy{ActorUserID: owner.ID, Personal: true},
+		Policy:  &store.MemoWritePolicy{ActorUserID: owner.ID},
 	}))
 	require.EqualValues(t, 3, readRevision(store.MemoTrashExclude))
 	mutation.ExpectedRevision = new(int64(2))

@@ -100,26 +100,25 @@ func (d *DB) ListAttachments(ctx context.Context, find *store.FindAttachment) ([
 	if find.HasRelatedMemo {
 		where = append(where, "`attachment`.`memo_id` IS NOT NULL")
 	}
+	if err := filter.AppendProgramCondition(find.PreparedFilter, &where, &args); err != nil {
+		return nil, errors.Wrap(err, "failed to append filter conditions")
+	}
 	if len(find.Filters) > 0 {
 		engine, err := filter.DefaultAttachmentEngine()
 		if err != nil {
 			return nil, errors.Wrap(err, "failed to get filter engine")
 		}
-		if err := filter.AppendConditions(ctx, engine, find.Filters, filter.DialectSQLite, &where, &args); err != nil {
+		if err := filter.AppendConditions(ctx, engine, find.Filters, &where, &args); err != nil {
 			return nil, errors.Wrap(err, "failed to append filter conditions")
 		}
 	}
 	if access := find.Access; access != nil {
-		scopeClauses := []string{}
-		if access.UserID != nil {
-			scopeClauses = append(scopeClauses, "(`attachment`.`memo_id` IS NULL AND EXISTS (SELECT 1 FROM `user` AS `attachment_user` WHERE `attachment_user`.`id` = ? AND `attachment_user`.`row_status` = 'NORMAL') AND `attachment`.`creator_id` = ?)")
-			args = append(args, *access.UserID, *access.UserID)
-		}
-		scopeClauses = append(scopeClauses, "(`attachment`.`memo_id` IS NOT NULL AND "+sqliteMemoAccessPredicate(access, "`memo`", "`attachment_member`", &args)+")")
-		if len(scopeClauses) == 0 {
+		if access.UserID == nil {
 			where = append(where, "1 = 0")
 		} else {
-			where = append(where, "("+strings.Join(scopeClauses, " OR ")+")")
+			args = append(args, *access.UserID, *access.UserID)
+			ownedMemo := sqliteMemoAccessPredicate(access, "`memo`", &args)
+			where = append(where, "((`attachment`.`memo_id` IS NULL AND EXISTS (SELECT 1 FROM `user` AS `attachment_user` WHERE `attachment_user`.`id` = ? AND `attachment_user`.`row_status` = 'NORMAL') AND `attachment`.`creator_id` = ?) OR (`attachment`.`memo_id` IS NOT NULL AND "+ownedMemo+"))")
 		}
 	}
 
@@ -146,7 +145,6 @@ func (d *DB) ListAttachments(ctx context.Context, find *store.FindAttachment) ([
 	query := "SELECT " + strings.Join(fields, ", ") + " FROM `attachment`" + " " +
 		"LEFT JOIN `memo` ON `attachment`.`memo_id` = `memo`.`id`" + " " +
 		"LEFT JOIN `user` AS `attachment_creator` ON `attachment`.`creator_id` = `attachment_creator`.`id`" + " " +
-		"LEFT JOIN `space` AS `attachment_space` ON `memo`.`space_id` = `attachment_space`.`id`" + " " +
 		"WHERE " + strings.Join(where, " AND ") + " " +
 		"ORDER BY `attachment`.`updated_ts` DESC"
 	if find.Limit != nil {
@@ -234,7 +232,7 @@ func (d *DB) UpdateAttachment(ctx context.Context, update *store.UpdateAttachmen
 		if err != nil {
 			return err
 		}
-		if err := authorizeSQLiteAttachmentMutation(ctx, tx, update.Policy.ActorUserID, actor.Admin, memoIDs, nil, d.profile != nil && d.profile.Personal); err != nil {
+		if err := authorizeSQLiteAttachmentMutation(ctx, tx, update.Policy.ActorUserID, actor.Admin, memoIDs, nil); err != nil {
 			return err
 		}
 	}

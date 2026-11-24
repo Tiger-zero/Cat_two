@@ -7,19 +7,20 @@ import type { CalendarDayCell } from "./types";
 export interface CalendarCellProps {
   day: CalendarDayCell;
   tooltipText: string;
+  showDateLabels?: boolean;
   onClick?: (date: string) => void;
 }
 
 /** The cell spans its whole column and takes the pointer; the chip inside it carries the fill. */
 const CELL_CLASSES = "group/day flex w-full items-center justify-center select-none";
 
-export const CalendarCell = memo(({ day, tooltipText, onClick }: CalendarCellProps) => {
+export const CalendarCell = memo(({ day, tooltipText, showDateLabels = true, onClick }: CalendarCellProps) => {
   const isInteractive = Boolean(onClick);
 
   if (!day.isCurrentMonth) {
     return (
       <div className={cn(CELL_CLASSES, "cursor-default")}>
-        <span className={getChipClassName(day, false)}>{day.label}</span>
+        <span className={getChipClassName(day, false)}>{showDateLabels && day.label}</span>
       </div>
     );
   }
@@ -35,8 +36,8 @@ export const CalendarCell = memo(({ day, tooltipText, onClick }: CalendarCellPro
       className={cn(CELL_CLASSES, "p-0 focus-visible:outline-none", isInteractive ? "cursor-pointer" : "cursor-default")}
     >
       <span className={getChipClassName(day, isInteractive)}>
-        {day.label}
-        {day.isToday && (
+        {showDateLabels ? day.label : <span className="mu-visually-hidden">{day.label}</span>}
+        {showDateLabels && day.isToday && (
           <span
             aria-hidden="true"
             className="absolute bottom-[3px] left-1/2 size-[3px] -translate-x-1/2 rounded-full bg-current opacity-70"
@@ -46,7 +47,7 @@ export const CalendarCell = memo(({ day, tooltipText, onClick }: CalendarCellPro
     </button>
   );
 
-  if (day.count === 0) {
+  if (!showDateLabels || day.count === 0) {
     return button;
   }
 

@@ -11,9 +11,10 @@ export const SIDEBAR_RAIL_CLASSES = "px-3 @max-[245px]/sidebar:px-1.5 @min-[245p
 export const SIDEBAR_LEADING_SLOT_CLASSES = "flex size-5 shrink-0 items-center justify-center";
 // Compact nav uses the visible 16px glyph itself as the cell, keeping 6px x/y padding.
 export const SIDEBAR_NAV_LEADING_SLOT_CLASSES = "flex size-4 shrink-0 items-center justify-center";
-export const SIDEBAR_LIST_GAP_CLASSES = "gap-0.5 in-[[data-sidebar-collection-list]]:gap-1.5";
+export const SIDEBAR_LIST_GAP_CLASSES = "gap-0.5 in-[[data-sidebar-collection-list]]:gap-1.5 light:in-[[data-home-collection]]:gap-2";
 export const SIDEBAR_PINNED_TAGS_DIVIDER_CLASSES =
-  "mb-1 border-b border-mu-line pb-1 in-[[data-sidebar-collection-list]]:mb-3 in-[[data-sidebar-collection-list]]:pb-3";
+  "mb-1 border-b border-mu-line pb-1 in-[[data-sidebar-collection-list]]:mb-3 in-[[data-sidebar-collection-list]]:pb-3 " +
+  "light:in-[[data-home-collection]]:border-b-transparent";
 
 /**
  * Brand controls hug their content, ordinary rows fill the inset rail, and the account

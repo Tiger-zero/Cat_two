@@ -201,7 +201,7 @@ func (s *APIService) editMemoTags(ctx context.Context, memo *store.Memo, edit fu
 		ExpectedMemoContent: memo.Content,
 		ExpectedRevision:    &memo.Revision,
 		MemoUpdate:          &store.UpdateMemo{ID: memo.ID, Content: &next.Content, Payload: next.Payload, UpdatedTs: &memo.UpdatedTs},
-		Policy:              s.memoWritePolicy(memo.CreatorID, false),
+		Policy:              &store.MemoWritePolicy{ActorUserID: memo.CreatorID},
 	})
 	return err == nil, err
 }

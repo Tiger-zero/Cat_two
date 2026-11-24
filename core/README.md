@@ -6,24 +6,21 @@ apply the same way.
 
 | Package | Owns |
 | --- | --- |
-| `access/` | who may read a memo, given viewer, space membership, and share links |
-| `notification/` | building and dispatching inbox and email notifications |
+| `access/` | author-only access to private notes and comments |
+| `mcpconnection/` | permissions, status and credentials for MCP connections |
 | `messagecapture/` | validating and encrypting Telegram, WeCom and Telegram proxy settings |
 | `memopayload/` | rebuilding a memo's derived payload from its markdown |
 | `memoexport/` | the Memos Export Format container and records used for export and import |
-| `identityprovider/` | the rules an identity provider must meet before it is stored, and its API↔store conversion |
-| `instancesetting/` | the rules each instance setting group must meet before it is stored, AI setting normalization, and the API↔store conversion |
+| `instancesetting/` | the rules each instance setting group must meet before it is stored, and API↔store conversion |
 | `user/` | the rules a username and password must meet before they are stored |
 | `configuration/` | declarative configuration: reading files (substitution, strict decoding, schema checks, merging), planning and applying them against the instance, and the API ownership guard |
 
-The three validation packages check the complete value as it will be stored.
-`identityprovider` and `instancesetting` also convert between API and store
-messages, because declarative configuration files are API messages; their
-`FromStore` keeps secrets, and API responses redact them in `server/api`.
+`instancesetting` converts between API and store messages for declarative
+configuration. API responses redact secrets in `server/api`.
 A write path's own conveniences, such as the API treating an empty secret as
 "keep the stored one", run before validation, never inside it.
 
-Layering: `core` may import `store`, `provider`, `markdown`, `filter`,
+Layering: `core` may import `store`, `markdown`, `filter`,
 `proto/gen`, and `internal`. It must not import `server` or `cmd`. New
 resource-specific rules extracted from `server/api` belong here, one package
 per resource.

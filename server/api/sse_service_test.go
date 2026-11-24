@@ -57,11 +57,6 @@ func requireMemoChanged(t *testing.T, ch <-chan []byte) {
 	require.Equal(t, memoChangedSSEFrame, string(mustReceive(t, ch, time.Second)))
 }
 
-func requireSpaceChanged(t *testing.T, ch <-chan []byte) {
-	t.Helper()
-	require.Equal(t, spaceChangedSSEFrame, string(mustReceive(t, ch, time.Second)))
-}
-
 func requireNoMemoChanged(t *testing.T, ch <-chan []byte) {
 	t.Helper()
 	select {
@@ -144,16 +139,9 @@ func TestUpdateAttachmentPublishesAfterCommittedAccessChange(t *testing.T) {
 	owner := createSpaceTestUser(ctx, t, svc, "sse-attachment-access-owner", store.RoleUser)
 	ownerCtx := userCtx(ctx, owner.ID)
 	other := createSpaceTestUser(ctx, t, svc, "sse-attachment-access-other", store.RoleUser)
-	space, err := svc.CreateSpace(ownerCtx, &apipb.CreateSpaceRequest{
-		SpaceId: "sse-attachment-access-space",
-		Space:   &apipb.Space{Title: "Attachment access space"},
-	})
-	require.NoError(t, err)
-	spaceName := space.Name
 	memo, err := svc.CreateMemo(ownerCtx, &apipb.CreateMemoRequest{Memo: &apipb.Memo{
 		Content:    "attachment access changed during update",
 		Visibility: apipb.Visibility_PRIVATE,
-		Space:      &spaceName,
 	}})
 	require.NoError(t, err)
 	attachment, err := svc.CreateAttachment(ownerCtx, &apipb.CreateAttachmentRequest{Attachment: &apipb.Attachment{
@@ -216,8 +204,7 @@ func TestDeleteAttachmentPublishesBeforeStorageCleanupFailure(t *testing.T) {
 	client := svc.SSEHub.Subscribe()
 	defer svc.SSEHub.Unsubscribe(client)
 	_, err = svc.DeleteAttachment(store.WithDeleteAttachmentStorageFailpoint(ownerCtx), &apipb.DeleteAttachmentRequest{Name: attachment.Name})
-	require.Equal(t, codes.Internal, status.Code(err))
-	require.ErrorContains(t, err, "attachments were deleted but storage cleanup failed")
+	require.NoError(t, err, "the deletion and cleanup job already committed")
 	requireMemoChanged(t, client.events)
 	requireNoMemoChanged(t, client.events)
 
@@ -226,57 +213,6 @@ func TestDeleteAttachmentPublishesBeforeStorageCleanupFailure(t *testing.T) {
 	storedAttachment, err := svc.Store.GetAttachment(ctx, &store.FindAttachment{UID: &attachmentUID})
 	require.NoError(t, err)
 	require.Nil(t, storedAttachment, "the database deletion must remain committed")
-}
-
-func TestSpaceMutationsPublishSpaceChanged(t *testing.T) {
-	ctx := context.Background()
-	svc := newIntegrationService(t)
-	owner := createSpaceTestUser(ctx, t, svc, "sse-space-owner", store.RoleAdmin)
-	member := createSpaceTestUser(ctx, t, svc, "sse-space-member", store.RoleUser)
-	ownerCtx := userCtx(ctx, owner.ID)
-	client := svc.SSEHub.Subscribe()
-	defer svc.SSEHub.Unsubscribe(client)
-
-	space, err := svc.CreateSpace(ownerCtx, &apipb.CreateSpaceRequest{
-		SpaceId: "sse-space",
-		Space:   &apipb.Space{Title: "SSE Space"},
-	})
-	require.NoError(t, err)
-	requireSpaceChanged(t, client.events)
-
-	space.Title = "Renamed SSE Space"
-	_, err = svc.UpdateSpace(ownerCtx, &apipb.UpdateSpaceRequest{
-		Space:      space,
-		UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"title"}},
-	})
-	require.NoError(t, err)
-	requireSpaceChanged(t, client.events)
-
-	invitation, err := svc.CreateSpaceInvitation(ownerCtx, &apipb.CreateSpaceInvitationRequest{
-		Parent:          space.Name,
-		SpaceInvitation: &apipb.SpaceInvitation{Invitee: BuildUserName(member.Username), Role: apipb.SpaceMember_USER},
-	})
-	require.NoError(t, err)
-	requireSpaceChanged(t, client.events)
-	membership, err := svc.AcceptSpaceInvitation(userCtx(ctx, member.ID), &apipb.AcceptSpaceInvitationRequest{Name: invitation.Name})
-	require.NoError(t, err)
-	requireSpaceChanged(t, client.events)
-
-	membership.Role = apipb.SpaceMember_ADMIN
-	_, err = svc.UpdateSpaceMember(ownerCtx, &apipb.UpdateSpaceMemberRequest{
-		SpaceMember: membership,
-		UpdateMask:  &fieldmaskpb.FieldMask{Paths: []string{"role"}},
-	})
-	require.NoError(t, err)
-	requireSpaceChanged(t, client.events)
-
-	_, err = svc.DeleteSpaceMember(ownerCtx, &apipb.DeleteSpaceMemberRequest{Name: membership.Name})
-	require.NoError(t, err)
-	requireSpaceChanged(t, client.events)
-
-	_, err = svc.DeleteSpace(ownerCtx, &apipb.DeleteSpaceRequest{Name: space.Name})
-	require.NoError(t, err)
-	requireSpaceChanged(t, client.events)
 }
 
 func TestUpdateMemoSSEBroadcastsToAllSubscribers(t *testing.T) {
@@ -313,67 +249,6 @@ func TestUpdateMemoSSEBroadcastsToAllSubscribers(t *testing.T) {
 	requireMemoChanged(t, ownerClient.events)
 	requireMemoChanged(t, otherClient.events)
 }
-
-func TestMoveMemoBetweenSpacesBroadcastsInvalidation(t *testing.T) {
-	ctx := context.Background()
-	svc := newIntegrationService(t)
-	owner := createSpaceTestUser(ctx, t, svc, "move-audience-owner", store.RoleAdmin)
-	sourceMember := createSpaceTestUser(ctx, t, svc, "move-source-member", store.RoleUser)
-	targetMember := createSpaceTestUser(ctx, t, svc, "move-target-member", store.RoleUser)
-	ownerCtx := userCtx(ctx, owner.ID)
-
-	source, err := svc.CreateSpace(ownerCtx, &apipb.CreateSpaceRequest{
-		SpaceId: "move-source-space",
-		Space:   &apipb.Space{Title: "Source"},
-	})
-	require.NoError(t, err)
-	target, err := svc.CreateSpace(ownerCtx, &apipb.CreateSpaceRequest{
-		SpaceId: "move-target-space",
-		Space:   &apipb.Space{Title: "Target"},
-	})
-	require.NoError(t, err)
-	inviteAndAcceptSpaceTestUser(ctx, t, svc, owner, sourceMember, source, apipb.SpaceMember_USER)
-	inviteAndAcceptSpaceTestUser(ctx, t, svc, owner, targetMember, target, apipb.SpaceMember_USER)
-
-	sourceName := source.Name
-	memo, err := svc.CreateMemo(ownerCtx, &apipb.CreateMemoRequest{Memo: &apipb.Memo{
-		Content:    "move between spaces",
-		Visibility: apipb.Visibility_SPACE,
-		Space:      &sourceName,
-	}})
-	require.NoError(t, err)
-	sourceClient := svc.SSEHub.Subscribe()
-	defer svc.SSEHub.Unsubscribe(sourceClient)
-	targetClient := svc.SSEHub.Subscribe()
-	defer svc.SSEHub.Unsubscribe(targetClient)
-	outsiderClient := svc.SSEHub.Subscribe()
-	defer svc.SSEHub.Unsubscribe(outsiderClient)
-
-	targetName := target.Name
-	_, err = svc.UpdateMemo(ownerCtx, &apipb.UpdateMemoRequest{
-		Memo: &apipb.Memo{
-			Name:       memo.Name,
-			Visibility: apipb.Visibility_SPACE,
-			Space:      &targetName,
-		},
-		UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"space", "visibility"}},
-	})
-	require.NoError(t, err)
-	requireMemoChanged(t, sourceClient.events)
-	requireMemoChanged(t, targetClient.events)
-	requireMemoChanged(t, outsiderClient.events)
-
-	_, err = svc.UpdateMemo(ownerCtx, &apipb.UpdateMemoRequest{
-		Memo:       &apipb.Memo{Name: memo.Name, Content: "target only now"},
-		UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"content"}},
-	})
-	require.NoError(t, err)
-	requireMemoChanged(t, sourceClient.events)
-	requireMemoChanged(t, targetClient.events)
-	requireMemoChanged(t, outsiderClient.events)
-}
-
-// ---- CreateMemoComment double-broadcast fix ----
 
 func TestCreateMemoComment_NoDuplicateSSEBroadcast(t *testing.T) {
 	ctx := context.Background()

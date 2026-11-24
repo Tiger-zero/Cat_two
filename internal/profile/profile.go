@@ -12,6 +12,9 @@ import (
 	"github.com/pkg/errors"
 )
 
+// SQLiteDriver is the database engine supported by Cat_two.
+const SQLiteDriver = "sqlite"
+
 // Profile is the configuration to start main server.
 type Profile struct {
 	// Demo indicates if the server is in demo mode
@@ -26,9 +29,9 @@ type Profile struct {
 	UNIXSock string
 	// Data is the data directory
 	Data string
-	// DSN points to where memos stores its own data
+	// DSN is the SQLite database path or file URI.
 	DSN string
-	// Driver is the database driver: sqlite, mysql, or postgres.
+	// Driver accepts the sqlite value from existing deployment configurations.
 	Driver string
 	// Version is the current version of server
 	Version string
@@ -64,9 +67,10 @@ func checkDataDir(dataDir string) (string, error) {
 }
 
 func (p *Profile) Validate() error {
-	if p.Demo && p.Driver != "sqlite" {
-		return errors.Errorf("demo mode requires the sqlite database driver, got %q", p.Driver)
+	if p.Driver != "" && p.Driver != SQLiteDriver {
+		return errors.Errorf("unsupported database driver %q: Cat_two requires SQLite", p.Driver)
 	}
+	p.Driver = SQLiteDriver
 
 	instanceURL, err := normalizeInstanceURL(p.InstanceURL)
 	if err != nil {
@@ -113,7 +117,7 @@ func (p *Profile) Validate() error {
 	}
 
 	p.Data = dataDir
-	if p.Driver == "sqlite" && p.DSN == "" {
+	if p.DSN == "" {
 		mode := "prod"
 		if p.Demo {
 			mode = "demo"

@@ -21,9 +21,6 @@ func TestMemoShareRejectsInvalidInputBeforeWriting(t *testing.T) {
 		{"missing actor", &store.DeleteMemoShare{ID: new(int32(1)), MemoID: new(int32(1)), Policy: &store.MemoWritePolicy{}}},
 		{"missing memo", &store.DeleteMemoShare{ID: new(int32(1)), Policy: &store.MemoWritePolicy{ActorUserID: 1}}},
 		{"invalid memo", &store.DeleteMemoShare{ID: new(int32(1)), MemoID: new(int32(0)), Policy: &store.MemoWritePolicy{ActorUserID: 1}}},
-		{"conflicting actions", &store.DeleteMemoShare{ID: new(int32(1)), MemoID: new(int32(1)), Policy: &store.MemoWritePolicy{
-			ActorUserID: 1, LifecycleOnly: true, CreatingShare: true,
-		}}},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			require.Error(t, ts.DeleteMemoShare(context.Background(), test.delete))

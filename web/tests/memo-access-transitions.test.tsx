@@ -5,7 +5,7 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useResolvedRelationMemos } from "@/components/MemoMetadata/Relation/useResolvedRelationMemos";
-import { findMemoInCollectionQueries, memoKeys, useMemo, useUpdateMemo } from "@/hooks/useMemoQueries";
+import { findMemoInCollectionQueries, memoKeys, useMemo } from "@/hooks/useMemoQueries";
 import { ListMemosResponseSchema, MemoRelation_Type, MemoRelationSchema, MemoSchema } from "@/types/proto/api/memo_service_pb";
 
 const api = vi.hoisted(() => ({ getMemo: vi.fn(), updateMemo: vi.fn() }));
@@ -77,29 +77,6 @@ describe("memo access transitions", () => {
     await waitFor(() => expect(result.current.isError).toBe(true));
     expect(result.current.isUnavailable).toBe(false);
     expect(api.getMemo).toHaveBeenCalledTimes(2);
-    client.clear();
-  });
-
-  it("does not optimistically move a memo before the server accepts it", async () => {
-    const { client, wrapper } = setup();
-    const memo = create(MemoSchema, { name: "memos/moving", space: "spaces/a" });
-    client.setQueryData(memoKeys.detail(memo.name), memo);
-    let reject!: (error: Error) => void;
-    api.updateMemo.mockImplementation(
-      () =>
-        new Promise((_, fail) => {
-          reject = fail;
-        }),
-    );
-    const { result } = renderHook(() => useUpdateMemo(memo.name), { wrapper });
-    act(() => result.current.mutate({ update: { name: memo.name, space: "spaces/b" }, updateMask: ["space"] }));
-    await waitFor(() => expect(api.updateMemo).toHaveBeenCalledOnce());
-    expect(client.getQueryData(memoKeys.detail(memo.name))).toEqual(memo);
-    await act(async () => {
-      reject(new ConnectError("denied", Code.PermissionDenied));
-    });
-    await waitFor(() => expect(result.current.isError).toBe(true));
-    expect(client.getQueryData(memoKeys.detail(memo.name))).toEqual(memo);
     client.clear();
   });
 });

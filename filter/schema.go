@@ -7,15 +7,6 @@ import (
 	"github.com/google/cel-go/ext"
 )
 
-// DialectName enumerates supported SQL dialects.
-type DialectName string
-
-const (
-	DialectSQLite   DialectName = "sqlite"
-	DialectMySQL    DialectName = "mysql"
-	DialectPostgres DialectName = "postgres"
-)
-
 // FieldType represents the logical type of a field.
 type FieldType string
 
@@ -74,7 +65,7 @@ type Field struct {
 	Related              *RelatedRows
 	AliasFor             string
 	SupportsContains     bool
-	Expressions          map[DialectName]string
+	Expression           string
 	AllowedComparisonOps map[ComparisonOperator]bool
 }
 
@@ -116,44 +107,34 @@ func NewSchema() Schema {
 			Type:             FieldTypeString,
 			Column:           Column{Table: "memo", Name: "content"},
 			SupportsContains: true,
-			Expressions:      map[DialectName]string{},
 		},
 		"creation_channel": {
-			Name:   "creation_channel",
-			Kind:   FieldKindScalar,
-			Type:   FieldTypeString,
-			Column: Column{Table: "memo", Name: "payload"},
-			Expressions: map[DialectName]string{
-				DialectSQLite:   "COALESCE(NULLIF(json_extract(%s, '$.creationChannel'), ''), 'unknown')",
-				DialectMySQL:    "COALESCE(NULLIF(NULLIF(JSON_UNQUOTE(JSON_EXTRACT(%s, '$.creationChannel')), 'null'), ''), 'unknown')",
-				DialectPostgres: "COALESCE(NULLIF(%s->>'creationChannel', ''), 'unknown')",
-			},
+			Name:       "creation_channel",
+			Kind:       FieldKindScalar,
+			Type:       FieldTypeString,
+			Column:     Column{Table: "memo", Name: "payload"},
+			Expression: "COALESCE(NULLIF(json_extract(%s, '$.creationChannel'), ''), 'unknown')",
 			AllowedComparisonOps: map[ComparisonOperator]bool{
 				CompareEq:  true,
 				CompareNeq: true,
 			},
 		},
 		"creator": {
-			Name:   "creator",
-			Kind:   FieldKindScalar,
-			Type:   FieldTypeString,
-			Column: Column{Table: "memo_creator", Name: "username"},
-			Expressions: map[DialectName]string{
-				DialectSQLite:   "('users/' || %s)",
-				DialectMySQL:    "CONCAT('users/', %s)",
-				DialectPostgres: "('users/' || %s)",
-			},
+			Name:       "creator",
+			Kind:       FieldKindScalar,
+			Type:       FieldTypeString,
+			Column:     Column{Table: "memo_creator", Name: "username"},
+			Expression: "('users/' || %s)",
 			AllowedComparisonOps: map[ComparisonOperator]bool{
 				CompareEq:  true,
 				CompareNeq: true,
 			},
 		},
 		"creator_id": {
-			Name:        "creator_id",
-			Kind:        FieldKindScalar,
-			Type:        FieldTypeInt,
-			Column:      Column{Table: "memo", Name: "creator_id"},
-			Expressions: map[DialectName]string{},
+			Name:   "creator_id",
+			Kind:   FieldKindScalar,
+			Type:   FieldTypeInt,
+			Column: Column{Table: "memo", Name: "creator_id"},
 			AllowedComparisonOps: map[ComparisonOperator]bool{
 				CompareEq:  true,
 				CompareNeq: true,
@@ -164,61 +145,31 @@ func NewSchema() Schema {
 			Kind:   FieldKindScalar,
 			Type:   FieldTypeTimestamp,
 			Column: Column{Table: "memo", Name: "created_ts"},
-			Expressions: map[DialectName]string{
-				// MySQL stores created_ts as TIMESTAMP, needs conversion to epoch
-				DialectMySQL: "UNIX_TIMESTAMP(%s)",
-				// PostgreSQL and SQLite store created_ts as BIGINT (epoch), no conversion needed
-				DialectPostgres: "%s",
-				DialectSQLite:   "%s",
-			},
 		},
 		"updated_ts": {
 			Name:   "updated_ts",
 			Kind:   FieldKindScalar,
 			Type:   FieldTypeTimestamp,
 			Column: Column{Table: "memo", Name: "updated_ts"},
-			Expressions: map[DialectName]string{
-				// MySQL stores updated_ts as TIMESTAMP, needs conversion to epoch
-				DialectMySQL: "UNIX_TIMESTAMP(%s)",
-				// PostgreSQL and SQLite store updated_ts as BIGINT (epoch), no conversion needed
-				DialectPostgres: "%s",
-				DialectSQLite:   "%s",
-			},
 		},
 		"pinned": {
-			Name:        "pinned",
-			Kind:        FieldKindBoolColumn,
-			Type:        FieldTypeBool,
-			Column:      Column{Table: "memo", Name: "pinned"},
-			Expressions: map[DialectName]string{},
+			Name:   "pinned",
+			Kind:   FieldKindBoolColumn,
+			Type:   FieldTypeBool,
+			Column: Column{Table: "memo", Name: "pinned"},
 			AllowedComparisonOps: map[ComparisonOperator]bool{
 				CompareEq:  true,
 				CompareNeq: true,
 			},
 		},
 		"visibility": {
-			Name:        "visibility",
-			Kind:        FieldKindScalar,
-			Type:        FieldTypeString,
-			Column:      Column{Table: "memo", Name: "visibility"},
-			Expressions: map[DialectName]string{},
+			Name:   "visibility",
+			Kind:   FieldKindScalar,
+			Type:   FieldTypeString,
+			Column: Column{Table: "memo", Name: "visibility"},
 			AllowedComparisonOps: map[ComparisonOperator]bool{
 				CompareEq:  true,
 				CompareNeq: true,
-			},
-		},
-		"space": {
-			Name:   "space",
-			Kind:   FieldKindScalar,
-			Type:   FieldTypeString,
-			Column: Column{Table: "memo_space", Name: "uid"},
-			Expressions: map[DialectName]string{
-				DialectSQLite:   "CASE WHEN `memo`.`space_id` IS NULL THEN NULL WHEN %[1]s IS NULL THEN '' ELSE ('spaces/' || %[1]s) END",
-				DialectMySQL:    "CASE WHEN `memo`.`space_id` IS NULL THEN NULL WHEN %[1]s IS NULL THEN '' ELSE CONCAT('spaces/', %[1]s) END",
-				DialectPostgres: "CASE WHEN memo.space_id IS NULL THEN NULL WHEN %[1]s IS NULL THEN '' ELSE ('spaces/' || %[1]s) END",
-			},
-			AllowedComparisonOps: map[ComparisonOperator]bool{
-				CompareEq: true,
 			},
 		},
 		"tags": {
@@ -341,8 +292,6 @@ func NewSchema() Schema {
 		cel.Variable("tag", cel.StringType),
 		cel.Variable("tags", cel.ListType(cel.StringType)),
 		cel.Variable("visibility", cel.StringType),
-		// Dyn permits the explicit null comparison used for memos without a space.
-		cel.Variable("space", cel.DynType),
 		cel.Variable("has_task_list", cel.BoolType),
 		cel.Variable("has_link", cel.BoolType),
 		cel.Variable("has_code", cel.BoolType),
@@ -366,15 +315,11 @@ func NewSchema() Schema {
 func NewAttachmentSchema() Schema {
 	fields := map[string]Field{
 		"creator": {
-			Name:   "creator",
-			Kind:   FieldKindScalar,
-			Type:   FieldTypeString,
-			Column: Column{Table: "memo", Name: "creator_id"},
-			Expressions: map[DialectName]string{
-				DialectSQLite:   "('users/' || (SELECT username FROM user WHERE id = CASE WHEN attachment.memo_id IS NULL THEN attachment.creator_id ELSE %[1]s END))",
-				DialectMySQL:    "CONCAT('users/', (SELECT username FROM `user` WHERE id = CASE WHEN `attachment`.`memo_id` IS NULL THEN `attachment`.`creator_id` ELSE %[1]s END))",
-				DialectPostgres: "('users/' || (SELECT username FROM \"user\" WHERE id = CASE WHEN attachment.memo_id IS NULL THEN attachment.creator_id ELSE %[1]s END))",
-			},
+			Name:       "creator",
+			Kind:       FieldKindScalar,
+			Type:       FieldTypeString,
+			Column:     Column{Table: "memo", Name: "creator_id"},
+			Expression: "('users/' || (SELECT username FROM user WHERE id = CASE WHEN attachment.memo_id IS NULL THEN attachment.creator_id ELSE %[1]s END))",
 			AllowedComparisonOps: map[ComparisonOperator]bool{
 				CompareEq: true,
 			},
@@ -385,7 +330,6 @@ func NewAttachmentSchema() Schema {
 			Type:             FieldTypeString,
 			Column:           Column{Table: "attachment", Name: "filename"},
 			SupportsContains: true,
-			Expressions:      map[DialectName]string{},
 		},
 		"mime_type": {
 			Name:             "mime_type",
@@ -393,44 +337,21 @@ func NewAttachmentSchema() Schema {
 			Type:             FieldTypeString,
 			Column:           Column{Table: "attachment", Name: "type"},
 			SupportsContains: true,
-			Expressions:      map[DialectName]string{},
 		},
 		"create_time": {
 			Name:   "create_time",
 			Kind:   FieldKindScalar,
 			Type:   FieldTypeTimestamp,
 			Column: Column{Table: "attachment", Name: "created_ts"},
-			Expressions: map[DialectName]string{
-				// MySQL stores created_ts as TIMESTAMP, needs conversion to epoch
-				DialectMySQL: "UNIX_TIMESTAMP(%s)",
-				// PostgreSQL and SQLite store created_ts as BIGINT (epoch), no conversion needed
-				DialectPostgres: "%s",
-				DialectSQLite:   "%s",
-			},
 		},
 		"memo_id": {
-			Name:        "memo_id",
-			Kind:        FieldKindScalar,
-			Type:        FieldTypeInt,
-			Column:      Column{Table: "attachment", Name: "memo_id"},
-			Expressions: map[DialectName]string{},
+			Name:   "memo_id",
+			Kind:   FieldKindScalar,
+			Type:   FieldTypeInt,
+			Column: Column{Table: "attachment", Name: "memo_id"},
 			AllowedComparisonOps: map[ComparisonOperator]bool{
 				CompareEq:  true,
 				CompareNeq: true,
-			},
-		},
-		"space": {
-			Name:   "space",
-			Kind:   FieldKindScalar,
-			Type:   FieldTypeString,
-			Column: Column{Table: "attachment_space", Name: "uid"},
-			Expressions: map[DialectName]string{
-				DialectSQLite:   "CASE WHEN `attachment`.`memo_id` IS NULL OR `memo`.`space_id` IS NULL THEN NULL WHEN %[1]s IS NULL THEN '' ELSE ('spaces/' || %[1]s) END",
-				DialectMySQL:    "CASE WHEN `attachment`.`memo_id` IS NULL OR `memo`.`space_id` IS NULL THEN NULL WHEN %[1]s IS NULL THEN '' ELSE CONCAT('spaces/', %[1]s) END",
-				DialectPostgres: "CASE WHEN attachment.memo_id IS NULL OR memo.space_id IS NULL THEN NULL WHEN %[1]s IS NULL THEN '' ELSE ('spaces/' || %[1]s) END",
-			},
-			AllowedComparisonOps: map[ComparisonOperator]bool{
-				CompareEq: true,
 			},
 		},
 	}
@@ -441,7 +362,6 @@ func NewAttachmentSchema() Schema {
 		cel.Variable("mime_type", cel.StringType),
 		cel.Variable("create_time", cel.TimestampType),
 		cel.Variable("memo_id", cel.AnyType),
-		cel.Variable("space", cel.DynType),
 		cel.Variable("now", cel.TimestampType),
 		cel.ASTValidators(cel.ValidateRegexLiterals()),
 	}
@@ -453,12 +373,11 @@ func NewAttachmentSchema() Schema {
 	}
 }
 
-// columnExpr returns the field expression for the given dialect, applying
-// any schema-specific overrides (e.g. UNIX timestamp conversions).
-func (f Field) columnExpr(d DialectName) string {
-	base := qualifyColumn(d, f.Column)
-	if expr, ok := f.Expressions[d]; ok && expr != "" {
-		return fmt.Sprintf(expr, base)
+// columnExpr applies the schema's SQLite expression to a qualified column.
+func (f Field) columnExpr() string {
+	base := qualifyColumn(f.Column)
+	if f.Expression != "" {
+		return fmt.Sprintf(f.Expression, base)
 	}
 	return base
 }

@@ -40,7 +40,7 @@ Web 保存前用一次 GET 检查草稿基线，随后发送更新。服务端�
 
 ### MCP 请求限流与业务逻辑跨两条路径
 
-连接鉴权在 `/mcp` 路由中先执行，工具级限流在鉴权后生效。具有 MCP 令牌前缀的错误请求也会触发 SQLite 查询，协议握手和工具发现未覆盖同一限流。已有工具又分成直接读取 Store 和经 HTTP 适配器调用 REST 两类。后者会额外编码、执行路由和解码，直接调用路径需单独维护访问与分页规则。 [路由和鉴权](../../../../server/mcp/service.go#L221) · [工具限流](../../../../server/mcp/service.go#L142) · [连接记录读取](../../../../core/mcpconnection/connection.go#L88) · [HTTP 适配器](../../../../server/mcp/adapter.go#L29) · [直接批读](../../../../server/mcp/personal_batch.go#L79)
+连接鉴权在 `/mcp` 路由中先执行，工具级限流在鉴权后生效。具有 MCP 令牌前缀的错误请求也会触发 SQLite 查询，协议握手和工具发现未覆盖同一限流。已有工具又分成直接读取 Store 和经 HTTP 适配器调用 REST 两类。后者会额外编码、执行路由和解码，直接调用路径需单独维护访问与分页规则。 [路由和鉴权](../../../../server/mcp/service.go#L221) · [工具限流](../../../../server/mcp/service.go#L142) · [连接记录读取](../../../../core/mcpconnection/connection.go#L88) · [HTTP 适配器](https://github.com/Tiger-zero/Cat_two/blob/0b9398d506e9b12d0895221fe7f203d7c57ab148/server/mcp/adapter.go#L29) · [直接批读](../../../../server/mcp/personal_batch.go#L79)
 
 建议在鉴权前按可信客户端 IP 设置协议入口预算，认证后保留共享的读写预算，并给批量读取加总字节限制。逐步让 REST、Connect 和 MCP 共用有类型的笔记操作，由同一处处理所有权、来源、版本和错误语义。重构时沿用现有 MCP 工具名与输入输出，使用三种接口的等价用例守住权限、排序、标签、分页和撤销规则。再用并发握手与典型大正文的基准测试衡量 SQLite 查询数、响应体积和请求延迟。
 

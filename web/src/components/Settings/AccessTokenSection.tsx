@@ -89,7 +89,7 @@ const HowToUseDisclosure = () => {
             <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5">
               <a
                 className="inline-flex items-center gap-1 mu-caption text-mu-text-secondary underline-offset-4 hover:text-mu-accent hover:underline"
-                href="https://usememos.com/docs/security/access-tokens"
+                href="https://github.com/Tiger-zero/Cat_two/blob/main/.agents/skills/cat-two-product-development/references/external-api.md#凭据和可见性"
                 target="_blank"
                 rel="noreferrer"
               >

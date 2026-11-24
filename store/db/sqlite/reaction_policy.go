@@ -37,16 +37,3 @@ func validateSQLiteReactionDeletePolicy(ctx context.Context, tx dbExecutor, reac
 	}
 	return participation, nil
 }
-
-func sqliteSpaceMemberActive(ctx context.Context, tx dbExecutor, spaceID, userID int32) (bool, error) {
-	var role store.SpaceMemberRole
-	err := tx.QueryRowContext(ctx, `SELECT role FROM space_member
-		WHERE space_id = ? AND user_id = ? AND status = 'ACTIVE' AND role IN ('ADMIN', 'USER')`, spaceID, userID).Scan(&role)
-	if errors.Is(err, sql.ErrNoRows) {
-		return false, nil
-	}
-	if err != nil {
-		return false, err
-	}
-	return role.IsActiveMember(), nil
-}

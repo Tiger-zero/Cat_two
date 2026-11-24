@@ -48,8 +48,8 @@ const (
 
 // AuthServiceClient is a client for the memos.api.AuthService service.
 type AuthServiceClient interface {
-	// SignIn authenticates a user with password or SSO credentials.
-	// Password sign-in also requires a one-time code when two-factor authentication is enabled.
+	// SignIn authenticates a user with their username and password.
+	// A one-time code is required when two-factor authentication is enabled.
 	// On success, returns a short-lived access token and sets a refresh token in an HttpOnly cookie.
 	// Public. Attempts are rate limited. Archived users cannot sign in.
 	SignIn(context.Context, *connect.Request[api.SignInRequest]) (*connect.Response[api.SignInResponse], error)
@@ -135,8 +135,8 @@ func (c *authServiceClient) SignOut(ctx context.Context, req *connect.Request[ap
 
 // AuthServiceHandler is an implementation of the memos.api.AuthService service.
 type AuthServiceHandler interface {
-	// SignIn authenticates a user with password or SSO credentials.
-	// Password sign-in also requires a one-time code when two-factor authentication is enabled.
+	// SignIn authenticates a user with their username and password.
+	// A one-time code is required when two-factor authentication is enabled.
 	// On success, returns a short-lived access token and sets a refresh token in an HttpOnly cookie.
 	// Public. Attempts are rate limited. Archived users cannot sign in.
 	SignIn(context.Context, *connect.Request[api.SignInRequest]) (*connect.Response[api.SignInResponse], error)

@@ -4,6 +4,7 @@ set -e
 
 # Change to repo root
 cd "$(dirname "$0")/../"
+sh scripts/check_frontend_build.sh server/frontend/dist
 
 OS=$(uname -s)
 

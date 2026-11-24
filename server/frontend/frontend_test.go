@@ -1,7 +1,6 @@
 package frontend
 
 import (
-	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -10,9 +9,6 @@ import (
 
 	"github.com/usememos/memos/internal/httphandler"
 	"github.com/usememos/memos/internal/profile"
-	storepb "github.com/usememos/memos/proto/gen/store"
-	"github.com/usememos/memos/store"
-	teststore "github.com/usememos/memos/store/test"
 )
 
 func TestFrontendService_CacheHeaderRules(t *testing.T) {
@@ -70,11 +66,8 @@ func TestFrontendService_CacheHeaderRules(t *testing.T) {
 }
 
 func TestFrontendService_StaticCacheHeaders(t *testing.T) {
-	ctx := context.Background()
-	testStore := teststore.NewTestingStore(ctx, t)
-
 	e := http.NewServeMux()
-	NewFrontendService(&profile.Profile{}, testStore).Serve(ctx, e, http.HandlerFunc(httphandler.NotFound))
+	e.Handle("/", NewFrontendService(&profile.Profile{}).Handler(http.HandlerFunc(httphandler.NotFound)))
 
 	tests := []struct {
 		name         string
@@ -121,7 +114,7 @@ func TestFrontendService_StaticCacheHeaders(t *testing.T) {
 }
 
 func TestFrontendService_SecurityHeaders(t *testing.T) {
-	frontend := NewFrontendService(&profile.Profile{}, nil).Handler(http.HandlerFunc(httphandler.NotFound))
+	frontend := NewFrontendService(&profile.Profile{}).Handler(http.HandlerFunc(httphandler.NotFound))
 	for _, path := range []string{"/", "/index.html", "/memos/private-note"} {
 		t.Run(path, func(t *testing.T) {
 			recorder := httptest.NewRecorder()
@@ -145,7 +138,7 @@ func TestFrontendService_PersonalScriptPolicy(t *testing.T) {
 		{"unrecognized provider", "https://custom.example.test", "'self'"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			service := NewFrontendService(&profile.Profile{Personal: true}, nil)
+			service := NewFrontendService(&profile.Profile{Personal: true})
 			service.ChallengeProvider = tc.provider
 			handler := service.Handler(http.HandlerFunc(httphandler.NotFound))
 			for _, path := range []string{"/auth", "/auth/signup", "/home"} {
@@ -164,11 +157,8 @@ func TestFrontendService_PersonalScriptPolicy(t *testing.T) {
 }
 
 func TestFrontendService_MissingAssetsAreNotCached(t *testing.T) {
-	ctx := context.Background()
-	testStore := teststore.NewTestingStore(ctx, t)
-
 	e := http.NewServeMux()
-	NewFrontendService(&profile.Profile{}, testStore).Serve(ctx, e, http.HandlerFunc(httphandler.NotFound))
+	e.Handle("/", NewFrontendService(&profile.Profile{}).Handler(http.HandlerFunc(httphandler.NotFound)))
 
 	for _, requestPath := range []string{"/assets/missing-deadbeef.js", "/assets/missing-deadbeef.css", "/missing.png"} {
 		for _, method := range []string{http.MethodGet, http.MethodHead} {
@@ -190,11 +180,8 @@ func TestFrontendService_MissingAssetsAreNotCached(t *testing.T) {
 }
 
 func TestFrontendService_HiddenPathsDoNotFallbackToIndex(t *testing.T) {
-	ctx := context.Background()
-	testStore := teststore.NewTestingStore(ctx, t)
-
 	e := http.NewServeMux()
-	NewFrontendService(&profile.Profile{}, testStore).Serve(ctx, e, http.HandlerFunc(httphandler.NotFound))
+	e.Handle("/", NewFrontendService(&profile.Profile{}).Handler(http.HandlerFunc(httphandler.NotFound)))
 
 	// OAuth Protected Resource Metadata discovery (RFC 9728) probes these
 	// paths and reads a 404 as "not advertised"; HTML would break the client.
@@ -225,11 +212,8 @@ func TestFrontendService_HiddenPathsDoNotFallbackToIndex(t *testing.T) {
 // resulting 404 used to inherit the static asset policy, so clients and CDNs
 // could store an absent discovery endpoint for an hour.
 func TestFrontendService_DiscoveryRoutesSkipFrontendCacheHeaders(t *testing.T) {
-	ctx := context.Background()
-	testStore := teststore.NewTestingStore(ctx, t)
-
 	e := http.NewServeMux()
-	NewFrontendService(&profile.Profile{}, testStore).Serve(ctx, e, http.HandlerFunc(httphandler.NotFound))
+	e.Handle("/", NewFrontendService(&profile.Profile{}).Handler(http.HandlerFunc(httphandler.NotFound)))
 
 	for _, requestPath := range []string{
 		"/.well-known/oauth-protected-resource",
@@ -257,11 +241,8 @@ func TestFrontendService_DiscoveryRoutesSkipFrontendCacheHeaders(t *testing.T) {
 }
 
 func TestFrontendService_SkipsDynamicRoutes(t *testing.T) {
-	ctx := context.Background()
-	testStore := teststore.NewTestingStore(ctx, t)
-
 	e := http.NewServeMux()
-	NewFrontendService(&profile.Profile{}, testStore).Serve(ctx, e, http.HandlerFunc(httphandler.NotFound))
+	e.Handle("/", NewFrontendService(&profile.Profile{}).Handler(http.HandlerFunc(httphandler.NotFound)))
 	e.Handle("GET /api/test", httphandler.Func(func(w http.ResponseWriter, _ *http.Request) error {
 		return httphandler.Text(w, http.StatusOK, "ok")
 	}))
@@ -274,113 +255,17 @@ func TestFrontendService_SkipsDynamicRoutes(t *testing.T) {
 	require.Empty(t, rec.Header().Get("Cache-Control"))
 }
 
-func TestFrontendService_RobotsTXT(t *testing.T) {
-	ctx := context.Background()
-	testStore := teststore.NewTestingStore(ctx, t)
-	setFrontendAccessMode(ctx, t, testStore, storepb.InstanceAccessMode_INSTANCE_ACCESS_MODE_PUBLIC)
-	profile := &profile.Profile{
-		InstanceURL: "https://demo.usememos.com/",
-	}
-
-	e := http.NewServeMux()
-	NewFrontendService(profile, testStore).Serve(ctx, e, http.HandlerFunc(httphandler.NotFound))
-
-	req := httptest.NewRequest(http.MethodGet, "/robots.txt", nil)
-	rec := httptest.NewRecorder()
-	e.ServeHTTP(rec, req)
-
-	require.Equal(t, http.StatusOK, rec.Code)
-	require.Equal(t, "text/plain; charset=UTF-8", rec.Header().Get("Content-Type"))
-	require.Equal(t, "User-agent: *\nDisallow: /\nHost: https://demo.usememos.com", rec.Body.String())
-}
-
-func TestFrontendService_SitemapXML(t *testing.T) {
-	ctx := context.Background()
-	testStore := teststore.NewTestingStore(ctx, t)
-	setFrontendAccessMode(ctx, t, testStore, storepb.InstanceAccessMode_INSTANCE_ACCESS_MODE_PUBLIC)
-	profile := &profile.Profile{
-		InstanceURL: "https://demo.usememos.com",
-	}
-
-	user, err := testStore.CreateUser(ctx, &store.User{
-		Username: "sitemap-owner",
-		Role:     store.RoleUser,
-		Email:    "sitemap-owner@example.com",
-	})
-	require.NoError(t, err)
-
-	_, err = testStore.CreateMemo(ctx, &store.Memo{
-		UID:        "publicmemo",
-		CreatorID:  user.ID,
-		Content:    "public memo",
-		Visibility: store.Public,
-	})
-	require.NoError(t, err)
-
-	_, err = testStore.CreateMemo(ctx, &store.Memo{
-		UID:        "privatememo",
-		CreatorID:  user.ID,
-		Content:    "private memo",
-		Visibility: store.Private,
-	})
-	require.NoError(t, err)
-
-	e := http.NewServeMux()
-	NewFrontendService(profile, testStore).Serve(ctx, e, http.HandlerFunc(httphandler.NotFound))
-
-	req := httptest.NewRequest(http.MethodGet, "/sitemap.xml", nil)
-	rec := httptest.NewRecorder()
-	e.ServeHTTP(rec, req)
-
-	require.Equal(t, http.StatusOK, rec.Code)
-	require.Contains(t, rec.Header().Get("Content-Type"), "application/xml")
-	require.Equal(t, "public, no-cache", rec.Header().Get("Cache-Control"))
-	require.NotContains(t, rec.Body.String(), "<loc>")
-	require.NotContains(t, rec.Body.String(), "publicmemo")
-	require.NotContains(t, rec.Body.String(), "privatememo")
-}
-
-func TestFrontendService_SitemapRoutesRequireInstanceURL(t *testing.T) {
-	ctx := context.Background()
-	testStore := teststore.NewTestingStore(ctx, t)
-	setFrontendAccessMode(ctx, t, testStore, storepb.InstanceAccessMode_INSTANCE_ACCESS_MODE_PUBLIC)
-
-	e := http.NewServeMux()
-	NewFrontendService(&profile.Profile{}, testStore).Serve(ctx, e, http.HandlerFunc(httphandler.NotFound))
-
-	for _, path := range []string{"/robots.txt", "/sitemap.xml"} {
-		req := httptest.NewRequest(http.MethodGet, path, nil)
+func TestFrontendService_RetiredPublicDiscovery(t *testing.T) {
+	handler := http.NewServeMux()
+	RegisterRetiredDiscoveryRoutes(handler)
+	for _, requestPath := range []string{"/robots.txt", "/sitemap.xml"} {
+		req := httptest.NewRequest(http.MethodGet, requestPath, nil)
 		rec := httptest.NewRecorder()
-		e.ServeHTTP(rec, req)
+		handler.ServeHTTP(rec, req)
 
 		require.Equal(t, http.StatusNotFound, rec.Code)
+		require.Equal(t, "no-store", rec.Header().Get("Cache-Control"))
+		require.Contains(t, rec.Body.String(), "public instance discovery is unavailable")
+		require.NotContains(t, rec.Body.String(), "example.test")
 	}
-}
-
-func TestFrontendService_SitemapRoutesRequirePublicAccess(t *testing.T) {
-	ctx := context.Background()
-	testStore := teststore.NewTestingStore(ctx, t)
-	setFrontendAccessMode(ctx, t, testStore, storepb.InstanceAccessMode_INSTANCE_ACCESS_MODE_PRIVATE)
-
-	e := http.NewServeMux()
-	NewFrontendService(&profile.Profile{InstanceURL: "https://private.example.com"}, testStore).Serve(ctx, e, http.HandlerFunc(httphandler.NotFound))
-
-	for _, path := range []string{"/robots.txt", "/sitemap.xml"} {
-		req := httptest.NewRequest(http.MethodGet, path, nil)
-		rec := httptest.NewRecorder()
-		e.ServeHTTP(rec, req)
-
-		require.Equal(t, http.StatusNotFound, rec.Code)
-	}
-}
-
-func setFrontendAccessMode(ctx context.Context, t *testing.T, stores *store.Store, mode storepb.InstanceAccessMode) {
-	t.Helper()
-	_, err := stores.UpsertInstanceSetting(ctx, &storepb.InstanceSetting{
-		Key: storepb.InstanceSettingKey_ACCESS,
-		Value: &storepb.InstanceSetting_AccessSetting{AccessSetting: &storepb.InstanceAccessSetting{
-			AccessMode: mode,
-		}},
-	})
-	require.NoError(t, err)
 }

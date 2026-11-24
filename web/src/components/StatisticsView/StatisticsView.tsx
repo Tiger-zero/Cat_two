@@ -9,6 +9,7 @@ import { MonthNavigator } from "./MonthNavigator";
 interface Props {
   statisticsData: StatisticsData;
   destination?: string;
+  showDateLabels?: boolean;
   onDateSelect?: () => void;
 }
 
@@ -40,6 +41,7 @@ const StatisticsView = (props: Props) => {
             month={calendar.visibleMonth}
             data={activityStats}
             selectedDate={selectedDate}
+            showDateLabels={props.showDateLabels}
             onClick={(date) => {
               navigateToDateFilter(date);
               props.onDateSelect?.();

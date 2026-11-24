@@ -264,9 +264,7 @@ func TestMemoManagedAttachmentImages(t *testing.T) {
 			Memo:       &apipb.Memo{Name: memo.Name, Content: "attachment removed", Attachments: []*apipb.Attachment{}},
 			UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"content", "attachments"}},
 		})
-		require.Equal(t, codes.Internal, status.Code(err))
-		require.ErrorContains(t, err, "memo was updated but attachment storage cleanup failed")
-		require.ErrorContains(t, err, store.ErrDeleteAttachmentStorageFailpoint.Error())
+		require.NoError(t, err, "the deletion and cleanup job already committed")
 		storedMemo, getErr := ts.Service.GetMemo(userCtx, &apipb.GetMemoRequest{Name: memo.Name})
 		require.NoError(t, getErr)
 		require.Equal(t, "attachment removed", storedMemo.Content)

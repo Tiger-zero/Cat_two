@@ -10,6 +10,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	"github.com/usememos/memos/internal/testutil/legacyspace"
 	apipb "github.com/usememos/memos/proto/gen/api"
 	"github.com/usememos/memos/store"
 )
@@ -118,22 +119,18 @@ func TestAssignedLegacyMemoReactionsRequireMemoOwner(t *testing.T) {
 	memberCtx := ts.CreateUserContext(ctx, member.ID)
 	adminCtx := ts.CreateUserContext(ctx, admin.ID)
 
-	space, err := ts.Store.CreateSpace(ctx, &store.Space{UID: "reaction-space", Title: "Reaction Space"}, owner.ID)
+	db := ts.Store.GetDriver().GetDB()
+	spaceID, err := legacyspace.Seed(ctx, db, "reaction-space", "Reaction Space", owner.ID)
 	require.NoError(t, err)
-	_, err = ts.InviteAndAcceptSpaceMember(ctx, &store.SpaceMember{
-		SpaceID: space.ID,
-		UserID:  member.ID,
-		Role:    store.SpaceMemberRoleAdmin,
-	}, owner.ID)
-	require.NoError(t, err)
+	require.NoError(t, legacyspace.AddMember(ctx, db, spaceID, member.ID, "ADMIN"))
 	root, err := ts.Store.CreateMemo(ctx, &store.Memo{
 		UID:        "reaction-space-root",
 		CreatorID:  owner.ID,
 		Content:    "assigned legacy public memo",
 		Visibility: store.Public,
-		SpaceID:    &space.ID,
 	})
 	require.NoError(t, err)
+	require.NoError(t, legacyspace.PlaceMemo(ctx, db, root.ID, spaceID, "PUBLIC"))
 	name := "memos/" + root.UID
 	legacyReaction, err := ts.Store.UpsertReaction(ctx, &store.Reaction{
 		CreatorID:    member.ID,
@@ -162,7 +159,7 @@ func TestAssignedLegacyMemoReactionsRequireMemoOwner(t *testing.T) {
 		Reaction: &apipb.Reaction{ReactionType: "👍"},
 	})
 	require.NoError(t, err)
-	require.NoError(t, ts.Store.DeleteSpaceMember(ctx, &store.DeleteSpaceMember{SpaceID: space.ID, UserID: member.ID}, owner.ID))
+	require.NoError(t, legacyspace.RemoveMember(ctx, db, spaceID, member.ID))
 	_, err = ts.Service.DeleteMemoReaction(memberCtx, &apipb.DeleteMemoReactionRequest{
 		Name: fmt.Sprintf("%s/reactions/%d", name, legacyReaction.ID),
 	})

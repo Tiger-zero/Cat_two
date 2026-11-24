@@ -5,7 +5,6 @@ import "sync"
 const (
 	sseClientEventBufferSize = 32
 	memoChangedSSEFrame      = "data: {\"type\":\"memo.changed\"}\n\n"
-	spaceChangedSSEFrame     = "data: {\"type\":\"space.changed\"}\n\n"
 )
 
 // SSEClient represents a single SSE connection.
@@ -80,13 +79,6 @@ func (h *SSEHub) Close() {
 // resynchronize instead of silently missing an event.
 func (h *SSEHub) publishMemoChanged() {
 	h.publish([]byte(memoChangedSSEFrame))
-}
-
-// publishSpaceChanged tells connected clients to refresh Space-backed caches
-// and caches whose visibility or presentation depends on Space state.
-// Like memo.changed, the event carries no authorization-sensitive data.
-func (h *SSEHub) publishSpaceChanged() {
-	h.publish([]byte(spaceChangedSSEFrame))
 }
 
 func (h *SSEHub) publish(frame []byte) {

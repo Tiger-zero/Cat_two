@@ -47,20 +47,6 @@ type Driver interface {
 	// CountUserMemos counts the memos a user created, comments included, in every row status and Space.
 	CountUserMemos(ctx context.Context, creatorID int32) (int64, error)
 
-	// Space model related methods.
-	CreateSpace(ctx context.Context, create *Space, creatorID int32) (*Space, error)
-	ListSpaces(ctx context.Context, find *FindSpace) ([]*Space, error)
-	UpdateSpace(ctx context.Context, update *UpdateSpace, actorUserID int32) (*Space, error)
-	DeleteSpace(ctx context.Context, delete *DeleteSpace) (*DeleteSpaceResult, error)
-	ListSpaceMembers(ctx context.Context, find *FindSpaceMember) ([]*SpaceMember, error)
-	UpdateSpaceMember(ctx context.Context, update *UpdateSpaceMember, actorUserID int32) (*SpaceMember, error)
-	DeleteSpaceMember(ctx context.Context, delete *DeleteSpaceMember, actorUserID int32) error
-	CreateSpaceInvitation(ctx context.Context, create *SpaceInvitation, actorUserID int32) (*SpaceInvitation, error)
-	ListSpaceInvitations(ctx context.Context, find *FindSpaceInvitation) ([]*SpaceInvitation, error)
-	AcceptSpaceInvitation(ctx context.Context, accept *AcceptSpaceInvitation, actorUserID int32) (*SpaceMember, error)
-	DeclineSpaceInvitation(ctx context.Context, decline *DeclineSpaceInvitation, actorUserID int32) error
-	RevokeSpaceInvitation(ctx context.Context, revoke *RevokeSpaceInvitation, actorUserID int32) error
-
 	// MemoRelation model related methods.
 	UpsertMemoRelation(ctx context.Context, create *MemoRelation) (*MemoRelation, error)
 	ListMemoRelations(ctx context.Context, find *FindMemoRelation) ([]*MemoRelation, error)
@@ -100,9 +86,10 @@ type Driver interface {
 	// UserSetting model related methods.
 	UpsertUserSetting(ctx context.Context, upsert *UserSetting) (*UserSetting, error)
 	// CompareAndSetUserSetting writes a setting only if its value has not changed.
-	// A nil previous value matches an absent row.
-	CompareAndSetUserSetting(ctx context.Context, setting *UserSetting, previous *string) (bool, error)
-	ListUserSettings(ctx context.Context, find *FindUserSetting) ([]*UserSetting, error)
+	// A nil previous value matches an absent row. A nil transaction uses the database directly.
+	CompareAndSetUserSetting(ctx context.Context, tx *sql.Tx, setting *UserSetting, previous *string) (bool, error)
+	// ListUserSettings uses the database directly if tx is nil.
+	ListUserSettings(ctx context.Context, tx *sql.Tx, find *FindUserSetting) ([]*UserSetting, error)
 	DeleteUserSettings(ctx context.Context, delete *DeleteUserSetting) error
 	// GetUserByPATHash returns the token matching tokenHash with its owner ID, or
 	// (nil, nil) when no stored token matches. An error means the lookup itself
@@ -124,19 +111,6 @@ type Driver interface {
 	UpdateMCPConnection(ctx context.Context, userID int32, id string, from MCPConnectionStatus, to MCPConnectionStatus, expiresAt int64) (bool, error)
 	DeleteMCPConnection(ctx context.Context, userID int32, id string) (bool, error)
 
-	// IdentityProvider model related methods.
-	CreateIdentityProvider(ctx context.Context, create *IdentityProvider) (*IdentityProvider, error)
-	ListIdentityProviders(ctx context.Context, find *FindIdentityProvider) ([]*IdentityProvider, error)
-	UpdateIdentityProvider(ctx context.Context, update *UpdateIdentityProvider) (*IdentityProvider, error)
-	DeleteIdentityProvider(ctx context.Context, delete *DeleteIdentityProvider) error
-	// The identity provider methods within tx.
-	CreateIdentityProviderTx(ctx context.Context, tx *sql.Tx, create *IdentityProvider) (*IdentityProvider, error)
-	ListIdentityProvidersTx(ctx context.Context, tx *sql.Tx, find *FindIdentityProvider) ([]*IdentityProvider, error)
-	UpdateIdentityProviderTx(ctx context.Context, tx *sql.Tx, update *UpdateIdentityProvider) (*IdentityProvider, error)
-	DeleteIdentityProviderTx(ctx context.Context, tx *sql.Tx, delete *DeleteIdentityProvider) error
-	// ApplyAuthenticationConfigMutationTx reads the authentication configuration, validates the mutation, and applies it within tx.
-	ApplyAuthenticationConfigMutationTx(ctx context.Context, tx *sql.Tx, mutation *AuthenticationConfigMutation) error
-
 	// IsRetryableTransactionError reports whether err is a serialization or locking conflict that running the transaction again can resolve.
 	IsRetryableTransactionError(err error) bool
 
@@ -157,14 +131,4 @@ type Driver interface {
 	ListMemoShares(ctx context.Context, find *FindMemoShare) ([]*MemoShare, error)
 	GetMemoShare(ctx context.Context, find *FindMemoShare) (*MemoShare, error)
 	DeleteMemoShare(ctx context.Context, delete *DeleteMemoShare) error
-
-	// UserIdentity model related methods.
-	CreateUserIdentity(ctx context.Context, create *UserIdentity) (*UserIdentity, error)
-	CreateUserWithIdentity(ctx context.Context, createUser *User, createIdentity *UserIdentity) (*User, error)
-	ListUserIdentities(ctx context.Context, find *FindUserIdentity) ([]*UserIdentity, error)
-	DeleteUserIdentities(ctx context.Context, delete *DeleteUserIdentity) error
-	// The identity link methods within tx.
-	CreateUserIdentityTx(ctx context.Context, tx *sql.Tx, create *UserIdentity) (*UserIdentity, error)
-	ListUserIdentitiesTx(ctx context.Context, tx *sql.Tx, find *FindUserIdentity) ([]*UserIdentity, error)
-	DeleteUserIdentitiesTx(ctx context.Context, tx *sql.Tx, delete *DeleteUserIdentity) error
 }

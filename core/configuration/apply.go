@@ -11,7 +11,6 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
 
-	coreuser "github.com/usememos/memos/core/user"
 	apipb "github.com/usememos/memos/proto/gen/api"
 	storepb "github.com/usememos/memos/proto/gen/store"
 	"github.com/usememos/memos/store"
@@ -90,68 +89,21 @@ func applyOperation(ctx context.Context, tx *store.ConfigurationTransaction, op 
 	}
 
 	switch op.kind {
-	case KindIdentityProvider:
-		switch {
-		case action == apipb.ResourceChange_DESTROY:
-			return tx.DeleteIdentityProvider(ctx, op.providerID)
-		case op.providerID != 0:
-			return tx.ReplaceIdentityProvider(ctx, op.providerID, op.provider)
-		default:
-			return tx.CreateIdentityProvider(ctx, op.provider)
-		}
 	case KindInstanceSetting:
 		if action != apipb.ResourceChange_RESET {
 			return tx.UpsertInstanceSetting(ctx, op.setting)
 		}
-		// ACCESS is written explicitly: a missing row would be initialized at
-		// the next start from the legacy instance URL rule.
-		if op.settingKey == storepb.InstanceSettingKey_ACCESS {
-			return tx.UpsertInstanceSetting(ctx, &storepb.InstanceSetting{
-				Key: storepb.InstanceSettingKey_ACCESS,
-				Value: &storepb.InstanceSetting_AccessSetting{AccessSetting: &storepb.InstanceAccessSetting{
-					AccessMode: storepb.InstanceAccessMode_INSTANCE_ACCESS_MODE_PRIVATE,
-				}},
-			})
-		}
 		return tx.DeleteInstanceSetting(ctx, op.settingKey)
-	case KindLinkedIdentity:
-		return applyLinkedIdentity(ctx, tx, op)
-	default:
+	case KindUser:
 		return applyUser(ctx, tx, op, now)
+	default:
+		return errors.Errorf("unsupported resource kind %s", op.kind)
 	}
-}
-
-// applyLinkedIdentity writes the one field a link has by replacing the row,
-// after resolving the user, who may have been created earlier in this apply.
-func applyLinkedIdentity(ctx context.Context, tx *store.ConfigurationTransaction, op *operation) error {
-	var userID int32
-	if op.actualUser != nil {
-		userID = op.actualUser.ID
-	} else {
-		users, err := tx.ListUsers(ctx, &store.FindUser{Username: &op.identityUsername})
-		if err != nil {
-			return errors.Wrap(err, "failed to read user")
-		}
-		if len(users) == 0 {
-			return errors.Errorf("user %s does not exist", op.identityUsername)
-		}
-		userID = users[0].ID
-	}
-	if op.actualIdentity != nil {
-		if err := tx.DeleteUserIdentities(ctx, &store.DeleteUserIdentity{UserID: &userID, Provider: &op.actualIdentity.Provider}); err != nil {
-			return err
-		}
-	}
-	if op.change.Action == apipb.ResourceChange_DESTROY {
-		return nil
-	}
-	return tx.CreateUserIdentity(ctx, &store.UserIdentity{UserID: userID, Provider: op.identity.Provider, ExternUID: op.identity.ExternUID})
 }
 
 // applyUser writes exactly the fields the plan lists, which already leave out
 // ignored fields, undeclared profile fields, and values that did not change.
 func applyUser(ctx context.Context, tx *store.ConfigurationTransaction, op *operation, now time.Time) error {
-	role := coreuser.RoleToStore(op.user.Role)
 	var passwordHash string
 	for _, field := range op.change.FieldChanges {
 		if field.Path == "password" {
@@ -162,18 +114,11 @@ func applyUser(ctx context.Context, tx *store.ConfigurationTransaction, op *oper
 			passwordHash = string(hash)
 		}
 	}
-	if op.randomPassword {
-		hash, err := coreuser.RandomPasswordHash()
-		if err != nil {
-			return err
-		}
-		passwordHash = hash
-	}
 
 	if op.actualUser == nil {
 		_, err := tx.CreateUser(ctx, &store.User{
 			Username:     op.user.Username,
-			Role:         role,
+			Role:         store.RoleAdmin,
 			Email:        op.user.Email,
 			Nickname:     op.user.DisplayName,
 			PasswordHash: passwordHash,
@@ -187,8 +132,6 @@ func applyUser(ctx context.Context, tx *store.ConfigurationTransaction, op *oper
 	update := &store.UpdateUser{ID: op.actualUser.ID, UpdatedTs: &updatedTsSec}
 	for _, field := range op.change.FieldChanges {
 		switch field.Path {
-		case "role":
-			update.Role = &role
 		case "displayName":
 			update.Nickname = &op.user.DisplayName
 		case "email":

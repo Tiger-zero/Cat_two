@@ -104,6 +104,7 @@ export const EditSession: React.FC<EditSessionProps> = ({
     getCreateAttempt,
     recordCreateAttempt,
     rebaseDraft,
+    preserveDraft,
   } = useAutoSave(draftKey, isInitialized, memo, reportDraftStorageError, initialDraftRaw, reviewDraftRevision);
   const hasEditConflict = useRef(false);
   const staleDraftToast = useRef<string | undefined>(undefined);
@@ -112,7 +113,7 @@ export const EditSession: React.FC<EditSessionProps> = ({
     (filesRevision?: string) => {
       if (warnedAboutStaleDraft.current) return;
       warnedAboutStaleDraft.current = true;
-      const stored = cacheService.loadDraft(draftKey);
+      const stored = cacheService.loadDraft(draftKey, cacheService.readForEditor(draftKey));
       const canCopy = stored.content && stored.baseRevision !== getBaseRevision();
       const reviewRevision = filesRevision ?? stored.stagedFilesRevision ?? stored.baseRevision;
       const actionProps =
@@ -144,14 +145,15 @@ export const EditSession: React.FC<EditSessionProps> = ({
     createBlobUrl,
     onStorageError: reportDraftStorageError,
     onStaleDraft: notifyStaleDraft,
+    preserveDraft,
   });
   const discardDraft = useCallback(async () => {
-    discardText();
     await discardFiles();
+    discardText();
   }, [discardText, discardFiles]);
   useEffect(() => {
     const baseRevision = getBaseRevision();
-    const stored = cacheService.loadDraft(draftKey);
+    const stored = cacheService.loadDraft(draftKey, cacheService.readForEditor(draftKey));
     if (!reviewDraftRevision && baseRevision && stored.baseRevision && stored.baseRevision !== baseRevision) notifyStaleDraft();
   }, [draftKey, getBaseRevision, notifyStaleDraft, reviewDraftRevision]);
 

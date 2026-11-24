@@ -10,14 +10,13 @@ describe("draft keys", () => {
     expect(draftKeyFor({ kind: "edit", name: "memos/a" })).toBe("edit:memos/a");
     expect(draftKeyFor({ kind: "comment", parent: "memos/a" })).toBe("comment:memos/a");
     expect(draftKeyFor({ kind: "new", scope: "home" })).toBe("new:home");
-    expect(draftKeyFor({ kind: "new", scope: "home", space: "spaces/work" })).toBe("new:home:spaces/work");
     expect(draftKeyFor({ kind: "new", scope: "calendar:2026-10-18" })).toBe("new:calendar:2026-10-18");
   });
 
   it("name the key each host chose before, where one existed", () => {
     expect(legacyDraftKeyFor({ kind: "comment", parent: "memos/a" })).toBe("memos/a-comment");
     expect(legacyDraftKeyFor({ kind: "new", scope: "home" })).toBe("home-memo-editor");
-    expect(legacyDraftKeyFor({ kind: "new", scope: "global", space: "spaces/x" })).toBe("global-memo-editor:spaces/x");
+    expect(legacyDraftKeyFor({ kind: "new", scope: "global" })).toBe("global-memo-editor");
     expect(legacyDraftKeyFor({ kind: "new", scope: "calendar:2026-10-18" })).toBe("calendar-day-editor:2026-10-18");
     expect(legacyDraftKeyFor({ kind: "new", scope: "elsewhere" })).toBeUndefined();
     expect(legacyDraftKeyFor({ kind: "edit", name: "memos/a" })).toBeUndefined();
@@ -98,8 +97,8 @@ describe("migrateLegacyDraft", () => {
   afterEach(() => vi.unstubAllGlobals());
 
   it("moves a draft from the old key to the new one, once", () => {
-    const identity = { kind: "new", scope: "home", space: "spaces/work" } as const;
-    const oldKey = cacheService.key("users/1", "home-memo-editor:spaces/work");
+    const identity = { kind: "new", scope: "calendar:2026-10-18" } as const;
+    const oldKey = cacheService.key("users/1", "calendar-day-editor:2026-10-18");
     const newKey = cacheService.key("users/1", draftKeyFor(identity));
     cacheService.saveNow(oldKey, { content: "Unfinished", attachments: [] });
 

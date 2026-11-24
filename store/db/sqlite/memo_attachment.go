@@ -128,6 +128,10 @@ func (d *DB) ApplyMemoMutation(ctx context.Context, mutation *store.MemoMutation
 		}
 	}
 
+	if err := store.EnqueueAttachmentStorageCleanup(ctx, conn, removedAttachments, enqueueAttachmentStorageCleanupSQL); err != nil {
+		return errors.Wrap(err, "failed to queue removed attachment storage cleanup")
+	}
+
 	for _, attachmentID := range mutation.RequiredAttachmentIDs {
 		var exists int
 		if err := conn.QueryRowContext(ctx, `SELECT 1 FROM attachment WHERE id = ? AND memo_id = ?`, attachmentID, mutation.MemoID).Scan(&exists); err != nil {
@@ -225,11 +229,6 @@ func applyMemoUpdate(ctx context.Context, executor memoUpdateExecer, update *sto
 			return errors.Wrap(err, "failed to marshal memo payload")
 		}
 		set, args = append(set, "`payload` = ?"), append(args, string(payload))
-	}
-	if update.ClearSpace {
-		set = append(set, "`space_id` = NULL")
-	} else if v := update.SpaceID; v != nil {
-		set, args = append(set, "`space_id` = ?"), append(args, *v)
 	}
 	if len(set) == 0 && !forceRevision && update.ExpectedRevision == nil {
 		return nil

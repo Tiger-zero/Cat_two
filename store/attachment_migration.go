@@ -3,7 +3,6 @@ package store
 import (
 	"bytes"
 	"context"
-	"io"
 	"path/filepath"
 
 	"github.com/pkg/errors"
@@ -14,8 +13,8 @@ import (
 	storepb "github.com/usememos/memos/proto/gen/store"
 )
 
-// MigrateLocalAttachments moves legacy database and object storage attachments
-// into the data directory. Call it after schema migration, before serving
+// MigrateLocalAttachments moves legacy SQLite blobs into the data directory.
+// Call it after schema migration, before serving
 // requests and while no previous version is writing to the same database.
 func (s *Store) MigrateLocalAttachments(ctx context.Context) error {
 	const batchSize = 64
@@ -60,15 +59,14 @@ func (s *Store) migrateLocalAttachment(ctx context.Context, id int32) error {
 		return errors.Wrap(err, "failed to load legacy attachment")
 	}
 	if attachment == nil || attachment.StorageType == storepb.AttachmentStorageType_LOCAL ||
-		attachment.StorageType == storepb.AttachmentStorageType_EXTERNAL {
+		attachment.StorageType == storepb.AttachmentStorageType_EXTERNAL ||
+		attachment.StorageType == storepb.AttachmentStorageType_S3 {
 		return nil
 	}
-	content, length, err := s.openLegacyAttachment(ctx, attachment)
-	if err != nil {
-		return err
+	if attachment.Blob == nil && attachment.Size > 0 {
+		return errors.New("attachment database content is missing")
 	}
-	defer content.Close()
-	reference, err := s.publishMigratedAttachment(ctx, content, length)
+	reference, err := s.publishMigratedAttachment(ctx, attachment.Blob)
 	if err != nil {
 		return err
 	}
@@ -94,45 +92,19 @@ func (s *Store) migrateLocalAttachment(ctx context.Context, id int32) error {
 	return nil
 }
 
-func (s *Store) openLegacyAttachment(ctx context.Context, attachment *Attachment) (io.ReadCloser, int64, error) {
-	if attachment.StorageType != storepb.AttachmentStorageType_S3 {
-		if attachment.Blob == nil && attachment.Size > 0 {
-			return nil, 0, errors.New("attachment database content is missing")
-		}
-		return io.NopCloser(bytes.NewReader(attachment.Blob)), int64(len(attachment.Blob)), nil
-	}
-	object := attachment.Payload.GetS3Object()
-	if object == nil || object.Key == "" {
-		return nil, 0, errors.New("legacy object storage key is missing")
-	}
-	setting, err := s.GetInstanceStorageSetting(ctx)
-	if err != nil {
-		return nil, 0, errors.Wrap(err, "failed to load legacy storage settings")
-	}
-	driver, err := s.ResolveStorageDriver(ctx, setting, object.StorageId, object.S3Config)
-	if err != nil {
-		return nil, 0, errors.New("failed to resolve legacy object storage")
-	}
-	stream, err := driver.GetObjectStream(ctx, object.Key)
-	if err != nil {
-		return nil, 0, errors.New("failed to retrieve legacy object from storage")
-	}
-	return stream.Body, stream.ContentLength, nil
-}
-
-func (s *Store) publishMigratedAttachment(ctx context.Context, source io.Reader, length int64) (string, error) {
+func (s *Store) publishMigratedAttachment(ctx context.Context, content []byte) (string, error) {
 	assets, err := OpenAttachmentDirectory(s.profile.Data)
 	if err != nil {
 		return "", err
 	}
 	defer assets.Close()
 
-	tempName, written, err := StageAttachmentFile(ctx, assets, source)
+	tempName, written, err := StageAttachmentFile(ctx, assets, bytes.NewReader(content))
 	if err != nil {
 		return "", err
 	}
 	defer assets.Remove(tempName)
-	if length >= 0 && written != length {
+	if written != int64(len(content)) {
 		return "", errors.New("legacy attachment content has an unexpected length")
 	}
 

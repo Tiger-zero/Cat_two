@@ -26,14 +26,18 @@ func (d *DB) UpsertUserSetting(ctx context.Context, upsert *store.UserSetting) (
 	return upsert, nil
 }
 
-func (d *DB) CompareAndSetUserSetting(ctx context.Context, setting *store.UserSetting, previous *string) (bool, error) {
+func (d *DB) CompareAndSetUserSetting(ctx context.Context, tx *sql.Tx, setting *store.UserSetting, previous *string) (bool, error) {
 	command := "INSERT INTO user_setting (user_id, key, value) VALUES (?, ?, ?) ON CONFLICT(user_id, key) DO NOTHING"
 	args := []any{setting.UserID, setting.Key.String(), setting.Value}
 	if previous != nil {
 		command = "UPDATE user_setting SET value = ? WHERE user_id = ? AND key = ? AND value = ?"
 		args = []any{setting.Value, setting.UserID, setting.Key.String(), *previous}
 	}
-	result, err := d.db.ExecContext(ctx, command, args...)
+	var q dbExecutor = d.db
+	if tx != nil {
+		q = tx
+	}
+	result, err := q.ExecContext(ctx, command, args...)
 	if err != nil {
 		return false, err
 	}
@@ -41,7 +45,7 @@ func (d *DB) CompareAndSetUserSetting(ctx context.Context, setting *store.UserSe
 	return count == 1, err
 }
 
-func (d *DB) ListUserSettings(ctx context.Context, find *store.FindUserSetting) ([]*store.UserSetting, error) {
+func (d *DB) ListUserSettings(ctx context.Context, tx *sql.Tx, find *store.FindUserSetting) ([]*store.UserSetting, error) {
 	where, args := []string{"1 = 1"}, []any{}
 
 	if v := find.Key; v != storepb.UserSetting_KEY_UNSPECIFIED {
@@ -58,7 +62,11 @@ func (d *DB) ListUserSettings(ctx context.Context, find *store.FindUserSetting) 
 			value
 		FROM user_setting
 		WHERE ` + strings.Join(where, " AND ")
-	rows, err := d.db.QueryContext(ctx, query, args...)
+	var q dbExecutor = d.db
+	if tx != nil {
+		q = tx
+	}
+	rows, err := q.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}

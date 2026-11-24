@@ -49,7 +49,7 @@ func registerPersonalMemoSearch(server *sdkmcp.Server, execute toolExecutor, lis
 		if err != nil {
 			return nil, nil, err
 		}
-		result, err := execute(ctx, listOperation.Operation, arguments, "")
+		result, err := execute(ctx, listOperation.Operation, arguments)
 		return result, nil, err
 	})
 }

@@ -18,7 +18,6 @@ import (
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
 
 	"github.com/usememos/memos/internal/profile"
-	"github.com/usememos/memos/internal/testutil/fakes3"
 	"github.com/usememos/memos/internal/version"
 	apipb "github.com/usememos/memos/proto/gen/api"
 	storepb "github.com/usememos/memos/proto/gen/store"
@@ -150,20 +149,16 @@ func TestMemoTrashExpiryKeepsSharedLocalAttachment(t *testing.T) {
 	require.NoFileExists(t, removePath)
 }
 
-func TestMemoTrashCleanupLeavesLegacyS3Object(t *testing.T) {
+func TestMemoTrashCleanupDoesNotQueueRetiredObjectStorage(t *testing.T) {
 	ctx := t.Context()
 	svc := newIntegrationService(t)
-	const bucket, key = "retired-bucket", "legacy/original.txt"
-	original := []byte("remote attachment")
-	fake := fakes3.New(t, bucket)
-	require.NoError(t, fake.PutObject(bucket, key, "text/plain", original))
 	owner := createSpaceTestUser(ctx, t, svc, "cleanup-s3-owner", store.RoleUser)
 	memo, err := svc.Store.CreateMemo(ctx, &store.Memo{UID: "trashed-s3-memo", CreatorID: owner.ID, Content: "removed", Visibility: store.Private})
 	require.NoError(t, err)
 	attachment, err := svc.Store.CreateAttachment(ctx, &store.Attachment{
 		UID: "retired-object", CreatorID: owner.ID, MemoID: &memo.ID, StorageType: storepb.AttachmentStorageType_S3,
 		Payload: &storepb.AttachmentPayload{Payload: &storepb.AttachmentPayload_S3Object_{
-			S3Object: &storepb.AttachmentPayload_S3Object{S3Config: fake.Config(bucket), Key: key},
+			S3Object: &storepb.AttachmentPayload_S3Object{Key: "legacy/original.txt"},
 		}},
 	})
 	require.NoError(t, err)
@@ -180,9 +175,6 @@ func TestMemoTrashCleanupLeavesLegacyS3Object(t *testing.T) {
 	pending, err := svc.Store.ListMemoTrashAttachmentCleanup(ctx, 0, now.Add(24*time.Hour), 100)
 	require.NoError(t, err)
 	require.Empty(t, pending)
-	data, err := fake.GetObject(bucket, key)
-	require.NoError(t, err)
-	require.Equal(t, original, data)
 }
 
 func TestMemoTrashBrowserAndRestore(t *testing.T) {

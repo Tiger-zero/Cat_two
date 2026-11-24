@@ -51,7 +51,8 @@ func TestDeleteUserBatchBoundariesAndRollback(t *testing.T) {
 			require.NoError(t, err)
 			keepReaction, err := ts.UpsertReaction(ctx, &store.Reaction{CreatorID: peer.ID, MemoID: keepMemo.ID, ReactionType: "keep"})
 			require.NoError(t, err)
-			attachmentIDs := make([]int32, 0, count)
+			ownedAttachmentIDs := make([]int32, 0, count/2)
+			peerAttachmentBodies := make(map[int32]string)
 			for i := range count {
 				uid := fmt.Sprintf("batch-%d", i)
 				memo, err := ts.CreateMemo(ctx, &store.Memo{UID: uid, CreatorID: owner.ID, Content: uid, Visibility: store.Public})
@@ -63,7 +64,11 @@ func TestDeleteUserBatchBoundariesAndRollback(t *testing.T) {
 				attachment, err := ts.CreateAttachment(ctx, &store.Attachment{UID: uid, CreatorID: creatorID, MemoID: &memo.ID,
 					Filename: uid + ".txt", Type: "text/plain", Blob: []byte(uid), Reference: uid})
 				require.NoError(t, err)
-				attachmentIDs = append(attachmentIDs, attachment.ID)
+				if creatorID == owner.ID {
+					ownedAttachmentIDs = append(ownedAttachmentIDs, attachment.ID)
+				} else {
+					peerAttachmentBodies[attachment.ID] = uid
+				}
 				_, err = ts.UpsertReaction(ctx, &store.Reaction{CreatorID: peer.ID, MemoID: memo.ID, ReactionType: "thumbs-up"})
 				require.NoError(t, err)
 				_, err = ts.CreateMemoShare(ctx, &store.MemoShare{UID: uid, MemoID: memo.ID, CreatorID: peer.ID})
@@ -80,7 +85,7 @@ func TestDeleteUserBatchBoundariesAndRollback(t *testing.T) {
 			_, err = ts.UpsertUserSetting(ctx, &storepb.UserSetting{UserId: owner.ID, Key: storepb.UserSetting_GENERAL,
 				Value: &storepb.UserSetting_General{General: &storepb.GeneralUserSetting{Locale: "en"}}})
 			require.NoError(t, err)
-			_, err = ts.CreateUserIdentity(ctx, &store.UserIdentity{UserID: owner.ID, Provider: "test", ExternUID: "batch-owner"})
+			_, err = ts.GetDriver().GetDB().ExecContext(ctx, "INSERT INTO user_identity (user_id, provider, extern_uid) VALUES (?, ?, ?)", owner.ID, "test", "batch-owner")
 			require.NoError(t, err)
 			// Prime facade caches before forcing a failure after every delete statement.
 			_, err = ts.GetUser(ctx, &store.FindUser{ID: &owner.ID})
@@ -108,21 +113,29 @@ func TestDeleteUserBatchBoundariesAndRollback(t *testing.T) {
 				deletedIDs = append(deletedIDs, attachment.ID)
 				require.Equal(t, attachment.UID, attachment.Reference)
 			}
-			require.ElementsMatch(t, attachmentIDs, deletedIDs, "each attachment must be returned exactly once, even if both owner and memo match")
+			require.ElementsMatch(t, ownedAttachmentIDs, deletedIDs, "only the deleted user's attachments may be returned for removal")
 			after := snapshotUserDeletion(t, ts)
 			require.Len(t, after.users, 1)
 			require.Equal(t, peer.ID, after.users[0].ID)
 			require.Equal(t, []*store.Memo{keepMemo}, after.memos)
-			require.Len(t, after.attachments, 1)
-			require.Equal(t, keepAttachment.ID, after.attachments[0].ID)
-			require.Equal(t, []byte("keep"), after.attachments[0].Blob)
+			require.Len(t, after.attachments, len(peerAttachmentBodies)+1)
+			for _, attachment := range after.attachments {
+				require.Equal(t, peer.ID, attachment.CreatorID)
+				if attachment.ID == keepAttachment.ID {
+					require.Equal(t, &keepMemo.ID, attachment.MemoID)
+					require.Equal(t, []byte("keep"), attachment.Blob)
+				} else {
+					require.Nil(t, attachment.MemoID)
+					require.Equal(t, peerAttachmentBodies[attachment.ID], string(attachment.Blob))
+				}
+			}
 			require.Equal(t, []*store.MemoShare{keepShare}, after.shares)
 			require.Equal(t, []*store.Reaction{keepReaction}, after.reactions)
 			require.Len(t, after.inboxes, 1)
 			require.Equal(t, keepInbox.ID, after.inboxes[0].ID)
 			require.Empty(t, after.relations)
 			require.Empty(t, after.settings)
-			require.Empty(t, after.identities)
+			require.Zero(t, after.identityCount)
 			cachedUser, err := ts.GetUser(ctx, &store.FindUser{ID: &owner.ID})
 			require.NoError(t, err)
 			require.Nil(t, cachedUser)
@@ -134,15 +147,15 @@ func TestDeleteUserBatchBoundariesAndRollback(t *testing.T) {
 }
 
 type userDeletionSnapshot struct {
-	users       []*store.User
-	memos       []*store.Memo
-	attachments []*store.Attachment
-	shares      []*store.MemoShare
-	reactions   []*store.Reaction
-	inboxes     []*store.Inbox
-	relations   []*store.MemoRelation
-	settings    []*storepb.UserSetting
-	identities  []*store.UserIdentity
+	users         []*store.User
+	memos         []*store.Memo
+	attachments   []*store.Attachment
+	shares        []*store.MemoShare
+	reactions     []*store.Reaction
+	inboxes       []*store.Inbox
+	relations     []*store.MemoRelation
+	settings      []*storepb.UserSetting
+	identityCount int
 }
 
 func snapshotUserDeletion(t *testing.T, ts *store.Store) userDeletionSnapshot {
@@ -166,8 +179,7 @@ func snapshotUserDeletion(t *testing.T, ts *store.Store) userDeletionSnapshot {
 	require.NoError(t, err)
 	result.settings, err = ts.ListUserSettings(ctx, &store.FindUserSetting{})
 	require.NoError(t, err)
-	result.identities, err = ts.ListUserIdentities(ctx, &store.FindUserIdentity{})
-	require.NoError(t, err)
+	require.NoError(t, ts.GetDriver().GetDB().QueryRowContext(ctx, "SELECT COUNT(*) FROM user_identity").Scan(&result.identityCount))
 	return result
 }
 
@@ -197,18 +209,12 @@ func TestDeleteUserCleansRelatedData(t *testing.T) {
 		Visibility: store.Public,
 	})
 	require.NoError(t, err)
-	peerCommentOnOwnMemo, err := ts.CreateMemoComment(ctx, &store.Memo{
-		UID:       "delete-peer-comment",
-		CreatorID: peer.ID,
-		Content:   "peer comment on owner memo",
-	}, ownMemo.ID, peer.ID)
-	require.NoError(t, err)
-	userCommentOnPeerMemo, err := ts.CreateMemoComment(ctx, &store.Memo{
-		UID:       "delete-user-comment",
-		CreatorID: user.ID,
-		Content:   "owner comment on peer memo",
-	}, peerMemo.ID, user.ID)
-	require.NoError(t, err)
+	peerCommentOnOwnMemo := seedLegacyComment(ctx, t, ts, &store.Memo{
+		UID: "delete-peer-comment", CreatorID: peer.ID, Content: "peer comment on owner memo", Visibility: store.Private,
+	}, ownMemo.ID)
+	userCommentOnPeerMemo := seedLegacyComment(ctx, t, ts, &store.Memo{
+		UID: "delete-user-comment", CreatorID: user.ID, Content: "owner comment on peer memo", Visibility: store.Private,
+	}, peerMemo.ID)
 
 	ownerAttachment, err := ts.CreateAttachment(ctx, &store.Attachment{
 		UID:       "delete-owner-attachment",
@@ -315,11 +321,7 @@ func TestDeleteUserCleansRelatedData(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	_, err = ts.CreateUserIdentity(ctx, &store.UserIdentity{
-		UserID:    user.ID,
-		Provider:  "google",
-		ExternUID: "delete-user-sub",
-	})
+	_, err = ts.GetDriver().GetDB().ExecContext(ctx, "INSERT INTO user_identity (user_id, provider, extern_uid) VALUES (?, ?, ?)", user.ID, "google", "delete-user-sub")
 	require.NoError(t, err)
 	err = ts.AddUserPersonalAccessToken(ctx, user.ID, &storepb.PersonalAccessTokensUserSetting_PersonalAccessToken{
 		TokenId:     "delete-user-pat",
@@ -349,11 +351,15 @@ func TestDeleteUserCleansRelatedData(t *testing.T) {
 		require.NotNil(t, got, memo.UID)
 	}
 
-	for _, attachment := range []*store.Attachment{ownerAttachment, peerAttachmentOnDeletedMemo} {
-		got, getErr := ts.GetAttachment(ctx, &store.FindAttachment{ID: &attachment.ID})
-		require.NoError(t, getErr)
-		require.Nil(t, got, attachment.UID)
-	}
+	deletedAttachment, err := ts.GetAttachment(ctx, &store.FindAttachment{ID: &ownerAttachment.ID})
+	require.NoError(t, err)
+	require.Nil(t, deletedAttachment)
+	detachedAttachment, err := ts.GetAttachment(ctx, &store.FindAttachment{ID: &peerAttachmentOnDeletedMemo.ID})
+	require.NoError(t, err)
+	require.NotNil(t, detachedAttachment)
+	require.Equal(t, peer.ID, detachedAttachment.CreatorID)
+	require.Nil(t, detachedAttachment.MemoID)
+
 	keptAttachment, err := ts.GetAttachment(ctx, &store.FindAttachment{ID: &peerAttachmentToKeep.ID})
 	require.NoError(t, err)
 	require.NotNil(t, keptAttachment)
@@ -387,9 +393,9 @@ func TestDeleteUserCleansRelatedData(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, keptInboxes, 1)
 
-	identities, err := ts.ListUserIdentities(ctx, &store.FindUserIdentity{UserID: &user.ID})
-	require.NoError(t, err)
-	require.Empty(t, identities)
+	var identities int
+	require.NoError(t, ts.GetDriver().GetDB().QueryRowContext(ctx, "SELECT COUNT(*) FROM user_identity WHERE user_id = ?", user.ID).Scan(&identities))
+	require.Zero(t, identities)
 	setting, err := ts.GetUserSetting(ctx, &store.FindUserSetting{
 		UserID: &user.ID,
 		Key:    storepb.UserSetting_PERSONAL_ACCESS_TOKENS,

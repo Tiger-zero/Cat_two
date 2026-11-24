@@ -175,36 +175,11 @@ func TestMemoMutationRollsBackAfterReferenceInsertFailure(t *testing.T) {
 	require.NoError(t, err)
 	// Inject a database error after memo fields, attachment bindings/removals,
 	// and the first replacement reference have already been written.
-	var statements []string
-	drop := "DROP TRIGGER reject_mutation_reference"
-	switch getDriverFromEnv() {
-	case "sqlite":
-		statements = []string{fmt.Sprintf(`CREATE TRIGGER reject_mutation_reference
-			BEFORE INSERT ON memo_relation WHEN NEW.related_memo_id = %d
-			BEGIN SELECT RAISE(ABORT, 'mutation test reference failure'); END`, f.next.ID)}
-	case "mysql":
-		statements = []string{fmt.Sprintf(`CREATE TRIGGER reject_mutation_reference
-			BEFORE INSERT ON memo_relation FOR EACH ROW BEGIN
-			IF NEW.related_memo_id = %d THEN
-				SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'mutation test reference failure';
-			END IF; END`, f.next.ID)}
-	case "postgres":
-		statements = []string{
-			fmt.Sprintf(`CREATE FUNCTION reject_mutation_reference() RETURNS trigger AS $$
-			BEGIN IF NEW.related_memo_id = %d THEN
-				RAISE EXCEPTION 'mutation test reference failure';
-			END IF; RETURN NEW; END; $$ LANGUAGE plpgsql`, f.next.ID),
-			`CREATE TRIGGER reject_mutation_reference BEFORE INSERT ON memo_relation
-			FOR EACH ROW EXECUTE FUNCTION reject_mutation_reference()`,
-		}
-		drop += " ON memo_relation"
-	default:
-		t.Fatalf("unsupported driver: %s", getDriverFromEnv())
-	}
-	for _, statement := range statements {
-		_, err := f.store.GetDriver().GetDB().ExecContext(f.ctx, statement)
-		require.NoError(t, err)
-	}
+	statement := fmt.Sprintf(`CREATE TRIGGER reject_mutation_reference
+		BEFORE INSERT ON memo_relation WHEN NEW.related_memo_id = %d
+		BEGIN SELECT RAISE(ABORT, 'mutation test reference failure'); END`, f.next.ID)
+	_, err = f.store.GetDriver().GetDB().ExecContext(f.ctx, statement)
+	require.NoError(t, err)
 	before := f.state()
 	mutation := f.mutation()
 	mutation.ReferenceRelations = append([]*store.MemoRelation{
@@ -212,7 +187,7 @@ func TestMemoMutationRollsBackAfterReferenceInsertFailure(t *testing.T) {
 	}, mutation.ReferenceRelations...)
 	require.ErrorContains(t, f.store.ApplyMemoMutation(f.ctx, mutation), "mutation test reference failure")
 	require.Equal(t, before, f.state(), "all three tables must roll back, including the deleted original reference")
-	_, err = f.store.GetDriver().GetDB().ExecContext(f.ctx, drop)
+	_, err = f.store.GetDriver().GetDB().ExecContext(f.ctx, "DROP TRIGGER reject_mutation_reference")
 	require.NoError(t, err)
 	require.NoError(t, f.store.ApplyMemoMutation(f.ctx, f.mutation()))
 }
@@ -328,52 +303,10 @@ func TestMemoMutationConcurrentWritersCommitOnlyOneCompleteChange(t *testing.T) 
 	require.Equal(t, mutations[winner].ReferenceRelations, relations)
 }
 
-func TestMemoMutationRechecksSpaceMembership(t *testing.T) {
-	for _, policyOnUpdate := range []bool{false, true} {
-		name := "mutation policy"
-		if policyOnUpdate {
-			name = "update policy fallback"
-		}
-		t.Run(name, func(t *testing.T) {
-			f := newMemoMutationFixture(t)
-			space, err := f.store.CreateSpace(f.ctx, &store.Space{UID: "mutation-space", Title: "Space"}, f.owner.ID)
-			require.NoError(t, err)
-			_, err = createSpaceMemberForTest(f.ctx, f.store, &store.SpaceMember{
-				SpaceID: space.ID, UserID: f.peer.ID, Role: store.SpaceMemberRoleAdmin,
-			}, f.owner.ID)
-			require.NoError(t, err)
-			require.NoError(t, f.store.UpdateMemo(f.ctx, &store.UpdateMemo{ID: f.memo.ID, SpaceID: &space.ID}))
-			mutation := f.mutation()
-			policy := memoWritePolicy(f.owner.ID, false)
-			if policyOnUpdate {
-				mutation.MemoUpdate.Policy = policy
-			} else {
-				mutation.Policy = policy
-			}
-			require.NoError(t, f.store.DeleteSpaceMember(f.ctx, &store.DeleteSpaceMember{SpaceID: space.ID, UserID: f.owner.ID}, f.peer.ID))
-			before := f.state()
-			require.ErrorIs(t, f.store.ApplyMemoMutation(f.ctx, mutation), store.ErrMemoSpaceMembershipRequired)
-			require.Equal(t, before, f.state())
-		})
-	}
-}
-
-func TestMemoMutationLifecyclePolicyFallbackRejectsDependentWrites(t *testing.T) {
-	f := newMemoMutationFixture(t)
-	space, err := f.store.CreateSpace(f.ctx, &store.Space{UID: "withdrawal-space", Title: "Space"}, f.owner.ID)
-	require.NoError(t, err)
-	require.NoError(t, f.store.UpdateMemo(f.ctx, &store.UpdateMemo{ID: f.memo.ID, SpaceID: &space.ID}))
-	mutation := f.mutation()
-	mutation.MemoUpdate = &store.UpdateMemo{ID: f.memo.ID, ClearSpace: true, Policy: memoWritePolicy(f.owner.ID, true)}
-	before := f.state()
-	require.ErrorIs(t, f.store.ApplyMemoMutation(f.ctx, mutation), store.ErrMemoSpaceMembershipRequired)
-	require.Equal(t, before, f.state())
-}
-
 func TestMemoMutationCommitsAllDependentChanges(t *testing.T) {
 	f := newMemoMutationFixture(t)
 	mutation := f.mutation()
-	mutation.Policy = memoWritePolicy(f.owner.ID, false)
+	mutation.Policy = memoWritePolicy(f.owner.ID)
 	mutation.MemoUpdate.UID = new("mutation-renamed")
 	mutation.MemoUpdate.CreatedTs = new(int64(1500000000))
 	mutation.MemoUpdate.UpdatedTs = new(int64(1600000000))
@@ -418,9 +351,9 @@ func TestMemoMutationAttachmentOwnership(t *testing.T) {
 		{"author cannot bind another users upload", false, false, "bind", false},
 		{"author cannot delete another users attachment", false, false, "remove", false},
 		{"author can retain legacy foreign binding", false, false, "keep", true},
-		{"admin can bind own upload to another users memo", true, false, "bind", true},
+		{"admin cannot bind own upload to another users memo", true, false, "bind", false},
 		{"admin cannot bind unrelated users upload", true, true, "bind", false},
-		{"admin can remove another users bound attachment", true, true, "remove", true},
+		{"admin cannot remove another users bound attachment", true, true, "remove", false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			f := newMemoMutationFixture(t)
@@ -443,7 +376,7 @@ func TestMemoMutationAttachmentOwnership(t *testing.T) {
 			foreign, err := f.store.CreateAttachment(f.ctx, create)
 			require.NoError(t, err)
 			mutation := f.mutation()
-			mutation.Policy = memoWritePolicy(actorID, false)
+			mutation.Policy = memoWritePolicy(actorID)
 			if tc.action == "remove" {
 				mutation.RemovedAttachmentIDs = append(mutation.RemovedAttachmentIDs, foreign.ID)
 			} else {
@@ -454,6 +387,11 @@ func TestMemoMutationAttachmentOwnership(t *testing.T) {
 			}
 			before := f.state()
 			err = f.store.ApplyMemoMutation(f.ctx, mutation)
+			if tc.admin {
+				require.ErrorIs(t, err, store.ErrMemoPermissionDenied)
+				require.Equal(t, before, f.state())
+				return
+			}
 			if !tc.allowed {
 				require.ErrorIs(t, err, store.ErrMemoMutationConflict)
 				require.Equal(t, before, f.state())
@@ -477,7 +415,7 @@ func TestMemoMutationRechecksActorAndReferenceAudience(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			f := newMemoMutationFixture(t)
 			mutation := f.mutation()
-			mutation.Policy = memoWritePolicy(f.owner.ID, false)
+			mutation.Policy = memoWritePolicy(f.owner.ID)
 			switch name {
 			case "actor archived":
 				_, err := f.store.UpdateUser(f.ctx, &store.UpdateUser{ID: f.owner.ID, RowStatus: new(store.Archived)})
@@ -488,7 +426,7 @@ func TestMemoMutationRechecksActorAndReferenceAudience(t *testing.T) {
 				require.NoError(t, err)
 				_, err = f.store.UpdateUser(f.ctx, &store.UpdateUser{ID: f.peer.ID, Role: new(store.RoleAdmin)})
 				require.NoError(t, err)
-				mutation.Policy = memoWritePolicy(f.peer.ID, false)
+				mutation.Policy = memoWritePolicy(f.peer.ID)
 				_, err = f.store.UpdateUser(f.ctx, &store.UpdateUser{ID: f.peer.ID, Role: new(store.RoleUser)})
 				require.NoError(t, err)
 			case "reference made private":

@@ -1,13 +1,9 @@
 package store
 
 import (
-	"io/fs"
-	"maps"
-	"slices"
 	"testing"
 	"testing/fstest"
 
-	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/mod/semver"
 )
@@ -52,7 +48,7 @@ func TestCalendarMigrationOrdering(t *testing.T) {
 		"migration/sqlite/26.10/00__next_month.sql",
 		"migration/sqlite/26.09/09__tenth.sql",
 		"migration/sqlite/26.09/00__first.sql",
-	), "migration/sqlite/")
+	))
 	require.NoError(t, err)
 	var versions []string
 	for _, file := range files {
@@ -74,7 +70,7 @@ func TestCalendarMigrationOrdering(t *testing.T) {
 		"migration/sqlite/26.09/00__.sql",
 		"migration/sqlite/26.09/LATEST.sql",
 	} {
-		_, err := listMigrationFilesFrom(migrationFixture(path), "migration/sqlite/")
+		_, err := listMigrationFilesFrom(migrationFixture(path))
 		require.Error(t, err, path)
 	}
 }
@@ -84,7 +80,7 @@ func TestDuplicateMigrationSequenceIsRejected(t *testing.T) {
 		"migration/sqlite/26.09/00__first.sql",
 		"migration/sqlite/26.09/01__add_index.sql",
 		"migration/sqlite/26.09/01__rename_column.sql",
-	), "migration/sqlite/")
+	))
 	require.ErrorContains(t, err, "both resolve to schema version 26.9.2")
 }
 
@@ -102,58 +98,4 @@ func TestCalendarMigrationSelection(t *testing.T) {
 		apply := shouldApplyMigration(mustParseSchemaVersion(tc.file), mustParseSchemaVersion(tc.current), mustParseSchemaVersion(tc.target))
 		require.Equal(t, tc.want, apply, "%+v", tc)
 	}
-}
-
-// migrationVersionsByDriver lists each driver's migration versions in order.
-func migrationVersionsByDriver(t *testing.T, fsys fs.FS) map[string][]string {
-	t.Helper()
-	entries, err := fs.ReadDir(fsys, "migration")
-	require.NoError(t, err)
-	versions := map[string][]string{}
-	for _, entry := range entries {
-		if !entry.IsDir() {
-			continue
-		}
-		files, err := listMigrationFilesFrom(fsys, "migration/"+entry.Name()+"/")
-		require.NoError(t, err, entry.Name())
-		driverVersions := []string{}
-		for _, file := range files {
-			driverVersions = append(driverVersions, file.version)
-		}
-		versions[entry.Name()] = driverVersions
-	}
-	return versions
-}
-
-// migrationVersionMismatch names the first driver whose migration versions
-// differ from another driver's, or returns nil when every driver agrees.
-func migrationVersionMismatch(versions map[string][]string) error {
-	drivers := slices.Sorted(maps.Keys(versions))
-	for _, driver := range drivers[1:] {
-		if !slices.Equal(versions[drivers[0]], versions[driver]) {
-			return errors.Errorf("driver %s ships migration versions %v but %s ships %v",
-				driver, versions[driver], drivers[0], versions[drivers[0]])
-		}
-	}
-	return nil
-}
-
-// TestMigrationVersionsMatchAcrossDrivers guards the schema marker: a driver
-// only records versions whose SQL it executed, so a migration must exist for
-// every driver before any driver can advance past it.
-func TestMigrationVersionsMatchAcrossDrivers(t *testing.T) {
-	versions := migrationVersionsByDriver(t, migrationFS)
-	require.Len(t, versions, 3)
-	require.NoError(t, migrationVersionMismatch(versions))
-
-	// The check itself catches a migration that lands for one driver only.
-	partial := migrationVersionsByDriver(t, migrationFixture(
-		"migration/mysql/LATEST.sql",
-		"migration/postgres/LATEST.sql",
-		"migration/sqlite/LATEST.sql",
-		"migration/sqlite/26.09/00__sqlite_only.sql",
-	))
-	require.Equal(t, []string{"26.9.1"}, partial["sqlite"])
-	require.Empty(t, partial["mysql"])
-	require.ErrorContains(t, migrationVersionMismatch(partial), "driver sqlite ships migration versions [26.9.1] but mysql ships []")
 }

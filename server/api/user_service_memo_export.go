@@ -25,7 +25,6 @@ type memoExportData struct {
 	attachmentsByID  map[int32][]*store.Attachment
 	relatedIDsByID   map[int32][]int32
 	reactionsByID    map[int32][]*store.Reaction
-	spacesByID       map[int32]*store.Space
 	memoUIDs         map[int32]string
 	ownedMemoUIDs    map[string]struct{}
 	usernames        map[int32]string
@@ -84,7 +83,6 @@ func (s *APIService) loadMemoExportData(ctx context.Context, user *store.User, m
 		attachmentsByID: make(map[int32][]*store.Attachment),
 		relatedIDsByID:  make(map[int32][]int32),
 		reactionsByID:   make(map[int32][]*store.Reaction),
-		spacesByID:      make(map[int32]*store.Space),
 		memoUIDs:        make(map[int32]string),
 		ownedMemoUIDs:   make(map[string]struct{}, len(memos)),
 		usernames:       map[int32]string{user.ID: user.Username},
@@ -94,15 +92,6 @@ func (s *APIService) loadMemoExportData(ctx context.Context, user *store.User, m
 		memoIDs = append(memoIDs, memo.ID)
 		export.memoUIDs[memo.ID] = memo.UID
 		export.ownedMemoUIDs[memo.UID] = struct{}{}
-		if memo.SpaceID != nil {
-			if _, ok := export.spacesByID[*memo.SpaceID]; !ok {
-				space, err := s.Store.GetSpace(ctx, &store.FindSpace{ID: memo.SpaceID})
-				if err != nil {
-					return nil, errors.Wrap(err, "failed to get space")
-				}
-				export.spacesByID[*memo.SpaceID] = space
-			}
-		}
 	}
 
 	unselectedRelatedMemoIDs := make(map[int32]struct{})
@@ -208,11 +197,6 @@ func (s *APIService) buildMemoExportRecord(ctx context.Context, writer *memoexpo
 			Placeholder: location.Placeholder,
 			Latitude:    location.Latitude,
 			Longitude:   location.Longitude,
-		}
-	}
-	if memo.SpaceID != nil {
-		if space := export.spacesByID[*memo.SpaceID]; space != nil {
-			record.Space = &memoexport.Space{UID: space.UID, Title: space.Title}
 		}
 	}
 	if memo.ParentUID != nil {

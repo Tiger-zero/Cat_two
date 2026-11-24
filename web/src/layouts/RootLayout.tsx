@@ -1,6 +1,7 @@
+import { Button } from "@usememos/ui";
 import type { CSSProperties } from "react";
 import { useEffect, useRef } from "react";
-import { Navigate, Outlet, useLocation, useSearchParams } from "react-router-dom";
+import { matchPath, Navigate, Outlet, useLocation, useSearchParams } from "react-router-dom";
 import AppSidebar, {
   MobileAppHeader,
   MobileAppSidebar,
@@ -11,18 +12,20 @@ import AppSidebar, {
 } from "@/components/AppSidebar";
 import SettingsDialog from "@/components/Settings/SettingsDialog";
 import { AppSidebarProvider } from "@/contexts/AppSidebarContext";
+import { useAuth } from "@/contexts/AuthContext";
 import { useInstance } from "@/contexts/InstanceContext";
 import { MemoFilterProvider, useMemoFilterContext } from "@/contexts/MemoFilterContext";
 import { useView } from "@/contexts/ViewContext";
 import useCurrentUser from "@/hooks/useCurrentUser";
 import useMediaQuery from "@/hooks/useMediaQuery";
+import { useResolvedTheme } from "@/hooks/useResolvedTheme";
 import { cn } from "@/lib/utils";
 import { ROUTES } from "@/router/routes";
 import { InstanceAccessMode } from "@/types/proto/api/instance_service_pb";
 import { buildAuthRoute, shouldGatePrivateInstance } from "@/utils/auth-redirect";
 import { useTranslate } from "@/utils/i18n";
 
-const MEMOS_DEPLOY_URL = "https://usememos.com/docs/deploy";
+const CAT_TWO_DEPLOY_URL = "https://github.com/Tiger-zero/Cat_two#部署服务端";
 
 const DemoBanner = () => {
   const t = useTranslate();
@@ -34,12 +37,31 @@ const DemoBanner = () => {
         <span>{t("demo.banner-description")}</span>
         <a
           className="font-medium text-mu-accent underline-offset-4 hover:underline"
-          href={MEMOS_DEPLOY_URL}
+          href={CAT_TWO_DEPLOY_URL}
           target="_blank"
           rel="noreferrer"
         >
           {t("demo.deploy-link")}
         </a>
+      </div>
+    </div>
+  );
+};
+
+const UserSettingsRecovery = () => {
+  const t = useTranslate();
+  const { userSettingsLoadError, isLoading, refetchSettings } = useAuth();
+  if (!userSettingsLoadError) return null;
+
+  return (
+    <div className="w-full px-4 pt-3 sm:px-6">
+      <div className="memos-panel flex flex-wrap items-center justify-between gap-3 p-4">
+        <p role="alert" className="mu-body text-mu-text-secondary">
+          {t("auth.settings-load-error")}
+        </p>
+        <Button variant="neutral" loading={isLoading} onClick={() => void refetchSettings().catch(() => undefined)}>
+          {t("common.retry")}
+        </Button>
       </div>
     </div>
   );
@@ -54,10 +76,13 @@ const RootLayoutContent = () => {
   const { removeFilter } = useMemoFilterContext();
   const { fullWidth, maxColumns } = useView();
   const { pathname } = location;
+  const home = pathname === ROUTES.HOME;
+  const homeCollection = home || (matchPath(ROUTES.TRASH, pathname) !== null && location.state?.trashFrom !== ROUTES.ARCHIVED);
+  const lightHome = useResolvedTheme() === "default" && homeCollection;
   const limitShell = !fullWidth && maxColumns !== 0;
   const prevPathnameRef = useRef<string | undefined>(undefined);
   const shellRef = useRef<HTMLDivElement>(null);
-  const { width: sidebarWidth, minWidth, maxWidth, setWidth: setSidebarWidth } = useSidebarWidth();
+  const { width: sidebarWidth, minWidth, maxWidth, defaultWidth, setWidth: setSidebarWidth } = useSidebarWidth(lightHome);
 
   useEffect(() => {
     const prevPathname = prevPathnameRef.current;
@@ -84,10 +109,11 @@ const RootLayoutContent = () => {
   return (
     <div
       ref={shellRef}
-      data-home-workspace={pathname === ROUTES.HOME || undefined}
+      data-home-workspace={home || undefined}
       className={cn(
         "mx-auto flex min-h-full w-full bg-mu-canvas md:gap-6 md:px-4 lg:gap-8 lg:px-6",
         limitShell && (maxColumns === 1 ? "max-w-[66.5rem]" : "max-w-7xl"),
+        limitShell && maxColumns === 1 && homeCollection && "light:lg:max-w-[69rem]",
       )}
       style={{ [SIDEBAR_WIDTH_VAR]: `${sidebarWidth}px` } as CSSProperties}
     >
@@ -99,6 +125,7 @@ const RootLayoutContent = () => {
             width={sidebarWidth}
             minWidth={minWidth}
             maxWidth={maxWidth}
+            defaultWidth={defaultWidth}
             onWidthChange={setSidebarWidth}
             targetRef={shellRef}
           />
@@ -108,6 +135,7 @@ const RootLayoutContent = () => {
       <main className="flex min-h-full min-w-0 flex-1 flex-col items-center">
         <MobileAppHeader />
         {profile.demo && <DemoBanner />}
+        <UserSettingsRecovery />
         <Outlet />
       </main>
       <QuickFindDialog />

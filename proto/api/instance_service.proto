@@ -47,7 +47,7 @@ service InstanceService {
     option (google.api.method_signature) = "instance_setting,update_mask";
   }
 
-  // TestInstanceEmailSetting sends a test email with the provided or stored SMTP settings. Admin only.
+  // TestInstanceEmailSetting is a retired SMTP test RPC retained for protocol compatibility.
   rpc TestInstanceEmailSetting(TestInstanceEmailSettingRequest) returns (google.protobuf.Empty) {
     option (google.api.http) = {
       post: "/api/instance/settings/notification:testEmail"
@@ -562,7 +562,7 @@ message InstanceStats {
 
   // DatabaseStats is the database size statistics.
   message DatabaseStats {
-    // The database driver: "sqlite", "mysql" or "postgres".
+    // The database driver is "sqlite".
     string driver = 1;
 
     // The database size in bytes. -1 if unavailable.

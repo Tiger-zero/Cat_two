@@ -7,7 +7,7 @@ description: Cat_two 整体项目开发指引。用于判断项目定位、确�
 
 ## 项目定位
 
-Cat_two 是单账户、自托管的个人笔记应用。新实例首次设置时创建一个管理员账户，日常围绕私有笔记的记录、查找、整理和同步展开。桌面 Web 是界面设计与视觉验收目标，NAS 和 Docker 部署使用 SQLite。处理旧实例时要保留原有笔记、附件、引用和归属校验。
+Cat_two 是单账户、自托管的个人笔记应用。新实例首次设置时创建一个管理员账户，日常围绕私有笔记的记录、查找、整理和同步展开。桌面 Web 是界面设计与视觉验收目标。Cat_two 是 SQLite 单数据库项目，部署、迁移和数据库兼容性验证均只覆盖 SQLite。升级时保留笔记作者、正文、本地附件和引用。笔记权限按作者判断。旧空间归属和 S3 对象迁移均已退役。
 
 项目基于 Memos，按 Cat_two 自身需求演进。参考其他项目之前，先确认场景，再从本仓库的实际入口、API、权限和数据流找可复用的实现。涉及界面、API 或存储的改动沿用户完成任务的完整链路验证。
 
@@ -35,15 +35,17 @@ Cat_two 是单账户、自托管的个人笔记应用。新实例首次设置时
 
 ## 验证
 
+数据库兼容性和数据库测试仅验证 SQLite。后端和存储改动先运行受影响的包或用例，涉及共享逻辑时扩大验证范围。
+
 | 改动 | 验证方式 |
 | --- | --- |
-| 服务端、鉴权或数据流 | 按改动范围运行 `go test -race ./server/... ./core/...`，从实际 HTTP、Connect 或 MCP 入口复测。 |
-| 存储或迁移 | 运行 `go test ./store/...`，覆盖 SQLite 新装、增量迁移和 CalVer 升级。按明确的兼容任务运行其他数据库测试。 [存储测试](../../../store/test/README.md) |
+| 服务端、鉴权或数据流 | 先运行受影响的包或用 `-run` 定向验证，按改动补 HTTP、Connect 或 MCP 验收。并发和生命周期改动使用 `-race`。 |
+| 存储或迁移 | 先运行相关的 SQLite 用例。共享存储或架构改动扩到 `go test ./store/...`，覆盖新装、增量迁移和 CalVer 升级。 [存储测试](../../../store/test/README.md) |
 | 桌面网页 | 按改动范围运行 `pnpm lint`、`pnpm test` 和生产构建，在浏览器核对相关流程。 [UI 验收](../cat-two-ui-development/SKILL.md) |
 | Proto 和生成物 | 运行仓库规定的 `buf generate`、`buf lint` 和格式检查，核对 Go、OpenAPI 和 TypeScript 输出。 [验证命令](../../../AGENTS.md#commands) |
 | 文档 | 运行 `git diff --check`，迁移时核对本地链接、章节锚点和文档覆盖。 |
 
-跨端行为按各功能的验收说明复测。例如编辑后刷新及下载附件，导入导出时核对正文、附件、标签与引用，MCP 检查发现、分页、上海日期边界和调用权限。 [产品功能开发](../cat-two-product-development/SKILL.md)
+发布前，同一提交须通过完整的 CI 检查、生产构建及 SQLite 容器的新装、重建与升级验证。跨端行为按各功能的验收说明复测，例如导入导出时核对正文、附件、标签与引用。 [测试命令](../../../AGENTS.md#verification-policy) · [产品功能开发](../cat-two-product-development/SKILL.md)
 
 ## 部署、镜像和交付
 
@@ -76,3 +78,8 @@ Cat_two 是单账户、自托管的个人笔记应用。新实例首次设置时
 - **2026-11-23 22:55**　按确认预览调整浅色首页画布、桌面侧栏与日历配色。生产构建、静态检查和 151 项相关测试通过，Chromium 核对画布、面板与日期的实际颜色及按日筛选。 [配色表](../cat-two-ui-development/references/desktop-visual-design.md#cat_two-主题)
 - **2026-11-23 23:11**　MCP 或 PAT 创建的笔记自动添加 `#MCP连接`。保存时识别正文中的真实标签，幂等重试沿用原请求。Go 静态检查、相关服务端及 Markdown 竞态测试通过，覆盖真实 MCP、REST 和 Connect 入口。 [外部 API](../cat-two-product-development/references/external-api.md#令牌创建笔记)
 - **2026-11-23 23:17**　发布 Docker Hub `0.16`，核对编号、`latest`、提交标签和 AMD64、ARM64 两种平台。前后端 CI 通过，正式 AMD64 镜像通过新装、重建、从 `0.15` 升级以及配色与 MCP、PAT 标签的验收。 [发布复盘](references/development-log.md#镜像-016)
+- **2026-11-24 21:45**　按确认稿更新浅色首页的纯白画布、侧栏间距和日历色块，当前日期用细描边标记。默认头像复用 Cat_two 小猫图标，已上传的头像优先显示。1448 项前端测试、静态检查和生产构建通过，Chromium 核对配色、头像、日期提示、鼠标和键盘筛选及窄屏布局。 [桌面设计与配色](../cat-two-ui-development/references/desktop-visual-design.md)
+- **2026-11-24 21:48**　移除浅色桌面首页日历色块在鼠标悬停和键盘聚焦时的日期提示。色块继续支持按日筛选，辅助技术可读取完整日期。26 项日历测试、静态检查和前端生产构建通过，Chromium 验证浅色和深色的提示行为及鼠标、键盘筛选。 [日历色块](../../../web/src/components/ActivityCalendar/CalendarCell.tsx)
+- **2026-11-24 22:29**　按云端审计收紧个人令牌管理，统一改密与会话撤销的事务，修复草稿、任务勾选、缓存和回收站隐私显示。SQLite 启动增加实例锁，提供离线 Markdown 检查与修复，附件清理采用持久重试，MCP 分页限制正文大小。镜像发布等待同提交检查，按摘要验收后推广标签，固定 Proto 生成器并恢复历史文档。Go 全仓、三种兼容数据库定向测试、1458 项前端测试及 Chromium 通过。本地 AMD64 候选通过新装、重建、从 `0.16` 升级、附件和回收站恢复及离线正文修复。 [发布流程](references/container-release.md) · [部署与恢复](../cat-two-product-development/references/deployment.md) · [接口](../cat-two-product-development/references/external-api.md)
+- **2026-11-24 22:43**　移除 MySQL、MariaDB 和 PostgreSQL 的驱动、迁移、查询方言及兼容测试。数据库兼容性和测试只覆盖 SQLite，日常先验证受影响的功能。Go 全仓测试、SQLite 迁移与并发专项测试、Proto 和 Compose 检查通过。隔离实例验证了新装、按标签查询，以及重启后读取笔记和附件。 [验证策略](#验证) · [发布流程](references/container-release.md)
+- **2026-11-24 23:35**　批量待办复用修订冲突保护。侧栏、编辑器和引导共享本人每日统计，1 万条笔记样本的未压缩响应从两次共 960,560 B 降至一次 1,605 B。删除孤立语音依赖、多人空间和旧归属、SSO、出站 Webhook 及 S3 附件迁移。SQLite 继续保护作者、笔记和本地附件。MCP 启动只解析已发布工具，Web 测试和文档改动跳过镜像构建，本地冒烟隔离前端产物，Go 依赖可跨 runner 缓存并离线编译。 [产品接口](../cat-two-product-development/references/external-api.md) · [升级说明](../cat-two-product-development/references/deployment.md#备份和升级) · [构建与验证](references/container-release.md)

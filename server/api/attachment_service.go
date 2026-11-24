@@ -168,11 +168,8 @@ func (s *APIService) prepareAttachment(ctx context.Context, request *apipb.Creat
 		if !access.CanManageMemo(user, memo) {
 			return nil, status.Errorf(codes.PermissionDenied, "permission denied")
 		}
-		if err := s.requireAssignedMemoWritable(ctx, memo, user); err != nil {
-			return nil, err
-		}
 		create.MemoID = &memo.ID
-		create.Policy = s.memoWritePolicy(user.ID, false)
+		create.Policy = &store.MemoWritePolicy{ActorUserID: user.ID}
 	}
 
 	return create, nil
@@ -325,10 +322,11 @@ func (s *APIService) ListAttachments(ctx context.Context, request *apipb.ListAtt
 	}
 	// Parse filter if provided
 	if request.Filter != "" {
-		if err := s.validateAttachmentFilterForUser(ctx, request.Filter, user); err != nil {
+		prepared, err := prepareAttachmentFilter(ctx, request.Filter)
+		if err != nil {
 			return nil, err
 		}
-		findAttachment.Filters = append(findAttachment.Filters, request.Filter)
+		findAttachment.PreparedFilter = prepared
 	}
 
 	attachments, err := s.Store.ListAttachments(ctx, findAttachment)
@@ -413,7 +411,7 @@ func (s *APIService) UpdateAttachment(ctx context.Context, request *apipb.Update
 	update := &store.UpdateAttachment{
 		ID:        attachment.ID,
 		UpdatedTs: &currentTsSec,
-		Policy:    s.memoWritePolicy(user.ID, false),
+		Policy:    &store.MemoWritePolicy{ActorUserID: user.ID},
 	}
 	for _, field := range request.UpdateMask.Paths {
 		if field == "filename" {
@@ -629,9 +627,7 @@ func (s *APIService) deleteAttachmentsAtomically(ctx context.Context, user *stor
 	if attachmentsIncludeMemo(attachments) {
 		s.SSEHub.publishMemoChanged()
 	}
-	if err := s.cleanupDeletedAttachmentStorage(ctx, attachments); err != nil {
-		return status.Errorf(codes.Internal, "attachments were deleted but storage cleanup failed: %v", err)
-	}
+	s.attemptCommittedAttachmentCleanup(ctx, attachments)
 	return nil
 }
 

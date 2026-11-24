@@ -5,9 +5,12 @@ import { AttachmentSchema } from "@/types/proto/api/attachment_service_pb";
 import type { Memo, MemoRelation } from "@/types/proto/api/memo_service_pb";
 import { MemoRelationSchema, MemoSchema } from "@/types/proto/api/memo_service_pb";
 import type { EditorSelection } from "../types/editorController";
+import type { StagedDraftFiles } from "./stagedDraftFiles";
 
 // A selection's shape depends on the editor mode it was taken in, so each one keeps its mode.
 const cursors = new Map<string, { selection: EditorSelection; mode: EditorMode }>();
+/** A sibling tab owns the shared draft. Keep this tab's branch separate until save or discard. */
+const recoveredDrafts = new Map<string, { raw: string; files: StagedDraftFiles; reopened: boolean }>();
 const STRUCTURED_CACHE_ENTRY_KIND = "memos.editor-cache";
 const STRUCTURED_CACHE_ENTRY_VERSION = 4;
 
@@ -20,7 +23,6 @@ export interface MemoCreateAttempt {
 export interface EditorDraft {
   content: string;
   attachments: Attachment[];
-  space?: string;
   baseRevision?: string;
   /** Kept when a recovered draft adopts a new server baseline but its files have the original draft identity. */
   stagedFilesRevision?: string;
@@ -52,8 +54,7 @@ function deserializeDraft(raw: string): EditorDraft {
             }
           })
         : [];
-      const space = typeof parsed.space === "string" && parsed.space.startsWith("spaces/") ? parsed.space : undefined;
-      const draft: EditorDraft = { content: parsed.content, attachments, space };
+      const draft: EditorDraft = { content: parsed.content, attachments };
       if (parsed.version !== STRUCTURED_CACHE_ENTRY_VERSION) return draft;
       if (typeof parsed.baseRevision === "string") draft.baseRevision = parsed.baseRevision;
       if (typeof parsed.stagedFilesRevision === "string") draft.stagedFilesRevision = parsed.stagedFilesRevision;
@@ -111,6 +112,19 @@ function serializeDraft({ attachments, relations, createAttempt, ...draft }: Edi
   });
 }
 
+export function hasDraftContent(draft: EditorDraft): boolean {
+  return Boolean(
+    draft.content.trim() ||
+      draft.attachments.length ||
+      draft.baseRevision ||
+      draft.relations?.length ||
+      draft.createTime !== undefined ||
+      draft.updateTime !== undefined ||
+      draft.attachmentOrder?.length ||
+      draft.createAttempt,
+  );
+}
+
 // The caller's last observed value prevents an older tab from replacing
 // a draft written or discarded elsewhere. Null means no saved entry.
 function storeEntry(
@@ -120,18 +134,7 @@ function storeEntry(
 ): { kind: "saved"; raw: string | null } | { kind: "conflict" | "unavailable" } {
   try {
     if (expected !== undefined && localStorage.getItem(key) !== expected) return { kind: "conflict" };
-    if (
-      draft &&
-      (draft.content.trim() ||
-        draft.attachments.length ||
-        draft.space ||
-        draft.baseRevision ||
-        draft.relations?.length ||
-        draft.createTime !== undefined ||
-        draft.updateTime !== undefined ||
-        draft.attachmentOrder?.length ||
-        draft.createAttempt)
-    ) {
+    if (draft && hasDraftContent(draft)) {
       const raw = serializeDraft(draft);
       localStorage.setItem(key, raw);
       return { kind: "saved", raw };
@@ -156,6 +159,11 @@ function readRaw(key: string): string | null {
   }
 }
 
+function warnAboutRecoveredDraft(event: BeforeUnloadEvent): void {
+  event.preventDefault();
+  event.returnValue = true;
+}
+
 export const cacheService = {
   /** The storage key for a draft: the user, then the identity-derived suffix (see `draftKeyFor`). */
   key: (username: string, draftKey?: string): string => {
@@ -166,6 +174,31 @@ export const cacheService = {
   saveSubmission: (key: string, draft: EditorDraft, expected: string | null) => storeEntry(key, draft, expected),
 
   readRaw,
+
+  readForEditor(key: string): string | null {
+    const recovery = recoveredDrafts.get(key);
+    if (!recovery) return readRaw(key);
+    recovery.reopened = true;
+    return recovery.raw;
+  },
+
+  recoveredFiles: (key: string): StagedDraftFiles | undefined => recoveredDrafts.get(key)?.files,
+
+  preserveRecovery(key: string, draft: EditorDraft, files: StagedDraftFiles): void {
+    recoveredDrafts.set(key, { raw: serializeDraft(draft), files, reopened: false });
+    window.addEventListener("beforeunload", warnAboutRecoveredDraft);
+  },
+
+  discardRecovery(key: string): void {
+    recoveredDrafts.delete(key);
+    if (recoveredDrafts.size === 0) window.removeEventListener("beforeunload", warnAboutRecoveredDraft);
+  },
+
+  /** A file write finished after navigation. Keep the snapshot only if it already seeded another editor. */
+  discardCommittedRecovery(key: string, files: StagedDraftFiles): void {
+    const recovery = recoveredDrafts.get(key);
+    if (recovery?.files === files && !recovery.reopened) this.discardRecovery(key);
+  },
 
   load(key: string): string {
     return this.loadDraft(key).content;
@@ -193,5 +226,7 @@ export const cacheService = {
 
   clearAll(): void {
     cursors.clear();
+    recoveredDrafts.clear();
+    window.removeEventListener("beforeunload", warnAboutRecoveredDraft);
   },
 };

@@ -6,6 +6,7 @@ import { TimelineViewProvider } from "@/contexts/ViewContext";
 import RootLayout from "@/layouts/RootLayout";
 
 const authState = vi.hoisted(() => ({ currentUser: { name: "users/test" } as { name: string } | undefined }));
+const settingsState = vi.hoisted(() => ({ userSettingsLoadError: false, isLoading: false, refetchSettings: vi.fn() }));
 const instanceState = vi.hoisted(() => ({ accessMode: 2, instanceUrl: "https://example.com", demo: true }));
 
 vi.mock("@/components/AppSidebar", () => ({
@@ -32,7 +33,7 @@ vi.mock("@/components/Settings/SettingsContent", () => ({
 }));
 
 vi.mock("@/contexts/AuthContext", () => ({
-  useAuth: () => ({ currentUser: authState.currentUser, isInitialized: true }),
+  useAuth: () => ({ currentUser: authState.currentUser, isInitialized: true, ...settingsState }),
 }));
 
 vi.mock("@/contexts/InstanceContext", () => ({
@@ -72,6 +73,8 @@ const RouteState = () => {
 describe("RootLayout shell", () => {
   beforeEach(() => {
     authState.currentUser = { name: "users/test" };
+    settingsState.userSettingsLoadError = false;
+    settingsState.isLoading = false;
     instanceState.accessMode = 2;
     localStorage.removeItem("memos-view-setting");
   });
@@ -99,6 +102,27 @@ describe("RootLayout shell", () => {
     for (const testId of SHELL_TEST_IDS) {
       expect(screen.getByTestId(testId)).toBeInTheDocument();
     }
+  });
+
+  it("offers an in-place settings retry after identity is available", () => {
+    settingsState.userSettingsLoadError = true;
+    settingsState.refetchSettings.mockResolvedValue(undefined);
+    render(
+      <MemoryRouter>
+        <TimelineViewProvider>
+          <Routes>
+            <Route element={<RootLayout />}>
+              <Route index element={<RouteState />} />
+            </Route>
+          </Routes>
+        </TimelineViewProvider>
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByRole("alert")).toHaveTextContent("auth.settings-load-error");
+    fireEvent.click(screen.getByRole("button", { name: "common.retry" }));
+    expect(settingsState.refetchSettings).toHaveBeenCalledOnce();
+    expect(screen.getByTestId("route")).toHaveTextContent("/");
   });
 
   it("opens and closes Settings while keeping the active feed and its filter", async () => {

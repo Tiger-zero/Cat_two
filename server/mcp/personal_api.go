@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"strings"
 
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"github.com/grpc-ecosystem/grpc-gateway/v2/utilities"
@@ -24,7 +25,7 @@ type personalAPI struct {
 	marshaler runtime.Marshaler
 }
 
-func (a personalAPI) execute(ctx context.Context, operation *openAPIOperation, arguments map[string]any, _ string) (*sdkmcp.CallToolResult, error) {
+func (a personalAPI) execute(ctx context.Context, operation *openAPIOperation, arguments map[string]any) (*sdkmcp.CallToolResult, error) {
 	if auth.GetUserID(ctx) == 0 {
 		return personalToolError(status.Error(codes.Unauthenticated, "MCP connection required")), nil
 	}
@@ -32,9 +33,9 @@ func (a personalAPI) execute(ctx context.Context, operation *openAPIOperation, a
 	case "AuthService_GetCurrentUser":
 		return invokePersonal(ctx, a, operation, arguments, &apipb.GetCurrentUserRequest{}, a.service.GetCurrentUser)
 	case "MemoService_ListMemos":
-		return invokePersonal(ctx, a, operation, arguments, &apipb.ListMemosRequest{}, a.service.ListMemos)
+		return invokePersonal(ctx, a, operation, arguments, &apipb.ListMemosRequest{}, a.service.ListMCPMemos)
 	case "MemoService_GetMemo":
-		request := &apipb.GetMemoRequest{Name: personalMemoName(operation, arguments)}
+		request := &apipb.GetMemoRequest{Name: personalMemoName(arguments)}
 		return invokePersonal(ctx, a, operation, arguments, request, a.service.GetMemo)
 	case "MemoService_CreateMemo":
 		memo, _, err := a.memoBody(arguments)
@@ -47,7 +48,7 @@ func (a personalAPI) execute(ctx context.Context, operation *openAPIOperation, a
 		if err != nil {
 			return personalToolError(err), nil
 		}
-		memo.Name = personalMemoName(operation, arguments)
+		memo.Name = personalMemoName(arguments)
 		mask, err := runtime.FieldMaskFromRequestBody(bytes.NewReader(body), memo)
 		if err != nil {
 			return personalToolError(status.Error(codes.InvalidArgument, err.Error())), nil
@@ -71,9 +72,12 @@ func (a personalAPI) memoBody(arguments map[string]any) (*apipb.Memo, []byte, er
 	return memo, body, nil
 }
 
-func personalMemoName(operation *openAPIOperation, arguments map[string]any) string {
-	id := trimResourceNamePrefix(operation.Path, "memo", valueToString(arguments["memo"]), nil)
-	return api.MemoNamePrefix + id
+func personalMemoName(arguments map[string]any) string {
+	name := valueToString(arguments["memo"])
+	if id, ok := strings.CutPrefix(name, api.MemoNamePrefix); ok && id != "" && !strings.Contains(id, "/") {
+		return name
+	}
+	return api.MemoNamePrefix + name
 }
 
 func invokePersonal[Request proto.Message, Response proto.Message](

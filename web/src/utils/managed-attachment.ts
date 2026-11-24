@@ -2,6 +2,7 @@ import { lineTable, sourceRange } from "@usememos/editor";
 import { parseMemoAst, visitWithSource } from "@/lib/memo-ast";
 import type { Attachment } from "@/types/proto/api/attachment_service_pb";
 import { getAttachmentMotionGroupId, getAttachmentUrl, isImage } from "@/utils/attachment";
+import { getManagedAttachmentOrigin } from "@/utils/managed-attachment-origin";
 
 const ATTACHMENT_NAME_PREFIX = "attachments/";
 const MANAGED_ATTACHMENT_PATH_PREFIX = "/file/attachments/";
@@ -37,31 +38,6 @@ export const extractAttachmentUIDFromName = (name: string): string | undefined =
   return UID_PATTERN.test(uid) ? uid : undefined;
 };
 
-// The API resolves absolute managed URLs against the configured instance URL, not
-// against whatever host the browser happens to be on, so the client has to know
-// the same value or the two disagree about which attachments are inline.
-let instanceOrigin: string | undefined;
-let instanceHost: string | undefined;
-
-/** Publishes the instance profile's URL to this module; clears the parse cache since results depend on it. */
-export const setManagedAttachmentInstanceUrl = (instanceUrl: string | undefined): void => {
-  let nextOrigin: string | undefined;
-  let nextHost: string | undefined;
-  if (instanceUrl?.trim()) {
-    try {
-      const parsed = new URL(instanceUrl.trim());
-      nextOrigin = parsed.origin;
-      nextHost = parsed.host;
-    } catch {
-      // A malformed instance URL is a server-side misconfiguration; treat it as unset.
-    }
-  }
-  if (nextOrigin === instanceOrigin && nextHost === instanceHost) return;
-  instanceOrigin = nextOrigin;
-  instanceHost = nextHost;
-  indexCache.clear();
-};
-
 const hasScheme = (raw: string): boolean => /^[a-z][a-z0-9+.-]*:/i.test(raw);
 
 /**
@@ -83,6 +59,7 @@ export const classifyManagedAttachmentImageURL = (raw: string): ManagedImageURL 
   }
   if (!parsed.pathname.startsWith(MANAGED_ATTACHMENT_PATH_PREFIX)) return UNMANAGED;
 
+  const { host: instanceHost, origin: instanceOrigin } = getManagedAttachmentOrigin();
   const isProtocolRelative = raw.startsWith("//");
   if (isProtocolRelative) {
     // Rejected whenever it could address this instance; otherwise it is someone else's URL.
@@ -116,6 +93,7 @@ const EMPTY_INDEX: ManagedImageIndex = { nodes: [], uids: new Set(), invalidRefe
  */
 const INDEX_CACHE_LIMIT = 128;
 const indexCache = new Map<string, ManagedImageIndex>();
+let cachedOrigin = getManagedAttachmentOrigin();
 
 const buildManagedImageIndex = (source: string): ManagedImageIndex => {
   // Image references are resolved in the tree, to the first of duplicate definitions as
@@ -149,6 +127,11 @@ const buildManagedImageIndex = (source: string): ManagedImageIndex => {
 const managedImageIndex = (source: string): ManagedImageIndex => {
   if (!source.includes(MANAGED_ATTACHMENT_PATH_PREFIX)) return EMPTY_INDEX;
 
+  const currentOrigin = getManagedAttachmentOrigin();
+  if (currentOrigin !== cachedOrigin) {
+    indexCache.clear();
+    cachedOrigin = currentOrigin;
+  }
   const cached = indexCache.get(source);
   if (cached) return cached;
 

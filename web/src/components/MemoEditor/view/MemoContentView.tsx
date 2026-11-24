@@ -1,5 +1,5 @@
 import type { Editor } from "@usememos/editor";
-import { memo, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import { MemoMarkdown } from "@/components/MemoEditor/MemoMarkdown";
@@ -32,7 +32,7 @@ export interface MemoContentViewProps {
    * Lets the viewer tick task items, for a memo they can manage. Called with the new
    * Markdown, in which only the ticked item's `[ ]` or `[x]` changed.
    */
-  onTaskToggle?: (content: string) => void;
+  onTaskToggle?: (content: string, previousContent: string) => void;
   className?: string;
   contentClassName?: string;
   onClick?: (e: React.MouseEvent) => void;
@@ -73,6 +73,17 @@ const MemoContentViewImpl = (props: MemoContentViewProps) => {
   const contentRef = useRef<HTMLDivElement>(null);
   useSearchMatchHighlight(contentRef, useContentSearchTerms());
   const [editor, setEditor] = useState<Editor | null>(null);
+  // The editor can emit multiple clicks before React receives the optimistic
+  // cache updates. Keep the exact Markdown that each click was based on.
+  const taskContent = useRef(content);
+  useLayoutEffect(() => {
+    taskContent.current = content;
+  }, [content]);
+  const handleTaskToggle = (nextContent: string) => {
+    const previousContent = taskContent.current;
+    taskContent.current = nextContent;
+    onTaskToggle?.(nextContent, previousContent);
+  };
 
   // Bare links become preview cards through the editor's block view: it hands over an
   // element per such paragraph and keeps it while the block is unchanged, so the card
@@ -131,7 +142,7 @@ const MemoContentViewImpl = (props: MemoContentViewProps) => {
         <MemoMarkdown
           editorRef={setEditor}
           value={content}
-          onChange={onTaskToggle}
+          onChange={onTaskToggle ? handleTaskToggle : undefined}
           taskToggle={Boolean(onTaskToggle)}
           toolbar={false}
           slashMenu={false}

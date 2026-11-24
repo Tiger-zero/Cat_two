@@ -19,37 +19,17 @@ func authorizeSQLiteMemoComment(ctx context.Context, tx dbExecutor, mutation *st
 	return mutation.AuthorizeCommentContext(snapshot)
 }
 
-// loadSQLiteMemoParticipation resolves the current actor, Space, membership,
-// and memo state shared by comment and reaction participation.
+// loadSQLiteMemoParticipation reads the actor and note in the write transaction.
 func loadSQLiteMemoParticipation(ctx context.Context, tx dbExecutor, memoID, actorUserID int32) (*store.MemoCommentAuthorizationSnapshot, error) {
 	actor, err := readSQLiteMemoActor(ctx, tx, actorUserID)
 	if err != nil {
 		return nil, err
 	}
 	snapshot := &store.MemoCommentAuthorizationSnapshot{ActorUserID: actorUserID, Actor: actor, ContextID: memoID}
-
-	var contextSpace sql.NullInt64
-	err = tx.QueryRowContext(ctx, `SELECT creator_id, row_status, visibility, space_id FROM memo WHERE id = ? AND deleted_ts IS NULL`, memoID).Scan(
-		&snapshot.ContextCreatorID, &snapshot.ContextRowStatus, &snapshot.ContextVisibility, &contextSpace,
-	)
-	if err != nil {
+	if err := tx.QueryRowContext(ctx, `SELECT creator_id, row_status, visibility FROM memo WHERE id = ? AND deleted_ts IS NULL`, memoID).Scan(
+		&snapshot.ContextCreatorID, &snapshot.ContextRowStatus, &snapshot.ContextVisibility,
+	); err != nil {
 		return nil, err
-	}
-	snapshot.ContextSpaceID = store.NullInt32Pointer(contextSpace)
-
-	if snapshot.ContextSpaceID != nil {
-		var exists bool
-		if err := tx.QueryRowContext(ctx, "SELECT EXISTS(SELECT 1 FROM space WHERE id = ?)", *snapshot.ContextSpaceID).Scan(&exists); err == nil {
-			snapshot.ContextSpaceExists = exists
-		} else if !stderrors.Is(err, sql.ErrNoRows) {
-			return nil, err
-		}
-		if actor.Admin {
-			return snapshot, nil
-		}
-		if snapshot.ContextMemberActive, err = sqliteSpaceMemberActive(ctx, tx, *snapshot.ContextSpaceID, actorUserID); err != nil {
-			return nil, err
-		}
 	}
 	return snapshot, nil
 }

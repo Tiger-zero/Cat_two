@@ -12,16 +12,6 @@ interface Props {
   children: React.ReactNode;
 }
 
-// "Don't have an account yet? Sign up" style prompt for hopping between auth pages.
-export const AuthLinkPrompt = ({ prompt, to, label }: { prompt: string; to: string; label: string }) => (
-  <p className="mt-5 text-center mu-caption text-mu-text-secondary">
-    {prompt}{" "}
-    <Link to={to} className="text-mu-accent hover:underline" viewTransition>
-      {label}
-    </Link>
-  </p>
-);
-
 // The way back from administrator sign-in.
 export const AuthBackLink = ({ to = ROUTES.AUTH }: { to?: string }) => {
   const t = useTranslate();

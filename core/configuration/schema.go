@@ -8,7 +8,6 @@ import (
 	"github.com/pkg/errors"
 	"google.golang.org/protobuf/reflect/protoreflect"
 
-	"github.com/usememos/memos/core/identityprovider"
 	"github.com/usememos/memos/core/instancesetting"
 	coreuser "github.com/usememos/memos/core/user"
 	"github.com/usememos/memos/internal/identifier"
@@ -17,6 +16,8 @@ import (
 
 // Kind is the kind of a configurable resource.
 type Kind string
+
+const legacyIdentityProviderPrefix = "identity-providers/"
 
 // The configurable kinds.
 const (
@@ -27,19 +28,18 @@ const (
 )
 
 // ConfigurableInstanceSettingKeys are the instance setting keys a file may declare.
-var ConfigurableInstanceSettingKeys = []string{"ACCESS", "GENERAL", "STORAGE", "NOTIFICATION", "AI", "USAGE_LIMITS"}
+var ConfigurableInstanceSettingKeys = []string{"GENERAL", "STORAGE"}
 
 // userFields are the User fields a file may set. The rest of a profile belongs
 // to the user.
 var userFields = []protoreflect.Name{"name", "username", "display_name", "email", "password", "role"}
 
 // ParseResourceName returns the kind and identifier of a configurable resource
-// name. A linked identity's identifier is {user}/{idp}; splitLinkedIdentityName
-// returns the two parts.
+// name. The identifiers of retired provider resources remain readable.
 func ParseResourceName(name string) (Kind, string, error) {
 	switch {
-	case strings.HasPrefix(name, identityprovider.NamePrefix):
-		uid := strings.TrimPrefix(name, identityprovider.NamePrefix)
+	case strings.HasPrefix(name, legacyIdentityProviderPrefix):
+		uid := strings.TrimPrefix(name, legacyIdentityProviderPrefix)
 		if !identifier.UIDMatcher.MatchString(uid) {
 			return "", "", errors.Errorf("invalid identity provider name %q", name)
 		}
@@ -75,14 +75,6 @@ func ParseResourceName(name string) (Kind, string, error) {
 	}
 }
 
-// splitLinkedIdentityName returns the user and identity provider names a
-// linked identity name joins. The name must have parsed as KindLinkedIdentity.
-func splitLinkedIdentityName(name string) (userName, providerName string) {
-	username, uid, _ := coreuser.SplitLinkedIdentityName(name)
-	return coreuser.NamePrefix + username, identityprovider.NamePrefix + uid
-}
-
-// checkDocument checks the rules one file must meet on its own.
 func checkDocument(document *apipb.Configuration) []string {
 	var problems []string
 	report := func(format string, args ...any) {
@@ -103,10 +95,6 @@ func checkDocument(document *apipb.Configuration) []string {
 			return "", false
 		}
 		return id, true
-	}
-
-	for i, provider := range document.IdentityProviders {
-		checkName(fmt.Sprintf("identityProviders[%d]", i), provider.GetName(), KindIdentityProvider)
 	}
 
 	for i, setting := range document.InstanceSettings {
@@ -144,14 +132,6 @@ func checkDocument(document *apipb.Configuration) []string {
 		})
 	}
 
-	for i, identity := range document.LinkedIdentities {
-		path := fmt.Sprintf("linkedIdentities[%d]", i)
-		checkName(path, identity.GetName(), KindLinkedIdentity)
-		if identity.GetExternalUid() == "" {
-			report("%s.externalUid is required", path)
-		}
-	}
-
 	for i, lifecycle := range document.Lifecycle {
 		path := fmt.Sprintf("lifecycle[%d]", i)
 		if lifecycle.GetResource() == "" {
@@ -168,10 +148,6 @@ func checkDocument(document *apipb.Configuration) []string {
 		}
 		if lifecycle.GetWriteOnlyVersion() != 0 && kind != KindUser {
 			report("%s.writeOnlyVersion applies only to users", path)
-		}
-		if len(lifecycle.GetIgnoreChanges()) > 0 && kind == KindLinkedIdentity {
-			report("%s.ignoreChanges does not apply to linked identities; externalUid is the whole resource", path)
-			continue
 		}
 		for j, fieldPath := range lifecycle.GetIgnoreChanges() {
 			if err := checkFieldPath(kindDescriptor(kind), fieldPath); err != nil {
@@ -195,12 +171,8 @@ func checkDocument(document *apipb.Configuration) []string {
 
 func kindDescriptor(kind Kind) protoreflect.MessageDescriptor {
 	switch kind {
-	case KindIdentityProvider:
-		return (&apipb.IdentityProvider{}).ProtoReflect().Descriptor()
 	case KindInstanceSetting:
 		return (&apipb.InstanceSetting{}).ProtoReflect().Descriptor()
-	case KindLinkedIdentity:
-		return (&apipb.LinkedIdentity{}).ProtoReflect().Descriptor()
 	default:
 		return (&apipb.User{}).ProtoReflect().Descriptor()
 	}
@@ -234,8 +206,7 @@ func checkFieldPath(descriptor protoreflect.MessageDescriptor, path string) erro
 
 // merger combines files into one desired state and checks the rules that span
 // files: one declaration per resource, lifecycle rules for declared resources,
-// removals of resources no file still declares, and linked identities whose
-// user is declared and whose subject is declared once.
+// and explicit removals of resources no file declares.
 type merger struct {
 	desired          *Desired
 	problems         []string
@@ -257,11 +228,6 @@ func (m *merger) add(file string, document *apipb.Configuration, userFields map[
 		return true
 	}
 	config := m.desired.Configuration
-	for _, provider := range document.IdentityProviders {
-		if claim(m.desired.Sources, provider.GetName(), "resource") {
-			config.IdentityProviders = append(config.IdentityProviders, provider)
-		}
-	}
 	for _, setting := range document.InstanceSettings {
 		if claim(m.desired.Sources, setting.GetName(), "resource") {
 			config.InstanceSettings = append(config.InstanceSettings, setting)
@@ -271,11 +237,6 @@ func (m *merger) add(file string, document *apipb.Configuration, userFields map[
 		if claim(m.desired.Sources, user.GetName(), "resource") {
 			config.Users = append(config.Users, user)
 			m.desired.UserFields[user.GetName()] = userFields[i]
-		}
-	}
-	for _, identity := range document.LinkedIdentities {
-		if claim(m.desired.Sources, identity.GetName(), "resource") {
-			config.LinkedIdentities = append(config.LinkedIdentities, identity)
 		}
 	}
 	for _, lifecycle := range document.Lifecycle {
@@ -293,6 +254,10 @@ func (m *merger) add(file string, document *apipb.Configuration, userFields map[
 func (m *merger) checkReferences() {
 	for _, lifecycle := range m.desired.Configuration.Lifecycle {
 		if _, ok := m.desired.Sources[lifecycle.GetResource()]; !ok {
+			if strings.HasPrefix(lifecycle.GetResource(), coreuser.NamePrefix) || m.desired.preserved[lifecycle.GetResource()] {
+				m.desired.Warnings = append(m.desired.Warnings, fmt.Sprintf("%s: lifecycle for %s is ignored in Cat_two", m.lifecycleSources[lifecycle.GetResource()], lifecycle.GetResource()))
+				continue
+			}
 			m.problems = append(m.problems, fmt.Sprintf("%s: the lifecycle rule names %s, which no file declares",
 				m.lifecycleSources[lifecycle.GetResource()], lifecycle.GetResource()))
 		}
@@ -302,24 +267,5 @@ func (m *merger) checkReferences() {
 			m.problems = append(m.problems, fmt.Sprintf("%s: %s is removed but still declared in %s",
 				m.removedSources[removed.GetResource()], removed.GetResource(), declaredIn))
 		}
-	}
-	// A linked identity binds a subject to a declared user: the declaration is
-	// what makes the binding trustworthy, so an undeclared user cannot have one.
-	// A subject signs in as one user, so it is declared at most once.
-	subjects := map[string]string{}
-	for _, identity := range m.desired.Configuration.LinkedIdentities {
-		name := identity.GetName()
-		userName, providerName := splitLinkedIdentityName(name)
-		if _, ok := m.desired.Sources[userName]; !ok {
-			m.problems = append(m.problems, fmt.Sprintf("%s: %s is declared for %s, which no file declares; a linked identity needs a declared user",
-				m.desired.Sources[name], name, userName))
-		}
-		subject := providerName + " " + identity.GetExternalUid()
-		if previous, ok := subjects[subject]; ok {
-			m.problems = append(m.problems, fmt.Sprintf("%s: %s declares the same %s subject as %s",
-				m.desired.Sources[name], name, providerName, previous))
-			continue
-		}
-		subjects[subject] = name
 	}
 }

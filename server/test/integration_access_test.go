@@ -1,33 +1,33 @@
 package test
 
 import (
-	"context"
 	"encoding/json"
 	"net/http"
 	"testing"
 
 	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/crypto/bcrypt"
+
+	"github.com/usememos/memos/store"
 )
 
-func TestIntegrationTokenUsesSameNoteOwnershipThroughRESTAndMCP(t *testing.T) {
-	ctx := context.Background()
-	inst := bootInstance(ctx, t, instanceOptions{})
+func TestIntegrationClientsUseSameNoteOwnershipThroughRESTAndMCP(t *testing.T) {
+	ctx := t.Context()
+	inst := bootInstance(ctx, t, instanceOptions{personal: true})
 	inst.createAdmin(t)
 	adminSession := inst.signIn(t)
 
 	const otherUsername = "note-owner"
 	const otherMemoID = "other-private-note"
-	status, body := inst.do(t, http.MethodPost, "/api/users", adminSession, map[string]string{
-		"username": otherUsername,
-		"password": testAdminPassword,
-		"email":    "note-owner@example.test",
-	})
-	require.Equal(t, http.StatusOK, status, "%s", body)
+	passwordHash, err := bcrypt.GenerateFromPassword([]byte(testAdminPassword), bcrypt.MinCost)
+	require.NoError(t, err)
+	_, err = inst.server.Store.CreateUser(ctx, &store.User{Username: otherUsername, Role: store.RoleUser, PasswordHash: string(passwordHash)})
+	require.NoError(t, err)
 	otherSession := inst.signInUser(t, otherUsername, testAdminPassword)
 	inst.createMemo(t, otherSession, otherMemoID, "Original private note")
 
-	status, body = inst.do(t, http.MethodPost, "/api/users/"+testAdminUsername+"/personalAccessTokens", adminSession, map[string]any{
+	status, body := inst.do(t, http.MethodPost, "/api/users/"+testAdminUsername+"/personalAccessTokens", adminSession, map[string]any{
 		"description":   "client integration",
 		"expiresInDays": 1,
 	})
@@ -37,23 +37,9 @@ func TestIntegrationTokenUsesSameNoteOwnershipThroughRESTAndMCP(t *testing.T) {
 	}
 	require.NoError(t, json.Unmarshal(body, &createdToken))
 	require.NotEmpty(t, createdToken.Token)
-	token := createdToken.Token
-
-	client := sdkmcp.NewClient(&sdkmcp.Implementation{Name: "cat-two-integration-test", Version: "1"}, nil)
-	session, err := client.Connect(ctx, &sdkmcp.StreamableClientTransport{
-		Endpoint:             inst.baseURL + "/mcp",
-		DisableStandaloneSSE: true,
-		HTTPClient: &http.Client{
-			Timeout: inst.client.Timeout,
-			Transport: integrationTestTransport(func(req *http.Request) (*http.Response, error) {
-				request := req.Clone(req.Context())
-				request.Header.Set("Authorization", "Bearer "+token)
-				return http.DefaultTransport.RoundTrip(request)
-			}),
-		},
-	}, nil)
-	require.NoError(t, err)
-	t.Cleanup(func() { require.NoError(t, session.Close()) })
+	pat := createdToken.Token
+	_, connectionToken := createMCPConnection(t, inst, adminSession, "Client integration", "")
+	session, _ := connectMCP(ctx, t, inst, connectionToken)
 
 	call := func(name string, arguments map[string]any) *sdkmcp.CallToolResult {
 		t.Helper()
@@ -68,14 +54,14 @@ func TestIntegrationTokenUsesSameNoteOwnershipThroughRESTAndMCP(t *testing.T) {
 		"body":   map[string]any{"content": "Created with MCP"},
 	})
 	require.False(t, created.IsError, "%v", created.Content)
-	inst.requireMemo(t, token, memoID, "Created with MCP\n\n#MCP连接")
+	inst.requireMemo(t, pat, memoID, "Created with MCP\n\n#MCP连接")
 
 	updated := call("memo_update_memo", map[string]any{
 		"memo": memoID,
 		"body": map[string]any{"content": "Updated with MCP"},
 	})
 	require.False(t, updated.IsError, "%v", updated.Content)
-	inst.requireMemo(t, token, memoID, "Updated with MCP")
+	inst.requireMemo(t, pat, memoID, "Updated with MCP")
 
 	owned := call("memo_get_memo", map[string]any{"memo": memoID})
 	require.False(t, owned.IsError, "%v", owned.Content)
@@ -83,7 +69,7 @@ func TestIntegrationTokenUsesSameNoteOwnershipThroughRESTAndMCP(t *testing.T) {
 	require.True(t, ok, "expected a note object, got %T", owned.StructuredContent)
 	require.Equal(t, "Updated with MCP", note["content"])
 
-	status, _ = inst.do(t, http.MethodGet, "/api/memos/"+otherMemoID, token, nil)
+	status, _ = inst.do(t, http.MethodGet, "/api/memos/"+otherMemoID, pat, nil)
 	require.Equal(t, http.StatusForbidden, status)
 	require.True(t, call("memo_get_memo", map[string]any{"memo": otherMemoID}).IsError)
 	require.True(t, call("memo_update_memo", map[string]any{

@@ -31,7 +31,8 @@ const (
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 //
-// IdentityProviderService manages the external identity providers users can sign in with.
+// IdentityProviderService is a legacy API retained for protocol compatibility.
+// The external identity provider methods are retired in Cat_two.
 type IdentityProviderServiceClient interface {
 	// ListIdentityProviders lists identity providers.
 	// Public, so the sign-in page can show SSO options. Client secrets are never returned.
@@ -114,7 +115,8 @@ func (c *identityProviderServiceClient) DeleteIdentityProvider(ctx context.Conte
 // All implementations must embed UnimplementedIdentityProviderServiceServer
 // for forward compatibility.
 //
-// IdentityProviderService manages the external identity providers users can sign in with.
+// IdentityProviderService is a legacy API retained for protocol compatibility.
+// The external identity provider methods are retired in Cat_two.
 type IdentityProviderServiceServer interface {
 	// ListIdentityProviders lists identity providers.
 	// Public, so the sign-in page can show SSO options. Client secrets are never returned.

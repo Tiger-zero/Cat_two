@@ -46,7 +46,7 @@ type InstanceServiceClient interface {
 	// UpdateInstanceSetting replaces an instance setting. Admin only. Fields declarative configuration manages cannot be
 	// changed. Empty write-only credentials keep the stored values.
 	UpdateInstanceSetting(ctx context.Context, in *UpdateInstanceSettingRequest, opts ...grpc.CallOption) (*InstanceSetting, error)
-	// TestInstanceEmailSetting sends a test email with the provided or stored SMTP settings. Admin only.
+	// TestInstanceEmailSetting is a retired SMTP test RPC retained for protocol compatibility.
 	TestInstanceEmailSetting(ctx context.Context, in *TestInstanceEmailSettingRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	// GetInstanceStats gets resource usage statistics for the instance. Admin only. Results are cached for 60 seconds.
 	GetInstanceStats(ctx context.Context, in *GetInstanceStatsRequest, opts ...grpc.CallOption) (*InstanceStats, error)
@@ -150,7 +150,7 @@ type InstanceServiceServer interface {
 	// UpdateInstanceSetting replaces an instance setting. Admin only. Fields declarative configuration manages cannot be
 	// changed. Empty write-only credentials keep the stored values.
 	UpdateInstanceSetting(context.Context, *UpdateInstanceSettingRequest) (*InstanceSetting, error)
-	// TestInstanceEmailSetting sends a test email with the provided or stored SMTP settings. Admin only.
+	// TestInstanceEmailSetting is a retired SMTP test RPC retained for protocol compatibility.
 	TestInstanceEmailSetting(context.Context, *TestInstanceEmailSettingRequest) (*emptypb.Empty, error)
 	// GetInstanceStats gets resource usage statistics for the instance. Admin only. Results are cached for 60 seconds.
 	GetInstanceStats(context.Context, *GetInstanceStatsRequest) (*InstanceStats, error)

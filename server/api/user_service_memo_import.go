@@ -120,10 +120,6 @@ type memoImporter struct {
 	// written lists the records that were created or updated, whose
 	// relations are applied once every record exists.
 	written []writtenMemo
-	// spaces caches Space resolution per archive Space UID; memberSpaces is
-	// the importer's Space list, loaded on first use.
-	spaces       map[string]*int32
-	memberSpaces []*store.Space
 }
 
 // ImportMemoExport applies an opened archive to the importing user's memos
@@ -149,7 +145,6 @@ func (s *APIService) ImportMemoExport(ctx context.Context, user *store.User, arc
 		report:   &apipb.ImportMemosReport{Warnings: archiveIssues(archive.Warnings)},
 		existing: existing,
 		resolved: make(map[string]*store.Memo, len(archive.Memos)),
-		spaces:   make(map[string]*int32),
 	}
 	for _, record := range archive.Memos {
 		if err := ctx.Err(); err != nil {
@@ -272,10 +267,6 @@ func (i *memoImporter) replaceMemo(record *memoexport.Memo, existing *store.Memo
 		CreatedTs:  &next.CreatedTs,
 		UpdatedTs:  &next.UpdatedTs,
 	}
-	if !i.service.personalMode() {
-		update.ClearSpace = next.SpaceID == nil
-		update.SpaceID = next.SpaceID
-	}
 	err = i.bindAttachments(existing, next.Content, names, attachments, func(prepared *preparedMemoAttachments, required []int32) error {
 		return i.service.applyMemoMutation(i.ctx, existing, prepared, update, required, nil)
 	})
@@ -309,8 +300,7 @@ func (i *memoImporter) bindAttachments(memo *store.Memo, content string, names [
 	return err
 }
 
-// buildMemo turns a record into the memo row to write, resolving the Space
-// and applying the visibility fallback.
+// buildMemo turns a record into a private memo owned by the importer.
 func (i *memoImporter) buildMemo(record *memoexport.Memo, uid string, content []byte) (*store.Memo, error) {
 	createdTs, err := memoexport.ParseTime(record.CreateTime)
 	if err != nil {
@@ -331,17 +321,8 @@ func (i *memoImporter) buildMemo(record *memoexport.Memo, uid string, content []
 		Pinned:     record.Pinned,
 		Payload:    &storepb.MemoPayload{},
 	}
-	if record.Space != nil && i.service.personalMode() {
+	if record.Space != nil {
 		i.warn(record.UID, "space placement from the archive was ignored")
-	} else if record.Space != nil {
-		spaceID, err := i.resolveSpace(record.Space)
-		if err != nil {
-			return nil, err
-		}
-		if spaceID == nil {
-			i.warn(record.UID, fmt.Sprintf("space %q was not found among your spaces; imported without a space", record.Space.UID))
-		}
-		memo.SpaceID = spaceID
 	}
 	if store.IsMemoCreationChannel(record.CreationChannel) {
 		memo.Payload.CreationChannel = record.CreationChannel
@@ -354,38 +335,6 @@ func (i *memoImporter) buildMemo(record *memoexport.Memo, uid string, content []
 		}
 	}
 	return memo, nil
-}
-
-// resolveSpace matches a record's Space by UID, then by title, among the
-// Spaces the importing user is an active member of.
-func (i *memoImporter) resolveSpace(space *memoexport.Space) (*int32, error) {
-	if cached, ok := i.spaces[space.UID]; ok {
-		return cached, nil
-	}
-	if i.memberSpaces == nil {
-		memberSpaces, err := i.service.Store.ListSpaces(i.ctx, &store.FindSpace{MemberUserID: &i.user.ID})
-		if err != nil {
-			return nil, errors.Wrap(err, "failed to list spaces")
-		}
-		i.memberSpaces = memberSpaces
-	}
-	var resolved *int32
-	for _, match := range []func(*store.Space) bool{
-		func(candidate *store.Space) bool { return candidate.UID == space.UID },
-		func(candidate *store.Space) bool { return space.Title != "" && candidate.Title == space.Title },
-	} {
-		for _, candidate := range i.memberSpaces {
-			if candidate.CurrentUserRole.IsActiveMember() && match(candidate) {
-				resolved = &candidate.ID
-				break
-			}
-		}
-		if resolved != nil {
-			break
-		}
-	}
-	i.spaces[space.UID] = resolved
-	return resolved, nil
 }
 
 // resolveMemo finds the instance memo an archive UID refers to: one this run

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"maps"
 	"path/filepath"
 	"regexp"
 	"slices"
@@ -34,7 +35,7 @@ var (
 // decodeDocument substitutes references in one file and decodes it strictly.
 // It also returns, for each user by index, the optional user fields the file
 // declares.
-func decodeDocument(content []byte, resolver Resolver) (*apipb.Configuration, map[int][]string, []string, []string) {
+func decodeDocument(content []byte, resolver Resolver, preserved map[string]bool) (*apipb.Configuration, map[int][]string, []string, []string) {
 	decoder := json.NewDecoder(bytes.NewReader(content))
 	decoder.UseNumber()
 	r := &jsonReader{decoder: decoder, resolver: resolver}
@@ -48,6 +49,10 @@ func decodeDocument(content []byte, resolver Resolver) (*apipb.Configuration, ma
 	object, ok := value.(map[string]any)
 	if !ok {
 		return nil, nil, nil, []string{"the document must be a JSON object"}
+	}
+	r.warnings = append(r.warnings, omitRetiredDeclarations(object, preserved)...)
+	if err := r.resolve("", object); err != nil {
+		return nil, nil, nil, []string{err.Error()}
 	}
 
 	// Marshalling a substituted tree cannot fail: it holds only JSON values.
@@ -91,8 +96,8 @@ func declaredUserFields(document map[string]any) map[int][]string {
 	return result
 }
 
-// jsonReader reads a JSON value token by token, substituting references in
-// string values and reporting paths in the document's own key spelling.
+// jsonReader reads a JSON value token by token and reports paths in the
+// document's own key spelling.
 type jsonReader struct {
 	decoder  *json.Decoder
 	resolver Resolver
@@ -149,11 +154,138 @@ func (r *jsonReader) value(path string) (any, error) {
 		default:
 			return nil, errors.Errorf("unexpected %q", t.String())
 		}
-	case string:
-		return r.substitute(path, t)
 	default:
 		return token, nil
 	}
+}
+
+// resolve substitutes active fields after retired declarations are discarded.
+func (r *jsonReader) resolve(path string, value any) error {
+	substitute := func(childPath string, child any, put func(any)) error {
+		if str, ok := child.(string); ok {
+			resolved, err := r.substitute(childPath, str)
+			if err != nil {
+				return err
+			}
+			put(resolved)
+			return nil
+		}
+		return r.resolve(childPath, child)
+	}
+	switch value := value.(type) {
+	case map[string]any:
+		for _, key := range slices.Sorted(maps.Keys(value)) {
+			if err := substitute(joinKey(path, key), value[key], func(child any) { value[key] = child }); err != nil {
+				return err
+			}
+		}
+	case []any:
+		for i, child := range value {
+			if err := substitute(fmt.Sprintf("%s[%d]", path, i), child, func(child any) { value[i] = child }); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func omitRetiredDeclarations(document map[string]any, preserved map[string]bool) []string {
+	var warnings []string
+	for _, field := range []string{"identityProviders", "identity_providers", "linkedIdentities", "linked_identities"} {
+		if value, exists := document[field]; exists {
+			delete(document, field)
+			if entries, ok := value.([]any); !ok || len(entries) > 0 {
+				warnings = append(warnings, field+" is ignored because federated sign-in is unavailable in Cat_two")
+			}
+		}
+	}
+	for _, field := range []string{"instanceSettings", "instance_settings"} {
+		if settings, ok := document[field].([]any); ok {
+			document[field] = slices.DeleteFunc(settings, func(value any) bool {
+				setting, _ := value.(map[string]any)
+				name, _ := setting["name"].(string)
+				if retiredResource(name) || (name == "instance/settings/STORAGE" && legacyStorageDeclaration(setting)) {
+					preserved[name] = true
+					warnings = append(warnings, name+" is ignored because this configuration is unavailable in Cat_two")
+					return true
+				}
+				if name == "instance/settings/GENERAL" {
+					for _, key := range []string{"generalSetting", "general_setting"} {
+						general, _ := setting[key].(map[string]any)
+						for _, flag := range []string{"disallowUserRegistration", "disallow_user_registration", "disallowPasswordAuth", "disallow_password_auth"} {
+							if _, exists := general[flag]; exists {
+								delete(general, flag)
+								warnings = append(warnings, flag+" is ignored because Cat_two uses administrator password sign-in")
+							}
+						}
+					}
+				}
+				return false
+			})
+		}
+	}
+	if users, ok := document["users"].([]any); ok {
+		document["users"] = slices.DeleteFunc(users, func(value any) bool {
+			user, _ := value.(map[string]any)
+			role, _ := user["role"].(string)
+			if role != "USER" {
+				return false
+			}
+			warnings = append(warnings, "a regular user declaration is ignored because Cat_two configures one administrator")
+			return true
+		})
+	}
+	for _, field := range []string{"lifecycle", "removed"} {
+		if entries, ok := document[field].([]any); ok {
+			document[field] = slices.DeleteFunc(entries, func(value any) bool {
+				entry, _ := value.(map[string]any)
+				name, _ := entry["resource"].(string)
+				if field == "removed" && strings.HasPrefix(name, "users/") && entry["destroy"] == true {
+					warnings = append(warnings, "a user removal is ignored because Cat_two preserves existing accounts and their data")
+					return true
+				}
+				if !retiredResource(name) && !preserved[name] {
+					return false
+				}
+				warnings = append(warnings, field+" for a retired resource is ignored in Cat_two")
+				return true
+			})
+		}
+	}
+	return warnings
+}
+
+func retiredResource(name string) bool {
+	if strings.HasPrefix(name, legacyIdentityProviderPrefix) || (strings.HasPrefix(name, "users/") && strings.Contains(name, "/linkedIdentities/")) {
+		return true
+	}
+	switch name {
+	case "instance/settings/ACCESS", "instance/settings/AI", "instance/settings/NOTIFICATION", "instance/settings/USAGE_LIMITS", "instance/settings/MEMO_RELATED":
+		return true
+	default:
+		return false
+	}
+}
+
+func legacyStorageDeclaration(setting map[string]any) bool {
+	isRetiredType := func(value any) bool {
+		return value == "S3" || value == "DATABASE" || value == "STORAGE_TYPE_S3" || value == "STORAGE_TYPE_DATABASE"
+	}
+	for _, key := range []string{"storageSetting", "storage_setting"} {
+		storage, _ := setting[key].(map[string]any)
+		if isRetiredType(storage["storageType"]) || isRetiredType(storage["storage_type"]) || storage["s3Config"] != nil || storage["s3_config"] != nil {
+			return true
+		}
+		if storages, ok := storage["storages"].([]any); ok {
+			for _, value := range storages {
+				entry, _ := value.(map[string]any)
+				if isRetiredType(entry["type"]) || entry["s3Config"] != nil || entry["s3_config"] != nil {
+					return true
+				}
+			}
+		}
+	}
+	return false
 }
 
 // substitute resolves a string that is exactly one ${env:NAME} or

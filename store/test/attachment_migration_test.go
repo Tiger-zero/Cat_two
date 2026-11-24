@@ -7,9 +7,9 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/proto"
 
 	"github.com/usememos/memos/internal/profile"
-	"github.com/usememos/memos/internal/testutil/fakes3"
 	"github.com/usememos/memos/internal/version"
 	storepb "github.com/usememos/memos/proto/gen/store"
 	"github.com/usememos/memos/store"
@@ -25,22 +25,6 @@ func TestMigrateLocalAttachments(t *testing.T) {
 	memo, err := testStore.CreateMemo(ctx, &store.Memo{UID: "attachment-migration-memo", CreatorID: owner.ID, Visibility: store.Private})
 	require.NoError(t, err)
 
-	const objectKey = "legacy/reused.txt"
-	fakeS3 := fakes3.New(t, "first-bucket", "second-bucket")
-	require.NoError(t, fakeS3.PutObject("first-bucket", objectKey, "text/plain", []byte("registered object")))
-	require.NoError(t, fakeS3.PutObject("second-bucket", objectKey, "text/plain", []byte("embedded object")))
-	_, err = testStore.UpsertInstanceSetting(ctx, &storepb.InstanceSetting{
-		Key: storepb.InstanceSettingKey_STORAGE,
-		Value: &storepb.InstanceSetting_StorageSetting{StorageSetting: &storepb.InstanceStorageSetting{
-			DefaultStorageId: "registered",
-			Storages: []*storepb.Storage{{
-				Id: "registered", Type: storepb.StorageType_STORAGE_TYPE_S3,
-				Config: &storepb.Storage_S3Config{S3Config: fakeS3.Config("first-bucket")},
-			}},
-		}},
-	})
-	require.NoError(t, err)
-
 	absolute := filepath.Join(t.TempDir(), "old-absolute.txt")
 	require.NoError(t, os.WriteFile(absolute, []byte("already local"), 0o600))
 	create := func(create *store.Attachment) *store.Attachment {
@@ -53,21 +37,17 @@ func TestMigrateLocalAttachments(t *testing.T) {
 		return attachment
 	}
 	dbContent := []byte{1, 2, 0, 255, 17}
-	database := create(&store.Attachment{UID: "database-attachment", Blob: dbContent, Size: int64(len(dbContent))})
-	databaseEmpty := create(&store.Attachment{UID: "database-empty-attachment", Blob: []byte{}})
-	meta := &storepb.MotionMedia{GroupId: "paired-media"}
-	registered := create(&store.Attachment{UID: "registered-object", MemoID: &memo.ID, Size: 17,
-		StorageType: storepb.AttachmentStorageType_S3, Payload: &storepb.AttachmentPayload{
-			MotionMedia: meta,
-			Payload: &storepb.AttachmentPayload_S3Object_{S3Object: &storepb.AttachmentPayload_S3Object{
-				Key: objectKey, StorageId: "registered",
-			}},
-		},
+	database := create(&store.Attachment{
+		UID: "database-attachment", MemoID: &memo.ID, Blob: dbContent, Size: int64(len(dbContent)),
+		Payload: &storepb.AttachmentPayload{MotionMedia: &storepb.MotionMedia{GroupId: "paired-media"}},
 	})
-	embedded := create(&store.Attachment{UID: "embedded-object", Size: 15,
-		StorageType: storepb.AttachmentStorageType_S3, Payload: &storepb.AttachmentPayload{
+	databaseEmpty := create(&store.Attachment{UID: "database-empty-attachment", Blob: []byte{}})
+	remote := create(&store.Attachment{
+		UID: "retired-object", MemoID: &memo.ID, Size: 17, StorageType: storepb.AttachmentStorageType_S3,
+		Payload: &storepb.AttachmentPayload{
+			MotionMedia: &storepb.MotionMedia{GroupId: "paired-media"},
 			Payload: &storepb.AttachmentPayload_S3Object_{S3Object: &storepb.AttachmentPayload_S3Object{
-				Key: objectKey, S3Config: fakeS3.Config("second-bucket"),
+				Key: "legacy/report.txt", StorageId: "retired",
 			}},
 		},
 	})
@@ -86,8 +66,6 @@ func TestMigrateLocalAttachments(t *testing.T) {
 	}{
 		{database, dbContent},
 		{databaseEmpty, []byte{}},
-		{registered, []byte("registered object")},
-		{embedded, []byte("embedded object")},
 	} {
 		row, err := testStore.GetAttachment(ctx, &store.FindAttachment{ID: &pair.original.ID, GetBlob: true})
 		require.NoError(t, err)
@@ -110,21 +88,19 @@ func TestMigrateLocalAttachments(t *testing.T) {
 		require.NoError(t, err)
 		require.Zero(t, info.Mode().Perm()&0o077)
 	}
-	for _, original := range []*store.Attachment{local, external} {
+	for _, original := range []*store.Attachment{local, external, remote} {
 		row, err := testStore.GetAttachment(ctx, &store.FindAttachment{ID: &original.ID})
 		require.NoError(t, err)
 		require.Equal(t, original.StorageType, row.StorageType)
 		require.Equal(t, original.Reference, row.Reference)
+		if original.Payload != nil {
+			require.True(t, proto.Equal(original.Payload, row.Payload))
+		}
 	}
 	require.NoError(t, testStore.MigrateLocalAttachments(ctx))
 	entries, err := os.ReadDir(assets)
 	require.NoError(t, err)
-	require.Len(t, entries, 4)
-	for i, bucket := range []string{"first-bucket", "second-bucket"} {
-		bytes, err := fakeS3.GetObject(bucket, objectKey)
-		require.NoError(t, err)
-		require.Equal(t, []string{"registered object", "embedded object"}[i], string(bytes))
-	}
+	require.Len(t, entries, 2)
 }
 
 func TestMigrateLocalAttachmentsRetryAfterFailure(t *testing.T) {
@@ -155,28 +131,13 @@ func TestMigrateLocalAttachmentsRetryAfterFailure(t *testing.T) {
 	require.Equal(t, legacy.StorageType, unmigrated.StorageType)
 	require.NoError(t, os.Remove(assets))
 
-	fakeS3 := fakes3.New(t, "migration-retry")
-	missing, err := testStore.CreateAttachment(ctx, &store.Attachment{
-		UID: "legacy-s3-retry", CreatorID: owner.ID, Filename: "legacy.txt", Size: 6,
-		StorageType: storepb.AttachmentStorageType_S3,
-		Payload: &storepb.AttachmentPayload{Payload: &storepb.AttachmentPayload_S3Object_{
-			S3Object: &storepb.AttachmentPayload_S3Object{Key: "temporary-missing", S3Config: fakeS3.Config("migration-retry")},
-		}},
-	})
-	require.NoError(t, err)
-	require.ErrorContains(t, testStore.MigrateLocalAttachments(ctx), "failed to retrieve legacy object from storage")
+	require.NoError(t, testStore.MigrateLocalAttachments(ctx))
 	migrated, err := testStore.GetAttachment(ctx, &store.FindAttachment{ID: &legacy.ID})
 	require.NoError(t, err)
 	require.Equal(t, storepb.AttachmentStorageType_LOCAL, migrated.StorageType)
-	waiting, err := testStore.GetAttachment(ctx, &store.FindAttachment{ID: &missing.ID})
+	content, err := os.ReadFile(filepath.Join(testStore.GetDataDir(), migrated.Reference))
 	require.NoError(t, err)
-	require.Equal(t, storepb.AttachmentStorageType_S3, waiting.StorageType)
-	require.NoError(t, fakeS3.PutObject("migration-retry", "temporary-missing", "text/plain", []byte("legacy")))
-	require.NoError(t, testStore.MigrateLocalAttachments(ctx))
-	retried, err := testStore.GetAttachment(ctx, &store.FindAttachment{ID: &missing.ID})
-	require.NoError(t, err)
-	require.Equal(t, storepb.AttachmentStorageType_LOCAL, retried.StorageType)
-	require.NotEqual(t, migrated.Reference, retried.Reference)
+	require.Equal(t, legacy.Blob, content)
 }
 
 func TestMigrateLocalAttachmentsSharedDataDirectory(t *testing.T) {

@@ -45,12 +45,6 @@ function buildUpdateMask(
     mask.add("content");
     patch.content = state.content;
   }
-  if ((state.metadata.space || undefined) !== (prevMemo.space || undefined)) {
-    mask.add("space");
-    mask.add("visibility");
-    patch.space = state.metadata.space ?? "";
-    patch.visibility = Visibility.PRIVATE;
-  }
   if (!isEqual(allAttachments, prevMemo.attachments)) {
     mask.add("attachments");
     patch.attachments = toAttachmentReferences(allAttachments);
@@ -120,12 +114,11 @@ export const memoService = {
     options: {
       memoName?: string;
       parentMemoName?: string;
-      space?: string;
       /** Runs as each local file finishes uploading, before the memo is saved. */
       onFileUploaded?: (localFile: LocalFile, attachment: Attachment) => void;
     },
     operations: MemoSaveOperations,
-  ): Promise<{ memoName: string; hasChanges: boolean; moved?: boolean }> {
+  ): Promise<{ memoName: string; hasChanges: boolean }> {
     // Verify the edit's baseline before uploading files for a stale draft.
     let prevMemo = options.memoName ? await operations.getMemo(options.memoName) : undefined;
     // 1. Upload new files first. Edits of saved drawings (`replaces`) upload over
@@ -172,7 +165,7 @@ export const memoService = {
           throw new DrawingSavedError(error);
         }
       }
-      return { memoName: memo.name, hasChanges: true, moved: mask.has("space") };
+      return { memoName: memo.name, hasChanges: true };
     }
 
     // 3. Create new memo or comment. Its attachments are not visible to anyone
@@ -188,7 +181,6 @@ export const memoService = {
       relations: state.metadata.relations,
       createTime: state.timestamps.createTime ? timestampFromDate(state.timestamps.createTime) : undefined,
       updateTime: state.timestamps.updateTime ? timestampFromDate(state.timestamps.updateTime) : undefined,
-      space: options.parentMemoName ? undefined : (options.space ?? state.metadata.space),
     });
 
     const memo = await operations.createMemo(memoData, options.parentMemoName);
@@ -204,7 +196,6 @@ export const memoService = {
     return {
       content: memo.content,
       metadata: {
-        space: memo.space || undefined,
         attachments: memo.attachments,
         relations: memo.relations,
       },

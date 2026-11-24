@@ -368,7 +368,8 @@ export const FieldMappingSchema: GenMessage<FieldMapping> = /*@__PURE__*/
   messageDesc(file_api_idp_service, 9);
 
 /**
- * IdentityProviderService manages the external identity providers users can sign in with.
+ * IdentityProviderService is a legacy API retained for protocol compatibility.
+ * The external identity provider methods are retired in Cat_two.
  *
  * @generated from service memos.api.IdentityProviderService
  */

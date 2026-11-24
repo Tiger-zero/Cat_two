@@ -32,6 +32,10 @@ type Authenticator struct {
 // ErrSessionIdleExpired means a verified web session outlasted its edit deadline.
 var ErrSessionIdleExpired = errors.New("session idle expired")
 
+// ErrInvalidRefreshToken denotes credentials that cannot authenticate. Store
+// errors remain separate so callers can distinguish a backend failure.
+var ErrInvalidRefreshToken = errors.New("invalid refresh token")
+
 // NewAuthenticator creates a new Authenticator instance.
 func NewAuthenticator(store *store.Store, secret string) *Authenticator {
 	return &Authenticator{
@@ -129,12 +133,12 @@ func (a *Authenticator) AuthenticateByRefreshToken(ctx context.Context, refreshT
 func (a *Authenticator) AuthenticateRefreshSession(ctx context.Context, refreshToken string) (*store.User, *RefreshTokenClaims, error) {
 	claims, err := ParseRefreshToken(refreshToken, []byte(a.secret))
 	if err != nil {
-		return nil, nil, errors.Wrap(err, "invalid refresh token")
+		return nil, nil, ErrInvalidRefreshToken
 	}
 
 	userID, err := parseInt32(claims.Subject)
 	if err != nil {
-		return nil, nil, errors.Wrap(err, "invalid user ID in token")
+		return nil, nil, errors.Wrap(ErrInvalidRefreshToken, "invalid user ID in token")
 	}
 
 	// Check token exists in database (revocation check)
@@ -143,13 +147,13 @@ func (a *Authenticator) AuthenticateRefreshSession(ctx context.Context, refreshT
 		return nil, nil, errors.Wrap(err, "failed to get refresh token")
 	}
 	if token == nil || token.GetSessionId() != claims.SessionID {
-		return nil, nil, errors.New("refresh token revoked")
+		return nil, nil, errors.Wrap(ErrInvalidRefreshToken, "refresh token revoked")
 	}
 
 	// Check token not expired
 	now := time.Now()
 	if token.ExpiresAt != nil && !token.ExpiresAt.AsTime().After(now) {
-		return nil, nil, errors.New("refresh token expired")
+		return nil, nil, errors.Wrap(ErrInvalidRefreshToken, "refresh token expired")
 	}
 	if a.store.IsPersonalMode() && !store.UserSessionIdleExpiresAt(token).After(now) {
 		return nil, nil, ErrSessionIdleExpired
@@ -161,10 +165,10 @@ func (a *Authenticator) AuthenticateRefreshSession(ctx context.Context, refreshT
 		return nil, nil, errors.Wrap(err, "failed to get user")
 	}
 	if user == nil {
-		return nil, nil, errors.New("user not found")
+		return nil, nil, errors.Wrap(ErrInvalidRefreshToken, "user not found")
 	}
 	if user.RowStatus == store.Archived {
-		return nil, nil, errors.New("user is archived")
+		return nil, nil, errors.Wrap(ErrInvalidRefreshToken, "user is archived")
 	}
 
 	factor, err := a.store.GetUserTwoFactor(ctx, userID)
@@ -172,7 +176,7 @@ func (a *Authenticator) AuthenticateRefreshSession(ctx context.Context, refreshT
 		return nil, nil, errors.Wrap(err, "failed to get refresh token session revision")
 	}
 	if claims.SessionRevision != factor.SessionRevision {
-		return nil, nil, errors.New("refresh token revoked")
+		return nil, nil, errors.Wrap(ErrInvalidRefreshToken, "refresh token revoked")
 	}
 	return user, claims, nil
 }
@@ -293,7 +297,7 @@ func (a *Authenticator) AuthenticateToUser(ctx context.Context, authHeader, cook
 	if cookieHeader != "" {
 		if refreshToken := ExtractRefreshTokenFromCookie(cookieHeader); refreshToken != "" {
 			user, _, err := a.AuthenticateByRefreshToken(ctx, refreshToken)
-			if errors.Is(err, ErrSessionIdleExpired) {
+			if errors.Is(err, ErrSessionIdleExpired) || errors.Is(err, ErrInvalidRefreshToken) {
 				return nil, nil
 			}
 			return user, err

@@ -2,12 +2,12 @@ package store
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 
 	"github.com/pkg/errors"
 	"google.golang.org/protobuf/encoding/protojson"
 
+	"github.com/usememos/memos/filter"
 	"github.com/usememos/memos/internal/identifier"
 	storepb "github.com/usememos/memos/proto/gen/store"
 )
@@ -15,10 +15,6 @@ import (
 // ErrMemoSpaceNotWritable indicates that a memo targets a missing or otherwise
 // invalid Space.
 var ErrMemoSpaceNotWritable = errors.New("memo space is not writable")
-
-// ErrMemoSpaceMembershipRequired indicates that the memo creator is not an
-// active member of its assigned space.
-var ErrMemoSpaceMembershipRequired = errors.New("active space membership required")
 
 // ErrMemoPermissionDenied indicates that the actor no longer owns the memo
 // being mutated.
@@ -88,7 +84,8 @@ type Memo struct {
 	CreationRequestDigest string
 
 	// Composed fields
-	ParentUID *string
+	ParentUID        *string
+	ContentSizeBytes int64
 }
 
 type FindMemo struct {
@@ -107,10 +104,12 @@ type FindMemo struct {
 	CommentContextMemoID *int32
 	Access               *MemoAccessScope
 	ExcludeContent       bool
+	IncludeContentSize   bool
 	// MaxTotalContentBytes bounds the total Markdown bytes returned. Zero leaves it unbounded.
 	MaxTotalContentBytes int
 	ExcludeComments      bool
 	Filters              []string
+	PreparedFilter       *filter.Program
 	Trash                MemoTrashScope
 	DeletedAfterTs       *int64
 	DeletedThroughTs     *int64
@@ -177,8 +176,6 @@ type UpdateMemo struct {
 	Visibility *Visibility
 	Pinned     *bool
 	Payload    *storepb.MemoPayload
-	SpaceID    *int32
-	ClearSpace bool
 	// Policy is set by transport-facing author mutations. Drivers revalidate it
 	// in the same transaction as the update; nil preserves trusted internal and
 	// migration callers.
@@ -187,19 +184,11 @@ type UpdateMemo struct {
 	ExpectedRevision *int64
 }
 
-// MemoWritePolicy identifies the actor and the intended kind of
-// transport-facing mutation. Drivers discover and authorize the current memo,
-// Space, membership, and share state in the write transaction.
+// MemoWritePolicy identifies the actor of a transport mutation. The driver
+// validates ownership against the memo state inside the write transaction.
 type MemoWritePolicy struct {
 	ActorUserID int32
-	// Personal authorizes only the memo's author and freezes historical Space placement.
-	Personal bool
-	// LifecycleOnly permits an author who is no longer a member of the source
-	// Space to move or withdraw the memo. It never permits content, metadata,
-	// attachment, relation, or share mutations.
-	LifecycleOnly bool
-	// CreatingShare rejects a share if the memo's current audience is
-	// SPACE. Share revocation deliberately leaves this false.
+	// CreatingShare applies the legacy storage invariant to old share data.
 	CreatingShare bool
 }
 
@@ -222,29 +211,16 @@ func NewMemoActorState(rowStatus RowStatus, role Role) MemoActorState {
 // MemoWriteSnapshot is the current database state used to validate a
 // MemoWritePolicy. Driver packages populate it in the mutation transaction.
 type MemoWriteSnapshot struct {
-	// ActorIsAdmin is true when the policy actor is an active instance
-	// administrator. It bypasses authorship and membership checks only.
-	ActorIsAdmin       bool
-	CreatorID          int32
-	RowStatus          RowStatus
-	SpaceID            *int32
-	Visibility         Visibility
-	SourceSpaceExists  bool
-	SourceMemberActive bool
-	TargetSpaceExists  bool
-	TargetMemberActive bool
-	HasActiveShare     bool
+	ActorIsAdmin bool
+	CreatorID    int32
+	RowStatus    RowStatus
+	Visibility   Visibility
 }
 
-// MemoAccessScope is a typed, fail-closed read authorization predicate. When
-// present on FindMemo, drivers apply it in SQL before pagination.
+// MemoAccessScope authorizes the memo author before pagination. A scope with
+// no user denies all reads. Trusted store scans can omit the scope.
 type MemoAccessScope struct {
-	// OwnerOnly restricts memo reads to the active user that created the memo,
-	// including rows with legacy visibility values.
-	OwnerOnly      bool
-	UserID         *int32
-	AllowPublic    bool
-	AllowProtected bool
+	UserID *int32
 }
 
 type DeleteMemo struct {
@@ -296,6 +272,9 @@ func validateMemoCreate(create *Memo) error {
 	if create.Visibility == SpaceAudience && create.SpaceID == nil {
 		return errors.New("SPACE visibility requires a space")
 	}
+	if create.SpaceID != nil {
+		return ErrMemoSpaceNotWritable
+	}
 	return nil
 }
 
@@ -304,16 +283,8 @@ func (s *Store) ListMemos(ctx context.Context, find *FindMemo) ([]*Memo, error) 
 	if err != nil || find.ExcludeContent {
 		return memos, err
 	}
-	if err := s.hydrateMemoBodies(ctx, memos); err != nil {
+	if err := s.hydrateMemoBodies(ctx, memos, find.MaxTotalContentBytes); err != nil {
 		return nil, err
-	}
-	if budget := find.MaxTotalContentBytes; budget > 0 {
-		for _, memo := range memos {
-			budget -= len(memo.Content)
-			if budget < 0 {
-				return nil, ErrMemoContentBudgetExceeded
-			}
-		}
 	}
 	return memos, nil
 }
@@ -370,9 +341,6 @@ func (s *Store) UpdateMemo(ctx context.Context, update *UpdateMemo) error {
 	if update.Visibility != nil && !isValidVisibility(*update.Visibility) {
 		return errors.New("invalid visibility")
 	}
-	if update.ClearSpace && update.Visibility != nil && *update.Visibility == SpaceAudience {
-		return errors.New("SPACE visibility requires a space")
-	}
 	if err := validateMemoWritePolicy(update.Policy); err != nil {
 		return err
 	}
@@ -402,9 +370,6 @@ func validateMemoWritePolicy(policy *MemoWritePolicy) error {
 	if policy.ActorUserID <= 0 {
 		return errors.New("memo write policy requires actor")
 	}
-	if policy.LifecycleOnly && policy.CreatingShare {
-		return errors.New("memo write policy has conflicting actions")
-	}
 	return nil
 }
 
@@ -417,118 +382,24 @@ func ValidateMemoWriteSnapshot(policy *MemoWritePolicy, update *UpdateMemo, snap
 	if policy == nil || snapshot == nil {
 		return errors.New("memo write policy snapshot is required")
 	}
-	// An instance administrator is the superuser for named memo operations and
-	// is not held to authorship or Space membership. Structural validity below
-	// still applies to every actor.
-	if snapshot.CreatorID != policy.ActorUserID && (!snapshot.ActorIsAdmin || policy.Personal) {
+	if snapshot.CreatorID != policy.ActorUserID {
 		return ErrMemoPermissionDenied
 	}
-	if snapshot.RowStatus != Normal && snapshot.RowStatus != Archived {
+	if (snapshot.RowStatus != Normal && snapshot.RowStatus != Archived) || !isValidVisibility(snapshot.Visibility) {
 		return ErrMemoMutationConflict
 	}
-	if policy.CreatingShare && snapshot.RowStatus != Normal {
-		return ErrMemoMutationConflict
-	}
-	if !isValidVisibility(snapshot.Visibility) {
-		return ErrMemoMutationConflict
-	}
-	if policy.Personal {
-		if policy.CreatingShare || policy.LifecycleOnly {
-			return ErrMemoPermissionDenied
+	if policy.CreatingShare {
+		if snapshot.RowStatus != Normal {
+			return ErrMemoMutationConflict
 		}
-		if update != nil && (update.SpaceID != nil || update.ClearSpace) {
-			return ErrMemoSpaceNotWritable
-		}
-		if update != nil && update.Visibility != nil && *update.Visibility != Private {
-			return ErrMemoPermissionDenied
-		}
-		return nil
-	}
-	if policy.LifecycleOnly && !isLifecycleOnlyMemoUpdate(update) {
-		// The source-writability exception exists only for an author's explicit
-		// move or withdrawal after membership removal. It must never authorize a
-		// content or metadata mutation in the same transaction.
-		return ErrMemoSpaceMembershipRequired
-	}
-	if snapshot.SpaceID != nil {
-		if !snapshot.SourceSpaceExists {
-			return ErrMemoSpaceNotWritable
-		}
-		if !policy.LifecycleOnly && !snapshot.ActorIsAdmin && !snapshot.SourceMemberActive {
-			return ErrMemoSpaceMembershipRequired
+		if snapshot.Visibility == SpaceAudience {
+			return ErrMemoShareConflict
 		}
 	}
-
-	resultSpaceID := snapshot.SpaceID
-	resultVisibility := snapshot.Visibility
-	if update != nil {
-		if update.SpaceID != nil {
-			if !snapshot.TargetSpaceExists {
-				return ErrMemoSpaceNotWritable
-			}
-			if !snapshot.ActorIsAdmin && !snapshot.TargetMemberActive {
-				return ErrMemoSpaceMembershipRequired
-			}
-			resultSpaceID = update.SpaceID
-		} else if update.ClearSpace {
-			resultSpaceID = nil
-		}
-		if update.Visibility != nil {
-			resultVisibility = *update.Visibility
-		}
-	}
-	if !isValidVisibility(resultVisibility) {
-		return ErrMemoMutationConflict
-	}
-	placementChanged := !sameMemoSpace(resultSpaceID, snapshot.SpaceID)
-	if placementChanged && snapshot.Visibility == SpaceAudience && (update == nil || update.Visibility == nil) {
-		// Moving a current SPACE memo changes which membership grants
-		// access. Require the audience to be explicitly confirmed in the same
-		// mutation, even if a caller read an older audience before the transaction.
-		return ErrMemoMutationConflict
-	}
-	if policy.LifecycleOnly && !placementChanged {
-		return ErrMemoSpaceMembershipRequired
-	}
-	if resultVisibility == SpaceAudience && resultSpaceID == nil {
-		return ErrMemoSpaceNotWritable
-	}
-	if policy.CreatingShare && resultVisibility == SpaceAudience {
-		return ErrMemoShareConflict
-	}
-	if update != nil && update.Visibility != nil && *update.Visibility == SpaceAudience && snapshot.HasActiveShare {
-		return ErrMemoShareConflict
+	if update != nil && update.Visibility != nil && *update.Visibility != Private {
+		return ErrMemoPermissionDenied
 	}
 	return nil
-}
-
-func isLifecycleOnlyMemoUpdate(update *UpdateMemo) bool {
-	if update == nil || (!update.ClearSpace && update.SpaceID == nil) || (update.ClearSpace && update.SpaceID != nil) {
-		return false
-	}
-	return update.UID == nil &&
-		update.CreatedTs == nil &&
-		update.UpdatedTs == nil &&
-		update.RowStatus == nil &&
-		update.Content == nil &&
-		update.Pinned == nil &&
-		update.Payload == nil
-}
-
-// NullInt32Pointer converts a nullable SQL integer to an optional int32.
-func NullInt32Pointer(value sql.NullInt64) *int32 {
-	if !value.Valid {
-		return nil
-	}
-	result := int32(value.Int64)
-	return &result
-}
-
-func sameMemoSpace(left, right *int32) bool {
-	if left == nil || right == nil {
-		return left == nil && right == nil
-	}
-	return *left == *right
 }
 
 func isValidVisibility(visibility Visibility) bool {

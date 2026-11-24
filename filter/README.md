@@ -1,33 +1,24 @@
-# Memo Filter Engine
+# CEL Filter Engine
 
-This package houses the memo-only filter engine that turns standard CEL syntax
-into SQL fragments for the subset of expressions supported by the memo schema.
-The engine follows a three phase pipeline inspired by systems
-such as Calcite or Prisma:
+The filter engine converts CEL expressions for memo and attachment queries into
+SQLite predicates with bound arguments.
 
 1. **Parsing** – CEL expressions are parsed with `cel-go` and validated against
-   the memo-specific environment declared in `schema.go`. Only fields that
-   exist in the schema can surface in the filter, and non-standard legacy
-   coercions are rejected.
+   the memo or attachment environment declared in `schema.go`.
 2. **Normalization** – the raw CEL AST is converted into an intermediate
-   representation (IR) defined in `ir.go`. The IR is a dialect-agnostic tree of
-   conditions (logical operators, comparisons, list membership, etc.). This
+   representation (IR) defined in `ir.go`. It represents logical operators,
+   comparisons, list membership, and other conditions. This
    step enforces schema rules (e.g. operator compatibility, type checks).
 3. **Rendering** – the renderer in `render.go` walks the IR and produces a SQL
-   fragment plus placeholder arguments tailored to a target dialect
-   (`sqlite`, `mysql`, or `postgres`). Dialect differences such as JSON access,
-   boolean semantics, placeholders, and `LIKE` vs `ILIKE` are encapsulated in
-   renderer helpers.
+   fragment plus bound arguments in placeholder order.
 
-The entry point is `filter.DefaultEngine()` from `engine.go`. It lazily constructs
-an `Engine` configured with the memo schema and exposes:
+Use `filter.DefaultEngine()` for memos and `filter.DefaultAttachmentEngine()`
+for attachments. Each caches the corresponding CEL environment.
 
 ```go
 engine, _ := filter.DefaultEngine()
-stmt, _ := engine.CompileToStatement(ctx, `has_task_list && visibility == "PUBLIC"`, filter.RenderOptions{
-	Dialect: filter.DialectPostgres,
-})
-// stmt.SQL  -> "((memo.payload->'property'->>'hasTaskList')::boolean IS TRUE AND memo.visibility = $1)"
+stmt, _ := engine.CompileToStatement(ctx, `has_task_list && visibility == "PUBLIC"`)
+// stmt.SQL  -> "(JSON_EXTRACT(`memo`.`payload`, '$.property.hasTaskList') IS TRUE AND `memo`.`visibility` = ?)"
 // stmt.Args -> ["PUBLIC"]
 ```
 
@@ -35,19 +26,19 @@ stmt, _ := engine.CompileToStatement(ctx, `has_task_list && visibility == "PUBLI
 
 | File          | Responsibility                                                                  |
 | ------------- | ------------------------------------------------------------------------------- |
-| `schema.go`   | Declares memo fields, their types, backing columns, CEL environment options     |
+| `schema.go`   | Declares memo and attachment fields, types, backing columns, and CEL options   |
 | `ir.go`       | IR node definitions used across the pipeline                                    |
 | `parser.go`   | Converts CEL `Expr` into IR while applying schema validation                    |
-| `render.go`   | Translates IR into SQL, handling dialect-specific behavior                      |
+| `render.go`   | Translates IR into SQLite predicates and bound arguments                         |
 | `engine.go`   | Glue between the phases; exposes `Compile`, `CompileToStatement`, and `DefaultEngine` |
 | `helpers.go`  | Convenience helpers for store integration (appending conditions)                |
 
 ## SQL Generation Notes
 
-- **Placeholders** — `?` is used for SQLite/MySQL, `$n` for Postgres. The renderer
-  tracks offsets to compose queries with pre-existing arguments.
+- **Placeholders** — Each `?` consumes one argument. Append the fragment and
+  its arguments in the order they appear in the full query.
 - **JSON Fields** — Memo metadata lives in `memo.payload`. The renderer handles
-  `JSON_EXTRACT`/`json_extract`/`->`/`->>` variations and boolean coercion.
+  JSON paths with `JSON_EXTRACT` and list elements with `json_each`.
 - **Time Fields** — `created_ts`, `updated_ts`, and attachment `create_time` are
   CEL `timestamp` values. Express instants with the `now` variable,
   `duration("…")` (e.g. `created_ts >= now - duration("24h")`), or
@@ -56,17 +47,17 @@ stmt, _ := engine.CompileToStatement(ctx, `has_task_list && visibility == "PUBLI
   for tests via the engine clock) — so the backing columns stay unchanged.
 - **Tag Operations** — `tag in [...]`, `"tag" in tags`, and tag comprehension
   predicates evaluate individual JSON array elements. Equality and string
-  matching are case-sensitive, without Unicode normalization; `%` and `_` in
-  string operands are literal. Hierarchy works through implied ancestors already
-  present in the memo tag set, not through prefix matching.
-- **Boolean Flags** — Fields such as `has_task_list` render as an `IS TRUE` check
-  (a comparison against `JSON_EXTRACT('true', '$')` on MySQL). Memo payloads omit false
-  flags, so a missing key counts as false: `flag == false` and `flag != true`
-  render as the negated check and match the same memos as `!flag`.
+  matching are case-sensitive and use the original code points. `%` and `_` in
+  string operands are literal. `TagBranchExpression` matches an exact path or
+  a descendant separated by `/`, including older payloads that only store the
+  literal child path.
+- **Boolean Flags** — Fields such as `has_task_list` render as an `IS TRUE` check.
+  An omitted key counts as false. `flag == false`, `flag != true`, and `!flag`
+  match the same memos.
 - **Presence Flags** — `has_location` checks legacy location metadata in
   `memo.payload` (`$.location`). The memo API preserves existing locations and
   ignores location fields on writes. A missing key and an explicit JSON null both
-  count as absent on every dialect; any other value — including an empty object —
+  count as absent. Any other value, including an empty object,
   counts as present. Only `==`/`!=` against a boolean literal (or bare/negated
   use) is allowed.
 - **Related-Row Flags** — `has_attachments` renders as `EXISTS` over
@@ -77,46 +68,39 @@ stmt, _ := engine.CompileToStatement(ctx, `has_task_list && visibility == "PUBLI
   the content changing; never copy them into the payload. Comparisons follow the
   presence flags.
 - **String Matching** — `content.contains(x)`, `content.startsWith(x)`, and
-  `content.endsWith(x)` render as case-insensitive `LIKE`/`ILIKE` with LIKE
+  `content.endsWith(x)` render as Unicode-folded `LIKE` with its
   metacharacters (`%`, `_`, `\`) escaped. Available on scalar string fields whose
   schema sets `SupportsContains` (memo `content`; attachment `filename`,
   `mime_type`).
-- **Regex** — `field.matches("pattern")` renders to `~` (Postgres) or `REGEXP`
-  (MySQL/SQLite). SQLite uses a Go-backed `regexp` function registered in
-  `store/db/sqlite/functions.go`. Patterns are validated at compile time against
-  Go's RE2 via `cel.ValidateRegexLiterals()`. **Caveat:** regex *syntax* differs
-  per engine (Go RE2 on SQLite, POSIX ERE on Postgres, ICU on MySQL 8.0+), so
-  engine-specific patterns may not be portable.
+- **Regex** — `field.matches("pattern")` uses the Go-backed `REGEXP` function
+  registered in `store/db/sqlite/functions.go`. `cel.ValidateRegexLiterals()`
+  validates patterns against Go's RE2 syntax before rendering.
 - **Tag `all()` / `exists_one()`** — `tags.all(t, <pred>)` matches only non-empty
   tag sets where every element satisfies the predicate; `tags.exists_one(t,
   <pred>)` matches when exactly one element does (`COUNT(...) = 1`). Both iterate
-  per-element (`json_each` / `jsonb_array_elements_text` / `JSON_TABLE`).
+  over `json_each`.
 - **Timestamp Accessors** — `created_ts.getFullYear()`, `getMonth()`, `getDate()`,
   `getDayOfMonth()`, `getDayOfWeek()`, `getDayOfYear()`, `getHours()`,
-  `getMinutes()`, `getSeconds()` render to date-part extraction (`strftime` /
-  `EXTRACT` / `YEAR`/`MONTH`/…). Results are normalized to CEL's base (0-based
+  `getMinutes()`, `getSeconds()` use `strftime` in UTC. Results follow CEL's base (0-based
   month, 0-based day-of-week with 0 = Sunday). The same accessors on `now` fold
   to literal date parts of the frozen evaluation time (UTC), so saved filters
   like `created_ts.getMonth() == now.getMonth() && created_ts.getDate() ==
-  now.getDate()` ("on this day") re-resolve on every compile. Extraction is UTC
-  on SQLite/Postgres (epoch columns); on MySQL the `TIMESTAMP` column is read in
-  the session time zone. A timezone argument is not supported.
-- **Set Operations** — `ext.Sets()`: `sets.contains(tags, [...])`,
-  `sets.intersects(tags, [...])`, and `sets.equivalent(tags, [...])` desugar to
-  exact-membership checks (AND / OR of `"v" in tags`); `equivalent` adds a
-  `size(tags)` length check (relies on tags being a set).
-- **`size()`** — `size(tags)` renders to JSON array length; `size(content)` (and
-  other string fields) render to `LENGTH` / `CHAR_LENGTH` (MySQL) for code-point
-  counts.
+  now.getDate()` ("on this day") re-resolve on every compile. Accessors take
+  no timezone argument.
+- **Set Operations** — `sets.contains(tags, [...])`, `sets.intersects(tags, [...])`,
+  and `sets.equivalent(tags, [...])` expand into exact-membership checks.
+  `equivalent` also compares the number of tags.
+- **`size()`** — `size(tags)` reads the JSON array length. On strings such as
+  `content`, `LENGTH` returns the code-point count.
 - **Arithmetic** — `+`, `-`, `*`, `/`, `%` constant-fold on literal/`now`/`duration`
   operands (division and modulo guard against a zero divisor).
 
 ## Typical Integration
 
-1. Fetch the engine with `filter.DefaultEngine()`.
-2. Call `CompileToStatement` using the appropriate dialect enum.
+1. Fetch the engine for memos or attachments.
+2. Call `CompileToStatement` with the CEL expression.
 3. Append the emitted SQL fragment/args to the existing `WHERE` clause.
 4. Execute the resulting query through the store driver.
 
-The `helpers.AppendConditions` helper encapsulates steps 2–3 when a driver needs
-to process an array of filters.
+`filter.AppendConditions` compiles multiple filters and appends their SQL and
+arguments to the existing query.

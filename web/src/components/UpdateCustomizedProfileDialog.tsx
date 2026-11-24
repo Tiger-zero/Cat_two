@@ -3,6 +3,7 @@ import { Button, Dialog, Field, Input, Textarea } from "@usememos/ui";
 import { useState } from "react";
 import { useInstance } from "@/contexts/InstanceContext";
 import { useFieldErrors } from "@/hooks/useFieldErrors";
+import { DEFAULT_APP_NAME } from "@/lib/branding";
 import { handleError } from "@/lib/error";
 import { buildInstanceSettingName } from "@/lib/resource-names";
 import { showErrorToast, toast } from "@/lib/toast";
@@ -25,8 +26,13 @@ function UpdateCustomizedProfileDialog({ open, onOpenChange, onSuccess }: Props)
   const t = useTranslate();
   const fieldErrors = useFieldErrors<"title">();
   const { generalSetting: instanceGeneralSetting, updateSetting } = useInstance();
+  const savedProfile = instanceGeneralSetting.customProfile;
   const [customProfile, setCustomProfile] = useState<InstanceSetting_GeneralSetting_CustomProfile>(
-    create(InstanceSetting_GeneralSetting_CustomProfileSchema, instanceGeneralSetting.customProfile || {}),
+    create(InstanceSetting_GeneralSetting_CustomProfileSchema, {
+      title: savedProfile?.title || DEFAULT_APP_NAME,
+      logoUrl: savedProfile?.logoUrl,
+      description: savedProfile?.description,
+    }),
   );
 
   const [isLoading, setIsLoading] = useState(false);
@@ -59,7 +65,7 @@ function UpdateCustomizedProfileDialog({ open, onOpenChange, onSuccess }: Props)
 
   const handleRestoreButtonClick = () => {
     setPartialState({
-      title: "Memos",
+      title: DEFAULT_APP_NAME,
       logoUrl: "",
       description: "",
     });

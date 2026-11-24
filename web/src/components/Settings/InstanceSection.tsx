@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useInstance } from "@/contexts/InstanceContext";
 import useCurrentUser from "@/hooks/useCurrentUser";
 import useDialog from "@/hooks/useDialog";
+import { DEFAULT_APP_NAME } from "@/lib/branding";
 import { toast } from "@/lib/toast";
 import {
   InstanceSetting_GeneralSetting,
@@ -74,7 +75,10 @@ const InstanceSection = () => {
     <SettingSection title={t("setting.system.label")}>
       <SettingGroup title={t("common.basic")} description={t("setting.system.basic-description")}>
         <SettingList>
-          <SettingListItem label={t("setting.system.server-name")} description={instanceGeneralSetting.customProfile?.title || "Memos"}>
+          <SettingListItem
+            label={t("setting.system.server-name")}
+            description={instanceGeneralSetting.customProfile?.title || DEFAULT_APP_NAME}
+          >
             <Button variant="neutral" onClick={customizeDialog.open}>
               {t("common.edit")}
             </Button>

@@ -3,18 +3,18 @@ import {
   CalendarDaysIcon,
   CodeXmlIcon,
   HashIcon,
+  LockIcon,
   type LucideIcon,
   MessageSquareIcon,
   PaperclipIcon,
   PenLineIcon,
   SparklesIcon,
   TextIcon,
-  UsersIcon,
 } from "lucide-react";
 import { type KeyboardEvent, type ReactNode, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import { useTranslate } from "@/utils/i18n";
-import { IntroHeader, KeepHeader, ShareHeader, WriteHeader } from "./headers";
+import { IntroHeader, KeepHeader, PrivateHeader, WriteHeader } from "./headers";
 
 interface Row {
   icon: LucideIcon;
@@ -38,7 +38,7 @@ interface Props {
 
 /**
  * The welcome guide a new account sees once on Home: an intro, then Write, Keep and
- * Share. Each page is a still life of a real component over a few icon-and-line rows.
+ * Personal notes. Each page illustrates an existing feature.
  *
  * All pages are laid out in one grid cell so the tallest sets the height and the footer,
  * which belongs to the dialog rather than to any page, never moves between pages.
@@ -57,7 +57,7 @@ const WelcomeGuideDialog = ({ open, onOpenChange }: Props) => {
       rows: [
         { icon: PenLineIcon, label: t("welcome.write"), text: t("welcome.intro-write") },
         { icon: CalendarDaysIcon, label: t("welcome.keep"), text: t("welcome.intro-keep") },
-        { icon: UsersIcon, label: t("welcome.share"), text: t("welcome.intro-share") },
+        { icon: LockIcon, label: t("welcome.share"), text: t("welcome.intro-share") },
       ],
     },
     {
@@ -82,12 +82,12 @@ const WelcomeGuideDialog = ({ open, onOpenChange }: Props) => {
       ],
     },
     {
-      icon: UsersIcon,
+      icon: LockIcon,
       title: t("welcome.share"),
       sub: t("welcome.share-sub"),
-      header: <ShareHeader />,
+      header: <PrivateHeader />,
       rows: [
-        { icon: UsersIcon, label: t("space.spaces"), text: t("welcome.spaces-text") },
+        { icon: LockIcon, label: t("welcome.private-label"), text: t("welcome.private-note-text") },
         { icon: MessageSquareIcon, label: t("welcome.comments"), text: t("welcome.comments-text") },
       ],
     },

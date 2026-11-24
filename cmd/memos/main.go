@@ -56,7 +56,7 @@ func init() {
 	cobra.OnInitialize(initSlogDefault)
 
 	viper.SetDefault("demo", false)
-	viper.SetDefault("driver", "sqlite")
+	viper.SetDefault("driver", profile.SQLiteDriver)
 	viper.SetDefault("port", 8081)
 
 	rootCmd.Flags().Bool("demo", false, "enable demo mode")
@@ -64,8 +64,8 @@ func init() {
 	rootCmd.Flags().Int("port", 8081, "port of server")
 	rootCmd.Flags().String("unix-sock", "", "path to the unix socket, overrides --addr and --port")
 	rootCmd.Flags().String("data", "", "data directory")
-	rootCmd.Flags().String("driver", "sqlite", "database driver (sqlite, mysql, postgres)")
-	rootCmd.Flags().String("dsn", "", "database source name (DSN)")
+	rootCmd.Flags().String("driver", profile.SQLiteDriver, "database driver (sqlite)")
+	rootCmd.Flags().String("dsn", "", "SQLite database path or file URI")
 	rootCmd.Flags().String("instance-url", "", "canonical external URL of the Memos instance")
 	rootCmd.Flags().Bool("allow-private-webhooks", false, "legacy webhook option")
 	rootCmd.Flags().StringSlice("webhook-private-network-allowlist", nil, "legacy webhook option")
@@ -138,6 +138,12 @@ func runServer() error {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+	releaseLock, err := lockInstance(ctx, instanceProfile)
+	if err != nil {
+		return err
+	}
+	defer releaseLock()
+
 	dbDriver, err := db.NewDBDriver(instanceProfile)
 	if err != nil {
 		return errors.Wrap(err, "failed to create database driver")
@@ -155,7 +161,6 @@ func runServer() error {
 	if err := storeInstance.Migrate(ctx); err != nil {
 		return errors.Wrap(err, "failed to migrate database")
 	}
-	// Legacy S3 attachments need the storage configuration already in the database.
 	if err := storeInstance.MigrateLocalAttachments(ctx); err != nil {
 		return errors.Wrap(err, "failed to migrate attachments to local storage")
 	}

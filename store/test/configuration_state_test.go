@@ -149,15 +149,6 @@ func TestConfigurationTransactionWrites(t *testing.T) {
 	require.NoError(t, err)
 
 	_, err = ts.RunConfigurationTransaction(ctx, func(ctx context.Context, tx *store.ConfigurationTransaction) (*storepb.InstanceConfigurationState, error) {
-		require.NoError(t, tx.CreateIdentityProvider(ctx, createTestOAuth2IDP("SSO", "sso")))
-		providers, err := tx.ListIdentityProviders(ctx, &store.FindIdentityProvider{})
-		require.NoError(t, err)
-		require.Len(t, providers, 1, "the transaction reads its own write")
-		replaced := proto.CloneOf(providers[0])
-		replaced.Name = "Renamed SSO"
-		replaced.Config.GetOauth2Config().Scopes = []string{"openid"}
-		require.NoError(t, tx.ReplaceIdentityProvider(ctx, providers[0].Id, replaced))
-
 		require.NoError(t, tx.UpsertInstanceSetting(ctx, &storepb.InstanceSetting{Key: storepb.InstanceSettingKey_GENERAL, Value: &storepb.InstanceSetting_GeneralSetting{
 			GeneralSetting: &storepb.InstanceGeneralSetting{CustomProfile: &storepb.InstanceCustomProfile{Title: "Configured"}},
 		}}))
@@ -179,10 +170,6 @@ func TestConfigurationTransactionWrites(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	provider, err := ts.GetIdentityProvider(ctx, &store.FindIdentityProvider{UID: new("sso")})
-	require.NoError(t, err)
-	require.Equal(t, "Renamed SSO", provider.Name)
-	require.Equal(t, []string{"openid"}, provider.Config.GetOauth2Config().Scopes)
 	general, err := ts.GetInstanceGeneralSetting(ctx)
 	require.NoError(t, err)
 	require.Equal(t, "Configured", general.GetCustomProfile().GetTitle(), "the commit invalidated the cached setting")
@@ -204,7 +191,7 @@ func TestConfigurationTransactionRollsBack(t *testing.T) {
 	require.NoError(t, err)
 
 	_, err = ts.RunConfigurationTransaction(ctx, func(ctx context.Context, tx *store.ConfigurationTransaction) (*storepb.InstanceConfigurationState, error) {
-		require.NoError(t, tx.CreateIdentityProvider(ctx, createTestOAuth2IDP("SSO", "sso")))
+		require.NoError(t, tx.UpsertInstanceSetting(ctx, &storepb.InstanceSetting{Key: storepb.InstanceSettingKey_TAGS, Value: &storepb.InstanceSetting_TagsSetting{TagsSetting: &storepb.InstanceTagsSetting{}}}))
 		role := store.RoleUser
 		// Demoting the last administrator fails as it does through the API,
 		// and the whole transaction rolls back with it.
@@ -212,9 +199,9 @@ func TestConfigurationTransactionRollsBack(t *testing.T) {
 	})
 	require.ErrorIs(t, err, store.ErrLastInstanceAdmin)
 
-	providers, err := ts.ListIdentityProviders(ctx, &store.FindIdentityProvider{})
+	tags, err := ts.GetUncachedInstanceSetting(ctx, &store.FindInstanceSetting{Name: "TAGS"})
 	require.NoError(t, err)
-	require.Empty(t, providers, "nothing from the failed transaction remains")
+	require.Nil(t, tags, "the earlier setting write rolled back")
 	state, err := ts.GetConfigurationState(ctx)
 	require.NoError(t, err)
 	require.Zero(t, state.Serial)

@@ -328,9 +328,12 @@ func TestServeAttachmentFile_CommentRequiresCommentOwner(t *testing.T) {
 		UID: "legacy-comment-parent", CreatorID: owner.ID, Content: "parent", Visibility: store.Public,
 	})
 	require.NoError(t, err)
-	comment, err := stores.CreateMemoComment(ctx, &store.Memo{
+	comment, err := stores.CreateMemo(ctx, &store.Memo{
 		UID: "legacy-public-comment", CreatorID: commenter.ID, Content: "comment", Visibility: store.Public,
-	}, parent.ID, commenter.ID)
+	})
+	require.NoError(t, err)
+	// Seed a cross-author comment from an older version.
+	_, err = stores.GetDriver().GetDB().ExecContext(ctx, "INSERT INTO memo_relation (memo_id, related_memo_id, type) VALUES (?, ?, 'COMMENT')", comment.ID, parent.ID)
 	require.NoError(t, err)
 	content := []byte("comment text")
 	const reference = "legacy-comment-file.txt"
@@ -874,6 +877,15 @@ func TestServeAttachmentFile_RefreshCookieAuthenticatesOwner(t *testing.T) {
 	e.ServeHTTP(rec, req)
 	require.Equal(t, http.StatusOK, rec.Code)
 	require.Equal(t, "secret content", rec.Body.String())
+
+	require.NoError(t, svc.Store.RemoveUserRefreshToken(ctx, owner.ID, tokenID))
+	for _, cookie := range []string{"not-a-session", refreshToken} {
+		req := httptest.NewRequest(http.MethodGet, url, nil)
+		req.AddCookie(&http.Cookie{Name: auth.RefreshTokenCookieName, Value: cookie})
+		rec := httptest.NewRecorder()
+		e.ServeHTTP(rec, req)
+		require.Equal(t, http.StatusUnauthorized, rec.Code)
+	}
 }
 
 // Unlinked attachments can be read by their creator only.

@@ -208,7 +208,7 @@ func TestMigrationMCPConnection(t *testing.T) {
 	t.Cleanup(func() { require.NoError(t, ts.Close()) })
 	owner, err := createTestingHostUser(ctx, ts)
 	require.NoError(t, err)
-	removeSchemaAfterMCPConnection(ctx, t, ts, getDriverFromEnv())
+	removeSchemaAfterMCPConnection(ctx, t, ts)
 	_, err = ts.GetDriver().GetDB().ExecContext(ctx, "DROP TABLE mcp_connection")
 	require.NoError(t, err)
 	setSchemaVersion(ctx, t, ts, "26.11.3")

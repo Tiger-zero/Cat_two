@@ -47,9 +47,12 @@ type (
 // a new upload; a call carrying an upload ID continues one. Either kind may
 // write data and finalize.
 func (s *APIService) UploadAttachment(ctx context.Context, request *apipb.UploadAttachmentRequest) (*apipb.UploadAttachmentResponse, error) {
-	user, err := s.requireCurrentSpaceUser(ctx)
+	user, err := s.fetchCurrentUser(ctx)
 	if err != nil {
-		return nil, err
+		return nil, status.Errorf(codes.Internal, "failed to get current user: %v", err)
+	}
+	if user == nil {
+		return nil, status.Error(codes.Unauthenticated, "user not authenticated")
 	}
 	if len(request.Data) > uploadChunkSize {
 		return nil, status.Errorf(codes.ResourceExhausted, "upload chunk exceeds the limit")

@@ -6,7 +6,7 @@ import { locales } from "@/i18n";
 import { getLocaleDisplayName, localeMatchesSearch, useTranslate } from "@/utils/i18n";
 
 const MISSING_LANGUAGE_FEEDBACK_URL =
-  "https://github.com/usememos/memos/issues/new?title=Missing%20language%20support&body=Please%20add%20support%20for%20this%20language%3A%0A%0A-%20Language%3A%20";
+  "https://github.com/Tiger-zero/Cat_two/issues/new?template=feature_request.yml&title=Missing%20language%20support";
 
 interface LocalePickerProps {
   value: Locale;

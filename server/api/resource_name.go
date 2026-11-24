@@ -10,26 +10,18 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	"github.com/usememos/memos/core/identityprovider"
 	"github.com/usememos/memos/core/instancesetting"
 	coreuser "github.com/usememos/memos/core/user"
 	"github.com/usememos/memos/internal/identifier"
-	"github.com/usememos/memos/internal/random"
 )
 
 const (
-	InstanceSettingNamePrefix  = instancesetting.NamePrefix
-	UserNamePrefix             = coreuser.NamePrefix
-	MemoNamePrefix             = "memos/"
-	MemoShareNamePrefix        = "shares/"
-	AttachmentNamePrefix       = "attachments/"
-	ReactionNamePrefix         = "reactions/"
-	InboxNamePrefix            = "inboxes/"
-	IdentityProviderNamePrefix = identityprovider.NamePrefix
-	WebhookNamePrefix          = "webhooks/"
-	SpaceNamePrefix            = "spaces/"
-	SpaceMemberNamePrefix      = "members/"
-	SpaceInvitationNamePrefix  = "invitations/"
+	InstanceSettingNamePrefix = instancesetting.NamePrefix
+	UserNamePrefix            = coreuser.NamePrefix
+	MemoNamePrefix            = "memos/"
+	MemoShareNamePrefix       = "shares/"
+	AttachmentNamePrefix      = "attachments/"
+	ReactionNamePrefix        = "reactions/"
 )
 
 // GetNameParentTokens returns the tokens from a resource name.
@@ -101,35 +93,6 @@ func buildMemoName(uid string) string {
 	return MemoNamePrefix + uid
 }
 
-// ExtractSpaceUIDFromName returns the UID from a Space resource name.
-func ExtractSpaceUIDFromName(name string) (string, error) {
-	tokens, err := GetNameParentTokens(name, SpaceNamePrefix)
-	if err != nil {
-		return "", err
-	}
-	return tokens[0], nil
-}
-
-// ExtractSpaceMemberTokensFromName returns the Space UID and username from a
-// SpaceMember resource name.
-func ExtractSpaceMemberTokensFromName(name string) (string, string, error) {
-	tokens, err := GetNameParentTokens(name, SpaceNamePrefix, SpaceMemberNamePrefix)
-	if err != nil {
-		return "", "", err
-	}
-	return tokens[0], tokens[1], nil
-}
-
-// ExtractSpaceInvitationTokensFromName returns the Space UID and invitee
-// username from a SpaceInvitation resource name.
-func ExtractSpaceInvitationTokensFromName(name string) (string, string, error) {
-	tokens, err := GetNameParentTokens(name, SpaceNamePrefix, SpaceInvitationNamePrefix)
-	if err != nil {
-		return "", "", err
-	}
-	return tokens[0], tokens[1], nil
-}
-
 // ExtractAttachmentUIDFromName returns the attachment UID from a resource name.
 func ExtractAttachmentUIDFromName(name string) (string, error) {
 	tokens, err := GetNameParentTokens(name, AttachmentNamePrefix)
@@ -157,27 +120,6 @@ func ExtractMemoReactionIDFromName(name string) (string, int32, error) {
 	return memoUID, reactionID, nil
 }
 
-// ExtractInboxIDFromName returns the inbox ID from a resource name.
-func ExtractInboxIDFromName(name string) (int32, error) {
-	tokens, err := GetNameParentTokens(name, InboxNamePrefix)
-	if err != nil {
-		return 0, err
-	}
-	id, err := parseInt32(tokens[0])
-	if err != nil {
-		return 0, errors.Errorf("invalid inbox ID %q", tokens[0])
-	}
-	return id, nil
-}
-
-func ExtractIdentityProviderUIDFromName(name string) (string, error) {
-	tokens, err := GetNameParentTokens(name, IdentityProviderNamePrefix)
-	if err != nil {
-		return "", err
-	}
-	return tokens[0], nil
-}
-
 // ValidateAndGenerateUID validates a user-provided UID or generates a new one.
 // If provided is empty, a new shortuuid is generated.
 // If provided is non-empty, it is validated against identifier.UIDMatcher.
@@ -190,15 +132,6 @@ func ValidateAndGenerateUID(provided string) (string, error) {
 		return "", status.Errorf(codes.InvalidArgument, "invalid UID: must be 1-36 characters, contain only letters, digits, or hyphens, and start and end with a letter or digit")
 	}
 	return uid, nil
-}
-
-// ValidateAndGenerateSpaceUID validates a user-provided Space UID or generates a UUID v4.
-// Custom UIDs use the same format as other public-resource UIDs.
-func ValidateAndGenerateSpaceUID(provided string) (string, error) {
-	if strings.TrimSpace(provided) == "" {
-		return random.UUID(), nil
-	}
-	return ValidateAndGenerateUID(provided)
 }
 
 func parseInt32(src string) (int32, error) {

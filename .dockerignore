@@ -10,7 +10,7 @@ coverage.out
 
 # Not used by the image build
 /web/
-/docs/
+/.agents/
 /.github/
 *.md
 /.gitignore

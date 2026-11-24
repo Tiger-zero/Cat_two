@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"database/sql"
 	"time"
 
 	"github.com/pkg/errors"
@@ -15,6 +16,9 @@ import (
 type refreshToken = storepb.RefreshTokensUserSetting_RefreshToken
 
 const UserSessionIdleTimeout = 45 * time.Minute
+
+// ErrSignInCredentialsChanged indicates that sign-in must verify the account again.
+var ErrSignInCredentialsChanged = errors.New("credentials changed during sign-in")
 
 // GetUserRefreshTokens returns the current refresh credential of each session.
 func (s *Store) GetUserRefreshTokens(ctx context.Context, userID int32) ([]*refreshToken, error) {
@@ -87,6 +91,35 @@ func (s *Store) AddUserRefreshToken(ctx context.Context, userID int32, token *re
 	return err
 }
 
+// AddUserRefreshTokenForSignIn records a session only while the credentials
+// accepted by sign-in still match the account.
+func (s *Store) AddUserRefreshTokenForSignIn(ctx context.Context, user *User, revision string, token *refreshToken) error {
+	err := s.runSerializable(ctx, func(tx *sql.Tx) error {
+		users, err := s.driver.ListUsersTx(ctx, tx, &FindUser{ID: &user.ID})
+		if err != nil {
+			return err
+		}
+		if len(users) != 1 || users[0].RowStatus != Normal || users[0].PasswordHash != user.PasswordHash {
+			return ErrSignInCredentialsChanged
+		}
+		factor, err := s.driver.GetUserTwoFactor(ctx, tx, user.ID)
+		if err != nil {
+			return err
+		}
+		if factor.SessionRevision != revision {
+			return ErrSignInCredentialsChanged
+		}
+		_, err = s.compareAndSetUserRefreshTokens(ctx, tx, user.ID, func(tokens []*refreshToken) ([]*refreshToken, bool) {
+			return append(s.pruneExpiredRefreshTokens(tokens, time.Now()), token), true
+		})
+		return err
+	})
+	if err == nil {
+		s.deleteRefreshTokenCache(ctx, user.ID)
+	}
+	return err
+}
+
 // RotateUserRefreshToken changes the latest credential within a live session.
 // A legacy record uses its original token ID and anchors inactivity to its
 // current creation time before replacing the credential.
@@ -151,7 +184,12 @@ func (s *Store) pruneExpiredRefreshTokens(tokens []*refreshToken, now time.Time)
 // RemoveUserRefreshTokensExcept revokes all sessions except the supplied
 // stable session (or a legacy refresh token ID). An empty ID revokes all.
 func (s *Store) RemoveUserRefreshTokensExcept(ctx context.Context, userID int32, keepID string) error {
-	_, err := s.updateUserRefreshTokens(ctx, userID, func(tokens []*refreshToken) ([]*refreshToken, bool) {
+	_, err := s.updateUserRefreshTokens(ctx, userID, retainUserRefreshSession(keepID))
+	return err
+}
+
+func retainUserRefreshSession(keepID string) func([]*refreshToken) ([]*refreshToken, bool) {
+	return func(tokens []*refreshToken) ([]*refreshToken, bool) {
 		var kept []*refreshToken
 		for _, token := range tokens {
 			if sessionMatches(token, keepID) {
@@ -159,8 +197,7 @@ func (s *Store) RemoveUserRefreshTokensExcept(ctx context.Context, userID int32,
 			}
 		}
 		return kept, len(kept) != len(tokens)
-	})
-	return err
+	}
 }
 
 // RemoveUserRefreshToken revokes the session by its stable ID or current token ID.
@@ -197,40 +234,52 @@ func (s *Store) updateUserRefreshTokens(ctx context.Context, userID int32, updat
 	s.refreshTokenMu.Lock()
 	defer s.refreshTokenMu.Unlock()
 
-	const key = storepb.UserSetting_REFRESH_TOKENS
 	for {
 		if err := ctx.Err(); err != nil {
 			return false, err
 		}
-		records, err := s.driver.ListUserSettings(ctx, &FindUserSetting{UserID: &userID, Key: key})
-		if err != nil {
-			return false, err
-		}
-		var previous *string
-		var tokens []*refreshToken
-		if len(records) != 0 {
-			previous = &records[0].Value
-			setting := &storepb.RefreshTokensUserSetting{}
-			if err := protojsonUnmarshaler.Unmarshal([]byte(*previous), setting); err != nil {
-				return false, errors.Wrap(err, "decode refresh token setting")
-			}
-			tokens = setting.GetRefreshTokens()
-		}
-		next, changed := update(tokens)
-		if !changed {
-			return false, nil
-		}
-		value, err := protojson.Marshal(&storepb.RefreshTokensUserSetting{RefreshTokens: next})
-		if err != nil {
-			return false, errors.Wrap(err, "encode refresh token setting")
-		}
-		written, err := s.driver.CompareAndSetUserSetting(ctx, &UserSetting{UserID: userID, Key: key, Value: string(value)}, previous)
-		if err != nil {
-			return false, err
+		written, err := s.compareAndSetUserRefreshTokens(ctx, nil, userID, update)
+		if errors.Is(err, errTransactionConflict) {
+			continue
 		}
 		if written {
-			s.userSettingCache.Delete(ctx, getUserSettingCacheKey(userID, key.String()))
-			return true, nil
+			s.deleteRefreshTokenCache(ctx, userID)
 		}
+		return written, err
 	}
+}
+
+func (s *Store) compareAndSetUserRefreshTokens(ctx context.Context, tx *sql.Tx, userID int32, update func([]*refreshToken) ([]*refreshToken, bool)) (bool, error) {
+	const key = storepb.UserSetting_REFRESH_TOKENS
+	records, err := s.driver.ListUserSettings(ctx, tx, &FindUserSetting{UserID: &userID, Key: key})
+	if err != nil {
+		return false, err
+	}
+	var previous *string
+	var tokens []*refreshToken
+	if len(records) != 0 {
+		previous = &records[0].Value
+		setting := &storepb.RefreshTokensUserSetting{}
+		if err := protojsonUnmarshaler.Unmarshal([]byte(*previous), setting); err != nil {
+			return false, errors.Wrap(err, "decode refresh token setting")
+		}
+		tokens = setting.GetRefreshTokens()
+	}
+	next, changed := update(tokens)
+	if !changed {
+		return false, nil
+	}
+	value, err := protojson.Marshal(&storepb.RefreshTokensUserSetting{RefreshTokens: next})
+	if err != nil {
+		return false, errors.Wrap(err, "encode refresh token setting")
+	}
+	written, err := s.driver.CompareAndSetUserSetting(ctx, tx, &UserSetting{UserID: userID, Key: key, Value: string(value)}, previous)
+	if err == nil && !written {
+		return false, errTransactionConflict
+	}
+	return written, err
+}
+
+func (s *Store) deleteRefreshTokenCache(ctx context.Context, userID int32) {
+	s.userSettingCache.Delete(ctx, getUserSettingCacheKey(userID, storepb.UserSetting_REFRESH_TOKENS.String()))
 }

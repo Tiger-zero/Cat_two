@@ -39,20 +39,16 @@ func TestMemoSearchCompilesLiteralFilters(t *testing.T) {
 
 	engine, err := filter.DefaultEngine()
 	require.NoError(t, err)
-	for _, dialect := range []filter.DialectName{filter.DialectSQLite, filter.DialectMySQL, filter.DialectPostgres} {
-		statement, err := engine.CompileToStatement(t.Context(), expression, filter.RenderOptions{Dialect: dialect})
-		require.NoError(t, err, dialect)
-		require.Contains(t, statement.Args, "计划/团队", dialect)
-		require.Contains(t, statement.Args, "web", dialect)
-		if dialect == filter.DialectSQLite {
-			// Shanghai midnight is 16:00 UTC on the preceding civil date.
-			require.Contains(t, statement.Args, time.Date(2024, time.February, 28, 16, 0, 0, 0, time.UTC).Unix())
-			require.Contains(t, statement.Args, time.Date(2024, time.February, 29, 16, 0, 0, 0, time.UTC).Unix())
-			require.Contains(t, statement.Args, "%进度 50\\%\\_off \"quote\" \\\\ notes\nnext%")
-			require.Contains(t, statement.Args, "计划/团队/")
-			require.NotContains(t, statement.SQL, input.Query)
-		}
-	}
+	statement, err := engine.CompileToStatement(t.Context(), expression)
+	require.NoError(t, err)
+	require.Contains(t, statement.Args, "计划/团队")
+	require.Contains(t, statement.Args, "web")
+	// Shanghai midnight is 16:00 UTC on the preceding civil date.
+	require.Contains(t, statement.Args, time.Date(2024, time.February, 28, 16, 0, 0, 0, time.UTC).Unix())
+	require.Contains(t, statement.Args, time.Date(2024, time.February, 29, 16, 0, 0, 0, time.UTC).Unix())
+	require.Contains(t, statement.Args, "%进度 50\\%\\_off \"quote\" \\\\ notes\nnext%")
+	require.Contains(t, statement.Args, "计划/团队/")
+	require.NotContains(t, statement.SQL, input.Query)
 }
 
 func TestMemoSearchValidatesFiltersAndPageTokens(t *testing.T) {

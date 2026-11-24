@@ -1331,7 +1331,7 @@ export const InstanceStatsSchema: GenMessage<InstanceStats> = /*@__PURE__*/
  */
 export type InstanceStats_DatabaseStats = Message<"memos.api.InstanceStats.DatabaseStats"> & {
   /**
-   * The database driver: "sqlite", "mysql" or "postgres".
+   * The database driver is "sqlite".
    *
    * @generated from field: string driver = 1;
    */
@@ -1564,7 +1564,7 @@ export const InstanceService: GenService<{
     output: typeof InstanceSettingSchema;
   },
   /**
-   * TestInstanceEmailSetting sends a test email with the provided or stored SMTP settings. Admin only.
+   * TestInstanceEmailSetting is a retired SMTP test RPC retained for protocol compatibility.
    *
    * @generated from rpc memos.api.InstanceService.TestInstanceEmailSetting
    */

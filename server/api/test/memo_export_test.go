@@ -20,6 +20,7 @@ import (
 
 	"github.com/usememos/memos/core/memoexport"
 	"github.com/usememos/memos/internal/ratelimit"
+	"github.com/usememos/memos/internal/testutil/legacyspace"
 	apipb "github.com/usememos/memos/proto/gen/api"
 	storepb "github.com/usememos/memos/proto/gen/store"
 	"github.com/usememos/memos/server/api"
@@ -42,7 +43,8 @@ func buildArchiveFixture(t *testing.T, ts *TestService, username string) *archiv
 	user, err := ts.CreateRegularUser(ctx, username)
 	require.NoError(t, err)
 	userCtx := ts.CreateUserContext(ctx, user.ID)
-	space, err := ts.Store.CreateSpace(ctx, &store.Space{UID: "team-notes", Title: "Team Notes"}, user.ID)
+	db := ts.Store.GetDriver().GetDB()
+	spaceID, err := legacyspace.Seed(ctx, db, "team-notes", "Team Notes", user.ID)
 	require.NoError(t, err)
 
 	photo := []byte{0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 1, 2, 3, 4}
@@ -103,9 +105,10 @@ func buildArchiveFixture(t *testing.T, ts *TestService, username string) *archiv
 	require.NoError(t, err)
 
 	legacySpaceMemo, err := ts.Store.CreateMemo(ctx, &store.Memo{
-		UID: "spacememo01", CreatorID: user.ID, Content: "Shared with the team", Visibility: store.SpaceAudience, SpaceID: &space.ID,
+		UID: "spacememo01", CreatorID: user.ID, Content: "Shared with the team", Visibility: store.Private,
 	})
 	require.NoError(t, err)
+	require.NoError(t, legacyspace.PlaceMemo(ctx, db, legacySpaceMemo.ID, spaceID, "SPACE"))
 
 	archived, err := ts.Service.CreateMemo(userCtx, &apipb.CreateMemoRequest{
 		MemoId: "archived001",
@@ -229,7 +232,7 @@ func TestWriteMemoExport(t *testing.T) {
 	// The comment is older than its parent but must still follow it.
 	require.Less(t, indexOfMemo(archive, "parent00001"), indexOfMemo(archive, "comment0001"))
 
-	require.Equal(t, &memoexport.Space{UID: "team-notes", Title: "Team Notes"}, byUID["spacememo01"].Space)
+	require.Nil(t, byUID["spacememo01"].Space)
 	require.Equal(t, "PRIVATE", byUID["spacememo01"].Visibility)
 	require.Equal(t, "ARCHIVED", byUID["archived001"].State)
 	require.Equal(t, "PRIVATE", byUID["archived001"].Visibility)
@@ -261,6 +264,8 @@ func TestImportMemoExportIntoAnotherAccount(t *testing.T) {
 	})
 	require.NoError(t, err)
 	archive := exportArchive(t, ts, fixture.user)
+	// Reproduce an archive created before workspace placement was retired.
+	archiveMemosByUID(archive)["spacememo01"].Space = &memoexport.Space{UID: "team-notes", Title: "Team Notes"}
 
 	ctx := context.Background()
 	importer, err := ts.CreateRegularUser(ctx, "importer")
@@ -273,7 +278,7 @@ func TestImportMemoExportIntoAnotherAccount(t *testing.T) {
 	require.Zero(t, report.Updated)
 	require.Zero(t, report.Skipped)
 	require.Zero(t, report.Failed, "%v", report.Failures)
-	// The space memo cannot land in a space the importer does not belong to.
+	// Legacy placement is ignored without losing the note.
 	require.Len(t, report.Warnings, 1)
 	require.Contains(t, report.Warnings[0].Message, "space")
 
@@ -320,7 +325,9 @@ func TestImportMemoExportIntoAnotherAccount(t *testing.T) {
 
 	spaceMemo := byContent["Shared with the team"]
 	require.NotNil(t, spaceMemo)
-	require.Nil(t, spaceMemo.SpaceID)
+	var hasNoPlacement bool
+	require.NoError(t, ts.Store.GetDriver().GetDB().QueryRowContext(ctx, "SELECT space_id IS NULL FROM memo WHERE id = ?", spaceMemo.ID).Scan(&hasNoPlacement))
+	require.True(t, hasNoPlacement)
 	require.Equal(t, store.Private, spaceMemo.Visibility)
 
 	archived := byContent["Old note"]

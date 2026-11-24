@@ -163,25 +163,43 @@ func (s *APIService) handleMemoTrashMutation(action store.MemoTrashAction) func(
 			return mapMemoWriteError(err, "failed to change deleted memo")
 		}
 		s.SSEHub.publishMemoChanged()
-		if len(attachments) != 0 {
-			// Storage cleanup can fail after the memo is gone. The jobs are
-			// already durable, so the response reports the committed purge.
-			cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
-			defer cancel()
-			s.cleanupPurgedMemoAttachments(cleanupCtx, attachments, now)
-		}
+		s.attemptCommittedAttachmentCleanup(ctx, attachments)
 		w.WriteHeader(http.StatusNoContent)
 		return nil
 	}
 }
 
-func (s *APIService) cleanupPurgedMemoAttachments(ctx context.Context, attachments []*store.Attachment, now time.Time) {
+// Try the committed jobs promptly without making their outcome part of the
+// request result. Metadata from the queue is authoritative after commit.
+func (s *APIService) attemptCommittedAttachmentCleanup(ctx context.Context, attachments []*store.Attachment) {
+	if len(attachments) == 0 {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
+	defer cancel()
+	now := time.Now()
+	for _, attachment := range attachments {
+		if ctx.Err() != nil {
+			return
+		}
+		jobs, err := s.Store.ListMemoTrashAttachmentCleanup(ctx, attachment.ID-1, now, 1)
+		if err != nil {
+			slog.Error("failed to read attachment cleanup job; retrying", "attachment", attachment.ID, "error", err)
+			continue
+		}
+		if len(jobs) > 0 && jobs[0].ID == attachment.ID {
+			s.cleanupQueuedAttachments(ctx, jobs, now)
+		}
+	}
+}
+
+func (s *APIService) cleanupQueuedAttachments(ctx context.Context, attachments []*store.Attachment, now time.Time) {
 	for _, attachment := range attachments {
 		if ctx.Err() != nil {
 			return
 		}
 		if err := s.Store.RunMemoTrashAttachmentCleanup(ctx, attachment, now); err != nil && ctx.Err() == nil {
-			slog.Error("failed to clean purged memo attachment; retrying", "attachment", attachment.ID, "error", err)
+			slog.Error("failed to clean deleted attachment; retrying", "attachment", attachment.ID, "error", err)
 		}
 	}
 }
@@ -200,7 +218,7 @@ func (s *APIService) retryPurgedMemoAttachments(ctx context.Context, now time.Ti
 		if err != nil {
 			return err
 		}
-		s.cleanupPurgedMemoAttachments(ctx, attachments, now)
+		s.cleanupQueuedAttachments(ctx, attachments, now)
 		if len(attachments) < batchSize {
 			return ctx.Err()
 		}

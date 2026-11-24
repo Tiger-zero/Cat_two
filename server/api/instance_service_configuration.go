@@ -4,56 +4,17 @@ import (
 	"context"
 	stderrors "errors"
 	"strings"
-	"time"
 
 	"google.golang.org/genproto/googleapis/rpc/errdetails"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/usememos/memos/core/configuration"
-	apipb "github.com/usememos/memos/proto/gen/api"
-	"github.com/usememos/memos/store"
 )
 
 // reasonManagedByConfiguration is the ErrorInfo reason of a write refused
 // because declarative configuration manages what it would change.
 const reasonManagedByConfiguration = "MANAGED_BY_CONFIGURATION"
-
-func (s *APIService) GetConfigurationStatus(ctx context.Context, _ *apipb.GetConfigurationStatusRequest) (*apipb.ConfigurationStatus, error) {
-	user, err := s.fetchCurrentUser(ctx)
-	if err != nil {
-		return nil, status.Errorf(codes.Internal, "failed to get current user: %v", err)
-	}
-	if user == nil {
-		return nil, status.Errorf(codes.Unauthenticated, "user not authenticated")
-	}
-	if user.Role != store.RoleAdmin {
-		return nil, status.Errorf(codes.PermissionDenied, "permission denied")
-	}
-	state, err := s.Store.GetConfigurationState(ctx)
-	if err != nil {
-		return nil, status.Errorf(codes.Internal, "failed to read the configuration state: %v", err)
-	}
-	result := &apipb.ConfigurationStatus{
-		Serial:       state.Serial,
-		ConfigDigest: state.ConfigDigest,
-		AppliedBy:    state.AppliedBy,
-		Version:      state.Version,
-	}
-	if state.AppliedTs != 0 {
-		result.ApplyTime = timestamppb.New(time.Unix(state.AppliedTs, 0))
-	}
-	for _, resource := range state.Resources {
-		result.ManagedResources = append(result.ManagedResources, &apipb.ConfigurationStatus_ManagedResource{
-			Resource:      resource.Name,
-			Source:        resource.Source,
-			ManagedFields: resource.ManagedFields,
-			IgnoredFields: resource.IgnoredFields,
-		})
-	}
-	return result, nil
-}
 
 // checkManagedChange refuses a write that would change fields of a resource
 // the configuration manages; changed lists the JSON-name paths the write

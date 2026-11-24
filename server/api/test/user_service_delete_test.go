@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/fieldmaskpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	apipb "github.com/usememos/memos/proto/gen/api"
@@ -29,11 +30,7 @@ func TestDeleteUserSelfDeleteCleansAccountDataAndAuthCookies(t *testing.T) {
 	user, err := ts.CreateRegularUser(ctx, "alice")
 	require.NoError(t, err)
 
-	_, err = ts.Store.CreateUserIdentity(ctx, &store.UserIdentity{
-		UserID:    user.ID,
-		Provider:  "google",
-		ExternUID: "alice-google-sub",
-	})
+	_, err = ts.Store.GetDriver().GetDB().ExecContext(ctx, "INSERT INTO user_identity (user_id, provider, extern_uid) VALUES (?, ?, ?)", user.ID, "google", "alice-google-sub")
 	require.NoError(t, err)
 
 	err = ts.Store.AddUserRefreshToken(ctx, user.ID, &storepb.RefreshTokensUserSetting_RefreshToken{
@@ -54,9 +51,9 @@ func TestDeleteUserSelfDeleteCleansAccountDataAndAuthCookies(t *testing.T) {
 	require.NoError(t, err)
 	require.Nil(t, deletedUser)
 
-	identities, err := ts.Store.ListUserIdentities(ctx, &store.FindUserIdentity{UserID: &user.ID})
-	require.NoError(t, err)
-	require.Empty(t, identities)
+	var identities int
+	require.NoError(t, ts.Store.GetDriver().GetDB().QueryRowContext(ctx, "SELECT COUNT(*) FROM user_identity WHERE user_id = ?", user.ID).Scan(&identities))
+	require.Zero(t, identities)
 
 	refreshSetting, err := ts.Store.GetUserSetting(ctx, &store.FindUserSetting{
 		UserID: &user.ID,
@@ -92,9 +89,8 @@ func TestDeleteUserSelfDeleteRemovesOnlyOwnedMemosAndResources(t *testing.T) {
 	}
 	createLegacyComment := func(uid string, creatorID, parentID int32, content string) *store.Memo {
 		t.Helper()
-		comment, err := ts.Store.CreateMemoComment(ctx, &store.Memo{
-			UID: uid, CreatorID: creatorID, Content: content, Visibility: store.Public,
-		}, parentID, creatorID)
+		comment := createMemo(uid, creatorID, content)
+		_, err := ts.Store.GetDriver().GetDB().ExecContext(ctx, "INSERT INTO memo_relation (memo_id, related_memo_id, type) VALUES (?, ?, 'COMMENT')", comment.ID, parentID)
 		require.NoError(t, err)
 		return comment
 	}
@@ -141,6 +137,18 @@ func TestDeleteUserSelfDeleteRemovesOnlyOwnedMemosAndResources(t *testing.T) {
 		Blob:      []byte("peer"),
 		MemoID:    &foreignMemoStore.ID,
 	})
+	require.NoError(t, err)
+	peerCtx := ts.CreateUserContext(ctx, peer.ID)
+	crossLinkedAttachment, err := ts.Service.CreateAttachment(peerCtx, &apipb.CreateAttachmentRequest{
+		AttachmentId: "attach-peer-detach",
+		Attachment: &apipb.Attachment{
+			Filename: "peer-old-thread.txt", Type: "text/plain", Content: []byte("peer keeps it"),
+		},
+	})
+	require.NoError(t, err)
+	crossLinkedUID, err := api.ExtractAttachmentUIDFromName(crossLinkedAttachment.Name)
+	require.NoError(t, err)
+	_, err = ts.Store.GetDriver().GetDB().ExecContext(ctx, "UPDATE attachment SET memo_id = ? WHERE uid = ?", ownMemoStore.ID, crossLinkedUID)
 	require.NoError(t, err)
 
 	_, err = ts.Store.UpsertReaction(ctx, &store.Reaction{
@@ -207,11 +215,7 @@ func TestDeleteUserSelfDeleteRemovesOnlyOwnedMemosAndResources(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	_, err = ts.Store.CreateUserIdentity(ctx, &store.UserIdentity{
-		UserID:    user.ID,
-		Provider:  "google",
-		ExternUID: "resource-owner-google-sub",
-	})
+	_, err = ts.Store.GetDriver().GetDB().ExecContext(ctx, "INSERT INTO user_identity (user_id, provider, extern_uid) VALUES (?, ?, ?)", user.ID, "google", "resource-owner-google-sub")
 	require.NoError(t, err)
 	err = ts.Store.AddUserPersonalAccessToken(ctx, user.ID, &storepb.PersonalAccessTokensUserSetting_PersonalAccessToken{
 		TokenId:     "pat-owner",
@@ -263,6 +267,14 @@ func TestDeleteUserSelfDeleteRemovesOnlyOwnedMemosAndResources(t *testing.T) {
 	peerAttachmentAfterDelete, err := ts.Store.GetAttachment(ctx, &store.FindAttachment{ID: &peerAttachment.ID})
 	require.NoError(t, err)
 	require.NotNil(t, peerAttachmentAfterDelete)
+	detached, err := ts.Store.GetAttachment(ctx, &store.FindAttachment{UID: &crossLinkedUID})
+	require.NoError(t, err)
+	require.NotNil(t, detached)
+	require.Equal(t, peer.ID, detached.CreatorID)
+	require.Nil(t, detached.MemoID)
+	blob, err := ts.Service.GetAttachmentBlob(ctx, detached)
+	require.NoError(t, err)
+	require.Equal(t, []byte("peer keeps it"), blob)
 	_, err = os.Stat(thumbnailCachePath)
 	require.ErrorIs(t, err, os.ErrNotExist)
 	_, err = os.Stat(motionCachePath)
@@ -297,9 +309,9 @@ func TestDeleteUserSelfDeleteRemovesOnlyOwnedMemosAndResources(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, receivedInboxes)
 
-	identities, err := ts.Store.ListUserIdentities(ctx, &store.FindUserIdentity{UserID: &user.ID})
-	require.NoError(t, err)
-	require.Empty(t, identities)
+	var identities int
+	require.NoError(t, ts.Store.GetDriver().GetDB().QueryRowContext(ctx, "SELECT COUNT(*) FROM user_identity WHERE user_id = ?", user.ID).Scan(&identities))
+	require.Zero(t, identities)
 
 	patSetting, err := ts.Store.GetUserSetting(ctx, &store.FindUserSetting{
 		UserID: &user.ID,
@@ -309,50 +321,45 @@ func TestDeleteUserSelfDeleteRemovesOnlyOwnedMemosAndResources(t *testing.T) {
 	require.Nil(t, patSetting)
 }
 
-func TestDeleteUserSpaceMembershipGuardIgnoresForce(t *testing.T) {
-	for _, tc := range []struct {
-		name   string
-		force  bool
-		suffix string
-	}{
-		{name: "without force", suffix: "normal"},
-		{name: "with force", force: true, suffix: "force"},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			ts := NewTestService(t)
-			defer ts.Cleanup()
+func TestArchiveAndDeleteAccountWithHistoricalSpaceMembership(t *testing.T) {
+	ctx := t.Context()
+	ts := NewTestService(t)
+	defer ts.Cleanup()
 
-			ctx := context.Background()
-			user, err := ts.CreateRegularUser(ctx, "membership-delete-"+tc.suffix)
-			require.NoError(t, err)
-			space, err := ts.Store.CreateSpace(ctx, &store.Space{UID: "membership-delete-" + tc.suffix, Title: "Membership guard"}, user.ID)
-			require.NoError(t, err)
-			memo, err := ts.Service.CreateMemo(ts.CreateUserContext(ctx, user.ID), &apipb.CreateMemoRequest{Memo: &apipb.Memo{
-				Content:    "must survive failed account deletion",
-				Visibility: apipb.Visibility_PUBLIC,
-			}})
-			require.NoError(t, err)
+	admin, err := ts.CreateHostUser(ctx, "instance-admin")
+	require.NoError(t, err)
+	user, err := ts.CreateRegularUser(ctx, "legacy-space-admin")
+	require.NoError(t, err)
+	adminCtx := ts.CreateUserContext(ctx, admin.ID)
+	db := ts.Store.GetDriver().GetDB()
+	var spaceID int32
+	require.NoError(t, db.QueryRowContext(ctx, "INSERT INTO space (uid, title) VALUES (?, ?) RETURNING id", "old-space", "Historical Space").Scan(&spaceID))
+	_, err = db.ExecContext(ctx, "INSERT INTO space_member (space_id, user_id, status, role) VALUES (?, ?, 'ACTIVE', 'ADMIN'), (?, ?, 'ACTIVE', 'USER')", spaceID, user.ID, spaceID, admin.ID)
+	require.NoError(t, err)
 
-			_, err = ts.Service.DeleteUser(ts.CreateUserContext(ctx, user.ID), &apipb.DeleteUserRequest{
-				Name:  api.BuildUserName(user.Username),
-				Force: tc.force,
-			})
-			require.Equal(t, codes.FailedPrecondition, status.Code(err))
-			require.ErrorContains(t, err, "leave all spaces")
+	userName := api.BuildUserName(user.Username)
+	updated, err := ts.Service.UpdateUser(adminCtx, &apipb.UpdateUserRequest{
+		User:       &apipb.User{Name: userName, State: apipb.State_ARCHIVED},
+		UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"state"}},
+	})
+	require.NoError(t, err)
+	require.Equal(t, apipb.State_ARCHIVED, updated.State)
+	var memberships int
+	require.NoError(t, db.QueryRowContext(ctx, "SELECT COUNT(*) FROM space_member WHERE space_id = ?", spaceID).Scan(&memberships))
+	require.Equal(t, 2, memberships, "archiving preserves historical metadata")
 
-			remainingUser, err := ts.Store.GetUser(ctx, &store.FindUser{ID: &user.ID})
-			require.NoError(t, err)
-			require.NotNil(t, remainingUser)
-			membership, err := ts.Store.GetSpaceMember(ctx, &store.FindSpaceMember{SpaceID: &space.ID, UserID: &user.ID, ViewerUserID: &user.ID})
-			require.NoError(t, err)
-			require.NotNil(t, membership)
-			memoUID, err := api.ExtractMemoUIDFromName(memo.Name)
-			require.NoError(t, err)
-			remainingMemo, err := ts.Store.GetMemo(ctx, &store.FindMemo{UID: &memoUID})
-			require.NoError(t, err)
-			require.NotNil(t, remainingMemo)
-		})
-	}
+	_, err = ts.Service.DeleteUser(adminCtx, &apipb.DeleteUserRequest{Name: userName})
+	require.NoError(t, err)
+	deleted, err := ts.Store.GetUser(ctx, &store.FindUser{ID: &user.ID})
+	require.NoError(t, err)
+	require.Nil(t, deleted)
+
+	var remainingUser int32
+	require.NoError(t, db.QueryRowContext(ctx, "SELECT user_id FROM space_member WHERE space_id = ?", spaceID).Scan(&remainingUser))
+	require.Equal(t, admin.ID, remainingUser)
+	var title string
+	require.NoError(t, db.QueryRowContext(ctx, "SELECT title FROM space WHERE id = ?", spaceID).Scan(&title))
+	require.Equal(t, "Historical Space", title)
 }
 
 func TestDeleteUserRollbackPreservesAllResources(t *testing.T) {
@@ -422,11 +429,7 @@ func TestDeleteUserRollbackPreservesAllResources(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	_, err = ts.Store.CreateUserIdentity(ctx, &store.UserIdentity{
-		UserID:    user.ID,
-		Provider:  "google",
-		ExternUID: "rollback-owner-google-sub",
-	})
+	_, err = ts.Store.GetDriver().GetDB().ExecContext(ctx, "INSERT INTO user_identity (user_id, provider, extern_uid) VALUES (?, ?, ?)", user.ID, "google", "rollback-owner-google-sub")
 	require.NoError(t, err)
 	err = ts.Store.AddUserPersonalAccessToken(ctx, user.ID, &storepb.PersonalAccessTokensUserSetting_PersonalAccessToken{
 		TokenId:     "pat-rollback-owner",
@@ -468,9 +471,9 @@ func TestDeleteUserRollbackPreservesAllResources(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, inboxesAfterRollback, 1)
 
-	identitiesAfterRollback, err := ts.Store.ListUserIdentities(ctx, &store.FindUserIdentity{UserID: &user.ID})
-	require.NoError(t, err)
-	require.Len(t, identitiesAfterRollback, 1)
+	var subject string
+	require.NoError(t, ts.Store.GetDriver().GetDB().QueryRowContext(ctx, "SELECT extern_uid FROM user_identity WHERE user_id = ?", user.ID).Scan(&subject))
+	require.Equal(t, "rollback-owner-google-sub", subject)
 
 	patSetting, err := ts.Store.GetUserSetting(ctx, &store.FindUserSetting{
 		UserID: &user.ID,

@@ -839,3 +839,7 @@ configuration directory. A missing `/etc/secrets` stays silent.
 
 `MEMO_RELATED` is retired. Reactions use the full Unicode emoji picker; remove this setting and its lifecycle references from
 declarative configuration files. The next apply releases its old ownership record automatically. Existing reactions are preserved.
+
+### 2026-11-24 — Cat_two personal instances
+
+A new Cat_two instance can initialize one password administrator. An existing instance can update that administrator, general settings and local storage settings. Plans warn about retired SSO, account provisioning and removal, SMTP, quota and non-local storage declarations. Existing SQLite accounts, notes and legacy settings survive an upgrade. [Deployment guide](../../../cat-two-product-development/references/deployment.md)

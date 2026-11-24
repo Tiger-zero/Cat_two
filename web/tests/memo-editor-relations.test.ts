@@ -8,6 +8,7 @@ import {
   MemoRelation_Type,
   MemoRelationSchema,
   MemoSchema,
+  Visibility,
 } from "@/types/proto/api/memo_service_pb";
 import { clientSaveOperations as ops } from "./helpers/memo-save-operations";
 
@@ -59,39 +60,39 @@ describe("memo editor relation updates", () => {
     clients.updateMemo.mockImplementation(async ({ memo }: { memo: Memo }) => memo);
   });
 
-  it("assigns a new top-level memo to the selected Space", async () => {
+  it("creates a private top-level memo", async () => {
     const state = createInitialState();
     state.content = "Roadmap";
 
-    await memoService.save(state, { space: "spaces/product" }, ops);
+    await memoService.save(state, {}, ops);
 
     expect(clients.createMemo).toHaveBeenCalledWith({
-      memo: expect.objectContaining({ content: "Roadmap", space: "spaces/product" }),
+      memo: expect.objectContaining({ content: "Roadmap", visibility: Visibility.PRIVATE }),
     });
+    expect(clients.createMemo.mock.calls[0][0].memo.space).toBeUndefined();
   });
 
-  it("saves the draft destination unless the host fixes the Space", async () => {
-    const state = createInitialState();
-    state.content = "Draft";
-    state.metadata = { ...state.metadata, space: "spaces/work" };
-    await memoService.save(state, {}, ops);
-    expect(clients.createMemo).toHaveBeenLastCalledWith({ memo: expect.objectContaining({ space: "spaces/work" }) });
-    await memoService.save(state, { space: "spaces/current" }, ops);
-    expect(clients.createMemo).toHaveBeenLastCalledWith({ memo: expect.objectContaining({ space: "spaces/current" }) });
-  });
-
-  it("does not inherit the selected Space when creating a comment", async () => {
+  it("creates a comment on its parent memo", async () => {
     const state = createInitialState();
     state.content = "Reply";
-    state.metadata = { ...state.metadata, space: "spaces/draft" };
-
-    await memoService.save(state, { parentMemoName: "memos/parent", space: "spaces/product" }, ops);
+    await memoService.save(state, { parentMemoName: "memos/parent" }, ops);
 
     expect(clients.createMemoComment).toHaveBeenCalledOnce();
     const request = clients.createMemoComment.mock.calls[0][0];
     expect(request.parent).toBe("memos/parent");
     expect(request.comment.content).toBe("Reply");
-    expect(request.comment.space).toBeUndefined();
+  });
+
+  it("edits the body of a legacy note without rewriting its space or visibility", async () => {
+    const memo = create(MemoSchema, { name: "memos/legacy", content: "Original", space: "spaces/work", visibility: Visibility.SPACE });
+    clients.getMemo.mockResolvedValue(memo);
+
+    await memoService.save({ ...createEditorState(memo), content: "Edited" }, { memoName: memo.name }, ops);
+
+    const { memo: patch, updateMask } = clients.updateMemo.mock.calls[0][0];
+    expect(updateMask.paths).toEqual(["content", "update_time"]);
+    expect(patch).toMatchObject({ content: "Edited", visibility: Visibility.VISIBILITY_UNSPECIFIED });
+    expect(patch.space).toBeUndefined();
   });
 
   it("sends only mutable references when editing a comment", async () => {

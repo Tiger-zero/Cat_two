@@ -7,11 +7,11 @@ AI 客户端用 MCP 查找、整理和写回笔记。脚本、附件传输及回
 - **登录防护** 同一 IP 连续 6 次密码验证失败会被禁止发起新的登录。第 6 次及之后的登录请求返回 `403` 和 `LOGIN_IP_BLOCKED`。登录和续期用标准 `Set-Cookie` 和 `Cookie` 处理刷新令牌。每次登录有独立会话 ID，退出或撤销该会话后，后续请求会拒绝其访问和刷新凭据。黑名单由管理员会话在网页中维护。 [解封说明](deployment.md#登录防护和-ip-解封)
 - **MCP** 连接到 `/mcp`，使用 Streamable HTTP，在每次请求发送 `Authorization: Bearer <MCP 连接令牌>`。在「设置 → MCP 和 API」创建，支持 7 天（默认）、14 天、1 个日历年或永久。创建时可选 `read_only` 或 `read_write`，默认和旧连接为读写。到期或删除后下一次请求会被拒绝。连接管理的 `/api/mcpConnections` 要求网页登录会话。 [连接说明](../../../../server/mcp/README.md#connecting-a-client) · [管理权限](../../../../server/api/mcp_connection_handler.go)
 - **REST** 在同一设置页创建个人访问令牌（PAT），发送 `Authorization: Bearer <PAT>`，先用 `GET /api/auth/me` 核对归属。PAT 的权限按持有账户及各接口的权限检查决定，目前无逐令牌的只读、按笔记或按标签授权范围。可为各集成单独发放和撤销令牌。密码修改需要交互会话。MCP 连接令牌仅用于 `/mcp`。 [PAT 字段](../../../../proto/api/user_service.proto) · [认证](../../../../server/auth/authenticator.go) · [密码修改约束](../../../../server/api/user_service.go)
-- **数据** 仅活跃的笔记作者可读写其笔记。REST 和 MCP 返回的笔记可见性为 `PRIVATE`，旧链接无法分享笔记。笔记链接 `/memos/<uid>` 仍要求登录并核对作者。匿名接口以 ACL 为准，例如实例概况可匿名读取。上游定义里仍保留部分已停用的空间、身份提供方和 Webhook 路由，个人模式调用会返回 `UNIMPLEMENTED`。 [笔记权限](../../../../core/access/memo.go) · [匿名路由](../../../../server/api/acl_config.go) · [停用路由](../../../../server/api/retired_modules.go)
+- **数据** 仅活跃的笔记作者可读写其笔记。REST 和 MCP 返回 `PRIVATE` 笔记，并省略历史空间归属。旧链接无法分享笔记。笔记链接 `/memos/<uid>` 查验登录和作者权限，实例概况等 ACL 白名单接口可匿名读取。空间、SSO、身份关联、通用出站 Webhook、旧用户通知和旧配置状态接口已停用，调用返回 `UNIMPLEMENTED`。 [笔记权限](../../../../core/access/memo.go) · [匿名路由](../../../../server/api/acl_config.go) · [停用路由](../../../../server/api/retired_modules.go)
 
 网页使用 Connect `AuthService`。对应的 REST 路径为 `POST /api/auth/signin`、`POST /api/auth/refresh`、`GET /api/auth/me` 和 `POST /api/auth/signout`。Connect 与 REST 调用同一会话实现，共用密码校验、刷新 Cookie 和会话撤销。 [认证协议](../../../../proto/api/auth_service.proto) · [Connect 入口](../../../../server/api/connect_services.go) · [会话实现](../../../../server/api/auth_service_session.go)
 
-网页在编辑时向 `POST /api/session/activity` 上报活动，接口需要活跃的登录会话并返回 `idleExpiresAt`。服务端以最近一次登录或编辑活动后的 45 分钟作为空闲期限，刷新 Cookie 或访问令牌不会顺延此期限。过期后原会话无法再次上报活动。 [会话持久化](../../../../store/user_session.go)
+网页在编辑时向 `POST /api/session/activity` 上报活动。请求使用当前站点的浏览器 `Origin` 和网页访问令牌的 Bearer 请求头，无需请求体。成功时返回 `idleExpiresAt`。服务端以最近一次登录或编辑活动后的 45 分钟作为空闲期限，刷新 Cookie 或访问令牌不会顺延此期限。过期后原会话无法再次上报活动。 [接口检查](../../../../server/api/auth_session_activity.go) · [会话持久化](../../../../store/user_session.go)
 
 ## MCP 查找与共同创作
 
@@ -28,7 +28,9 @@ AI 客户端用 MCP 查找、整理和写回笔记。脚本、附件传输及回
 | `memo_create_memo` | 传 `{"body":{"content":"# 标题\n\n- [ ] 待办\n\n#项目/Cat_two"}}`。可用 `body.createTime` 指定 RFC 3339 创建时间。设置顶层 `memoId` 和 `idempotent: true` 后，可重试相同请求。 |
 | `memo_update_memo` | 传 `{"memo":"memos/<uid>","updateMask":"content","expectedRevision":"读取时的修订号","body":{"content":"完整正文"}}`。只更新掩码选定的字段。旧修订号会返回工具冲突错误。 |
 
-`memo_search` 和 `memo_list_memos` 查下一页时，把返回的 `nextPageToken` 作为 `pageToken` 并沿用查询条件与顺序。写回前展示完整 Markdown，取得用户确认。更新原笔记时使用读取结果中的 `revision`，发生冲突后重新读回并核对预览。创建请求响应中断时可用原 `memoId`、`idempotent` 和原始字段重试，匹配时返回已保存的记录。MCP 使用顶层参数，REST 使用查询参数。 [分页及写入工作流](../../../../plugins/cat-two-notes/skills/organize-notes/SKILL.md) · [新建参数](../../../../proto/api/memo_service.proto)
+`memo_search` 和 `memo_list_memos` 每页返回最多 4 MiB 的 Markdown。达到上限时，即使本页条数少于 `pageSize`，也请用 `nextPageToken` 继续，并沿用查询条件与顺序。若单条超过上限，按错误提示用 `memo_get_memo` 读取该笔记，再用错误中提供的 `pageToken` 继续。分页请求遇到并发修改时可用相同游标重试。
+
+写回前展示完整 Markdown，取得用户确认。更新原笔记时使用读取结果中的 `revision`，发生冲突后重新读回并核对预览。创建请求响应中断时可用原 `memoId`、`idempotent` 和原始字段重试，匹配时返回已保存的记录。MCP 使用顶层参数，REST 使用查询参数。 [分页及写入工作流](../../../../plugins/cat-two-notes/skills/organize-notes/SKILL.md) · [新建参数](../../../../proto/api/memo_service.proto)
 
 ## 令牌创建笔记
 
@@ -52,7 +54,7 @@ AI 客户端用 MCP 查找、整理和写回笔记。脚本、附件传输及回
 | 修改附件集合 | `PATCH /api/memos/<uid>/attachments` 传 `{"attachments":[{"name":"attachments/<uid>"}]}`。提交的是完整集合，增添附件时也要带上原有引用。笔记正文中的托管附件链接必须与绑定一致。 |
 | ZIP 导出与导入 | `GET /file/users/<username>/export` 导出自己的笔记。可用多个 `memo=<uid>` 选择最多 100 条。`POST /api/users/<username>:importMemos` 分块上传 ZIP，结束时用 `validateOnly: true` 预演。 |
 
-独立附件由上传者访问，绑定后的附件随笔记权限。个人 MCP 提供附件元数据。上传、下载文件、删除笔记及回收站操作使用上表的 HTTP 路径。 [附件协议](../../../../proto/api/attachment_service.proto) · [附件绑定](../../../../server/api/memo_attachment_service.go) · [文件路由](../../../../server/fileserver/fileserver.go) · [回收站实现](../../../../server/api/memo_trash_handler.go) · [ZIP 导出](../../../../server/fileserver/memo_export.go) · [导入协议](../../../../proto/api/user_service.proto)
+独立附件由上传者访问，绑定后的附件随笔记权限。个人 MCP 提供附件元数据。上传、下载文件、删除笔记及回收站操作使用上表的 HTTP 路径。仅存于旧 S3 的附件保留元数据，当前下载接口返回 `404`。新导出的 ZIP 省略旧空间归属。导入旧版 ZIP 时忽略其中的空间归属并报告提示。 [附件协议](../../../../proto/api/attachment_service.proto) · [附件绑定](../../../../server/api/memo_attachment_service.go) · [文件路由](../../../../server/fileserver/fileserver.go) · [回收站实现](../../../../server/api/memo_trash_handler.go) · [ZIP 导出](../../../../server/fileserver/memo_export.go) · [导入协议](../../../../proto/api/user_service.proto)
 
 ## 统计和标签
 
@@ -62,7 +64,7 @@ AI 客户端用 MCP 查找、整理和写回笔记。脚本、附件传输及回
 
 ## 变更通知和收件
 
-- 需要即时刷新时，使用 Bearer 认证连接 `GET /api/sse`。收到 `{"type":"memo.changed"}` 后通过列表或详情重新读取。通知只包含事件类型。SSE 只发送连接期间的事件，断线重连后重新查询。个人模式停用了通用出站 Webhook 管理和发送。 [SSE 路由](../../../../server/api/sse_handler.go) · [事件定义](../../../../server/api/sse_hub.go) · [Webhook 发送限制](../../../../server/api/memo_service_webhooks.go)
+- 需要即时刷新时，使用 Bearer 认证连接 `GET /api/sse`。收到 `{"type":"memo.changed"}` 后通过列表或详情重新读取。通知只包含事件类型。SSE 只发送连接期间的事件，断线重连后重新查询。 [SSE 路由](../../../../server/api/sse_handler.go) · [事件定义](../../../../server/api/sse_hub.go)
 - Telegram Bot 私聊使用长轮询，企业微信自建应用使用 `/integrations/wecom` 接收签名加密回调。启用前按部署说明配置发件人。接入只保存纯文本，由唯一活跃管理员持有，加入渠道标签，按消息 ID 去重，成功后回复 `Yes!`。日常 AI 或浏览器集成可直接用 MCP 或 REST 写入。 [收件配置](deployment.md#telegram-和企业微信收件) · [写入与去重](../../../../server/api/memo_capture.go)
 - 「通知」和「网络」使用 `/api/notificationSettings` 和 `/api/networkSettings` 的 `GET` 与 `PATCH`，要求活跃的管理员网页登录会话。读取返回启用状态、来源、渠道标识及凭据是否已设置。代理 URL 和渠道密钥为只写字段，更新时留空保留旧值。 [设置接口](../../../../server/api/capture_settings.go)
 - 企业微信配置中的 `wecom.callbackUrl` 是可读的手动公网地址。`PATCH` 省略该字段时保留原值，传空字符串时清除。`wecomDefaultCallbackUrl` 来自符合格式的实例公网域名。两者都支持 HTTP 或 HTTPS 和显式端口，填写裸域名时默认使用 HTTPS。保存只校验格式，公网连通性以企业微信后台的 GET 验证为准。 [地址格式](../../../../core/messagecapture/wecom_callback.go) · [接收消息与事件](https://developer.work.weixin.qq.com/document/path/90238)

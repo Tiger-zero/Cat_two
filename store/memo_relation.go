@@ -23,7 +23,6 @@ type MemoRelation struct {
 // MemoRelationEndpointSnapshot is the memo-local database state used to
 // authorize one endpoint during a reference-relation mutation.
 type MemoRelationEndpointSnapshot struct {
-	Personal    bool
 	ActorUserID int32
 	Actor       MemoActorState
 
@@ -31,61 +30,21 @@ type MemoRelationEndpointSnapshot struct {
 	EndpointCreatorID  int32
 	EndpointRowStatus  RowStatus
 	EndpointVisibility Visibility
-	EndpointSpaceID    *int32
-
-	EndpointSpaceExists  bool
-	EndpointMemberActive bool
 }
 
-// ValidateMemoRelationEndpointRead applies authenticated memo-local read
-// policy to an endpoint. An active instance administrator passes the audience
-// checks; structural validity still applies.
+// ValidateMemoRelationEndpointRead requires an active author at each endpoint.
 func ValidateMemoRelationEndpointRead(snapshot *MemoRelationEndpointSnapshot) error {
 	if snapshot == nil || !snapshot.Actor.Active {
 		return ErrMemoPermissionDenied
 	}
-	if snapshot.EndpointID <= 0 {
+	if snapshot.EndpointID <= 0 || (snapshot.EndpointRowStatus != Normal && snapshot.EndpointRowStatus != Archived) ||
+		!isValidVisibility(snapshot.EndpointVisibility) {
 		return ErrMemoMutationConflict
 	}
-	if snapshot.EndpointRowStatus != Normal && snapshot.EndpointRowStatus != Archived {
-		return ErrMemoMutationConflict
-	}
-	if !isValidVisibility(snapshot.EndpointVisibility) {
-		return ErrMemoMutationConflict
-	}
-	if snapshot.Personal {
-		if snapshot.EndpointCreatorID != snapshot.ActorUserID {
-			return ErrMemoPermissionDenied
-		}
-		return nil
-	}
-	if snapshot.EndpointVisibility == SpaceAudience &&
-		(snapshot.EndpointSpaceID == nil || !snapshot.EndpointSpaceExists) {
-		return ErrMemoMutationConflict
-	}
-	if snapshot.Actor.Admin {
-		return nil
-	}
-	if snapshot.EndpointRowStatus == Archived && snapshot.EndpointCreatorID != snapshot.ActorUserID {
+	if snapshot.EndpointCreatorID != snapshot.ActorUserID {
 		return ErrMemoPermissionDenied
 	}
-
-	switch snapshot.EndpointVisibility {
-	case Public, Protected:
-		return nil
-	case Private:
-		if snapshot.EndpointCreatorID != snapshot.ActorUserID {
-			return ErrMemoPermissionDenied
-		}
-		return nil
-	case SpaceAudience:
-		if !snapshot.EndpointMemberActive {
-			return ErrMemoPermissionDenied
-		}
-		return nil
-	default:
-		return ErrMemoMutationConflict
-	}
+	return nil
 }
 
 type FindMemoRelation struct {

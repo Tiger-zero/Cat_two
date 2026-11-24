@@ -1,5 +1,5 @@
 import { useInstance } from "@/contexts/InstanceContext";
-import { DEFAULT_LOGO, getCustomLogoUrl } from "@/lib/branding";
+import { DEFAULT_APP_NAME, DEFAULT_LOGO, getCustomLogoUrl } from "@/lib/branding";
 import { cn } from "@/lib/utils";
 import IdentityLabel from "./IdentityLabel";
 
@@ -22,7 +22,7 @@ const LOGO_SCALE = {
 function MemosLogo({ collapsed, size = "md", as: Component = "div", className }: Props) {
   const scale = LOGO_SCALE[size];
   const { generalSetting: instanceGeneralSetting } = useInstance();
-  const title = instanceGeneralSetting.customProfile?.title || "Memos";
+  const title = instanceGeneralSetting.customProfile?.title || DEFAULT_APP_NAME;
   const logoUrl = getCustomLogoUrl(instanceGeneralSetting.customProfile?.logoUrl);
   const markWidth = logoUrl || collapsed ? scale.mark : Math.ceil((scale.mark * 88) / 144);
 

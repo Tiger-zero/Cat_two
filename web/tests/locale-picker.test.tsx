@@ -11,7 +11,10 @@ describe("<LocalePicker>", () => {
     fireEvent.change(input, { target: { value: "klingon" } });
 
     const feedbackLink = await screen.findByRole("link", { name: "Language not found? Submit feedback" });
-    expect(feedbackLink).toHaveAttribute("href", expect.stringContaining("https://github.com/usememos/memos/issues/new"));
+    expect(feedbackLink).toHaveAttribute(
+      "href",
+      expect.stringContaining("https://github.com/Tiger-zero/Cat_two/issues/new?template=feature_request.yml"),
+    );
   });
 
   it("finds a locale by name and picks it", async () => {

@@ -114,7 +114,7 @@ func TestPasswordChangeRejectsOldAccessToken(t *testing.T) {
 			_, _, err = authenticator.AuthenticateByRefreshToken(ctx, stolenRefresh)
 			require.ErrorContains(t, err, "revoked")
 			resolved, err = authenticator.AuthenticateToUser(ctx, "Bearer "+oldAccess, auth.RefreshTokenCookieName+"="+stolenRefresh)
-			require.ErrorContains(t, err, "revoked")
+			require.NoError(t, err)
 			require.Nil(t, resolved)
 
 			// The owner browser can refresh, and a fresh password sign-in also

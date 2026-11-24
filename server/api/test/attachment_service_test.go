@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/lithammer/shortuuid/v4"
 	"github.com/stretchr/testify/require"
@@ -16,6 +17,7 @@ import (
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
 
 	"github.com/usememos/memos/internal/testutil"
+	"github.com/usememos/memos/internal/testutil/legacyspace"
 	apipb "github.com/usememos/memos/proto/gen/api"
 	storepb "github.com/usememos/memos/proto/gen/store"
 	"github.com/usememos/memos/server/api"
@@ -449,7 +451,7 @@ func TestCreateAttachmentMemoPermission(t *testing.T) {
 	})
 }
 
-func TestLinkedAttachmentMutationsRevalidateMemoSpaceMembership(t *testing.T) {
+func TestLinkedAttachmentWritesDoNotDependOnHistoricalSpaceMembership(t *testing.T) {
 	ctx := context.Background()
 	ts := NewTestService(t)
 	defer ts.Cleanup()
@@ -459,20 +461,20 @@ func TestLinkedAttachmentMutationsRevalidateMemoSpaceMembership(t *testing.T) {
 	member, err := ts.CreateRegularUser(ctx, "attachment-lifecycle-member")
 	require.NoError(t, err)
 	memberCtx := ts.CreateUserContext(ctx, member.ID)
-	space, err := ts.Store.CreateSpace(ctx, &store.Space{UID: "attachment-lifecycle-space", Title: "Attachment Lifecycle"}, owner.ID)
+	db := ts.Store.GetDriver().GetDB()
+	spaceID, err := legacyspace.Seed(ctx, db, "attachment-lifecycle-space", "Attachment Lifecycle", owner.ID)
 	require.NoError(t, err)
-	_, err = ts.InviteAndAcceptSpaceMember(ctx, &store.SpaceMember{
-		SpaceID: space.ID, UserID: member.ID, Role: store.SpaceMemberRoleUser,
-	}, owner.ID)
-	require.NoError(t, err)
+	require.NoError(t, legacyspace.AddMember(ctx, db, spaceID, member.ID, "USER"))
 	root, err := ts.Store.CreateMemo(ctx, &store.Memo{
-		UID: "attachment-lifecycle-root", CreatorID: member.ID, Content: "root", Visibility: store.SpaceAudience, SpaceID: &space.ID,
+		UID: "attachment-lifecycle-root", CreatorID: member.ID, Content: "root", Visibility: store.Private,
 	})
 	require.NoError(t, err)
 	comment, err := ts.Store.CreateMemoComment(ctx, &store.Memo{
-		UID: "attachment-lifecycle-comment", CreatorID: member.ID, Content: "comment", Visibility: store.SpaceAudience, SpaceID: &space.ID,
+		UID: "attachment-lifecycle-comment", CreatorID: member.ID, Content: "comment", Visibility: store.Private,
 	}, root.ID, member.ID)
 	require.NoError(t, err)
+	require.NoError(t, legacyspace.PlaceMemo(ctx, db, root.ID, spaceID, "SPACE"))
+	require.NoError(t, legacyspace.PlaceMemo(ctx, db, comment.ID, spaceID, "SPACE"))
 	memoName := api.MemoNamePrefix + comment.UID
 
 	createLinked := func(filename string) *apipb.Attachment {
@@ -495,169 +497,19 @@ func TestLinkedAttachmentMutationsRevalidateMemoSpaceMembership(t *testing.T) {
 		UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"filename"}},
 	})
 	require.NoError(t, err)
-	require.NoError(t, ts.Store.DeleteSpaceMember(ctx, &store.DeleteSpaceMember{SpaceID: space.ID, UserID: member.ID}, owner.ID))
+	require.NoError(t, legacyspace.RemoveMember(ctx, db, spaceID, member.ID))
 
-	_, err = ts.Service.CreateAttachment(memberCtx, &apipb.CreateAttachmentRequest{Attachment: &apipb.Attachment{
-		Filename: "create-after-revoke.txt", Type: "text/plain", Content: []byte("blocked"), Memo: &memoName,
-	}})
-	require.Equal(t, codes.PermissionDenied, status.Code(err))
+	created := createLinked("create-after-revoke.txt")
+	require.NotEmpty(t, created.Name)
 	_, err = ts.Service.UpdateAttachment(memberCtx, &apipb.UpdateAttachmentRequest{
-		Attachment: &apipb.Attachment{Name: updateTarget.Name, Filename: "must-not-rename.txt"},
+		Attachment: &apipb.Attachment{Name: updateTarget.Name, Filename: "renamed-after-revoke.txt"},
 		UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"filename"}},
 	})
-	require.Equal(t, codes.PermissionDenied, status.Code(err))
+	require.NoError(t, err)
 	_, err = ts.Service.DeleteAttachment(memberCtx, &apipb.DeleteAttachmentRequest{Name: deleteTarget.Name})
-	require.Equal(t, codes.PermissionDenied, status.Code(err))
+	require.NoError(t, err)
 	_, err = ts.Service.BatchDeleteAttachments(memberCtx, &apipb.BatchDeleteAttachmentsRequest{Names: []string{batchTarget.Name}})
-	require.Equal(t, codes.PermissionDenied, status.Code(err))
-
-	for _, attachment := range []*apipb.Attachment{updateTarget, deleteTarget, batchTarget} {
-		uid, extractErr := api.ExtractAttachmentUIDFromName(attachment.Name)
-		require.NoError(t, extractErr)
-		stored, getErr := ts.Store.GetAttachment(ctx, &store.FindAttachment{UID: &uid})
-		require.NoError(t, getErr)
-		require.NotNil(t, stored)
-		require.NotNil(t, stored.MemoID)
-		require.Equal(t, comment.ID, *stored.MemoID)
-	}
-	updateUID, err := api.ExtractAttachmentUIDFromName(updateTarget.Name)
 	require.NoError(t, err)
-	storedUpdate, err := ts.Store.GetAttachment(ctx, &store.FindAttachment{UID: &updateUID})
-	require.NoError(t, err)
-	require.Equal(t, "updated-before-revoke.txt", storedUpdate.Filename)
-
-	_, err = ts.InviteAndAcceptSpaceMember(ctx, &store.SpaceMember{
-		SpaceID: space.ID, UserID: member.ID, Role: store.SpaceMemberRoleUser,
-	}, owner.ID)
-	require.NoError(t, err)
-	_, err = ts.Service.UpdateAttachment(memberCtx, &apipb.UpdateAttachmentRequest{
-		Attachment: &apipb.Attachment{Name: updateTarget.Name, Filename: "renamed-after-rejoin.txt"},
-		UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"filename"}},
-	})
-	require.NoError(t, err)
-}
-
-func TestListAttachmentsSpaceFilter(t *testing.T) {
-	ctx := context.Background()
-	ts := NewTestService(t)
-	defer ts.Cleanup()
-
-	owner, err := ts.CreateRegularUser(ctx, "attachment-scope-owner")
-	require.NoError(t, err)
-	member, err := ts.CreateRegularUser(ctx, "attachment-scope-member")
-	require.NoError(t, err)
-	outsider, err := ts.CreateRegularUser(ctx, "attachment-scope-outsider")
-	require.NoError(t, err)
-	spaceA, err := ts.Store.CreateSpace(ctx, &store.Space{UID: "attachment-api-scope-a", Title: "A"}, owner.ID)
-	require.NoError(t, err)
-	_, err = ts.InviteAndAcceptSpaceMember(ctx, &store.SpaceMember{
-		SpaceID: spaceA.ID, UserID: member.ID, Role: store.SpaceMemberRoleUser,
-	}, owner.ID)
-	require.NoError(t, err)
-	spaceB, err := ts.Store.CreateSpace(ctx, &store.Space{UID: "attachment-api-scope-b", Title: "B"}, owner.ID)
-	require.NoError(t, err)
-
-	unassignedMemo, err := ts.Store.CreateMemo(ctx, &store.Memo{
-		UID: "attachment-api-unassigned", CreatorID: owner.ID, Content: "unassigned", Visibility: store.Private,
-	})
-	require.NoError(t, err)
-	spaceAMemo, err := ts.Store.CreateMemo(ctx, &store.Memo{
-		UID: "attachment-api-space-a", CreatorID: owner.ID, Content: "a", Visibility: store.Private, SpaceID: &spaceA.ID,
-	})
-	require.NoError(t, err)
-	sharedMemo, err := ts.Store.CreateMemo(ctx, &store.Memo{
-		UID: "attachment-api-space-a-shared", CreatorID: owner.ID, Content: "shared", Visibility: store.SpaceAudience, SpaceID: &spaceA.ID,
-	})
-	require.NoError(t, err)
-	spaceBMemo, err := ts.Store.CreateMemo(ctx, &store.Memo{
-		UID: "attachment-api-space-b", CreatorID: owner.ID, Content: "b", Visibility: store.Public, SpaceID: &spaceB.ID,
-	})
-	require.NoError(t, err)
-	memberMemo, err := ts.Store.CreateMemo(ctx, &store.Memo{
-		UID: "attachment-api-space-a-member", CreatorID: member.ID, Content: "member-owned", Visibility: store.Private, SpaceID: &spaceA.ID,
-	})
-	require.NoError(t, err)
-
-	createAttachment := func(uid string, memoID *int32) {
-		t.Helper()
-		_, createErr := ts.Store.CreateAttachment(ctx, &store.Attachment{
-			UID: uid, CreatorID: owner.ID, Filename: uid + ".txt", Type: "text/plain", MemoID: memoID,
-		})
-		require.NoError(t, createErr)
-	}
-	createAttachment("attachment-api-unlinked", nil)
-	createAttachment("attachment-api-unassigned-file", &unassignedMemo.ID)
-	createAttachment("attachment-api-space-a-file", &spaceAMemo.ID)
-	createAttachment("attachment-api-space-a-shared-file", &sharedMemo.ID)
-	createAttachment("attachment-api-space-b-file", &spaceBMemo.ID)
-	_, err = ts.Store.CreateAttachment(ctx, &store.Attachment{
-		UID: "attachment-api-space-a-member-file", CreatorID: member.ID, Filename: "member-file.txt", Type: "text/plain", MemoID: &memberMemo.ID,
-	})
-	require.NoError(t, err)
-
-	attachmentFilenames := func(response *apipb.ListAttachmentsResponse) []string {
-		t.Helper()
-		filenames := make([]string, 0, len(response.Attachments))
-		for _, attachment := range response.Attachments {
-			filenames = append(filenames, attachment.Filename)
-		}
-		return filenames
-	}
-	ownerCtx := ts.CreateUserContext(ctx, owner.ID)
-	allResponse, err := ts.Service.ListAttachments(ownerCtx, &apipb.ListAttachmentsRequest{PageSize: 100})
-	require.NoError(t, err)
-	require.Len(t, allResponse.Attachments, 5, "omitting the filter includes every readable attachment and the owner's unused uploads")
-
-	spaceResponse, err := ts.Service.ListAttachments(ownerCtx, &apipb.ListAttachmentsRequest{
-		PageSize: 100,
-		Filter:   `space == "spaces/` + spaceA.UID + `"`,
-	})
-	require.NoError(t, err)
-	require.ElementsMatch(t, []string{"attachment-api-space-a-file.txt", "attachment-api-space-a-shared-file.txt"}, attachmentFilenames(spaceResponse))
-
-	unassignedResponse, err := ts.Service.ListAttachments(ownerCtx, &apipb.ListAttachmentsRequest{
-		PageSize: 100,
-		Filter:   `space == null`,
-	})
-	require.NoError(t, err)
-	require.ElementsMatch(t, []string{"attachment-api-unlinked.txt", "attachment-api-unassigned-file.txt"}, attachmentFilenames(unassignedResponse))
-
-	unusedInMemos, err := ts.Service.ListAttachments(ownerCtx, &apipb.ListAttachmentsRequest{
-		PageSize: 100,
-		Filter:   "memo_id == null && space == null",
-	})
-	require.NoError(t, err)
-	require.Equal(t, []string{"attachment-api-unlinked.txt"}, attachmentFilenames(unusedInMemos))
-	unusedInSpace, err := ts.Service.ListAttachments(ownerCtx, &apipb.ListAttachmentsRequest{
-		PageSize: 100,
-		Filter:   `memo_id == null && space == "spaces/` + spaceA.UID + `"`,
-	})
-	require.NoError(t, err)
-	require.Empty(t, unusedInSpace.Attachments)
-
-	memberResponse, err := ts.Service.ListAttachments(ts.CreateUserContext(ctx, member.ID), &apipb.ListAttachmentsRequest{
-		PageSize: 100,
-		Filter:   `space == "spaces/` + spaceA.UID + `"`,
-	})
-	require.NoError(t, err)
-	require.Equal(t, []string{"member-file.txt"}, attachmentFilenames(memberResponse))
-
-	creatorResponse, err := ts.Service.ListAttachments(ts.CreateUserContext(ctx, member.ID), &apipb.ListAttachmentsRequest{
-		PageSize: 100,
-		Filter:   `creator == "users/` + owner.Username + `"`,
-	})
-	require.NoError(t, err)
-	require.Empty(t, creatorResponse.Attachments)
-
-	_, err = ts.Service.ListAttachments(ts.CreateUserContext(ctx, outsider.ID), &apipb.ListAttachmentsRequest{
-		Filter: `space == "spaces/` + spaceA.UID + `"`,
-	})
-	require.Equal(t, codes.NotFound, status.Code(err))
-
-	_, err = ts.Service.ListAttachments(ownerCtx, &apipb.ListAttachmentsRequest{
-		Filter: `space != null`,
-	})
-	require.Equal(t, codes.InvalidArgument, status.Code(err))
 }
 
 func TestAttachmentCreatorIsUploader(t *testing.T) {
@@ -969,9 +821,7 @@ func TestBatchDeleteAttachmentsReportsPostCommitStorageCleanupFailure(t *testing
 
 	names := []string{attachments[0].Name, attachments[1].Name}
 	_, err = ts.Service.BatchDeleteAttachments(store.WithDeleteAttachmentStorageFailpoint(userCtx), &apipb.BatchDeleteAttachmentsRequest{Names: names})
-	require.Equal(t, codes.Internal, status.Code(err))
-	require.ErrorContains(t, err, "attachments were deleted but storage cleanup failed")
-	require.ErrorContains(t, err, store.ErrDeleteAttachmentStorageFailpoint.Error())
+	require.NoError(t, err, "the deletion and cleanup job already committed")
 	for _, attachment := range attachments {
 		uid, err := api.ExtractAttachmentUIDFromName(attachment.Name)
 		require.NoError(t, err)
@@ -985,6 +835,10 @@ func TestBatchDeleteAttachmentsReportsPostCommitStorageCleanupFailure(t *testing
 	for _, path := range localPaths {
 		_, err := os.Stat(path)
 		require.NoError(t, err, "storage cleanup failure happens after the database deletion commits")
+	}
+	require.NoError(t, ts.Service.PurgeExpiredMemoTrash(ctx, time.Now().Add(6*time.Minute)))
+	for _, path := range localPaths {
+		require.NoFileExists(t, path, "the committed jobs retry the failed file cleanup")
 	}
 }
 

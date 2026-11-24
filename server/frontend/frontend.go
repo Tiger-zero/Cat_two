@@ -1,9 +1,7 @@
 package frontend
 
 import (
-	"context"
 	"embed"
-	"encoding/xml"
 	"io"
 	"io/fs"
 	"net/http"
@@ -14,7 +12,6 @@ import (
 
 	"github.com/usememos/memos/internal/httphandler"
 	"github.com/usememos/memos/internal/profile"
-	"github.com/usememos/memos/store"
 )
 
 //go:embed dist/*
@@ -28,21 +25,23 @@ const (
 
 type FrontendService struct {
 	Profile           *profile.Profile
-	Store             *store.Store
 	ChallengeProvider string
 }
 
-func NewFrontendService(profile *profile.Profile, store *store.Store) *FrontendService {
+func NewFrontendService(profile *profile.Profile) *FrontendService {
 	return &FrontendService{
 		Profile: profile,
-		Store:   store,
 	}
 }
 
-func (s *FrontendService) Serve(_ context.Context, mux *http.ServeMux, fallback http.Handler) {
-	mux.Handle("/robots.txt", httphandler.GET(httphandler.Func(s.getRobotsTXT), nil))
-	mux.Handle("/sitemap.xml", httphandler.GET(httphandler.Func(s.getSitemapXML), nil))
-	mux.Handle("/", s.Handler(fallback))
+// RegisterRetiredDiscoveryRoutes preserves the HTTP method contract for old public URLs.
+func RegisterRetiredDiscoveryRoutes(mux *http.ServeMux) {
+	handler := httphandler.GET(httphandler.Func(func(w http.ResponseWriter, _ *http.Request) error {
+		w.Header().Set("Cache-Control", "no-store")
+		return &httphandler.Error{Code: http.StatusNotFound, Message: "public instance discovery is unavailable"}
+	}), nil)
+	mux.Handle("/robots.txt", handler)
+	mux.Handle("/sitemap.xml", handler)
 }
 
 // Handler serves static files and SPA routes, passing API namespaces to fallback.
@@ -177,65 +176,3 @@ func getFileSystem(path string) fs.FS {
 	}
 	return sub
 }
-
-func (s *FrontendService) getRobotsTXT(w http.ResponseWriter, r *http.Request) error {
-	if err := s.requirePublicAccess(r.Context()); err != nil {
-		return err
-	}
-	instanceURL, err := normalizeInstanceURL(s.Profile.InstanceURL)
-	if err != nil {
-		return err
-	}
-
-	robotsTXT := strings.Join([]string{
-		"User-agent: *",
-		"Disallow: /",
-		"Host: " + instanceURL,
-	}, "\n")
-	return httphandler.Text(w, http.StatusOK, robotsTXT)
-}
-
-func (s *FrontendService) getSitemapXML(w http.ResponseWriter, r *http.Request) error {
-	if err := s.requirePublicAccess(r.Context()); err != nil {
-		return err
-	}
-	if _, err := normalizeInstanceURL(s.Profile.InstanceURL); err != nil {
-		return err
-	}
-
-	// All notes require their author's session. Keep the sitemap response empty.
-	w.Header().Set("Cache-Control", "public, no-cache")
-	w.Header().Set("Content-Type", "application/xml; charset=UTF-8")
-	w.WriteHeader(http.StatusOK)
-	if _, err := io.WriteString(w, xml.Header); err != nil {
-		return err
-	}
-	return xml.NewEncoder(w).Encode(sitemapURLSet{XMLNS: sitemapXMLNamespace})
-}
-
-func (s *FrontendService) requirePublicAccess(ctx context.Context) error {
-	allowsAnonymous, err := s.Store.AllowsAnonymousAccess(ctx)
-	if err != nil {
-		return &httphandler.Error{Code: http.StatusInternalServerError, Message: "failed to get instance access policy", Cause: err}
-	}
-	if !allowsAnonymous {
-		return &httphandler.Error{Code: http.StatusNotFound, Message: "public instance discovery is unavailable"}
-	}
-	return nil
-}
-
-func normalizeInstanceURL(instanceURL string) (string, error) {
-	instanceURL = strings.TrimRight(instanceURL, "/")
-	if instanceURL == "" {
-		return "", &httphandler.Error{Code: http.StatusNotFound, Message: "instance URL is not configured"}
-	}
-	return instanceURL, nil
-}
-
-type sitemapURLSet struct {
-	XMLName xml.Name `xml:"urlset"`
-	XMLNS   string   `xml:"xmlns,attr"`
-}
-
-//nolint:revive
-const sitemapXMLNamespace = "http://www.sitemaps.org/schemas/sitemap/0.9"

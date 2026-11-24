@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"github.com/usememos/memos/internal/profile"
-	"github.com/usememos/memos/provider/storage"
 	"github.com/usememos/memos/store/cache"
 )
 
@@ -14,7 +13,6 @@ type Store struct {
 	profile *profile.Profile
 	driver  Driver
 
-	authConfigMu      sync.Mutex
 	refreshTokenMu    sync.Mutex
 	patMu             sync.Mutex
 	memoBodyMu        sync.Mutex
@@ -27,12 +25,6 @@ type Store struct {
 	instanceSettingCache *cache.Cache // cache for instance settings
 	userCache            *cache.Cache // cache for users
 	userSettingCache     *cache.Cache // cache for user settings
-
-	// storageDriverCache reuses object-storage clients across requests, keyed
-	// by the resolved configuration. Reset whenever the STORAGE setting changes.
-	storageDriverMu         sync.Mutex
-	storageDriverGeneration uint64
-	storageDriverCache      map[storageDriverCacheKey]storage.Driver
 }
 
 // New creates a new instance of Store.

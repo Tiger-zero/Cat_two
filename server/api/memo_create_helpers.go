@@ -26,10 +26,7 @@ func WithMCPMemoCreation(ctx context.Context) context.Context {
 }
 
 func mapMemoCreateError(err error, uid, operation string) error {
-	errMessage := err.Error()
-	if strings.Contains(errMessage, "UNIQUE constraint failed") ||
-		strings.Contains(errMessage, "duplicate key") ||
-		strings.Contains(errMessage, "Duplicate entry") {
+	if strings.Contains(err.Error(), "UNIQUE constraint failed") {
 		return memoAlreadyExists(uid)
 	}
 	return mapMemoWriteError(err, operation)
@@ -145,12 +142,8 @@ func (s *APIService) prepareMemoCreate(ctx context.Context, user *store.User, in
 		Content:    input.Content,
 		Visibility: visibility,
 	}
-	if input.Space != nil && input.GetSpace() != "" {
-		space, err := s.resolveSpaceForMemoPlacement(ctx, input.GetSpace(), user)
-		if err != nil {
-			return nil, err
-		}
-		memo.SpaceID = &space.ID
+	if input.GetSpace() != "" {
+		return nil, retiredModuleError()
 	}
 	if input.CreateTime != nil && input.CreateTime.IsValid() {
 		memo.CreatedTs = input.CreateTime.AsTime().Unix()

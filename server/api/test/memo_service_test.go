@@ -13,6 +13,7 @@ import (
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
+	"github.com/usememos/memos/internal/testutil/legacyspace"
 	apipb "github.com/usememos/memos/proto/gen/api"
 	storepb "github.com/usememos/memos/proto/gen/store"
 	"github.com/usememos/memos/store"
@@ -92,15 +93,17 @@ func TestInstanceAdminCannotReadOrModifyAnotherCreatorsMemos(t *testing.T) {
 	admin, err := ts.CreateHostUser(ctx, "admin")
 	require.NoError(t, err)
 	adminCtx := ts.CreateUserContext(ctx, admin.ID)
-	space, err := ts.Store.CreateSpace(ctx, &store.Space{UID: "creator-space", Title: "Creator space"}, owner.ID)
+	db := ts.Store.GetDriver().GetDB()
+	spaceID, err := legacyspace.Seed(ctx, db, "creator-space", "Creator space", owner.ID)
 	require.NoError(t, err)
 
 	private, err := ts.Service.CreateMemo(ownerCtx, &apipb.CreateMemoRequest{Memo: &apipb.Memo{
-		Content: "private content", Visibility: apipb.Visibility_PUBLIC, Space: new("spaces/" + space.UID),
+		Content: "private content", Visibility: apipb.Visibility_PUBLIC,
 	}})
 	require.NoError(t, err)
 	require.Equal(t, apipb.Visibility_PRIVATE, private.Visibility)
-	require.Equal(t, "spaces/"+space.UID, private.GetSpace())
+	require.NoError(t, legacyspace.PlaceMemo(ctx, db, parseMemoIDFromNameForTest(t, ts, private.Name), spaceID, "PRIVATE"))
+	require.Nil(t, private.Space)
 
 	_, err = ts.Service.GetMemo(adminCtx, &apipb.GetMemoRequest{Name: private.Name})
 	require.Equal(t, codes.PermissionDenied, status.Code(err))
@@ -153,7 +156,7 @@ func TestArchivedCreatorDoesNotMakeMemosReadableByOthers(t *testing.T) {
 	require.Equal(t, codes.PermissionDenied, status.Code(err))
 }
 
-func TestDanglingPlacementDoesNotOverrideNonSpaceAudience(t *testing.T) {
+func TestDanglingLegacySpaceDoesNotObscureAuthoredNotes(t *testing.T) {
 	ctx := context.Background()
 	ts := NewTestService(t)
 	defer ts.Cleanup()
@@ -167,7 +170,7 @@ func TestDanglingPlacementDoesNotOverrideNonSpaceAudience(t *testing.T) {
 	require.NoError(t, err)
 	memoID := parseMemoIDFromNameForTest(t, ts, memo.Name)
 	_, err = ts.Store.GetDriver().GetDB().ExecContext(ctx,
-		fmt.Sprintf("UPDATE memo SET space_id = 2147483000 WHERE id = %d", memoID))
+		fmt.Sprintf("UPDATE memo SET space_id = 2147483000, visibility = 'SPACE' WHERE id = %d", memoID))
 	require.NoError(t, err)
 
 	got, err := ts.Service.GetMemo(creatorCtx, &apipb.GetMemoRequest{Name: memo.Name})
@@ -181,9 +184,9 @@ func TestDanglingPlacementDoesNotOverrideNonSpaceAudience(t *testing.T) {
 	require.Nil(t, listed.Memos[0].Space)
 
 	_, err = ts.Service.CreateMemoComment(creatorCtx, &apipb.CreateMemoCommentRequest{
-		Parent: memo.Name, Comment: &apipb.Memo{Content: "must not participate", Visibility: apipb.Visibility_PUBLIC},
+		Parent: memo.Name, Comment: &apipb.Memo{Content: "legacy note still accepts comments", Visibility: apipb.Visibility_PUBLIC},
 	})
-	require.Equal(t, codes.FailedPrecondition, status.Code(err), "placement-dependent participation must fail closed")
+	require.NoError(t, err, "legacy placement must not prevent the author from commenting")
 }
 
 func TestMemoReadFailsClosedForMissingCreatorBeforePaginationAndChildren(t *testing.T) {
@@ -827,142 +830,6 @@ func TestCreateMemoCommentRejectsSelfReference(t *testing.T) {
 	require.Empty(t, comments.Comments)
 }
 
-func TestUpdateMemoPlacementAndAudienceContract(t *testing.T) {
-	ctx := context.Background()
-	ts := NewTestService(t)
-	defer ts.Cleanup()
-
-	sourceAdmin, err := ts.CreateRegularUser(ctx, "placement-source-admin")
-	require.NoError(t, err)
-	author, err := ts.CreateRegularUser(ctx, "placement-author")
-	require.NoError(t, err)
-	sourceAdminCtx := ts.CreateUserContext(ctx, sourceAdmin.ID)
-	authorCtx := ts.CreateUserContext(ctx, author.ID)
-
-	source, err := ts.Service.CreateSpace(sourceAdminCtx, &apipb.CreateSpaceRequest{
-		SpaceId: "placement-source",
-		Space:   &apipb.Space{Title: "Placement Source"},
-	})
-	require.NoError(t, err)
-	target, err := ts.Service.CreateSpace(authorCtx, &apipb.CreateSpaceRequest{
-		SpaceId: "placement-target",
-		Space:   &apipb.Space{Title: "Placement Target"},
-	})
-	require.NoError(t, err)
-	invitation, err := ts.Service.CreateSpaceInvitation(sourceAdminCtx, &apipb.CreateSpaceInvitationRequest{
-		Parent: source.Name,
-		SpaceInvitation: &apipb.SpaceInvitation{
-			Invitee: "users/" + author.Username,
-			Role:    apipb.SpaceMember_USER,
-		},
-	})
-	require.NoError(t, err)
-	_, err = ts.Service.AcceptSpaceInvitation(authorCtx, &apipb.AcceptSpaceInvitationRequest{Name: invitation.Name})
-	require.NoError(t, err)
-
-	protectedMemo, err := ts.Service.CreateMemo(authorCtx, &apipb.CreateMemoRequest{Memo: &apipb.Memo{
-		Content: "assign without audience change", Visibility: apipb.Visibility_PROTECTED,
-	}})
-	require.NoError(t, err)
-	sourceName := source.Name
-	protectedMemo, err = ts.Service.UpdateMemo(authorCtx, &apipb.UpdateMemoRequest{
-		Memo:       &apipb.Memo{Name: protectedMemo.Name, Space: &sourceName},
-		UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"space"}},
-	})
-	require.NoError(t, err)
-	require.Equal(t, source.Name, protectedMemo.GetSpace())
-	require.Equal(t, apipb.Visibility_PRIVATE, protectedMemo.Visibility)
-
-	_, err = ts.Service.UpdateMemo(sourceAdminCtx, &apipb.UpdateMemoRequest{
-		Memo:       &apipb.Memo{Name: protectedMemo.Name},
-		UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"space"}},
-	})
-	require.Equal(t, codes.PermissionDenied, status.Code(err), "Space administrators cannot change another author's memo placement")
-	protectedMemo, err = ts.Service.GetMemo(authorCtx, &apipb.GetMemoRequest{Name: protectedMemo.Name})
-	require.NoError(t, err)
-	require.Equal(t, source.Name, protectedMemo.GetSpace())
-
-	unassigned, err := ts.Service.CreateMemo(authorCtx, &apipb.CreateMemoRequest{Memo: &apipb.Memo{
-		Content: "unassigned", Visibility: apipb.Visibility_PRIVATE,
-	}})
-	require.NoError(t, err)
-	_, err = ts.Service.UpdateMemo(authorCtx, &apipb.UpdateMemoRequest{
-		Memo:       &apipb.Memo{Name: unassigned.Name, Visibility: apipb.Visibility_SPACE},
-		UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"visibility"}},
-	})
-	require.NoError(t, err, "legacy SPACE input is normalized to PRIVATE")
-
-	spaceMembersMemo, err := ts.Service.CreateMemo(authorCtx, &apipb.CreateMemoRequest{Memo: &apipb.Memo{
-		Content: "members audience", Visibility: apipb.Visibility_SPACE, Space: &sourceName,
-	}})
-	require.NoError(t, err)
-	targetName := target.Name
-	_, err = ts.Service.UpdateMemo(authorCtx, &apipb.UpdateMemoRequest{
-		Memo:       &apipb.Memo{Name: spaceMembersMemo.Name, Space: &targetName},
-		UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"space"}},
-	})
-	require.NoError(t, err)
-	_, err = ts.Service.UpdateMemo(authorCtx, &apipb.UpdateMemoRequest{
-		Memo:       &apipb.Memo{Name: spaceMembersMemo.Name},
-		UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"space"}},
-	})
-	require.NoError(t, err)
-	spaceMembersMemo, err = ts.Service.UpdateMemo(authorCtx, &apipb.UpdateMemoRequest{
-		Memo:       &apipb.Memo{Name: spaceMembersMemo.Name, Visibility: apipb.Visibility_PRIVATE},
-		UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"space", "visibility"}},
-	})
-	require.NoError(t, err)
-	require.Nil(t, spaceMembersMemo.Space)
-	require.Equal(t, apipb.Visibility_PRIVATE, spaceMembersMemo.Visibility)
-
-	moveMemo, err := ts.Service.CreateMemo(authorCtx, &apipb.CreateMemoRequest{Memo: &apipb.Memo{
-		Content: "move original", Visibility: apipb.Visibility_PUBLIC, Space: &sourceName,
-	}})
-	require.NoError(t, err)
-	withdrawMemo, err := ts.Service.CreateMemo(authorCtx, &apipb.CreateMemoRequest{Memo: &apipb.Memo{
-		Content: "withdraw original", Visibility: apipb.Visibility_PUBLIC, Space: &sourceName,
-	}})
-	require.NoError(t, err)
-	membersOnlyMemo, err := ts.Service.CreateMemo(authorCtx, &apipb.CreateMemoRequest{Memo: &apipb.Memo{
-		Content: "members only", Visibility: apipb.Visibility_SPACE, Space: &sourceName,
-	}})
-	require.NoError(t, err)
-	_, err = ts.Service.DeleteSpaceMember(sourceAdminCtx, &apipb.DeleteSpaceMemberRequest{
-		Name: source.Name + "/members/" + author.Username,
-	})
-	require.NoError(t, err)
-	_, err = ts.Service.GetMemo(authorCtx, &apipb.GetMemoRequest{Name: membersOnlyMemo.Name})
-	require.NoError(t, err, "the author can still read their private note after leaving a Space")
-
-	_, err = ts.Service.UpdateMemo(authorCtx, &apipb.UpdateMemoRequest{
-		Memo:       &apipb.Memo{Name: moveMemo.Name, Space: &targetName, Content: "smuggled content"},
-		UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"space", "content"}},
-	})
-	require.Equal(t, codes.PermissionDenied, status.Code(err), "a removed author cannot smuggle content into a lifecycle move")
-	unchangedMove, err := ts.Service.GetMemo(authorCtx, &apipb.GetMemoRequest{Name: moveMemo.Name})
-	require.NoError(t, err)
-	require.Equal(t, "move original", unchangedMove.Content)
-	require.Equal(t, source.Name, unchangedMove.GetSpace())
-
-	moved, err := ts.Service.UpdateMemo(authorCtx, &apipb.UpdateMemoRequest{
-		Memo:       &apipb.Memo{Name: moveMemo.Name, Space: &targetName},
-		UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"space"}},
-	})
-	require.NoError(t, err)
-	require.Equal(t, target.Name, moved.GetSpace())
-	require.Equal(t, "move original", moved.Content)
-	require.Equal(t, apipb.Visibility_PRIVATE, moved.Visibility)
-
-	withdrawn, err := ts.Service.UpdateMemo(authorCtx, &apipb.UpdateMemoRequest{
-		Memo:       &apipb.Memo{Name: withdrawMemo.Name},
-		UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"space"}},
-	})
-	require.NoError(t, err)
-	require.Nil(t, withdrawn.Space)
-	require.Equal(t, "withdraw original", withdrawn.Content)
-	require.Equal(t, apipb.Visibility_PRIVATE, withdrawn.Visibility)
-}
-
 func TestListMemoCommentsPaginates(t *testing.T) {
 	ctx := context.Background()
 
@@ -1198,20 +1065,16 @@ func TestAssignedMemoCommentListingUsesMemoLocalReadAccess(t *testing.T) {
 	memberCtx := ts.CreateUserContext(ctx, member.ID)
 	outsiderCtx := ts.CreateUserContext(ctx, outsider.ID)
 
-	space, err := ts.Store.CreateSpace(ctx, &store.Space{UID: "assigned-comment-space", Title: "Assigned comments"}, owner.ID)
+	db := ts.Store.GetDriver().GetDB()
+	spaceID, err := legacyspace.Seed(ctx, db, "assigned-comment-space", "Assigned comments", owner.ID)
 	require.NoError(t, err)
-	_, err = ts.InviteAndAcceptSpaceMember(ctx, &store.SpaceMember{
-		SpaceID: space.ID,
-		UserID:  member.ID,
-		Role:    store.SpaceMemberRoleAdmin,
-	}, owner.ID)
-	require.NoError(t, err)
+	require.NoError(t, legacyspace.AddMember(ctx, db, spaceID, member.ID, "ADMIN"))
 	contextMemo, err := ts.Service.CreateMemo(ownerCtx, &apipb.CreateMemoRequest{Memo: &apipb.Memo{
 		Content:    "assigned public comment context",
 		Visibility: apipb.Visibility_PUBLIC,
-		Space:      new("spaces/" + space.UID),
 	}})
 	require.NoError(t, err)
+	require.NoError(t, legacyspace.PlaceMemo(ctx, db, parseMemoIDFromNameForTest(t, ts, contextMemo.Name), spaceID, "SPACE"))
 	comment, err := ts.Service.CreateMemoComment(ownerCtx, &apipb.CreateMemoCommentRequest{
 		Parent: contextMemo.Name,
 		Comment: &apipb.Memo{
@@ -1230,7 +1093,7 @@ func TestAssignedMemoCommentListingUsesMemoLocalReadAccess(t *testing.T) {
 	_, err = ts.Service.ListMemoComments(ctx, &apipb.ListMemoCommentsRequest{Parent: contextMemo.Name})
 	require.Equal(t, codes.Unauthenticated, status.Code(err))
 
-	require.NoError(t, ts.Store.DeleteSpaceMember(ctx, &store.DeleteSpaceMember{SpaceID: space.ID, UserID: owner.ID}, owner.ID))
+	require.NoError(t, legacyspace.RemoveMember(ctx, db, spaceID, owner.ID))
 	comments, err := ts.Service.ListMemoComments(ownerCtx, &apipb.ListMemoCommentsRequest{Parent: contextMemo.Name})
 	require.NoError(t, err)
 	require.Len(t, comments.Comments, 1, "the removed author still reads their private notes")

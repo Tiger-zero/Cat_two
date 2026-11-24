@@ -41,6 +41,10 @@ func TestPersonalAdministratorSetupAndAccess(t *testing.T) {
 
 	inst.createAdmin(t)
 	session := inst.signIn(t)
+	code, body = inst.do(t, http.MethodPatch, "/api/instance/settings/GENERAL", session, map[string]any{
+		"generalSetting": map[string]any{"disallowPasswordAuth": true},
+	})
+	require.Equal(t, http.StatusBadRequest, code, "%s", body)
 	for _, bearer := range []string{"", session} {
 		code, _ := inst.do(t, http.MethodPost, "/api/users", bearer, map[string]string{
 			"username": "second-account", "password": testAdminPassword,

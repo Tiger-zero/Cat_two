@@ -776,7 +776,8 @@ export const DeclineSpaceInvitationRequestSchema: GenMessage<DeclineSpaceInvitat
   messageDesc(file_api_space_service, 22);
 
 /**
- * SpaceService manages collaborative spaces, their members and their invitations.
+ * SpaceService is a legacy API retained for protocol compatibility.
+ * The collaborative space, membership and invitation methods are retired in Cat_two.
  *
  * @generated from service memos.api.SpaceService
  */

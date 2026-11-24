@@ -56,8 +56,9 @@ func TestMemoTrashKeepsSurvivingReplyAfterOwnerDeletion(t *testing.T) {
 	require.NoError(t, err)
 	parent, err := ts.CreateMemo(ctx, &store.Memo{UID: "trash-legacy-parent", CreatorID: parentOwner.ID, Content: "parent", Visibility: store.Public})
 	require.NoError(t, err)
-	reply, err := ts.CreateMemoComment(ctx, &store.Memo{UID: "trash-legacy-reply", CreatorID: replyOwner.ID, Content: "reply", Visibility: store.Public}, parent.ID, replyOwner.ID)
-	require.NoError(t, err)
+	reply := seedLegacyComment(ctx, t, ts, &store.Memo{
+		UID: "trash-legacy-reply", CreatorID: replyOwner.ID, Content: "reply", Visibility: store.Public,
+	}, parent.ID)
 	now := time.Now().Unix()
 	_, err = ts.ApplyMemoTrash(ctx, &store.MemoTrashMutation{MemoID: parent.ID, ActorUserID: parentOwner.ID, Action: store.MemoTrashMove, NowTs: now})
 	require.NoError(t, err)

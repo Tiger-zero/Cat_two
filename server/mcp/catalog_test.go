@@ -2,41 +2,23 @@ package mcp
 
 import (
 	"encoding/json"
-	"maps"
 	"strconv"
-	"strings"
 	"testing"
 
 	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
 )
 
-func TestCuratedOperationIDsStayMemoFocused(t *testing.T) {
-	require.Len(t, curatedOperationIDs, 35)
-
-	for _, operationID := range curatedOperationIDs {
-		require.NotContains(t, operationID, "Admin")
-		// AuthService_GetCurrentUser is the single allowed auth op (read-only
-		// "whoami"); the rest of the auth/identity surface stays off MCP.
-		if operationID != "AuthService_GetCurrentUser" {
-			require.NotContains(t, operationID, "AuthService_")
-		}
-		require.NotContains(t, operationID, "UserService_")
-		require.NotContains(t, operationID, "AIService_")
-		require.NotContains(t, operationID, "IdentityProviderService_")
-		require.NotContains(t, operationID, "InstanceService_")
-		require.NotContains(t, operationID, "PersonalAccessToken")
-		require.NotContains(t, operationID, "PAT")
-		require.NotContains(t, operationID, "Webhook")
-		require.NotContains(t, operationID, "Share")
-		require.NotContains(t, operationID, "BatchDelete")
-		require.NotContains(t, operationID, "Transcribe")
-	}
+func TestCuratedOperationIDs(t *testing.T) {
+	require.ElementsMatch(t, []string{
+		"AuthService_GetCurrentUser", "MemoService_ListMemos", "MemoService_GetMemo",
+		"MemoService_CreateMemo", "MemoService_UpdateMemo",
+	}, curatedOperationIDs)
 }
 
 func TestToolNameFromOperationID(t *testing.T) {
 	require.Equal(t, "memo_list_memos", toolNameFromOperationID("MemoService_ListMemos"))
-	require.Equal(t, "attachment_get_attachment", toolNameFromOperationID("AttachmentService_GetAttachment"))
+	require.Equal(t, "memo_get_memo", toolNameFromOperationID("MemoService_GetMemo"))
 }
 
 func TestBuildToolFromOperationIncludesSchemasAndMetadata(t *testing.T) {
@@ -105,85 +87,6 @@ func TestBuildToolFromOperationIncludesRequestBodySchema(t *testing.T) {
 	require.NoError(t, err)
 }
 
-func TestBuildToolFromOperationTailorsRequestBodySchemas(t *testing.T) {
-	spec, err := loadOpenAPISpec("../../proto/gen/openapi.yaml")
-	require.NoError(t, err)
-	registry, err := buildOperationRegistry(spec)
-	require.NoError(t, err)
-
-	tests := []struct {
-		name              string
-		operationID       string
-		arguments         map[string]any
-		omittedProperties []string
-	}{
-		{
-			name:        "partial memo update",
-			operationID: "MemoService_UpdateMemo",
-			arguments: map[string]any{
-				"memo": "memos/abc123",
-				"body": map[string]any{"content": "updated"},
-			},
-			omittedProperties: []string{"name"},
-		},
-		{
-			name:        "comment defaults state and visibility",
-			operationID: "MemoService_CreateMemoComment",
-			arguments: map[string]any{
-				"memo": "memos/abc123",
-				"body": map[string]any{"content": "comment"},
-			},
-		},
-		{
-			name:        "set attachments gets name from path",
-			operationID: "MemoService_SetMemoAttachments",
-			arguments: map[string]any{
-				"memo": "memos/abc123",
-				"body": map[string]any{"attachments": []any{}},
-			},
-			omittedProperties: []string{"name"},
-		},
-		{
-			name:        "set relations gets name from path",
-			operationID: "MemoService_SetMemoRelations",
-			arguments: map[string]any{
-				"memo": "memos/abc123",
-				"body": map[string]any{"relations": []any{}},
-			},
-			omittedProperties: []string{"name"},
-		},
-		{
-			name:        "upsert reaction gets parent from path",
-			operationID: "MemoService_UpsertMemoReaction",
-			arguments: map[string]any{
-				"memo": "memos/abc123",
-				"body": map[string]any{
-					"reaction": map[string]any{
-						"reactionType": "👍",
-					},
-				},
-			},
-			omittedProperties: []string{"parent"},
-		},
-	}
-
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			tool, _ := buildToolFromOperation(registry[test.operationID])
-			input, ok := tool.InputSchema.(jsonSchema)
-			require.True(t, ok)
-			require.NoError(t, validateToolArguments(input, test.arguments))
-
-			properties := schemaProperties(input["properties"])
-			body := schemaProperties(properties["body"])
-			bodyProperties := schemaProperties(body["properties"])
-			for _, property := range test.omittedProperties {
-				require.NotContains(t, bodyProperties, property)
-			}
-		})
-	}
-}
-
 func TestBuildToolFromOperationRejectsEmptyMemoUpdateBody(t *testing.T) {
 	spec, err := loadOpenAPISpec("../../proto/gen/openapi.yaml")
 	require.NoError(t, err)
@@ -206,67 +109,6 @@ func TestBuildToolFromOperationRejectsEmptyMemoUpdateBody(t *testing.T) {
 	}))
 }
 
-func TestRequestBodySchemaOverridePreservesRequiredByDefault(t *testing.T) {
-	const operationID = "TestService_UpdateResource"
-	requestBodySchemaOverrides[operationID] = requestBodySchemaOverride{
-		omittedProperties: []string{"name"},
-	}
-	t.Cleanup(func() {
-		delete(requestBodySchemaOverrides, operationID)
-	})
-
-	schema := requestBodySchema(&openAPIOperation{
-		OperationID: operationID,
-		RequestBodySchema: jsonSchema{
-			"type":     "object",
-			"required": []string{"content"},
-			"properties": map[string]any{
-				"name":    jsonSchema{"type": "string"},
-				"content": jsonSchema{"type": "string"},
-			},
-		},
-	})
-
-	require.Equal(t, []string{"content"}, schema["required"])
-	require.NotContains(t, schemaProperties(schema["properties"]), "name")
-}
-
-func TestBuildToolFromOperationExposesCreateAttachment(t *testing.T) {
-	spec, err := loadOpenAPISpec("../../proto/gen/openapi.yaml")
-	require.NoError(t, err)
-	registry, err := buildOperationRegistry(spec)
-	require.NoError(t, err)
-
-	tool, operation := buildToolFromOperation(registry["AttachmentService_CreateAttachment"])
-	require.Equal(t, "attachment_create_attachment", tool.Name)
-	require.Equal(t, "POST", operation.Method)
-	require.False(t, tool.Annotations.ReadOnlyHint)
-	require.False(t, *tool.Annotations.DestructiveHint)
-	require.False(t, tool.Annotations.IdempotentHint)
-
-	input, ok := tool.InputSchema.(jsonSchema)
-	require.True(t, ok)
-	require.Contains(t, input["required"], "body")
-	properties, ok := input["properties"].(map[string]any)
-	require.True(t, ok)
-	// attachmentId is an optional query parameter; the file itself is the body.
-	require.Contains(t, properties, "attachmentId")
-	require.Contains(t, properties, "body")
-	body, ok := properties["body"].(jsonSchema)
-	require.True(t, ok)
-	require.Contains(t, body["properties"], "filename")
-	require.Contains(t, body["properties"], "content")
-
-	err = validateToolArguments(input, map[string]any{
-		"body": map[string]any{
-			"filename": "screenshot.png",
-			"type":     "image/png",
-			"content":  "aGVsbG8=",
-		},
-	})
-	require.NoError(t, err)
-}
-
 func TestBuildToolFromOperationExposesCurrentUser(t *testing.T) {
 	spec, err := loadOpenAPISpec("../../proto/gen/openapi.yaml")
 	require.NoError(t, err)
@@ -277,23 +119,6 @@ func TestBuildToolFromOperationExposesCurrentUser(t *testing.T) {
 	require.Equal(t, "auth_get_current_user", tool.Name)
 	require.Equal(t, "GET", operation.Method)
 	require.True(t, tool.Annotations.ReadOnlyHint)
-}
-
-func TestBuildToolFromOperationMarksSetOperationsIdempotent(t *testing.T) {
-	spec, err := loadOpenAPISpec("../../proto/gen/openapi.yaml")
-	require.NoError(t, err)
-	registry, err := buildOperationRegistry(spec)
-	require.NoError(t, err)
-
-	for _, operationID := range []string{"MemoService_SetMemoAttachments", "MemoService_SetMemoRelations"} {
-		tool, operation := buildToolFromOperation(registry[operationID])
-		require.Equal(t, "PATCH", operation.Method, operationID)
-		// PATCH is non-idempotent by the method heuristic, but the per-operation
-		// override restores the declarative "set" semantics.
-		require.True(t, tool.Annotations.IdempotentHint, operationID)
-		require.False(t, tool.Annotations.ReadOnlyHint, operationID)
-		require.True(t, *tool.Annotations.DestructiveHint, operationID)
-	}
 }
 
 func TestBuildToolFromOperationMarksUpdateMemoDestructive(t *testing.T) {
@@ -356,29 +181,6 @@ func TestValidateOperationOverridesRejectsStaleKey(t *testing.T) {
 	require.ErrorContains(t, validateOperationOverrides(registry), "MemoService_UpdateMemo")
 }
 
-func TestValidateOperationOverridesRejectsStaleOmittedProperty(t *testing.T) {
-	spec, err := loadOpenAPISpec("../../proto/gen/openapi.yaml")
-	require.NoError(t, err)
-	registry, err := buildOperationRegistry(spec)
-	require.NoError(t, err)
-
-	// A binding rename (name -> parent) must be reported instead of leaving the
-	// path-bound field exposed in the body schema.
-	operation := registry["MemoService_UpsertMemoReaction"]
-	renamed := cloneSchema(operation.RequestBodySchema)
-	properties := maps.Clone(schemaProperties(renamed["properties"]))
-	properties["name"] = properties["parent"]
-	delete(properties, "parent")
-	renamed["properties"] = properties
-	registry["MemoService_UpsertMemoReaction"] = &openAPIOperation{
-		OperationID:       operation.OperationID,
-		RequestBodySchema: renamed,
-	}
-	err = validateOperationOverrides(registry)
-	require.ErrorContains(t, err, `omits property "parent"`)
-	require.ErrorContains(t, err, "MemoService_UpsertMemoReaction")
-}
-
 func TestBuildCuratedToolsRejectsDuplicateToolNames(t *testing.T) {
 	registry := make(map[string]*openAPIOperation, len(curatedOperationIDs))
 	for _, operationID := range curatedOperationIDs {
@@ -435,7 +237,6 @@ func TestBuildCuratedToolsUseStandardSchemaFormats(t *testing.T) {
 		}
 	}
 
-	sawBase64Content := false
 	for _, tool := range tools {
 		for label, schema := range map[string]any{"inputSchema": tool.InputSchema, "outputSchema": tool.OutputSchema} {
 			encoded, err := json.Marshal(schema)
@@ -443,105 +244,6 @@ func TestBuildCuratedToolsUseStandardSchemaFormats(t *testing.T) {
 			var decoded any
 			require.NoError(t, json.Unmarshal(encoded, &decoded))
 			collectFormats(t, tool.Name, label, decoded)
-			if strings.Contains(string(encoded), `"contentEncoding":"base64"`) {
-				sawBase64Content = true
-			}
 		}
-	}
-	require.True(t, sawBase64Content, "expected attachment content to advertise contentEncoding base64")
-}
-
-func TestBuildToolFromOperationExposesSpaceTools(t *testing.T) {
-	spec, err := loadOpenAPISpec("../../proto/gen/openapi.yaml")
-	require.NoError(t, err)
-	registry, err := buildOperationRegistry(spec)
-	require.NoError(t, err)
-
-	tool, operation := buildToolFromOperation(registry["SpaceService_ListSpaces"])
-	require.Equal(t, "space_list_spaces", tool.Name)
-	require.Equal(t, "GET", operation.Method)
-	require.Equal(t, "/api/spaces", operation.Path)
-	require.True(t, tool.Annotations.ReadOnlyHint)
-
-	tool, operation = buildToolFromOperation(registry["SpaceService_CreateSpace"])
-	require.Equal(t, "space_create_space", tool.Name)
-	require.Equal(t, "POST", operation.Method)
-	input, ok := tool.InputSchema.(jsonSchema)
-	require.True(t, ok)
-	require.Contains(t, input["required"], "body")
-	require.NoError(t, validateToolArguments(input, map[string]any{
-		"body": map[string]any{"title": "Team"},
-	}))
-	require.Error(t, validateToolArguments(input, map[string]any{
-		"body": map[string]any{"description": "no title"},
-	}))
-
-	tool, operation = buildToolFromOperation(registry["SpaceService_DeleteSpace"])
-	require.Equal(t, "space_delete_space", tool.Name)
-	require.Equal(t, "DELETE", operation.Method)
-	require.True(t, *tool.Annotations.DestructiveHint)
-}
-
-func TestBuildToolFromOperationTailorsSpaceUpdateBodies(t *testing.T) {
-	spec, err := loadOpenAPISpec("../../proto/gen/openapi.yaml")
-	require.NoError(t, err)
-	registry, err := buildOperationRegistry(spec)
-	require.NoError(t, err)
-
-	tool, operation := buildToolFromOperation(registry["SpaceService_UpdateSpace"])
-	require.Equal(t, "PATCH", operation.Method)
-	require.True(t, *tool.Annotations.DestructiveHint)
-	input, ok := tool.InputSchema.(jsonSchema)
-	require.True(t, ok)
-	body := schemaProperties(schemaProperties(input["properties"])["body"])
-	require.NotContains(t, schemaProperties(body["properties"]), "name")
-	// The gateway infers the update mask from the fields present, so a partial
-	// body is valid but an empty one is not.
-	require.NoError(t, validateToolArguments(input, map[string]any{
-		"space": "spaces/team",
-		"body":  map[string]any{"description": "renamed"},
-	}))
-	require.Error(t, validateToolArguments(input, map[string]any{
-		"space": "spaces/team",
-		"body":  map[string]any{},
-	}))
-
-	tool, operation = buildToolFromOperation(registry["SpaceService_UpdateSpaceMember"])
-	require.Equal(t, "PATCH", operation.Method)
-	require.True(t, *tool.Annotations.DestructiveHint)
-	input, ok = tool.InputSchema.(jsonSchema)
-	require.True(t, ok)
-	body = schemaProperties(schemaProperties(input["properties"])["body"])
-	require.NotContains(t, schemaProperties(body["properties"]), "name")
-	require.NotContains(t, schemaProperties(body["properties"]), "user")
-	require.Equal(t, []string{"role"}, body["required"])
-	require.NoError(t, validateToolArguments(input, map[string]any{
-		"space":  "spaces/team",
-		"member": "sam",
-		"body":   map[string]any{"role": "ADMIN"},
-	}))
-}
-
-func TestBuildToolFromOperationMakesInvitationResponseBodiesOptional(t *testing.T) {
-	spec, err := loadOpenAPISpec("../../proto/gen/openapi.yaml")
-	require.NoError(t, err)
-	registry, err := buildOperationRegistry(spec)
-	require.NoError(t, err)
-
-	for _, operationID := range []string{"SpaceService_AcceptSpaceInvitation", "SpaceService_DeclineSpaceInvitation"} {
-		operation := registry[operationID]
-		require.True(t, operation.RequestBody.Required, operationID)
-		require.False(t, requestBodyRequired(operation), operationID)
-
-		tool, _ := buildToolFromOperation(operation)
-		input, ok := tool.InputSchema.(jsonSchema)
-		require.True(t, ok)
-		require.NotContains(t, input["required"], "body", operationID)
-		body := schemaProperties(schemaProperties(input["properties"])["body"])
-		require.NotContains(t, schemaProperties(body["properties"]), "name", operationID)
-		require.NoError(t, validateToolArguments(input, map[string]any{
-			"space":      "spaces/team",
-			"invitation": "sam",
-		}), operationID)
 	}
 }

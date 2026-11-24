@@ -1,7 +1,10 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { CalendarCell } from "@/components/ActivityCalendar/CalendarCell";
+import { MonthCalendar } from "@/components/ActivityCalendar/MonthCalendar";
 import type { CalendarDayCell } from "@/components/ActivityCalendar/types";
+
+vi.mock("@/contexts/InstanceContext", () => ({ useInstance: () => ({ generalSetting: { weekStartDayOffset: 0 } }) }));
 
 const makeDay = (overrides: Partial<CalendarDayCell> = {}): CalendarDayCell => ({
   date: "2025-05-01",
@@ -67,6 +70,22 @@ describe("CalendarCell empty-day clickability", () => {
     expect(button.querySelector('[aria-hidden="true"]')).toHaveClass("rounded-full");
   });
 
+  it.each([0, 3])("keeps an unnumbered day with %i notes clickable and accessible without a tooltip", (count) => {
+    const onClick = vi.fn();
+    render(<CalendarCell day={makeDay({ count, isToday: true })} tooltipText="2025-05-01" showDateLabels={false} onClick={onClick} />);
+
+    const button = screen.getByRole("button", { name: "2025-05-01" });
+    expect(button).toHaveAttribute("aria-current", "date");
+    expect(button).toHaveAttribute("tabindex", "0");
+    expect(button).not.toHaveClass("mu-tooltip-trigger");
+    expect(button).not.toHaveAttribute("title");
+    expect(chipOf(button)).toHaveClass("border-[color:var(--memos-activity-today,var(--mu-primary))]");
+    expect(chipOf(button).firstElementChild).toHaveClass("mu-visually-hidden");
+    expect(button.querySelector('[aria-hidden="true"]')).toBeNull();
+    fireEvent.click(button);
+    expect(onClick).toHaveBeenCalledWith("2025-05-01");
+  });
+
   it("marks the selected filter with a soft fill and accent border", () => {
     render(<CalendarCell day={makeDay({ isSelected: true })} tooltipText="May 1, 2025" onClick={() => {}} />);
 
@@ -99,5 +118,29 @@ describe("CalendarCell empty-day clickability", () => {
     render(<CalendarCell day={makeDay({ isCurrentMonth: false })} tooltipText="May 1, 2025" onClick={() => {}} />);
 
     expect(screen.queryByRole("button")).toBeNull();
+  });
+});
+
+describe("MonthCalendar date labels", () => {
+  it("omits the weekday row and outside dates in numberless mode, with the same day grid and selection", () => {
+    const selectedDate = "2026-11-24";
+    const props = { month: "2026-11", data: {}, selectedDate, onClick: vi.fn() };
+    const { rerender } = render(<MonthCalendar {...props} showDateLabels={false} />);
+
+    const month = screen.getByRole("group");
+    const grid = month.firstElementChild!;
+    expect(month.children).toHaveLength(1);
+    expect(grid.children).toHaveLength(35);
+    expect(grid.lastElementChild?.textContent).toBe("");
+    const dayButtons = screen.getAllByRole("button");
+    expect(dayButtons).toHaveLength(30);
+    expect(dayButtons.every((button) => chipOf(button).querySelector(".mu-visually-hidden"))).toBe(true);
+    expect(chipOf(screen.getByRole("button", { name: `${selectedDate} (selected)` }))).toHaveClass("bg-mu-selected");
+
+    rerender(<MonthCalendar {...props} />);
+    expect(month.children).toHaveLength(2);
+    expect(month.firstElementChild?.children).toHaveLength(7);
+    expect(screen.getAllByRole("button")).toHaveLength(30);
+    expect(chipOf(screen.getByRole("button", { name: `${selectedDate} (selected)` }))).toHaveTextContent("24");
   });
 });

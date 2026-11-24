@@ -8,13 +8,15 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+
+	storepb "github.com/usememos/memos/proto/gen/store"
 )
 
 // Legacy usage limits remain readable for compatibility, but do not block
 // memo creation over either transport.
 func TestStoredUsageLimitsDoNotRestrictEitherTransport(t *testing.T) {
 	ctx := context.Background()
-	inst := bootInstance(ctx, t, instanceOptions{instanceURL: "http://127.0.0.1"})
+	inst := bootInstance(ctx, t, instanceOptions{personal: true, instanceURL: "http://127.0.0.1"})
 	inst.createAdmin(t)
 	token := inst.signIn(t)
 
@@ -34,12 +36,25 @@ func TestStoredUsageLimitsDoNotRestrictEitherTransport(t *testing.T) {
 		return resp
 	}
 
-	status, body := inst.do(t, http.MethodPatch, "/api/instance/settings/USAGE_LIMITS", token, map[string]any{
-		"usageLimitsSetting": map[string]any{
-			"limits": []map[string]any{{"allUsers": true, "memoCount": "1", "memoContentBytes": "8192", "uploadBytes": "33554432"}},
+	_, err := inst.server.Store.UpsertInstanceSetting(ctx, &storepb.InstanceSetting{
+		Key: storepb.InstanceSettingKey_USAGE_LIMITS,
+		Value: &storepb.InstanceSetting_UsageLimitsSetting{
+			UsageLimitsSetting: &storepb.InstanceUsageLimitsSetting{
+				Limits: []*storepb.InstanceUsageLimitsSetting_UsageLimit{{
+					AllUsers:  true,
+					MemoCount: new(int64(1)), MemoContentBytes: new(int64(8192)), UploadBytes: new(int64(33554432)),
+				}},
+			},
 		},
 	})
-	require.Equal(t, http.StatusOK, status, "replacing the usage limits should succeed: %s", body)
+	require.NoError(t, err)
+
+	status, body := inst.do(t, http.MethodPatch, "/api/instance/settings/USAGE_LIMITS", token, map[string]any{
+		"usageLimitsSetting": map[string]any{
+			"limits": []map[string]any{{"allUsers": true, "memoCount": "100"}},
+		},
+	})
+	require.Equal(t, http.StatusNotImplemented, status, "%s", body)
 
 	status, body = inst.do(t, http.MethodGet, "/api/instance/settings/USAGE_LIMITS", token, nil)
 	require.Equal(t, http.StatusOK, status, "%s", body)

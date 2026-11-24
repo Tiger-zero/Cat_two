@@ -3,7 +3,6 @@ package store
 import (
 	"context"
 	"database/sql"
-	"log/slog"
 
 	"github.com/pkg/errors"
 	"google.golang.org/protobuf/encoding/protojson"
@@ -55,23 +54,6 @@ func (t *ConfigurationTransaction) GetConfigurationState(context.Context) (*stor
 	return t.State(), nil
 }
 
-// ListIdentityProviders reads identity providers within the transaction.
-func (t *ConfigurationTransaction) ListIdentityProviders(ctx context.Context, find *FindIdentityProvider) ([]*storepb.IdentityProvider, error) {
-	list, err := t.store.driver.ListIdentityProvidersTx(ctx, t.tx, find)
-	if err != nil {
-		return nil, err
-	}
-	providers := make([]*storepb.IdentityProvider, 0, len(list))
-	for _, raw := range list {
-		provider, err := convertIdentityProviderFromRaw(raw)
-		if err != nil {
-			return nil, err
-		}
-		providers = append(providers, provider)
-	}
-	return providers, nil
-}
-
 // GetUncachedInstanceSetting reads one setting within the transaction.
 func (t *ConfigurationTransaction) GetUncachedInstanceSetting(ctx context.Context, find *FindInstanceSetting) (*storepb.InstanceSetting, error) {
 	raw, err := t.store.driver.GetInstanceSettingTx(ctx, t.tx, find.Name)
@@ -84,41 +66,6 @@ func (t *ConfigurationTransaction) GetUncachedInstanceSetting(ctx context.Contex
 // ListUsers reads users within the transaction.
 func (t *ConfigurationTransaction) ListUsers(ctx context.Context, find *FindUser) ([]*User, error) {
 	return t.store.driver.ListUsersTx(ctx, t.tx, find)
-}
-
-// CreateIdentityProvider creates an identity provider within the transaction.
-func (t *ConfigurationTransaction) CreateIdentityProvider(ctx context.Context, provider *storepb.IdentityProvider) error {
-	raw, err := convertIdentityProviderToRaw(provider)
-	if err != nil {
-		return err
-	}
-	if _, err := t.store.driver.CreateIdentityProviderTx(ctx, t.tx, raw); err != nil {
-		return errors.Wrapf(err, "failed to create identity provider %s", provider.Uid)
-	}
-	return nil
-}
-
-// ReplaceIdentityProvider writes every field of the identity provider with id.
-func (t *ConfigurationTransaction) ReplaceIdentityProvider(ctx context.Context, id int32, provider *storepb.IdentityProvider) error {
-	config, err := convertIdentityProviderConfigToRaw(provider.Type, provider.Config)
-	if err != nil {
-		return err
-	}
-	name, filter := provider.Name, provider.IdentifierFilter
-	if _, err := t.store.driver.UpdateIdentityProviderTx(ctx, t.tx, &UpdateIdentityProvider{
-		ID: id, Name: &name, IdentifierFilter: &filter, Config: &config,
-	}); err != nil {
-		return errors.Wrapf(err, "failed to update identity provider %s", provider.Uid)
-	}
-	return nil
-}
-
-// DeleteIdentityProvider deletes the identity provider with id.
-func (t *ConfigurationTransaction) DeleteIdentityProvider(ctx context.Context, id int32) error {
-	if err := t.store.driver.DeleteIdentityProviderTx(ctx, t.tx, &DeleteIdentityProvider{ID: id}); err != nil {
-		return errors.Wrap(err, "failed to delete identity provider")
-	}
-	return nil
 }
 
 // UpsertInstanceSetting writes a setting within the transaction.
@@ -171,7 +118,7 @@ func (t *ConfigurationTransaction) UpdateUser(ctx context.Context, update *Updat
 		}
 		update.Email = &email
 	}
-	if _, err := t.store.driver.UpdateUserTx(ctx, t.tx, update); err != nil {
+	if _, err := t.store.updateUserAndRevokeSessions(ctx, t.tx, update); err != nil {
 		if uniqueErr := classifyUserUniqueViolation(err); uniqueErr != nil {
 			return uniqueErr
 		}
@@ -184,48 +131,17 @@ func (t *ConfigurationTransaction) UpdateUser(ctx context.Context, update *Updat
 	return nil
 }
 
-// ListUserIdentities reads identity links within the transaction.
-func (t *ConfigurationTransaction) ListUserIdentities(ctx context.Context, find *FindUserIdentity) ([]*UserIdentity, error) {
-	return t.store.driver.ListUserIdentitiesTx(ctx, t.tx, find)
-}
-
-// CreateUserIdentity links an identity-provider subject to a user within the
-// transaction. A subject already linked elsewhere is ErrUserIdentityTaken.
-func (t *ConfigurationTransaction) CreateUserIdentity(ctx context.Context, create *UserIdentity) error {
-	if _, err := t.store.driver.CreateUserIdentityTx(ctx, t.tx, create); err != nil {
-		if uniqueErr := classifyUserUniqueViolation(err); uniqueErr != nil {
-			return uniqueErr
-		}
-		return errors.Wrapf(err, "failed to link the %s identity of user %d", create.Provider, create.UserID)
-	}
-	return nil
-}
-
-// DeleteUserIdentities removes identity links within the transaction.
-func (t *ConfigurationTransaction) DeleteUserIdentities(ctx context.Context, delete *DeleteUserIdentity) error {
-	if err := t.store.driver.DeleteUserIdentitiesTx(ctx, t.tx, delete); err != nil {
-		return errors.Wrap(err, "failed to delete identity links")
-	}
-	return nil
-}
-
-// afterCommit drops what the committed writes made stale. A new password ends
-// every session of that user, as an administrator's password reset does.
+// afterCommit drops what the committed writes made stale.
 func (t *ConfigurationTransaction) afterCommit(ctx context.Context) {
 	s := t.store
 	for _, name := range t.settingNames {
 		s.instanceSettingCache.Delete(ctx, name)
-		if name == storepb.InstanceSettingKey_STORAGE.String() {
-			s.resetStorageDriverCache()
-		}
 	}
 	for _, userID := range t.userIDs {
 		s.userCache.Delete(ctx, userCacheKey(userID))
 	}
 	for _, userID := range t.passwordsChanged {
-		if err := s.RemoveUserRefreshTokensExcept(ctx, userID, ""); err != nil {
-			slog.Warn("failed to revoke sessions after a configured password change", "user_id", userID, "error", err)
-		}
+		s.deleteRefreshTokenCache(ctx, userID)
 	}
 }
 

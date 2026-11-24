@@ -3,6 +3,7 @@ package test
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -49,7 +50,7 @@ func assertMemoBodyFile(t *testing.T, st *store.Store, id int32, content string)
 func TestMemoBodiesMigrateArchiveAndTrashWithinDatabaseNamespace(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()
-	p := getTestingProfileForDriver(t, "sqlite")
+	p := getTestingProfile(t)
 	legacy := openMemoBodyStore(t, p)
 	owner, err := createTestingHostUser(ctx, legacy)
 	require.NoError(t, err)
@@ -61,7 +62,7 @@ func TestMemoBodiesMigrateArchiveAndTrashWithinDatabaseNamespace(t *testing.T) {
 	now := time.Now().Unix()
 	_, err = legacy.ApplyMemoTrash(ctx, &store.MemoTrashMutation{MemoID: trashed.ID, ActorUserID: owner.ID, Action: store.MemoTrashMove, NowTs: now})
 	require.NoError(t, err)
-	removeMemoBodySchema(ctx, t, legacy, "sqlite")
+	removeMemoBodySchema(ctx, t, legacy)
 	setSchemaVersion(ctx, t, legacy, "26.11.7")
 	require.NoError(t, legacy.Close())
 
@@ -89,9 +90,18 @@ func TestMemoBodiesMigrateArchiveAndTrashWithinDatabaseNamespace(t *testing.T) {
 	otherPath := assertMemoBodyFile(t, other, otherMemo.ID, trashed.Content)
 	require.NotEqual(t, filepath.Dir(otherPath), filepath.Dir(trashedPath))
 
+	orphanStages := make([]string, 150)
+	for i := range orphanStages {
+		path := filepath.Join(filepath.Dir(archivedPath), fmt.Sprintf(".memo-body-orphan-%d", i))
+		require.NoError(t, os.WriteFile(path, []byte("unfinished body"), 0o600))
+		orphanStages[i] = path
+	}
 	require.NoError(t, st.Close())
 	st = openMemoBodyStore(t, p)
 	require.NoError(t, st.MigrateMemoBodies(ctx))
+	for _, path := range orphanStages {
+		require.NoFileExists(t, path)
+	}
 	require.NoFileExists(t, trashedPath)
 	require.FileExists(t, archivedPath)
 	require.FileExists(t, otherPath)
@@ -103,7 +113,7 @@ func TestMemoBodiesMigrateArchiveAndTrashWithinDatabaseNamespace(t *testing.T) {
 func TestMemoBodiesWriteThroughMutationAndReadVerifiedFiles(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()
-	p := getTestingProfileForDriver(t, "sqlite")
+	p := getTestingProfile(t)
 	p.Personal = true
 	st := openMemoBodyStore(t, p)
 	owner, err := createTestingHostUser(ctx, st)
@@ -155,4 +165,80 @@ func TestMemoBodiesWriteThroughMutationAndReadVerifiedFiles(t *testing.T) {
 	metadata, err := st.GetMemo(ctx, &store.FindMemo{ID: &memo.ID, ExcludeContent: true})
 	require.NoError(t, err)
 	require.Empty(t, metadata.Content)
+
+	var issues, repaired []int32
+	report := func(id int32, err error, fixed bool) {
+		if err != nil {
+			issues = append(issues, id)
+		}
+		if fixed {
+			repaired = append(repaired, id)
+		}
+	}
+	require.NoError(t, st.CheckMemoBodies(ctx, false, report))
+	require.Equal(t, []int32{memo.ID}, issues)
+	require.NoFileExists(t, current)
+
+	issues = nil
+	require.NoError(t, st.CheckMemoBodies(ctx, true, report))
+	require.Empty(t, issues)
+	require.Equal(t, []int32{memo.ID}, repaired)
+	assertMemoBodyFile(t, st, memo.ID, next)
+
+	// A damaged file can be replaced when the SQL copy still verifies.
+	repaired = nil
+	require.NoError(t, os.WriteFile(current, []byte("damaged"), 0o600))
+	require.NoError(t, st.CheckMemoBodies(ctx, true, report))
+	require.Empty(t, issues)
+	require.Equal(t, []int32{memo.ID}, repaired)
+	assertMemoBodyFile(t, st, memo.ID, next)
+
+	// A mismatched SQL copy does not invalidate a healthy Markdown file.
+	_, err = st.GetDriver().GetDB().ExecContext(ctx, `UPDATE memo SET content = ? WHERE id = ?`, "different copy", memo.ID)
+	require.NoError(t, err)
+	require.NoError(t, st.CheckMemoBodies(ctx, false, report))
+	require.Empty(t, issues)
+
+	// A mismatched SQL copy must never replace the damaged Markdown file.
+	require.NoError(t, os.WriteFile(current, []byte("damaged"), 0o600))
+	require.NoError(t, st.CheckMemoBodies(ctx, true, report))
+	require.Equal(t, []int32{memo.ID}, issues)
+	body, err := os.ReadFile(current)
+	require.NoError(t, err)
+	require.Equal(t, "damaged", string(body))
+}
+
+func TestMemoMarkdownPagesKeepTheirOffsetAtByteLimit(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	p := getTestingProfile(t)
+	p.Personal = true
+	st := openMemoBodyStore(t, p)
+	owner, err := createTestingHostUser(ctx, st)
+	require.NoError(t, err)
+	for index, note := range []struct{ uid, body string }{{"first", "中文字"}, {"oversize", "12345678901"}, {"last", "尾"}} {
+		_, err := st.CreateMemo(ctx, &store.Memo{
+			UID: note.uid, CreatorID: owner.ID, Visibility: store.Private, Content: note.body, CreatedTs: int64(index + 1),
+		})
+		require.NoError(t, err)
+	}
+	offset := 0
+	find := &store.FindMemo{CreatorID: &owner.ID, OrderByTimeAsc: true, Offset: &offset}
+	page, err := st.ListMemoContentPage(ctx, find, 3, 10)
+	require.NoError(t, err)
+	require.Len(t, page.Memos, 1)
+	require.Equal(t, "中文字", page.Memos[0].Content)
+	require.True(t, page.HasMore)
+	require.Equal(t, 1, page.Consumed)
+	offset += page.Consumed
+	page, err = st.ListMemoContentPage(ctx, find, 3, 10)
+	require.NoError(t, err)
+	require.Equal(t, "oversize", page.OversizedUID)
+	require.True(t, page.HasMore)
+	offset += page.Consumed
+	page, err = st.ListMemoContentPage(ctx, find, 3, 10)
+	require.NoError(t, err)
+	require.Len(t, page.Memos, 1)
+	require.Equal(t, "尾", page.Memos[0].Content)
+	require.False(t, page.HasMore)
 }

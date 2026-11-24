@@ -16,7 +16,6 @@ import (
 	"github.com/pkg/errors"
 	"golang.org/x/sync/semaphore"
 
-	"github.com/usememos/memos/core/notification"
 	"github.com/usememos/memos/internal/httphandler"
 	"github.com/usememos/memos/internal/linkmeta"
 	"github.com/usememos/memos/internal/profile"
@@ -86,18 +85,15 @@ type APIService struct {
 	apipb.UnimplementedAuthServiceServer
 	apipb.UnimplementedUserServiceServer
 	apipb.UnimplementedMemoServiceServer
-	apipb.UnimplementedSpaceServiceServer
 	apipb.UnimplementedAttachmentServiceServer
-	apipb.UnimplementedIdentityProviderServiceServer
 
-	Secret                  string
-	Profile                 *profile.Profile
-	Store                   *store.Store
-	MarkdownService         markdown.Service
-	SSEHub                  *SSEHub
-	NotificationEmailSender notification.EmailSender
-	NotificationSettings    NotificationSettingsService
-	NetworkSettings         NetworkSettingsService
+	Secret               string
+	Profile              *profile.Profile
+	Store                *store.Store
+	MarkdownService      markdown.Service
+	SSEHub               *SSEHub
+	NotificationSettings NotificationSettingsService
+	NetworkSettings      NetworkSettingsService
 
 	// RateLimiter bounds request rates; nil disables every limit.
 	RateLimiter ratelimit.Limiter
@@ -133,7 +129,6 @@ func NewAPIService(secret string, profile *profile.Profile, store *store.Store) 
 		Store:                    store,
 		MarkdownService:          markdownService,
 		SSEHub:                   NewSSEHub(),
-		NotificationEmailSender:  nil,
 		RateLimiter:              newProfileRateLimiter(profile),
 		thumbnailSemaphore:       semaphore.NewWeighted(3), // Limit to 3 concurrent thumbnail generations
 		imageProcessingSemaphore: semaphore.NewWeighted(2),
@@ -189,15 +184,15 @@ func (s *APIService) NewHandler(ctx context.Context) (http.Handler, error) {
 			// are refused. Failing closed keeps a routing gap from becoming an
 			// access-control gap.
 			procedure, _ := routeResolver.resolveRequest(r)
+			if isRetiredProcedure(procedure) {
+				writeGatewayStatusError(w, retiredModuleError())
+				return
+			}
 			if rejectsAuthBrowserOrigin(r, procedure, s.Profile.InstanceURL) {
 				writeGatewayStatusError(w, status.Error(codes.PermissionDenied, authBrowserOriginError))
 				return
 			}
 			result := authorizer.Authenticate(ctx, r.Header.Get("Authorization"))
-			if s.isRetiredProcedure(procedure) {
-				writeGatewayStatusError(w, retiredModuleError())
-				return
-			}
 			if err := authorizer.CheckAccess(ctx, procedure, result); err != nil {
 				writeGatewayAuthorizationError(w, err)
 				return
@@ -249,13 +244,13 @@ func (s *APIService) NewHandler(ctx context.Context) (http.Handler, error) {
 	if err := s.registerMemoTagRoutes(gwMux); err != nil {
 		return nil, err
 	}
-	if err := apipb.RegisterSpaceServiceHandlerServer(ctx, gwMux, s); err != nil {
+	if err := apipb.RegisterSpaceServiceHandlerServer(ctx, gwMux, apipb.UnimplementedSpaceServiceServer{}); err != nil {
 		return nil, err
 	}
 	if err := apipb.RegisterAttachmentServiceHandlerServer(ctx, gwMux, s); err != nil {
 		return nil, err
 	}
-	if err := apipb.RegisterIdentityProviderServiceHandlerServer(ctx, gwMux, s); err != nil {
+	if err := apipb.RegisterIdentityProviderServiceHandlerServer(ctx, gwMux, apipb.UnimplementedIdentityProviderServiceServer{}); err != nil {
 		return nil, err
 	}
 
@@ -265,7 +260,7 @@ func (s *APIService) NewHandler(ctx context.Context) (http.Handler, error) {
 		NewMetadataInterceptor(), // Convert HTTP headers to gRPC metadata first
 		NewLoggingInterceptor(logStacktraces),
 		NewRecoveryInterceptor(logStacktraces),
-		connect.UnaryInterceptorFunc(s.rejectRetiredConnectProcedures),
+		connect.UnaryInterceptorFunc(rejectRetiredConnectProcedures),
 		NewAuthInterceptor(authorizer),
 	)
 	connectMux := http.NewServeMux()

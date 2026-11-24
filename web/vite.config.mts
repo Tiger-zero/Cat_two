@@ -27,6 +27,11 @@ export default defineConfig({
         target: devProxyServer,
         xfwd: true,
       },
+      "^/mcp(?:\\?|$)": {
+        target: devProxyServer,
+        xfwd: true,
+        timeout: 0,
+      },
       "^/memos.api": {
         target: devProxyServer,
         xfwd: true,

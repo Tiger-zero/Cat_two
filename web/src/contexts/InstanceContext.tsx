@@ -12,7 +12,7 @@ import {
   InstanceSetting_GeneralSettingSchema,
   InstanceSetting_Key,
 } from "@/types/proto/api/instance_service_pb";
-import { setManagedAttachmentInstanceUrl } from "@/utils/managed-attachment";
+import { setManagedAttachmentInstanceUrl } from "@/utils/managed-attachment-origin";
 
 const instanceSettingNamePrefix = "instance/settings/";
 

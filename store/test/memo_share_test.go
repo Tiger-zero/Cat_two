@@ -42,7 +42,7 @@ func TestMemoShareDeleteRequiresSelector(t *testing.T) {
 func TestMemoShareAuthorizedDeletion(t *testing.T) {
 	for _, name := range []string{
 		"owner by id", "owner by uid", "matching selectors", "instance admin", "archived memo",
-		"unrelated actor", "archived actor", "missing actor", "demoted admin", "removed membership",
+		"unrelated actor", "archived actor", "missing actor", "demoted admin",
 		"mismatched memo", "mismatched selectors", "missing share", "missing memo", "database failure",
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -55,12 +55,8 @@ func TestMemoShareAuthorizedDeletion(t *testing.T) {
 			require.NoError(t, err)
 			peer, err := createTestingUserWithRole(ctx, ts, "share-peer", store.RoleUser)
 			require.NoError(t, err)
-			space, err := ts.CreateSpace(ctx, &store.Space{UID: "share-space", Title: "Shares"}, owner.ID)
-			require.NoError(t, err)
-			_, err = createSpaceMemberForTest(ctx, ts, &store.SpaceMember{SpaceID: space.ID, UserID: peer.ID, Role: store.SpaceMemberRoleAdmin}, owner.ID)
-			require.NoError(t, err)
 			memo, err := ts.CreateMemo(ctx, &store.Memo{UID: "share-memo", CreatorID: owner.ID,
-				Content: "memo", Visibility: store.Public, SpaceID: &space.ID})
+				Content: "memo", Visibility: store.Public})
 			require.NoError(t, err)
 			other, err := ts.CreateMemo(ctx, &store.Memo{UID: "other-share-memo", CreatorID: owner.ID,
 				Content: "other", Visibility: store.Public})
@@ -80,6 +76,7 @@ func TestMemoShareAuthorizedDeletion(t *testing.T) {
 				delete.UID = &share.UID
 			case "instance admin":
 				delete.Policy.ActorUserID = admin.ID
+				wantErr = store.ErrMemoPermissionDenied
 			case "archived memo":
 				require.NoError(t, ts.UpdateMemo(ctx, &store.UpdateMemo{ID: memo.ID, RowStatus: new(store.Archived)}))
 			case "unrelated actor":
@@ -88,10 +85,10 @@ func TestMemoShareAuthorizedDeletion(t *testing.T) {
 			case "archived actor":
 				_, err = ts.UpdateUser(ctx, &store.UpdateUser{ID: owner.ID, RowStatus: new(store.Archived)})
 				require.NoError(t, err)
-				wantErr = store.ErrMemoSpaceMembershipRequired
+				wantErr = store.ErrMemoPermissionDenied
 			case "missing actor":
 				delete.Policy.ActorUserID = 99999
-				wantErr = store.ErrMemoSpaceMembershipRequired
+				wantErr = store.ErrMemoPermissionDenied
 			case "demoted admin":
 				delete.Policy.ActorUserID = admin.ID
 				// The instance must keep another administrator for the demotion.
@@ -100,9 +97,6 @@ func TestMemoShareAuthorizedDeletion(t *testing.T) {
 				_, err = ts.UpdateUser(ctx, &store.UpdateUser{ID: admin.ID, Role: new(store.RoleUser)})
 				require.NoError(t, err)
 				wantErr = store.ErrMemoPermissionDenied
-			case "removed membership":
-				require.NoError(t, ts.DeleteSpaceMember(ctx, &store.DeleteSpaceMember{SpaceID: space.ID, UserID: owner.ID}, peer.ID))
-				wantErr = store.ErrMemoSpaceMembershipRequired
 			case "mismatched memo":
 				delete.MemoID = &other.ID
 				wantErr = store.ErrMemoMutationConflict

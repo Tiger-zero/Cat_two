@@ -33,9 +33,9 @@ Code blocks use lazy-loaded `@pierre/highlights` tokens as editor decorations, w
 
 ## Data
 
-- **Reads are by name.** `useMemoByName` (`hooks/useMemoQueries.ts`) returns the freshest copy of the memo any query holds (a list, a comment page, the calendar month, a detail, a shared memo) and fetches the detail only when nothing holds it. A card in a list therefore costs no request beyond the list's, follows the list's refetches, and never refetches on its own.
-- **Writes are mutations.** A ticked task, a save and a new memo go through `useUpdateMemo` and `useCreateMemo`, which patch and refresh every query holding the memo, so the saved text shows wherever the memo is on the page as soon as the server answers.
-- **Drafts stay in the current browser.** `edit/draftKey.ts` scopes memo edits, replies and new notes by account and subject. `initialEditorState` restores text and saved attachment references from localStorage. A recovered edit must match the memo's saved revision. `useStagedDraftFiles` restores files awaiting upload from IndexedDB and recreates their preview URLs. Writes and removal compare the last observed snapshot to detect changes from another tab. Successful saves and cancellation of an existing edit clear the session's draft when its snapshot still matches.
+- **Reads are by name.** `useMemoByName` (`hooks/useMemoQueries.ts`) prefers the latest revision among cached copies of a memo and fetches the detail only when no query holds it. A card follows its list without issuing a separate request. Appending another page cannot make an older revision replace a newer one.
+- **Writes are mutations.** `useUpdateMemo` and `useCreateMemo` patch and refresh the cached copies after saving. Single and bulk task changes include the displayed note's Markdown and revision, and updates for one memo run in order. A queued task change can use the preceding local write's confirmed revision when that write saved the text the action was based on. A conflict rolls back the pending change and reports the failure.
+- **Drafts stay in the current browser.** `edit/draftKey.ts` scopes memo edits, replies and new notes by account and subject. `initialEditorState` restores text and saved attachment references from localStorage. A recovered edit must match the memo's saved revision. `useStagedDraftFiles` restores files awaiting upload from IndexedDB and recreates their preview URLs. Writes and removal compare the last observed snapshot. If another tab has changed that snapshot or browser storage fails, the current tab keeps its text and staged files in memory. Reopening the editor in the same tab restores that copy. The browser warns before closing or reloading the tab while that recovery is outstanding. Saving or discarding the recovered draft clears the in-memory copy.
 - **Home restores drafts in priority order.** Its own draft comes first. On a fresh mount with an empty Home draft, the composer can open a draft from the former sidebar editor for the current account. The saved text and pending files for that draft use their original key.
 - **Calendar defaults follow the selected Shanghai day.** Manual create and update times survive filter changes and refreshes for that day. Changing or clearing the date filter resets the defaults for the new selection.
 
@@ -43,7 +43,7 @@ Code blocks use lazy-loaded `@pierre/highlights` tokens as editor decorations, w
 
 ### State
 
-A reducer (`edit/state/reducer.ts`) drives an external store; consumers subscribe to one slice via `useEditorSelector`, so typing re-renders only what reads `content`. `state.content` is the document as Markdown and the single source of truth. UI flags (focus mode, loading, pending inline images), metadata (Space, attachments, relations), timestamps, local files awaiting upload, the shared order of saved attachments and new files (`attachmentOrder`) and accepted suggestions live beside it.
+A reducer (`edit/state/reducer.ts`) drives an external store; consumers subscribe to one slice via `useEditorSelector`, so typing re-renders only what reads `content`. `state.content` is the document as Markdown and the single source of truth. UI flags (focus mode, loading, pending inline images), metadata (attachments and relations), timestamps, local files awaiting upload, the shared order of saved attachments and new files (`attachmentOrder`) and accepted suggestions live beside it.
 
 ### The editor contract
 
@@ -103,7 +103,7 @@ Hosts of a new top-level memo pass `useMemoSuggestions()` into `suggestions`; ed
 
 Focus mode is a sheet narrower than the page (`max-w-3xl`): its header, text and footer share one left edge, and the text is set larger (`MEMO_FOCUS_EDITOR_THEME`). Its header row shows only the memo's time on the left, as `TimestampPopover`: the time control once the memo has one (an edit, or a new memo dated from the calendar), otherwise "Now" in the viewer's language. The button that leaves the frame is on the right.
 
-The session's code is a chunk of its own, loaded when a memo is first edited or composed, and renders without suspending once loaded. A host that knows an editor is coming calls `preloadMemoEditing()`: the router loads it with the Home page for a signed-in user, so the composer renders with the page, and the comment section loads it while the pointer is on its button. Until it is loaded a new draft shows a still of the empty composer, the same frame, placeholder line and toolbar height, so nothing moves when the session takes its place.
+The session's code is a chunk of its own. The authenticated Home route loads `preloadMemoEditing()` alongside the page using the small loader in `edit/loadEditSession.ts`. The comment section calls it while the pointer is on its button. Until the session loads, a new draft shows the empty composer's frame, placeholder line and toolbar height.
 
 ### Personal notes
 
@@ -124,6 +124,7 @@ MemoEditor/
     ├── controller.ts, extensions.ts, uploadAnchors.ts, editor.css
     ├── draftKey.ts             # Identity → draft key, legacy migration
     ├── initialState.ts         # The store's first state, from the memo or the draft
+    ├── loadEditSession.ts      # Shared lazy import and preload entry point
     ├── state/, services/, hooks/, components/, Toolbar/, types/, utils/
     └── constants.ts
 ```

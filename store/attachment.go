@@ -8,6 +8,7 @@ import (
 
 	"github.com/pkg/errors"
 
+	"github.com/usememos/memos/filter"
 	"github.com/usememos/memos/internal/identifier"
 	storepb "github.com/usememos/memos/proto/gen/store"
 )
@@ -54,6 +55,7 @@ type FindAttachment struct {
 	MemoIDList     []int32
 	HasRelatedMemo bool
 	Filters        []string
+	PreparedFilter *filter.Program
 	// Access applies memo-local authorization to linked attachments
 	// before pagination. Unlinked attachments are visible only to the active
 	// matching creator. Nil is reserved for trusted internal callers.
@@ -144,7 +146,7 @@ func (s *Store) CreateAttachment(ctx context.Context, create *Attachment) (*Atta
 			return nil, ErrMemoPermissionDenied
 		}
 		if shouldFailCreateAttachmentPolicy(ctx) {
-			return nil, ErrMemoSpaceMembershipRequired
+			return nil, ErrMemoPermissionDenied
 		}
 		attachment, err = s.driver.CreateAttachment(ctx, create)
 	} else {

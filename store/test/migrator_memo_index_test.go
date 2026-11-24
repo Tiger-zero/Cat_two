@@ -10,9 +10,6 @@ import (
 
 func TestMigrationMemoOwnerPinnedCreatedIndex(t *testing.T) {
 	t.Parallel()
-	if getDriverFromEnv() != "sqlite" {
-		t.Skip("the owner feed partial index is SQLite-specific")
-	}
 	ctx := t.Context()
 	ts := NewTestingStore(ctx, t)
 	t.Cleanup(func() { require.NoError(t, ts.Close()) })
@@ -53,7 +50,7 @@ func TestMigrationMemoOwnerPinnedCreatedIndex(t *testing.T) {
 	requireFeed := func() {
 		t.Helper()
 		find := &store.FindMemo{
-			Access:          &store.MemoAccessScope{UserID: &owner.ID, OwnerOnly: true},
+			Access:          &store.MemoAccessScope{UserID: &owner.ID},
 			RowStatus:       new(store.Normal),
 			ExcludeComments: true,
 			OrderByPinned:   true,
@@ -80,7 +77,7 @@ func TestMigrationMemoOwnerPinnedCreatedIndex(t *testing.T) {
 	}
 	requireFeed()
 
-	removeSchemaAfterMCPConnection(ctx, t, ts, "sqlite")
+	removeSchemaAfterMCPConnection(ctx, t, ts)
 	setSchemaVersion(ctx, t, ts, "26.11.4")
 	require.NoError(t, ts.Migrate(ctx))
 	requireIndex()

@@ -1,10 +1,12 @@
 import { create } from "@bufbuild/protobuf";
+import { Code, ConnectError } from "@connectrpc/connect";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, fireEvent, render, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoEditor } from "@/components/MemoEditor/MemoEditor";
 import { memoKeys } from "@/hooks/useMemoQueries";
+import { toast } from "@/lib/toast";
 import { ListMemosResponseSchema, type Memo, MemoSchema } from "@/types/proto/api/memo_service_pb";
 
 const state = vi.hoisted(() => ({ currentUser: undefined as { name: string; role?: string } | undefined }));
@@ -88,6 +90,58 @@ describe("MemoEditor in view mode", () => {
     await waitFor(() =>
       expect(client.getQueryData<{ memos: Memo[] }>(memoKeys.list({}))?.memos[0].content).toBe("- [x] First\n- [x] Second"),
     );
+  });
+
+  it.each([
+    false,
+    true,
+  ])("uses only the previous locally committed revision when several tasks are clicked (external edit: %s)", async (externalEdit) => {
+    const { client, renderMemo } = setup();
+    state.currentUser = { name: "users/owner" };
+    const before = { ...memo("- [ ] First\n- [ ] Second"), revision: "42:1" };
+    const savedFirst = { ...before, revision: "42:2", content: "- [x] First\n- [ ] Second" };
+    const savedBoth = { ...before, revision: "42:3", content: "- [x] First\n- [x] Second" };
+    const fromOtherClient = { ...savedFirst, revision: "42:3", content: `${savedFirst.content}\n\nEdit from another device` };
+    let stored = before;
+    let replyFirst!: () => void;
+    const showError = vi.spyOn(toast, "add");
+    client.setQueryData(memoKeys.list({}), create(ListMemosResponseSchema, { memos: [before] }));
+    api.updateMemo
+      .mockImplementationOnce(
+        () =>
+          new Promise<Memo>((resolve) => {
+            replyFirst = () => {
+              stored = externalEdit ? fromOtherClient : savedFirst;
+              resolve(savedFirst);
+            };
+          }),
+      )
+      .mockImplementationOnce(async ({ expectedRevision }: { expectedRevision: string }) => {
+        if (expectedRevision !== stored.revision) throw new ConnectError("memo revision changed", Code.Aborted);
+        stored = savedBoth;
+        return stored;
+      });
+
+    const { container } = renderMemo(before.name);
+    const clickTask = (index: number) => {
+      fireEvent.mouseDown(container.querySelectorAll<HTMLInputElement>("input.mbe-checkbox")[index]);
+    };
+    act(() => clickTask(0));
+    await waitFor(() => expect(api.updateMemo).toHaveBeenCalledOnce());
+    act(() => clickTask(1));
+    await waitFor(() => expect(client.isMutating()).toBe(2));
+    expect(api.updateMemo).toHaveBeenCalledOnce();
+    await act(async () => replyFirst());
+    await waitFor(() => expect(client.isMutating()).toBe(0));
+
+    expect(api.updateMemo).toHaveBeenNthCalledWith(1, expect.objectContaining({ expectedRevision: before.revision }));
+    expect(api.updateMemo).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({ expectedRevision: savedFirst.revision, memo: expect.objectContaining({ content: savedBoth.content }) }),
+    );
+    expect(stored).toEqual(externalEdit ? fromOtherClient : savedBoth);
+    if (externalEdit) expect(showError).toHaveBeenCalledWith(expect.objectContaining({ type: "danger" }));
+    else expect(showError).not.toHaveBeenCalled();
   });
 
   it("keeps tasks locked for a reader", () => {

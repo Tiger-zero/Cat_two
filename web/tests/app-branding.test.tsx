@@ -48,6 +48,7 @@ describe("instance favicon", () => {
     instance.generalSetting.customProfile = { title: "Memos", logoUrl };
     render(<App />);
 
+    expect(document.title).toBe("Memos");
     expect(icon).toHaveAttribute("href", "/favicon.png?v=cat-two");
     expect(icon).toHaveAttribute("type", "image/png");
   });
@@ -69,7 +70,7 @@ describe("instance favicon", () => {
     instance.generalSetting.customProfile = undefined;
     rerender(<App />);
 
-    expect(document.title).toBe("Memos");
+    expect(document.title).toBe("Cat_two");
     expect(icon).toHaveAttribute("href", "/favicon.png?v=cat-two");
     expect(icon).toHaveAttribute("type", "image/png");
   });

@@ -6,7 +6,6 @@ import "github.com/pkg/errors"
 // mutation. Drivers authorize that actor against the memo's current state.
 type ReactionWritePolicy struct {
 	ActorUserID int32
-	Personal    bool
 }
 
 func validateReactionWritePolicy(reaction *Reaction) error {
@@ -29,9 +28,7 @@ func ValidateReactionWriteParticipation(reaction *Reaction, snapshot *MemoCommen
 	if err := ValidateReactionWithdrawal(reaction, snapshot); err != nil {
 		return err
 	}
-	participation := *snapshot
-	participation.Personal = reaction.Policy.Personal
-	return ValidateMemoCommentAuthorization(&participation)
+	return ValidateMemoCommentAuthorization(snapshot)
 }
 
 // ValidateReactionWithdrawal allows an active actor to withdraw their own reaction

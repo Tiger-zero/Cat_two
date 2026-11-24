@@ -14,7 +14,6 @@ type sqliteRelationMemoState struct {
 	creatorID  int32
 	rowStatus  store.RowStatus
 	visibility store.Visibility
-	spaceID    *int32
 }
 
 func validateSQLiteMemoRelationEndpoints(ctx context.Context, executor dbExecutor, mutation *store.MemoMutation) error {
@@ -38,26 +37,12 @@ func validateSQLiteMemoRelationEndpoints(ctx context.Context, executor dbExecuto
 			return err
 		}
 		snapshot := &store.MemoRelationEndpointSnapshot{
-			Personal:           mutation.PersonalMode(),
 			ActorUserID:        actorUserID,
 			Actor:              actor,
 			EndpointID:         state.id,
 			EndpointCreatorID:  state.creatorID,
 			EndpointRowStatus:  state.rowStatus,
 			EndpointVisibility: state.visibility,
-			EndpointSpaceID:    state.spaceID,
-		}
-		if state.spaceID != nil {
-			if err := executor.QueryRowContext(ctx, "SELECT EXISTS(SELECT 1 FROM space WHERE id = ?)", *state.spaceID).Scan(&snapshot.EndpointSpaceExists); err != nil {
-				return err
-			}
-			if snapshot.EndpointSpaceExists && !actor.Admin {
-				active, err := sqliteSpaceMemberActive(ctx, executor, *state.spaceID, actorUserID)
-				if err != nil {
-					return err
-				}
-				snapshot.EndpointMemberActive = active
-			}
 		}
 		if err := store.ValidateMemoRelationEndpointRead(snapshot); err != nil {
 			return err
@@ -68,14 +53,12 @@ func validateSQLiteMemoRelationEndpoints(ctx context.Context, executor dbExecuto
 
 func getSQLiteRelationMemoState(ctx context.Context, executor dbExecutor, memoID int32) (*sqliteRelationMemoState, error) {
 	state := &sqliteRelationMemoState{}
-	var spaceID sql.NullInt64
-	if err := executor.QueryRowContext(ctx, `SELECT id, creator_id, row_status, visibility, space_id
+	if err := executor.QueryRowContext(ctx, `SELECT id, creator_id, row_status, visibility
 		FROM memo WHERE id = ? AND deleted_ts IS NULL`, memoID).Scan(
-		&state.id, &state.creatorID, &state.rowStatus, &state.visibility, &spaceID,
+		&state.id, &state.creatorID, &state.rowStatus, &state.visibility,
 	); err != nil {
 		return nil, err
 	}
-	state.spaceID = store.NullInt32Pointer(spaceID)
 	return state, nil
 }
 

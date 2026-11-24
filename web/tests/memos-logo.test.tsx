@@ -22,7 +22,7 @@ describe("<MemosLogo>", () => {
     const logo = container.querySelector("img");
     expect(logo).toHaveAttribute("src", "/logo.webp?v=cat-two");
     expect(logo).toHaveAttribute("alt", "");
-    expect(screen.getByText("Memos")).toBeInTheDocument();
+    expect(screen.getByText("Cat_two")).toBeInTheDocument();
   });
 
   it.each(["/custom-logo.png", "/custom-logo.svg", "https://example.com/logo.webp"])("preserves custom branding at %s", (logoUrl) => {
@@ -37,7 +37,7 @@ describe("<MemosLogo>", () => {
   it("names the standalone mark when the title is collapsed", () => {
     render(<MemosLogo collapsed />);
 
-    expect(screen.getByRole("img", { name: "Memos" })).toHaveAttribute("src", "/logo.webp?v=cat-two");
+    expect(screen.getByRole("img", { name: "Cat_two" })).toHaveAttribute("src", "/logo.webp?v=cat-two");
   });
 
   it("names a custom standalone logo when the title is collapsed", () => {

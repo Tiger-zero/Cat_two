@@ -31,7 +31,7 @@ func TestMemoTagEditsThroughREST(t *testing.T) {
 	require.NoError(t, err)
 	personalAccessToken := func(user *store.User) string {
 		t.Helper()
-		created, err := ts.Service.CreatePersonalAccessToken(ts.CreateUserContext(ctx, user.ID), &apipb.CreatePersonalAccessTokenRequest{
+		created, err := ts.Service.CreatePersonalAccessToken(ts.CreateSessionContext(ctx, user.ID), &apipb.CreatePersonalAccessTokenRequest{
 			Parent:      "users/" + user.Username,
 			Description: "tag editor test client",
 		})

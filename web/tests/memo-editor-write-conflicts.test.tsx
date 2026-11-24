@@ -49,6 +49,7 @@ function mountEditor({
 
 describe("editor retries and concurrent writes", () => {
   beforeEach(() => {
+    cacheService.clearAll();
     localStorage.clear();
     vi.resetAllMocks();
   });

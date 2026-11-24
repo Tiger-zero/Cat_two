@@ -1,54 +1,22 @@
-# Maintaining the Memo Filter Engine
+# Maintaining the CEL Filter Engine
 
-The engine is memo-specific; any future field or behavior changes must stay
-consistent with the memo schema and store implementations. Use this guide when
-extending or debugging the package.
+Use the memo and attachment schemas in `schema.go` to expose a field to CEL.
+Define its SQLite column, type, supported operators, and optional JSON path.
+Declare the field in `EnvOptions`. Use `FieldKindJSONBool` for facts derived
+from note content and `FieldKindExists` for facts about related rows. Attachment
+presence, for example, follows the current relationships in SQLite.
 
-## Adding a New Memo Field
+Validate field types and operators in `parser.go`. Render the resulting IR in
+`render.go`, using bound arguments for user-provided values. `Compile` checks
+the CEL expression and returns a `Program`. `Program.Render` produces a SQL
+fragment with its arguments. `CompileToStatement` combines the two steps.
 
-1. **Update the schema**  
-   - Add the field entry in `schema.go`.  
-   - Define the backing column (`Column`), JSON path (if applicable), type, and
-     allowed operators.  
-   - Include the CEL variable in `EnvOptions`.
-   - Choose the kind by where the truth lives: a payload flag
-     (`FieldKindJSONBool`) only for facts computed from the content; a fact about
-     related rows, such as attachments, uses `FieldKindExists` with `Related`,
-     never a payload copy.
-2. **Adjust parser or renderer (if needed)**  
-   - For non-scalar fields (JSON booleans, lists), add handling in
-     `parser.go` or extend the renderer helpers.  
-   - Keep validation in the parser (e.g., reject unsupported operators).
-3. **Write a golden test**  
-   - Extend `engine_test.go` with per-dialect rendering assertions for the new
-     field, and a SQLite behavioral test when the semantics warrant it.
-4. **Run `go test ./...`** to ensure the SQL output matches expectations across
-   all dialects.
+Keep the `?` placeholders and argument order aligned when composing SQL for the
+store. A branch folded to a constant contributes no arguments. Reuse
+`DefaultEngine` and `DefaultAttachmentEngine`, which cache their respective CEL
+environments.
 
-## Supporting Dialect Nuances
-
-- Centralize differences inside `render.go`. If a new dialect-specific behavior
-  emerges (e.g., JSON operators), add the logic there rather than leaking it
-  into store code.
-- Use the renderer helpers (`jsonExtractExpr`, `jsonArrayExpr`, etc.) rather than
-  sprinkling ad-hoc SQL strings.
-- When placeholders change, adjust `addArg` so that argument numbering stays in
-  sync with store queries.
-
-## Debugging Tips
-
-- **Parser errors** – Most originate in `buildCondition` or schema validation.
-  Enable logging around `parser.go` when diagnosing unknown identifier/operator
-  messages.
-- **Renderer output** – Temporary printf/log statements in `renderCondition` help
-  identify which IR node produced unexpected SQL.
-- **Store integration** – Ensure drivers call `filter.DefaultEngine()` exactly once
-  per process; the singleton caches the parsed CEL environment.
-
-## Testing Checklist
-
-- `go test ./store/...` ensures all dialect tests consume the engine correctly.
-- Add targeted unit tests whenever new IR nodes or renderer paths are introduced.
-- When changing boolean or JSON handling, verify SQLite, MySQL, MariaDB, and
-  PostgreSQL execution through the store tests. MariaDB uses the MySQL dialect;
-  see `store/test/README.md` for the test selector.
+Extend the relevant renderer assertions when changing a predicate. Verify
+SQLite execution when the change affects stored rows, ordering, matching,
+or omitted JSON values. Run `go test ./filter/... ./store/... ./server/mcp/...`
+for the filter package and its main integration paths.

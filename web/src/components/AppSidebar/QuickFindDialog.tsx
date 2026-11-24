@@ -205,7 +205,7 @@ const QuickFindDialog = () => {
                 <div className="min-w-0 space-y-1 mu-caption text-mu-text-secondary">
                   <p id={hintId}>{t("search.keyboard-hint")}</p>
                   <a
-                    href="https://usememos.com/docs/usage/shortcuts#filter-expression-syntax"
+                    href="https://github.com/Tiger-zero/Cat_two/blob/main/filter/README.md#sql-generation-notes"
                     target="_blank"
                     rel="noopener noreferrer"
                     className="inline-block rounded-mu-sm border border-transparent mu-focus underline underline-offset-2 hover:text-mu-text"

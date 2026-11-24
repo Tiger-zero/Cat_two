@@ -4,10 +4,10 @@ WORKDIR /backend-build
 # Install build dependencies
 RUN apk add --no-cache git ca-certificates
 
-# Copy go mod files and download dependencies (cached layer)
+# Keep dependencies in an exportable image layer so a fresh CI runner can
+# compile from a restored BuildKit cache without fetching modules again.
 COPY go.mod go.sum ./
-RUN --mount=type=cache,target=/go/pkg/mod \
-    go mod download
+RUN go mod download
 
 # Copy source code (use .dockerignore to exclude unnecessary files)
 COPY . .
@@ -15,11 +15,11 @@ COPY . .
 # Please build frontend first, so that the static files are available.
 # Refer to `pnpm release` in package.json for the build command.
 ARG TARGETOS TARGETARCH VERSION COMMIT=unknown
-RUN --mount=type=cache,target=/go/pkg/mod \
-    --mount=type=cache,target=/root/.cache/go-build \
+RUN --network=none --mount=type=cache,target=/root/.cache/go-build \
     : "${VERSION:?Pass VERSION from scripts/release_version.sh development-version or a release tag}" && \
+    sh scripts/check_frontend_build.sh server/frontend/dist && \
     CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH \
-    go build \
+    go build -mod=readonly \
       -trimpath \
       -ldflags="-s -w -X github.com/usememos/memos/internal/version.Version=${VERSION} -X github.com/usememos/memos/internal/version.Commit=${COMMIT} -extldflags '-static'" \
       -tags netgo,osusergo \

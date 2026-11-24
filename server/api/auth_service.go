@@ -54,13 +54,12 @@ func (s *APIService) GetCurrentUser(ctx context.Context, _ *apipb.GetCurrentUser
 // SignIn authenticates a user with credentials and returns tokens.
 // On success, returns an access token and sets a refresh token cookie.
 //
-// Supports two authentication methods:
-// 1. Password-based authentication (username + password).
-// 2. SSO authentication (OAuth2 authorization code).
-//
 // Authentication: Not required (public endpoint).
 // Returns: User info, access token, and token expiry.
 func (s *APIService) SignIn(ctx context.Context, request *apipb.SignInRequest) (*apipb.SignInResponse, error) {
+	if request.GetSsoCredentials() != nil {
+		return nil, retiredModuleError()
+	}
 	var existingUser *store.User
 
 	// The blocklist and rate limits run before any user lookup or hashing.
@@ -87,7 +86,6 @@ func (s *APIService) SignIn(ctx context.Context, request *apipb.SignInRequest) (
 		return nil, err
 	}
 
-	// Authentication Method 1: Password-based authentication
 	if passwordCredentials := request.GetPasswordCredentials(); passwordCredentials != nil {
 		if err := s.requireChallenge(ctx, ratelimit.ScopeSignInIP); err != nil {
 			attempt.succeeded()
@@ -118,30 +116,6 @@ func (s *APIService) SignIn(ctx context.Context, request *apipb.SignInRequest) (
 				}
 			}
 			return nil, status.Error(codes.InvalidArgument, unmatchedUsernameAndPasswordError)
-		}
-		instanceGeneralSetting, err := s.Store.GetInstanceGeneralSetting(ctx)
-		if err != nil {
-			attempt.succeeded()
-			return nil, status.Errorf(codes.Internal, "failed to get instance general setting, error: %v", err)
-		}
-		// Check if the password auth in is allowed.
-		if instanceGeneralSetting.DisallowPasswordAuth && user.Role == store.RoleUser {
-			attempt.succeeded()
-			return nil, status.Errorf(codes.PermissionDenied, "password signin is not allowed")
-		}
-		existingUser = user
-	} else if ssoCredentials := request.GetSsoCredentials(); ssoCredentials != nil {
-		// Authentication Method 2: SSO (OAuth2) authentication
-		identityProvider, userInfo, err := s.resolveSSOIdentity(ctx, ssoCredentials.IdentityProvider, ssoCredentials.Code, ssoCredentials.RedirectUri, ssoCredentials.CodeVerifier)
-		if err != nil {
-			// A rejected exchange is a credential failure and stays counted.
-			return nil, err
-		}
-		user, err := s.resolveSSOUser(ctx, nil, identityProvider, userInfo)
-		if err != nil {
-			// The credential was valid; whatever refused provisioning is not a guess.
-			attempt.succeeded()
-			return nil, err
 		}
 		existingUser = user
 	}
@@ -177,7 +151,7 @@ func (s *APIService) SignIn(ctx context.Context, request *apipb.SignInRequest) (
 	}
 	accessToken, accessExpiresAt, err := s.doSignIn(ctx, existingUser, revision)
 	if err != nil {
-		return nil, status.Errorf(codes.Internal, "failed to sign in: %v", err)
+		return nil, err
 	}
 
 	return &apipb.SignInResponse{
@@ -186,15 +160,3 @@ func (s *APIService) SignIn(ctx context.Context, request *apipb.SignInRequest) (
 		AccessTokenExpireTime: timestamppb.New(accessExpiresAt),
 	}, nil
 }
-
-// resolveSSOUser resolves a local user from an external-identity subject, creating the
-// linkage record (and a new local user if necessary) when first login is allowed.
-//
-// Lookup goes through the user_identity table instead of using userInfo.Identifier
-// as the local lookup key. On the miss path, a local user is created with the
-// identifier as its username when valid and available, or a UUID fallback
-// otherwise, and the (provider, extern_uid) linkage is committed atomically with
-// the user. When currentUser is provided by a caller outside AuthService.SignIn,
-// the lookup miss path binds the external identity to that existing user instead.
-// Concurrent first logins reconcile uniqueness conflicts by loading the linkage
-// winner.

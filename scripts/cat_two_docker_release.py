@@ -1,4 +1,4 @@
-"""Assign a numbered Docker Hub tag and point latest at the same image index."""
+"""Promote a tested Docker Hub index to its numbered, commit, and latest tags."""
 
 import json
 import re
@@ -12,6 +12,7 @@ REPOSITORY = "tiger2896/cat_two"
 IMAGE = f"docker.io/{REPOSITORY}"
 TAG_LIST_URL = f"https://registry-1.docker.io/v2/{REPOSITORY}/tags/list"
 RUN_LABEL = "io.github.tiger-zero.cat-two.release-run"
+REVISION_LABEL = "org.opencontainers.image.revision"
 
 
 def registry_tags():
@@ -69,29 +70,39 @@ def promote(tag, digest):
     )
 
 
-def publish(candidate_digest, run_number):
+def publish(candidate_digest, run_number, revision):
     previous_number = last_number(registry_tags())
+    number = previous_number + 1
+    digest = candidate_digest
     if previous_number:
         previous = inspect(version_tag(previous_number))
-        run_labels = {image["config"]["Labels"].get(RUN_LABEL) for image in previous["image"].values()}
+        platform_labels = [image["config"]["Labels"] for image in previous["image"].values()]
+        run_labels = {labels.get(RUN_LABEL) for labels in platform_labels}
         if len(run_labels) != 1:
             raise ValueError("Inconsistent release run labels in the last numbered image")
         previous_run = int(next(iter(run_labels)) or 0)
         if previous_run > run_number:
             raise ValueError("A newer workflow run has already published a numbered image")
         if previous_run == run_number:
-            # A retry can finish updating latest with the index already assigned a number.
-            promote("latest", previous["manifest"]["digest"])
-            return version_tag(previous_number)
+            if {labels.get(REVISION_LABEL) for labels in platform_labels} != {revision}:
+                raise ValueError("The numbered image from this workflow run belongs to a different commit")
+            # Retries repair aliases using the index that already owns the number.
+            number = previous_number
+            digest = previous["manifest"]["digest"]
 
-    tag = version_tag(previous_number + 1)
-    promote(tag, candidate_digest)
-    promote("latest", candidate_digest)
+    tag = version_tag(number)
+    if number != previous_number:
+        promote(tag, digest)
+    promote(f"sha-{revision}", digest)
+    promote("latest", digest)
     return tag
 
 
 if __name__ == "__main__":
-    digest, run = sys.argv[1:]
+    digest, run, revision = sys.argv[1:]
     if not re.fullmatch(r"sha256:[0-9a-f]{64}", digest):
         raise ValueError("Expected the digest of the published multi-platform image")
-    print(f"Published {IMAGE}:{publish(digest, int(run))} and {IMAGE}:latest")
+    if not re.fullmatch(r"[0-9a-f]{40}", revision):
+        raise ValueError("Expected the complete Git commit SHA")
+    tag = publish(digest, int(run), revision)
+    print(f"Published {IMAGE}:{tag}, {IMAGE}:sha-{revision} and {IMAGE}:latest")

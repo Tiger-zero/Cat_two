@@ -1,8 +1,8 @@
-# Memos API Design
+# Cat_two API Design
 
 This API design should follow the guidelines and best practices outlined in the [Google API Improvement Proposals (AIPs)](https://google.aip.dev/).
 
-The package is `memos.api`. It carries no version marker; breaking changes are recorded in [CHANGELOG.md](CHANGELOG.md).
+The public package remains `memos.api` for existing clients. Breaking changes are recorded in the changelog. [API changelog](CHANGELOG.md)
 
 ## File Layout
 

@@ -2,8 +2,6 @@ package api
 
 import (
 	"context"
-	"maps"
-	"slices"
 
 	"github.com/pkg/errors"
 	"google.golang.org/grpc/codes"
@@ -12,7 +10,6 @@ import (
 	"github.com/usememos/memos/core/instancesetting"
 	apipb "github.com/usememos/memos/proto/gen/api"
 	storepb "github.com/usememos/memos/proto/gen/store"
-	"github.com/usememos/memos/store"
 )
 
 // convertInstanceSettingResponse converts a stored setting for the API. Usage
@@ -46,50 +43,4 @@ func (s *APIService) convertUsageLimitsSettingFromStore(ctx context.Context, set
 		userNames[userID] = BuildUserName(username)
 	}
 	return instancesetting.UsageLimitsFromStore(setting, userNames), nil
-}
-
-// convertUsageLimitsSettingToStore converts usage limits from the API for the
-// store, resolving usernames to IDs. It returns an InvalidArgument status for
-// a malformed user name and a NotFound status for a user that does not exist.
-// The store validates the list when it is written.
-func (s *APIService) convertUsageLimitsSettingToStore(ctx context.Context, setting *apipb.InstanceSetting_UsageLimitsSetting) (*storepb.InstanceUsageLimitsSetting, error) {
-	if setting == nil {
-		return nil, status.Errorf(codes.InvalidArgument, "usage limits setting is required")
-	}
-	// Request user name to username, parsed once.
-	usernameOf := map[string]string{}
-	for _, limit := range setting.GetLimits() {
-		for _, name := range limit.GetUsers() {
-			username, err := parseUsernameFromName(name)
-			if err != nil {
-				return nil, status.Errorf(codes.InvalidArgument, "invalid user name %q: %v", name, err)
-			}
-			usernameOf[name] = username
-		}
-	}
-	userIDs := map[string]int32{}
-	if len(usernameOf) > 0 {
-		users, err := s.Store.ListUsers(ctx, &store.FindUser{UsernameList: slices.Collect(maps.Values(usernameOf))})
-		if err != nil {
-			return nil, status.Errorf(codes.Internal, "failed to list users: %v", err)
-		}
-		for _, user := range users {
-			userIDs[user.Username] = user.ID
-		}
-	}
-	userIDOf := make(map[string]int32, len(usernameOf))
-	for _, limit := range setting.GetLimits() {
-		for _, name := range limit.GetUsers() {
-			userID, ok := userIDs[usernameOf[name]]
-			if !ok {
-				return nil, status.Errorf(codes.NotFound, "user %q not found", name)
-			}
-			userIDOf[name] = userID
-		}
-	}
-	result, err := instancesetting.UsageLimitsToStore(setting, userIDOf)
-	if err != nil {
-		return nil, status.Errorf(codes.InvalidArgument, "%v", err)
-	}
-	return result, nil
 }

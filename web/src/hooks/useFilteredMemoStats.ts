@@ -56,11 +56,10 @@ export const useFilteredMemoStats = (options: UseFilteredMemoStatsOptions = {}):
   const currentUser = useCurrentUser();
   const { timeBasis } = useView();
 
-  // Legacy personal collections use backend per-user stats.
-  const { data: userStats, isLoading: isLoadingUserStats } = useUserStats(userName, { enabled, filter });
-  // Collection and Archived fetch grouped stats and aggregate them locally.
-  // ListUserStats AND's the request filter with the server's auth filter, so
-  // private memos are not included unless explicitly visible to the current user.
+  const grouped = context === "collection" || context === "archived";
+  // Owner Home shares the active per-user statistics used by the editor.
+  const { data: userStats, isLoading: isLoadingUserStats } = useUserStats(userName, { enabled: enabled && !grouped, filter });
+  // Anonymous collections and archives remain scoped through ListUserStats.
   const allUserStatsRequest =
     context === "collection" ? { state: State.NORMAL, filter } : context === "archived" ? { state: State.ARCHIVED, filter } : {};
   const shouldFetchAllUserStats = context === "collection" || (context === "archived" && !!currentUser?.name);
@@ -70,7 +69,7 @@ export const useFilteredMemoStats = (options: UseFilteredMemoStatsOptions = {}):
 
   const data = useMemo(() => {
     const loading = isLoadingUserStats || isLoadingAllUserStats;
-    const activityStats: Record<string, number> = {};
+    let activityStats: Record<string, number> = {};
     let tagCount: Record<string, number> = mergeTagCounts();
     let summary: CollectionSummary | undefined;
 
@@ -91,10 +90,24 @@ export const useFilteredMemoStats = (options: UseFilteredMemoStatsOptions = {}):
         summary = { memoCount, tagCount: Object.keys(tagCount).length, recordedDays: Object.keys(createdActivity).length };
       }
     } else if (userName && userStats) {
-      // Legacy personal collections use backend per-user stats.
-      addDailyCounts(activityStats, timestampsForBasis(userStats, timeBasis));
-      if (userStats.tagCounts) {
-        tagCount = mergeTagCounts(userStats.tagCounts);
+      const { dailyActivity } = userStats;
+      if (dailyActivity) {
+        activityStats = timeBasis === "update_time" ? dailyActivity.updatedCounts : dailyActivity.createdCounts;
+      } else {
+        addDailyCounts(activityStats, timestampsForBasis(userStats, timeBasis));
+      }
+      tagCount = mergeTagCounts(userStats.tagCounts);
+      if (context === "home") {
+        let createdActivity = dailyActivity?.createdCounts ?? activityStats;
+        if (!dailyActivity && timeBasis === "update_time") {
+          createdActivity = {};
+          addDailyCounts(createdActivity, userStats.memoCreatedTimestamps ?? []);
+        }
+        summary = {
+          memoCount: userStats.totalMemoCount,
+          tagCount: Object.keys(tagCount).length,
+          recordedDays: Object.keys(createdActivity).length,
+        };
       }
     }
 

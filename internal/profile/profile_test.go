@@ -1,6 +1,7 @@
 package profile
 
 import (
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -38,7 +39,16 @@ func TestValidateInstanceURL(t *testing.T) {
 	}
 }
 
-func TestValidateRejectsDemoWithNonSQLiteDriver(t *testing.T) {
-	p := &Profile{Demo: true, Driver: "postgres", Data: t.TempDir()}
-	require.ErrorContains(t, p.Validate(), "demo mode requires the sqlite database driver")
+func TestValidateDatabaseDriver(t *testing.T) {
+	for _, driver := range []string{"", SQLiteDriver} {
+		p := &Profile{Driver: driver, Data: t.TempDir()}
+		require.NoError(t, p.Validate())
+		require.Equal(t, SQLiteDriver, p.Driver)
+		require.Equal(t, filepath.Join(p.Data, "memos_prod.db"), p.DSN)
+	}
+	for _, demo := range []bool{false, true} {
+		p := &Profile{Demo: demo, Driver: "postgres", Data: filepath.Join(t.TempDir(), "data")}
+		require.ErrorContains(t, p.Validate(), "Cat_two requires SQLite")
+		require.NoDirExists(t, p.Data, "invalid database configurations must fail before preparing their data directory")
+	}
 }

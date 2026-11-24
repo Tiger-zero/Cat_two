@@ -25,9 +25,26 @@ func TestCompileNowVariableFoldsToInjectedClock(t *testing.T) {
 	t.Parallel()
 
 	engine := memoEngineAt(t, 1750000000)
-	stmt, err := engine.CompileToStatement(context.Background(), `created_ts >= now`, RenderOptions{Dialect: DialectSQLite})
+	stmt, err := engine.CompileToStatement(context.Background(), `created_ts >= now`)
 	require.NoError(t, err)
 	require.Equal(t, []any{int64(1750000000)}, stmt.Args)
+}
+
+func TestPreparedConditionRetainsTimeAcrossQueries(t *testing.T) {
+	t.Parallel()
+
+	engine := memoEngineAt(t, 1750000000)
+	program, err := engine.Compile(t.Context(), `created_ts >= now`)
+	require.NoError(t, err)
+	engine.nowFunc = fixedClock(1750000001)
+
+	for range 2 {
+		var where []string
+		var args []any
+		require.NoError(t, AppendProgramCondition(program, &where, &args))
+		require.Len(t, where, 1)
+		require.Equal(t, []any{int64(1750000000)}, args)
+	}
 }
 
 func TestCompileNowFunctionIsRemoved(t *testing.T) {
@@ -45,7 +62,7 @@ func TestCompileNowMinusDurationFolds(t *testing.T) {
 	t.Parallel()
 
 	engine := memoEngineAt(t, 1750000000)
-	stmt, err := engine.CompileToStatement(context.Background(), `created_ts >= now - duration("1h")`, RenderOptions{Dialect: DialectSQLite})
+	stmt, err := engine.CompileToStatement(context.Background(), `created_ts >= now - duration("1h")`)
 	require.NoError(t, err)
 	require.Equal(t, []any{int64(1750000000 - 3600)}, stmt.Args)
 }
@@ -54,7 +71,7 @@ func TestCompileNowPlusDurationFolds(t *testing.T) {
 	t.Parallel()
 
 	engine := memoEngineAt(t, 1750000000)
-	stmt, err := engine.CompileToStatement(context.Background(), `updated_ts < now + duration("24h")`, RenderOptions{Dialect: DialectSQLite})
+	stmt, err := engine.CompileToStatement(context.Background(), `updated_ts < now + duration("24h")`)
 	require.NoError(t, err)
 	require.Equal(t, []any{int64(1750000000 + 86400)}, stmt.Args)
 }
@@ -63,7 +80,7 @@ func TestCompileAbsoluteTimestampStringFolds(t *testing.T) {
 	t.Parallel()
 
 	engine := memoEngineAt(t, 1750000000)
-	stmt, err := engine.CompileToStatement(context.Background(), `created_ts >= timestamp("2025-01-01T00:00:00Z")`, RenderOptions{Dialect: DialectSQLite})
+	stmt, err := engine.CompileToStatement(context.Background(), `created_ts >= timestamp("2025-01-01T00:00:00Z")`)
 	require.NoError(t, err)
 	require.Equal(t, []any{int64(1735689600)}, stmt.Args)
 }
@@ -73,7 +90,7 @@ func TestCompileTimestampFromEpochIntFolds(t *testing.T) {
 
 	// This is the shape the frontend date-range filter emits.
 	engine := memoEngineAt(t, 1750000000)
-	stmt, err := engine.CompileToStatement(context.Background(), `created_ts >= timestamp(1730000000)`, RenderOptions{Dialect: DialectSQLite})
+	stmt, err := engine.CompileToStatement(context.Background(), `created_ts >= timestamp(1730000000)`)
 	require.NoError(t, err)
 	require.Equal(t, []any{int64(1730000000)}, stmt.Args)
 }
@@ -94,7 +111,7 @@ func TestCompileAttachmentCreateTimeUsesNow(t *testing.T) {
 	require.NoError(t, err)
 	engine.nowFunc = fixedClock(1750000000)
 
-	stmt, err := engine.CompileToStatement(context.Background(), `create_time >= now - duration("24h")`, RenderOptions{Dialect: DialectSQLite})
+	stmt, err := engine.CompileToStatement(context.Background(), `create_time >= now - duration("24h")`)
 	require.NoError(t, err)
 	require.Equal(t, []any{int64(1750000000 - 86400)}, stmt.Args)
 }

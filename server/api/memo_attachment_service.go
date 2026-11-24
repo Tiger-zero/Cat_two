@@ -52,11 +52,7 @@ func (s *APIService) SetMemoAttachments(ctx context.Context, request *apipb.SetM
 	if err := s.applyMemoMutation(ctx, memo, prepared, &store.UpdateMemo{ID: memo.ID, UpdatedTs: &updatedTsSec}, requiredAttachmentIDs, nil); err != nil {
 		return nil, err
 	}
-	_, _, memoMessage, err := s.buildUpdatedMemoState(ctx, memo.ID)
-	if err != nil {
-		return nil, status.Errorf(codes.Internal, "failed to build updated memo state")
-	}
-	s.dispatchMemoUpdatedSideEffects(ctx, memoMessage)
+	s.SSEHub.publishMemoChanged()
 
 	return &emptypb.Empty{}, nil
 }
@@ -178,7 +174,6 @@ func (s *APIService) createMemoWithMutation(
 		})
 	}
 	return s.Store.ApplyMemoMutation(ctx, &store.MemoMutation{
-		PersonalCreation:          s.personalMode(),
 		MemoCreate:                create,
 		CommentContextMemoID:      commentContextMemoID,
 		RestoreArchivedComment:    restoringArchive && commentContextMemoID != nil,
@@ -210,7 +205,7 @@ func (s *APIService) applyMemoMutation(
 	if !access.CanManageMemo(user, memo) {
 		return status.Error(codes.PermissionDenied, "permission denied")
 	}
-	policy := s.memoWritePolicy(user.ID, false)
+	policy := &store.MemoWritePolicy{ActorUserID: user.ID}
 	if memoUpdate != nil && memoUpdate.Policy != nil {
 		policy = memoUpdate.Policy
 	} else if memoUpdate != nil {
@@ -253,9 +248,7 @@ func (s *APIService) applyMemoMutation(
 	if err := s.Store.ApplyMemoMutation(ctx, mutation); err != nil {
 		return mapMemoWriteError(err, "failed to apply memo mutation")
 	}
-	if err := s.cleanupDeletedAttachmentStorage(ctx, prepared.removed); err != nil {
-		return status.Errorf(codes.Internal, "memo was updated but attachment storage cleanup failed: %v", err)
-	}
+	s.attemptCommittedAttachmentCleanup(ctx, prepared.removed)
 	return nil
 }
 

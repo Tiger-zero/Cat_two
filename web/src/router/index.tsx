@@ -1,9 +1,8 @@
 import { createBrowserRouter, Navigate, type RouteObject, useLocation } from "react-router-dom";
 import App from "@/App";
 import { ChunkLoadErrorFallback } from "@/components/ErrorBoundary";
-import { preloadMemoEditing } from "@/components/MemoEditor";
+import { preloadMemoEditing } from "@/components/MemoEditor/edit/loadEditSession";
 import MainLayout from "@/layouts/MainLayout";
-import RootLayout from "@/layouts/RootLayout";
 import { lazyWithReload } from "@/utils/lazy";
 import { RequireAuthRoute, RequireFullInitializationRoute, RequireGuestRoute, RequireInstanceInitializationRoute } from "./guards";
 import { LegacyCalendarRedirect } from "./LegacyCalendarRedirect";
@@ -17,6 +16,7 @@ const Home = lazyWithReload(() => Promise.all([import("@/pages/Home"), preloadMe
 const MemoDetail = lazyWithReload(() => import("@/pages/MemoDetail"));
 const NotFound = lazyWithReload(() => import("@/pages/NotFound"));
 const PermissionDenied = lazyWithReload(() => import("@/pages/PermissionDenied"));
+const RootLayout = lazyWithReload(() => import("@/layouts/RootLayout"));
 const SignIn = lazyWithReload(() => import("@/pages/SignIn"));
 const SignUp = lazyWithReload(() => import("@/pages/SignUp"));
 const Trash = lazyWithReload(() => import("@/pages/Trash"));
@@ -44,9 +44,7 @@ export const Routes = ROUTES;
 export { ROUTES };
 
 /**
- * Static route configuration. Exported so tests can assert on the tree shape
- * (e.g. that `/auth/callback` stays outside the guest-only guard subtree) and
- * so integration tests can drive a `createMemoryRouter` over the same tree.
+ * Static route configuration shared by the browser router and memory-router tests.
  */
 export const routeConfig: RouteObject[] = [
   {

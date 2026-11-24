@@ -598,9 +598,6 @@ func TestAttachmentInvalidUID(t *testing.T) {
 
 // TestMemoMutationConcurrentUpdatesNoSQLiteBusy: concurrent distinct-memo mutations all succeed (issue #6186).
 func TestMemoMutationConcurrentUpdatesNoSQLiteBusy(t *testing.T) {
-	if getDriverFromEnv() != "sqlite" {
-		t.Skip("skipping sqlite lock regression test for non-sqlite driver")
-	}
 	t.Parallel()
 
 	ctx := context.Background()
@@ -643,9 +640,6 @@ func TestMemoMutationConcurrentUpdatesNoSQLiteBusy(t *testing.T) {
 
 // TestMemoMutationConcurrentUpdatesSameMemoNoSQLiteBusy: same-memo races only yield success or ErrMemoMutationConflict.
 func TestMemoMutationConcurrentUpdatesSameMemoNoSQLiteBusy(t *testing.T) {
-	if getDriverFromEnv() != "sqlite" {
-		t.Skip("skipping sqlite lock regression test for non-sqlite driver")
-	}
 	t.Parallel()
 
 	ctx := context.Background()

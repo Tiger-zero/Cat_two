@@ -8,14 +8,6 @@ import (
 	"github.com/pkg/errors"
 )
 
-func extractWebhookIDFromName(name string) string {
-	parts := strings.Split(name, "/")
-	if len(parts) >= 4 && parts[0] == "users" && parts[2] == "webhooks" {
-		return parts[3]
-	}
-	return ""
-}
-
 // extractUsernameFromFilter extracts username from the filter string using CEL.
 // Supported filter format: "username == 'steven'"
 // Returns the username value and an error if the filter format is invalid.
@@ -108,7 +100,3 @@ func extractUsernameFromComparison(left, right ast.Expr) (string, bool) {
 
 	return str, true
 }
-
-// ListUserNotifications lists all notifications for a user.
-// Notifications are backed by the inbox storage layer and represent activities
-// that require user attention (e.g., memo comments).

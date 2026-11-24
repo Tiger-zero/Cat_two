@@ -1,8 +1,6 @@
 package filter
 
 import (
-	"context"
-	"fmt"
 	"strings"
 	"testing"
 
@@ -43,79 +41,39 @@ func TestRenderFoldedOperandsDropTheirArgs(t *testing.T) {
 		},
 	}
 
-	for _, dialect := range []DialectName{DialectSQLite, DialectMySQL, DialectPostgres} {
-		for _, offset := range []int{0, 3} {
-			for _, tc := range tests {
-				t.Run(fmt.Sprintf("%s/offset=%d/%s", dialect, offset, tc.filter), func(t *testing.T) {
-					stmt, err := engine.CompileToStatement(context.Background(), tc.filter, RenderOptions{
-						Dialect:           dialect,
-						PlaceholderOffset: offset,
-					})
-					require.NoError(t, err)
-					require.Equal(t, tc.args, stmt.Args)
-					if tc.sql == "*" {
-						require.NotContains(t, []string{"", "1 = 0"}, stmt.SQL)
-					} else {
-						require.Equal(t, tc.sql, stmt.SQL)
-					}
-					require.Equal(t, expectedPlaceholders(dialect, offset, len(tc.args)), placeholdersIn(dialect, stmt.SQL))
-				})
+	for _, tc := range tests {
+		t.Run(tc.filter, func(t *testing.T) {
+			stmt, err := engine.CompileToStatement(t.Context(), tc.filter)
+			require.NoError(t, err)
+			require.Equal(t, tc.args, stmt.Args)
+			if tc.sql == "*" {
+				require.NotContains(t, []string{"", "1 = 0"}, stmt.SQL)
+			} else {
+				require.Equal(t, tc.sql, stmt.SQL)
 			}
-		}
+			require.Equal(t, len(tc.args), strings.Count(stmt.SQL, "?"))
+		})
 	}
 }
 
 func TestCheckPlaceholderParityRejectsMismatch(t *testing.T) {
 	t.Parallel()
 
-	tests := []struct {
-		name    string
-		dialect DialectName
-		sql     string
-		args    []any
-		offset  int
-		wantErr bool
-	}{
-		{name: "sqlite match", dialect: DialectSQLite, sql: "a = ? AND b = ?", args: []any{1, 2}},
-		{name: "sqlite surplus arg", dialect: DialectSQLite, sql: "a = ?", args: []any{1, 2}, wantErr: true},
-		{name: "mysql missing arg", dialect: DialectMySQL, sql: "a = ? AND b = ?", args: []any{1}, wantErr: true},
-		{name: "postgres match with offset", dialect: DialectPostgres, sql: "a = $3 AND b = $4", args: []any{1, 2}, offset: 2},
-		{name: "postgres surplus arg", dialect: DialectPostgres, sql: "a = $1", args: []any{1, 2}, wantErr: true},
-		{name: "postgres below offset", dialect: DialectPostgres, sql: "a = $1", args: []any{1}, offset: 1, wantErr: true},
-		{name: "postgres beyond args", dialect: DialectPostgres, sql: "a = $3", args: []any{1}, offset: 1, wantErr: true},
-		{name: "postgres repeated", dialect: DialectPostgres, sql: "a = $1 AND b = $1", args: []any{1, 2}, wantErr: true},
-	}
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			err := checkPlaceholderParity(tc.sql, tc.args, tc.dialect, tc.offset)
-			if tc.wantErr {
-				require.Error(t, err)
-			} else {
-				require.NoError(t, err)
-			}
-		})
-	}
+	require.NoError(t, checkPlaceholderParity("a = ? AND b = ?", []any{1, 2}))
+	require.Error(t, checkPlaceholderParity("a = ?", []any{1, 2}))
+	require.Error(t, checkPlaceholderParity("a = ? AND b = ?", []any{1}))
 }
 
-func expectedPlaceholders(dialect DialectName, offset, count int) []string {
-	placeholders := []string{}
-	for i := 1; i <= count; i++ {
-		if dialect == DialectPostgres {
-			placeholders = append(placeholders, fmt.Sprintf("$%d", offset+i))
-		} else {
-			placeholders = append(placeholders, "?")
-		}
-	}
-	return placeholders
-}
+// Store callers can append conditions after their own arguments.
+func TestAppendConditionsPreservesArgumentOrder(t *testing.T) {
+	t.Parallel()
 
-func placeholdersIn(dialect DialectName, sql string) []string {
-	if dialect == DialectPostgres {
-		matches := postgresPlaceholderPattern.FindAllString(sql, -1)
-		if matches == nil {
-			return []string{}
-		}
-		return matches
-	}
-	return expectedPlaceholders(dialect, 0, strings.Count(sql, "?"))
+	engine, err := DefaultEngine()
+	require.NoError(t, err)
+	where := []string{"memo.id = ?"}
+	args := []any{int64(4)}
+	filters := []string{`creator_id == 1 || true`, `pinned == true`, `creation_channel == "web"`}
+	require.NoError(t, AppendConditions(t.Context(), engine, filters, &where, &args))
+	require.Len(t, where, 3)
+	require.Equal(t, []any{int64(4), 1, "web"}, args)
 }

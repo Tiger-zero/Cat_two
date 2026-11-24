@@ -113,6 +113,8 @@ CREATE INDEX idx_memo_space_id ON memo(space_id, row_status, created_ts DESC, id
 CREATE INDEX idx_memo_trash_expiry ON memo(deleted_ts, id);
 CREATE INDEX idx_memo_trash_creator ON memo(creator_id, deleted_ts, id);
 CREATE INDEX idx_memo_trash_root ON memo(trash_root_id);
+CREATE INDEX idx_memo_legacy_body ON memo(id) WHERE body_digest = '';
+CREATE INDEX idx_memo_body_digest ON memo(body_digest) WHERE body_digest != '';
 CREATE INDEX idx_memo_owner_pinned_created
   ON memo(creator_id, row_status, pinned DESC, created_ts DESC, id DESC)
   WHERE deleted_ts IS NULL;
@@ -155,6 +157,8 @@ CREATE TABLE attachment (
 
 CREATE INDEX idx_attachment_creator_id ON attachment(creator_id);
 CREATE INDEX idx_attachment_memo_id_type ON attachment(memo_id, type);
+CREATE INDEX idx_attachment_legacy_storage
+  ON attachment(id) WHERE storage_type NOT IN ('LOCAL', 'EXTERNAL', 'S3');
 
 -- Removed attachment metadata for retrying trash storage cleanup after commit.
 CREATE TABLE attachment_storage_cleanup (

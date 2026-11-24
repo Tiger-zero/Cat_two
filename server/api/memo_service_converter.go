@@ -12,7 +12,6 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	"github.com/usememos/memos/core/access"
 	apipb "github.com/usememos/memos/proto/gen/api"
 	storepb "github.com/usememos/memos/proto/gen/store"
 	"github.com/usememos/memos/store"
@@ -59,19 +58,6 @@ func (s *APIService) convertMemoFromStoreWithCreators(ctx context.Context, memo 
 		Pinned:          memo.Pinned,
 		Revision:        MemoRevision(memo),
 	}
-	// An assigned memo needs a read context for its placement projection; an
-	// unassigned memo needs none.
-	var readContext access.MemoReadContext
-	if memo.SpaceID != nil {
-		resolved, err := s.buildMemoReadContext(ctx, memo)
-		if err != nil {
-			return nil, errors.Wrap(err, "failed to resolve memo access")
-		}
-		readContext = resolved
-	}
-	if err := s.projectMemoCollaborationContext(ctx, memo, memoMessage, readContext); err != nil {
-		return nil, errors.Wrap(err, "failed to project memo collaboration context")
-	}
 	if memo.Payload != nil {
 		memoMessage.Tags = memo.Payload.Tags
 		memoMessage.Property = convertMemoPropertyFromStore(memo.Payload.Property)
@@ -82,7 +68,7 @@ func (s *APIService) convertMemoFromStoreWithCreators(ctx context.Context, memo 
 	// Project the parent only when the same author can read both notes.
 	if memo.ParentUID != nil {
 		parent, err := s.Store.GetMemo(ctx, &store.FindMemo{
-			UID: memo.ParentUID, Access: &store.MemoAccessScope{OwnerOnly: true, UserID: &memo.CreatorID}, ExcludeContent: true,
+			UID: memo.ParentUID, Access: &store.MemoAccessScope{UserID: &memo.CreatorID}, ExcludeContent: true,
 		})
 		if err != nil {
 			return nil, errors.Wrap(err, "failed to resolve comment parent")
@@ -120,37 +106,6 @@ func (s *APIService) convertMemoFromStoreWithCreators(ctx context.Context, memo 
 	memoMessage.Snippet = snippet
 
 	return memoMessage, nil
-}
-
-func (s *APIService) projectMemoCollaborationContext(ctx context.Context, memo *store.Memo, message *apipb.Memo, readContext access.MemoReadContext) error {
-	if memo.SpaceID == nil {
-		return nil
-	}
-	if !readContext.SpaceValid {
-		// Placement is not an additional read gate for PRIVATE, PROTECTED, or
-		// PUBLIC. Omit a dangling placement rather than turning it into a second
-		// audience restriction. SPACE already failed closed in the read policy.
-		if memo.Visibility == store.SpaceAudience {
-			return errors.New("memo has invalid space placement")
-		}
-		return nil
-	}
-	if !access.CanManageMemo(readContext.Viewer, memo) {
-		return nil
-	}
-	space, err := s.Store.GetSpace(ctx, &store.FindSpace{ID: memo.SpaceID})
-	if err != nil {
-		return err
-	}
-	if space == nil {
-		if memo.Visibility == store.SpaceAudience {
-			return errors.New("memo has invalid space placement")
-		}
-		return nil
-	}
-	spaceName := buildSpaceName(space.UID)
-	message.Space = &spaceName
-	return nil
 }
 
 func (s *APIService) listUsersByIDWithExisting(ctx context.Context, userIDs []int32, existing map[int32]*store.User) (map[int32]*store.User, error) {
@@ -413,4 +368,13 @@ func validateUpdateMemoVisibility(visibility apipb.Visibility) (store.Visibility
 		return "", status.Errorf(codes.InvalidArgument, "visibility must be specified")
 	}
 	return validateCreateMemoVisibility(visibility)
+}
+
+func (s *APIService) getMemoContentSnippet(content string) (string, error) {
+	// Use goldmark service for snippet generation
+	snippet, err := s.MarkdownService.GenerateSnippet([]byte(content), 64)
+	if err != nil {
+		return "", errors.Wrap(err, "failed to generate snippet")
+	}
+	return snippet, nil
 }

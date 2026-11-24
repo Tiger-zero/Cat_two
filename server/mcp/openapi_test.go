@@ -11,30 +11,11 @@ func TestLoadOpenAPIOperationsIncludesCuratedIDs(t *testing.T) {
 	spec, err := loadOpenAPISpec("../../proto/gen/openapi.yaml")
 	require.NoError(t, err)
 
-	registry, err := buildOperationRegistry(spec)
+	registry, err := buildOperationRegistry(spec, curatedOperationIDs...)
 	require.NoError(t, err)
+	require.Len(t, registry, len(curatedOperationIDs))
 
-	curatedIDs := []string{
-		"MemoService_ListMemos",
-		"MemoService_CreateMemo",
-		"MemoService_GetMemo",
-		"MemoService_UpdateMemo",
-		"MemoService_DeleteMemo",
-		"MemoService_ListMemoComments",
-		"MemoService_CreateMemoComment",
-		"MemoService_ListMemoAttachments",
-		"MemoService_SetMemoAttachments",
-		"MemoService_ListMemoReactions",
-		"MemoService_UpsertMemoReaction",
-		"MemoService_DeleteMemoReaction",
-		"MemoService_ListMemoRelations",
-		"MemoService_SetMemoRelations",
-		"AttachmentService_ListAttachments",
-		"AttachmentService_GetAttachment",
-		"AttachmentService_DeleteAttachment",
-	}
-
-	for _, operationID := range curatedIDs {
+	for _, operationID := range curatedOperationIDs {
 		operation, ok := registry[operationID]
 		require.True(t, ok, "missing curated operation %s", operationID)
 		require.NotEmpty(t, operation.Method, operationID)

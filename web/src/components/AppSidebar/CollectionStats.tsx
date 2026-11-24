@@ -22,7 +22,7 @@ const CollectionStats = ({ summary, loading, desktop }: Props) => {
         className={cn(
           "grid grid-cols-3 divide-x divide-mu-line/70",
           desktop
-            ? "border-b border-mu-line/65 pt-1 pb-4"
+            ? "border-b border-mu-line/65 pt-1 pb-4 light:in-[[data-home-collection]]:border-b-transparent"
             : "rounded-mu-lg border border-mu-line/70 bg-mu-surface py-2.5 dark:bg-mu-canvas",
         )}
       >

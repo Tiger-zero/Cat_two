@@ -35,20 +35,20 @@ import (
 // - Older installations: Must upgrade through v0.31.0 before running this binary
 //
 // Migration Files:
-// - Location: store/migration/{driver}/{version}/NN__description.sql
+// - Location: store/migration/sqlite/{version}/NN__description.sql
 // - Naming: NN is a zero-based migration sequence, description is human-readable
 // - Ordering: Calendar year, month, and migration sequence are compared numerically
-// - Every driver ships the same set of migration versions; a schema change is
-//   one file per driver under the same YY.MM/NN
 // - LATEST.sql: Full schema for new installations (faster than incremental migrations)
 
-//go:embed migration
+//go:embed migration/sqlite
 var migrationFS embed.FS
 
-//go:embed seed
+//go:embed seed/sqlite
 var seedFS embed.FS
 
 const (
+	migrationBasePath = "migration/sqlite/"
+
 	// MigrateFileNameSplit separates the migration sequence from the description in the migration file name.
 	// For example, "00__create_table.sql".
 	MigrateFileNameSplit = "__"
@@ -165,7 +165,7 @@ func (s *Store) applyMigrations(ctx context.Context, currentSchemaVersion, targe
 	if err != nil {
 		return err
 	}
-	files, err := s.listMigrationFiles()
+	files, err := listMigrationFilesFrom(migrationFS)
 	if err != nil {
 		return err
 	}
@@ -210,10 +210,7 @@ func (s *Store) applyMigrations(ctx context.Context, currentSchemaVersion, targe
 		migrationsApplied++
 	}
 
-	// Record the schema version in the same transaction, so on SQLite and
-	// PostgreSQL a crash cannot leave migrated tables behind an old version
-	// that re-runs them. MySQL commits DDL implicitly, so there the version
-	// write is only adjacent to the migration, as it was before.
+	// Commit the schema changes and their version marker in one transaction.
 	if err := s.writeSchemaVersionTx(ctx, tx, basicSetting, targetSchemaVersion); err != nil {
 		return err
 	}
@@ -234,7 +231,7 @@ func (s *Store) preMigrate(ctx context.Context) error {
 	}
 
 	if !initialized {
-		filePath := s.getMigrationBasePath() + LatestSchemaFileName
+		filePath := migrationBasePath + LatestSchemaFileName
 		bytes, err := migrationFS.ReadFile(filePath)
 		if err != nil {
 			return errors.Errorf("failed to read latest schema file: %s", err)
@@ -250,9 +247,7 @@ func (s *Store) preMigrate(ctx context.Context) error {
 			return errors.Errorf("failed to execute SQL file %s, err %s", filePath, err)
 		}
 
-		// Record the schema version with the schema, so on SQLite and
-		// PostgreSQL a crash cannot leave an initialized database without
-		// one. MySQL commits DDL implicitly and keeps the earlier behavior.
+		// Initialize the schema and its version marker in one transaction.
 		schemaVersion, err := s.GetCurrentSchemaVersion()
 		if err != nil {
 			return errors.Wrap(err, "failed to get current schema version")
@@ -274,26 +269,12 @@ func (s *Store) preMigrate(ctx context.Context) error {
 	return nil
 }
 
-func (s *Store) getMigrationBasePath() string {
-	return fmt.Sprintf("migration/%s/", s.profile.Driver)
-}
-
-func (s *Store) getSeedBasePath() string {
-	return fmt.Sprintf("seed/%s/", s.profile.Driver)
-}
-
 // Seed loads the demo content: every seed file from the embedded filesystem,
 // in name order, in one transaction. The server calls it in demo mode after
 // the declarative configuration is applied, so content attaches to the users
-// the configuration declares. Only SQLite has seed files.
+// the configuration declares.
 func (s *Store) Seed(ctx context.Context) error {
-	// Only seed for SQLite - other databases should use production data
-	if s.profile.Driver != "sqlite" {
-		slog.Warn("seed is only supported for SQLite, skipping for other databases")
-		return nil
-	}
-
-	filenames, err := fs.Glob(seedFS, fmt.Sprintf("%s*.sql", s.getSeedBasePath()))
+	filenames, err := fs.Glob(seedFS, "seed/sqlite/*.sql")
 	if err != nil {
 		return errors.Wrap(err, "failed to read seed files")
 	}
@@ -344,14 +325,10 @@ func (s *Store) CheckSchemaCurrent(ctx context.Context) error {
 	return nil
 }
 
-// GetCurrentSchemaVersion returns the latest schema version available for the configured database driver.
-// With no incremental migrations, it returns the fixed v0.31.0 baseline.
-//
-// Only this driver's migration files count. Every driver must ship the same
-// migration versions (TestMigrationVersionsMatchAcrossDrivers enforces this),
-// so a driver never records a version whose SQL it has not executed.
-func (s *Store) GetCurrentSchemaVersion() (string, error) {
-	files, err := s.listMigrationFiles()
+// GetCurrentSchemaVersion returns the latest SQLite schema version. With no
+// incremental migrations, it returns the fixed schema shipped by v0.31.0.
+func (*Store) GetCurrentSchemaVersion() (string, error) {
+	files, err := listMigrationFilesFrom(migrationFS)
 	if err != nil {
 		return "", err
 	}
@@ -365,17 +342,13 @@ func (s *Store) GetCurrentSchemaVersion() (string, error) {
 	return latest.version, nil
 }
 
-// listMigrationFiles returns this driver's migration scripts in application
+// listMigrationFilesFrom returns SQLite migration scripts in application
 // order. Every filename is validated and every version parsed before any SQL
 // runs, sequences are ordered numerically (including months with more than
 // 100 migrations), and two files that resolve to the same version are rejected
 // because their relative order would be undefined.
-func (s *Store) listMigrationFiles() ([]migrationFile, error) {
-	return listMigrationFilesFrom(migrationFS, s.getMigrationBasePath())
-}
-
-func listMigrationFilesFrom(fsys fs.FS, basePath string) ([]migrationFile, error) {
-	paths, err := fs.Glob(fsys, basePath+"*/*.sql")
+func listMigrationFilesFrom(fsys fs.FS) ([]migrationFile, error) {
+	paths, err := fs.Glob(fsys, migrationBasePath+"*/*.sql")
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to read migration files")
 	}

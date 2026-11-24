@@ -284,7 +284,6 @@ export type ListMemosRequest = Message<"memos.api.ListMemosRequest"> & {
    * the create_time / update_time names used by order_by.
    * Examples:
    *   pinned == true && visibility == "PUBLIC"
-   *   space == "spaces/team" or space == null
    *   tags.exists(t, t == "urgent")
    *   content.contains("roadmap") && created_ts > now - duration("168h")
    *

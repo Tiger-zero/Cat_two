@@ -1,5 +1,6 @@
 import { UserRoundIcon } from "lucide-react";
-import type { CSSProperties } from "react";
+import { type CSSProperties, useState } from "react";
+import { DEFAULT_AVATAR } from "@/lib/branding";
 import { cn } from "@/lib/utils";
 
 interface Props {
@@ -8,19 +9,19 @@ interface Props {
   name?: string;
 }
 
-const UserAvatar = (props: Props) => {
-  const { avatarUrl, className, name } = props;
-  const title = name?.trim();
+const Avatar = ({ avatarUrl, className, name }: Props) => {
+  const [src, setSrc] = useState(avatarUrl || DEFAULT_AVATAR);
+  const title = src ? undefined : name?.trim();
   let hash = 0;
   for (const character of title?.toLowerCase() ?? "") hash = (hash * 31 + (character.codePointAt(0) ?? 0)) | 0;
-  const style = title && !avatarUrl ? ({ "--avatar-hue": `${((hash >>> 0) % 12) * 30}deg` } as CSSProperties) : undefined;
+  const style = title ? ({ "--avatar-hue": `${((hash >>> 0) % 12) * 30}deg` } as CSSProperties) : undefined;
 
   return (
     <div
       className={cn(
         "flex size-8 shrink-0 items-center justify-center overflow-hidden rounded-full",
-        avatarUrl
-          ? "border border-mu-line"
+        src
+          ? src === avatarUrl && "border border-mu-line"
           : title
             ? "bg-[oklch(0.82_0.09_var(--avatar-hue))] text-[oklch(0.5_0.1_var(--avatar-hue))] [[data-theme=dark]_&]:bg-[oklch(0.42_0.09_var(--avatar-hue))] [[data-theme=dark]_&]:text-[oklch(0.85_0.06_var(--avatar-hue))]"
             : "bg-mu-well text-mu-text-secondary",
@@ -29,8 +30,15 @@ const UserAvatar = (props: Props) => {
       style={style}
       aria-hidden="true"
     >
-      {avatarUrl ? (
-        <img className="size-full object-cover" src={avatarUrl} decoding="async" loading="lazy" alt="" />
+      {src ? (
+        <img
+          className="size-full object-cover"
+          src={src}
+          decoding="async"
+          loading="lazy"
+          alt=""
+          onError={() => setSrc(src === DEFAULT_AVATAR ? "" : DEFAULT_AVATAR)}
+        />
       ) : (
         // Lower the portrait to crop the body, widen it, and leave a small gap below the head.
         <UserRoundIcon
@@ -42,5 +50,8 @@ const UserAvatar = (props: Props) => {
     </div>
   );
 };
+
+// A changed upload starts from its own URL, independent of the previous fallback.
+const UserAvatar = (props: Props) => <Avatar key={props.avatarUrl} {...props} />;
 
 export default UserAvatar;

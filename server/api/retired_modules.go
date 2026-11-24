@@ -19,10 +19,7 @@ func (s *APIService) personalMode() bool { return s.Profile != nil && s.Profile.
 
 // isRetiredProcedure is shared by the two transports while the legacy protobuf
 // declarations remain available to clients built against older versions.
-func (s *APIService) isRetiredProcedure(procedure string) bool {
-	if !s.personalMode() {
-		return false
-	}
+func isRetiredProcedure(procedure string) bool {
 	if strings.HasPrefix(procedure, "/"+apiconnect.SpaceServiceName+"/") ||
 		strings.HasPrefix(procedure, "/"+apiconnect.IdentityProviderServiceName+"/") {
 		return true
@@ -42,9 +39,9 @@ func (s *APIService) isRetiredProcedure(procedure string) bool {
 	}
 }
 
-func (s *APIService) rejectRetiredConnectProcedures(next connect.UnaryFunc) connect.UnaryFunc {
+func rejectRetiredConnectProcedures(next connect.UnaryFunc) connect.UnaryFunc {
 	return func(ctx context.Context, request connect.AnyRequest) (connect.AnyResponse, error) {
-		if s.isRetiredProcedure(request.Spec().Procedure) {
+		if isRetiredProcedure(request.Spec().Procedure) {
 			return nil, convertGRPCError(retiredModuleError())
 		}
 		return next(ctx, request)

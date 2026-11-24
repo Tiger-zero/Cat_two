@@ -4,14 +4,15 @@ import { AttachmentSchema } from "@/types/proto/api/attachment_service_pb";
 import { type Memo, MemoRelationSchema } from "@/types/proto/api/memo_service_pb";
 import { draftCalendarDay, matchesMemoDraftRevision, memoDraftRevision } from "../draftRevision";
 import { cacheService, type EditorDraft, memoService } from "../services";
-import type { MemoCreateAttempt } from "../services/cacheService";
+import { hasDraftContent, type MemoCreateAttempt } from "../services/cacheService";
+import { snapshotDraftFiles } from "../services/stagedDraftFiles";
 import { createInitialState, type EditorState, useEditorStore } from "../state";
 
 function draftFromState(
   { content, metadata, timestamps, calendarDefault, attachmentOrder }: EditorState,
   baseRevision?: string,
 ): EditorDraft {
-  const draft: EditorDraft = { content, attachments: metadata.attachments, space: metadata.space };
+  const draft: EditorDraft = { content, attachments: metadata.attachments };
   if (baseRevision) draft.baseRevision = baseRevision;
   if (metadata.relations.length || baseRevision) draft.relations = metadata.relations;
   if (attachmentOrder.length) draft.attachmentOrder = attachmentOrder;
@@ -23,7 +24,6 @@ function draftFromState(
 
 const sameDraft = (left: EditorDraft, right: EditorDraft): boolean =>
   left.content === right.content &&
-  left.space === right.space &&
   left.baseRevision === right.baseRevision &&
   left.stagedFilesRevision === right.stagedFilesRevision &&
   left.createAttempt === right.createAttempt &&
@@ -59,7 +59,10 @@ export const useAutoSave = (
 ) => {
   const store = useEditorStore();
   const initialDraftRef = useRef<EditorDraft | undefined>(undefined);
-  initialDraftRef.current ??= cacheService.loadDraft(key, initialDraftRaw);
+  initialDraftRef.current ??= cacheService.loadDraft(
+    key,
+    initialDraftRaw === undefined ? cacheService.readForEditor(key) : initialDraftRaw,
+  );
   const baselineRef = useRef<EditorDraft | null | undefined>(undefined);
   const fileRevisionRef = useRef<string | undefined>(undefined);
   if (baselineRef.current === undefined) {
@@ -75,21 +78,25 @@ export const useAutoSave = (
   }
   const attemptRef = useRef(memo ? undefined : initialDraftRef.current.createAttempt);
   const getFilesRevision = useCallback(() => fileRevisionRef.current ?? baselineRef.current?.baseRevision, []);
+  const readDraft = useCallback(() => {
+    const baseRevision = baselineRef.current?.baseRevision;
+    const filesRevision = getFilesRevision();
+    return {
+      ...draftFromState(store.getState(), baseRevision),
+      stagedFilesRevision: filesRevision !== baseRevision ? filesRevision : undefined,
+      createAttempt: attemptRef.current,
+    };
+  }, [getFilesRevision, store]);
+  const preserveDraft = useCallback(() => {
+    const { localFiles, attachmentOrder } = store.getState();
+    cacheService.preserveRecovery(key, readDraft(), snapshotDraftFiles(localFiles, attachmentOrder, getFilesRevision()));
+  }, [getFilesRevision, key, readDraft, store]);
   const onDiscard = useRef<(() => void) | undefined>(undefined);
   const onFlush = useRef<(() => boolean) | undefined>(undefined);
   const onRecordAttempt = useRef<((attempt: MemoCreateAttempt) => boolean) | undefined>(undefined);
 
   useEffect(() => {
     if (!enabled) return;
-    const readDraft = () => {
-      const baseRevision = baselineRef.current?.baseRevision;
-      const filesRevision = getFilesRevision();
-      return {
-        ...draftFromState(store.getState(), baseRevision),
-        stagedFilesRevision: filesRevision !== baseRevision ? filesRevision : undefined,
-        createAttempt: attemptRef.current,
-      };
-    };
     let expected = initialDraftRaw === undefined ? cacheService.readRaw(key) : initialDraftRaw;
     const storedBase = cacheService.loadDraft(key, expected).baseRevision;
     let latest = readDraft();
@@ -101,30 +108,30 @@ export const useAutoSave = (
     let discarded = false;
     let storageFailed = false;
 
-    const preventLoss = (event: BeforeUnloadEvent) => {
-      event.preventDefault();
-      event.returnValue = true;
-    };
     const reportWrite = (stored: string | null | undefined) => {
       if (stored === undefined) {
         if (!storageFailed) onStorageError?.();
         storageFailed = true;
-        window.addEventListener("beforeunload", preventLoss);
         return false;
       }
       expected = stored;
       hasDraft = stored !== null;
       changed = false;
       storageFailed = false;
-      window.removeEventListener("beforeunload", preventLoss);
       return true;
     };
     const flushDraft = () => {
       clearTimeout(timer);
-      if (!changed || discarded) return !storageFailed;
+      if (!changed || discarded) return true;
+      if (cacheService.recoveredFiles(key)) {
+        preserveDraft();
+        changed = false;
+        return true;
+      }
       const baseline = baselineRef.current;
       if (!baseline || !sameDraft(latest, baseline)) {
-        return reportWrite(cacheService.saveNow(key, latest, expected));
+        if (!reportWrite(cacheService.saveNow(key, latest, expected))) preserveDraft();
+        return true;
       }
       return hasDraft ? reportWrite(cacheService.clear(key, expected)) : true;
     };
@@ -136,8 +143,9 @@ export const useAutoSave = (
       const draft = readDraft();
       if (sameDraft(draft, latest)) return;
       latest = draft;
-      // An existing memo's editor closes just after the store is reset.
-      if (discarded && baselineRef.current) return;
+      // An existing memo's editor closes after reset. A new composer stays open,
+      // but resetting it after save should not create an empty recovery draft.
+      if (discarded && (baselineRef.current || !hasDraftContent(draft))) return;
       discarded = false;
       changed = true;
       clearTimeout(timer);
@@ -148,14 +156,16 @@ export const useAutoSave = (
       discarded = true;
       attemptRef.current = undefined;
       clearTimeout(timer);
-      if (hasDraft) {
+      if (cacheService.recoveredFiles(key)) {
+        cacheService.discardRecovery(key);
+        hasDraft = false;
+      } else if (hasDraft) {
         const removed = cacheService.clear(key, expected);
         if (removed === null) {
           expected = null;
           hasDraft = false;
         }
       }
-      window.removeEventListener("beforeunload", preventLoss);
     };
     onFlush.current = flushDraft;
     onRecordAttempt.current = (attempt) => {
@@ -165,14 +175,21 @@ export const useAutoSave = (
       discarded = false;
       changed = true;
       clearTimeout(timer);
+      if (cacheService.recoveredFiles(key)) {
+        preserveDraft();
+        changed = false;
+        return true;
+      }
       const result = cacheService.saveSubmission(key, latest, expected);
       if (result.kind === "saved") return reportWrite(result.raw);
       reportWrite(undefined);
       // Storage failure leaves retries safe in this tab. An observed newer draft belongs to another tab.
-      if (result.kind === "unavailable") return true;
-      attemptRef.current = previous;
-      latest = readDraft();
-      return false;
+      if (result.kind === "conflict") {
+        attemptRef.current = previous;
+        latest = readDraft();
+      }
+      preserveDraft();
+      return result.kind === "unavailable";
     };
     const handleVisibilityChange = () => {
       if (document.visibilityState === "hidden") flushDraft();
@@ -186,11 +203,10 @@ export const useAutoSave = (
       onFlush.current = undefined;
       onRecordAttempt.current = undefined;
       flushDraft();
-      window.removeEventListener("beforeunload", preventLoss);
       window.removeEventListener("pagehide", flushDraft);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
-  }, [store, key, enabled, onStorageError, initialDraftRaw, reviewDraftRevision, getFilesRevision]);
+  }, [store, key, enabled, onStorageError, initialDraftRaw, reviewDraftRevision, preserveDraft, readDraft]);
 
   const discardDraft = useCallback(() => onDiscard.current?.(), []);
   const flushDraft = useCallback(() => onFlush.current?.() ?? false, []);
@@ -202,5 +218,5 @@ export const useAutoSave = (
     baselineRef.current = baselineFor(updated);
   }, []);
 
-  return { discardDraft, flushDraft, getBaseRevision, getFilesRevision, getCreateAttempt, recordCreateAttempt, rebaseDraft };
+  return { discardDraft, flushDraft, getBaseRevision, getFilesRevision, getCreateAttempt, recordCreateAttempt, rebaseDraft, preserveDraft };
 };

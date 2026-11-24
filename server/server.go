@@ -105,29 +105,30 @@ func NewServer(ctx context.Context, profile *profile.Profile, store *store.Store
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to create API handler")
 	}
-	frontendService := frontend.NewFrontendService(profile, store)
+	frontendService := frontend.NewFrontendService(profile)
 	if apiService.Challenge != nil {
 		frontendService.ChallengeProvider = apiService.Challenge.Provider()
 	}
-	frontendService.Serve(ctx, mux, apiHandler)
+	frontendHandler := frontendService.Handler(apiHandler)
+	frontend.RegisterRetiredDiscoveryRoutes(mux)
+	mux.Handle("/", frontendHandler)
 	fileServerService := fileserver.NewFileServerService(s.Profile, s.Store, s.Secret)
 	fileServerService.MemoExporter = apiService
 	fileServerService.RateLimiter = apiService.RateLimiter
 	fileServerService.RegisterRoutes(mux, apiHandler)
 	// Preserve unclean-path routing without ServeMux's automatic redirects.
-	fallback := frontendService.Handler(apiHandler)
 	router := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		frontend.SetCacheHeaders(w, r)
 		routingRequest := httphandler.RoutingRequest(r)
 		if path.Clean(routingRequest.URL.Path) != routingRequest.URL.Path && routingRequest.URL.Path != "/" {
-			fallback.ServeHTTP(w, r)
+			frontendHandler.ServeHTTP(w, r)
 			return
 		}
 		mux.ServeHTTP(w, routingRequest)
 	})
 	s.handler = httphandler.Recover(clientip.Middleware(clientIPResolver)(newCORSMiddleware(profile, mux)(router)))
 
-	mcpService, err := mcp.NewMCPService(profile, s.handler, apiService)
+	mcpService, err := mcp.NewMCPService(profile, apiService)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to create MCP service")
 	}

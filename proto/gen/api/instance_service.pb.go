@@ -2479,7 +2479,7 @@ func (x *InstanceSetting_UsageLimitsSetting_UsageLimit) GetUploadBytes() int64 {
 // DatabaseStats is the database size statistics.
 type InstanceStats_DatabaseStats struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// The database driver: "sqlite", "mysql" or "postgres".
+	// The database driver is "sqlite".
 	Driver string `protobuf:"bytes,1,opt,name=driver,proto3" json:"driver,omitempty"`
 	// The database size in bytes. -1 if unavailable.
 	SizeBytes     int64 `protobuf:"varint,2,opt,name=size_bytes,json=sizeBytes,proto3" json:"size_bytes,omitempty"`

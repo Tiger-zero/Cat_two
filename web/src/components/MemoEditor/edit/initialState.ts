@@ -24,7 +24,7 @@ export function initialEditorState({
   memo,
   draftKey,
   defaultCreateTime,
-  rawDraft = cacheService.readRaw(draftKey),
+  rawDraft = cacheService.readForEditor(draftKey),
   reviewStaleDraft = false,
 }: InitialEditorStateOptions): EditorState {
   const base = {

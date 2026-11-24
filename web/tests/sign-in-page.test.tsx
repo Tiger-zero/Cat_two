@@ -1,13 +1,16 @@
 import { render, screen } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import AdminSignIn from "@/pages/AdminSignIn";
 import SignIn from "@/pages/SignIn";
+import SignUp from "@/pages/SignUp";
 
-const generalSetting = vi.hoisted(() => ({ disallowPasswordAuth: false, disallowUserRegistration: false }));
+const profile = vi.hoisted(() => ({ needsSetup: false }));
 
 vi.mock("@/contexts/InstanceContext", () => ({
-  useInstance: () => ({ generalSetting }),
+  useInstance: () => ({ profile, generalSetting: {}, initialize: vi.fn() }),
 }));
+vi.mock("@/contexts/AuthContext", () => ({ useAuth: () => ({ initialize: vi.fn() }) }));
 
 vi.mock("@/components/AuthFooter", () => ({ default: () => null }));
 vi.mock("@/components/PasswordSignInForm", () => ({
@@ -23,20 +26,14 @@ const renderPage = (path = "/auth") =>
   );
 
 describe("<SignIn>", () => {
-  beforeEach(() => {
-    generalSetting.disallowPasswordAuth = false;
-    generalSetting.disallowUserRegistration = false;
-  });
-
   it("shows password sign-in and preserves a safe destination", () => {
     renderPage("/auth?redirect=%2Fmemos%2Fexample");
 
     expect(screen.getByTestId("password-sign-in")).toHaveTextContent("/memos/example");
-    expect(screen.getByRole("link", { name: "common.sign-up" })).toHaveAttribute("href", "/auth/signup?redirect=%2Fmemos%2Fexample");
+    expect(screen.queryByRole("link", { name: "common.sign-up" })).not.toBeInTheDocument();
   });
 
   it("announces closed registration while allowing existing accounts to sign in", () => {
-    generalSetting.disallowUserRegistration = true;
     renderPage("/auth?reason=signups-closed");
 
     expect(screen.getByRole("status")).toHaveTextContent("auth.signups-closed-description");
@@ -51,11 +48,50 @@ describe("<SignIn>", () => {
     expect(screen.getByTestId("password-sign-in")).toHaveTextContent("/memos/example");
   });
 
-  it("offers the administrator sign-in route when password sign-in is disabled for members", () => {
-    generalSetting.disallowPasswordAuth = true;
-    renderPage();
+  it("keeps legacy administrator sign-in and its return destination", () => {
+    render(
+      <MemoryRouter initialEntries={["/auth/admin?redirect=%2Fmemos%2Fexample"]}>
+        <AdminSignIn />
+      </MemoryRouter>,
+    );
 
-    expect(screen.queryByTestId("password-sign-in")).not.toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "auth.admin-sign-in" })).toHaveAttribute("href", "/auth/admin");
+    expect(screen.getByTestId("password-sign-in")).toHaveTextContent("/memos/example");
+    expect(screen.getByRole("link", { name: "auth.back-to-sign-in" })).toHaveAttribute("href", "/auth?redirect=%2Fmemos%2Fexample");
+  });
+});
+
+function SignInLocation() {
+  const { search, hash } = useLocation();
+  return <output data-testid="sign-in-location">{search + hash}</output>;
+}
+
+describe("first administrator setup", () => {
+  beforeEach(() => {
+    profile.needsSetup = false;
+  });
+
+  it("redirects the old signup link to sign-in after the instance has been set up", async () => {
+    render(
+      <MemoryRouter initialEntries={["/auth/signup?redirect=%2Fmemos%2Fexample#anchor"]}>
+        <Routes>
+          <Route path="/auth/signup" element={<SignUp />} />
+          <Route path="/auth" element={<SignInLocation />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByTestId("sign-in-location")).toHaveTextContent("?redirect=%2Fmemos%2Fexample&reason=signups-closed#anchor");
+  });
+
+  it("still opens the setup form for a new instance", () => {
+    profile.needsSetup = true;
+    render(
+      <MemoryRouter>
+        <SignUp />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByRole("heading", { name: "auth.setup-title" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "auth.create-admin-account" })).toBeInTheDocument();
   });
 });

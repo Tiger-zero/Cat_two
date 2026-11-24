@@ -11,6 +11,7 @@ import (
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
 
 	apipb "github.com/usememos/memos/proto/gen/api"
+	storepb "github.com/usememos/memos/proto/gen/store"
 	"github.com/usememos/memos/server/api"
 	"github.com/usememos/memos/store"
 )
@@ -26,12 +27,16 @@ func usageLimitsSetting(limits ...*usageLimitEntry) *apipb.InstanceSetting {
 	}
 }
 
-// setUsageLimits replaces the usage limits through the API as ctx's user.
-func setUsageLimits(ctx context.Context, t *testing.T, ts *TestService, limits ...*usageLimitEntry) *apipb.InstanceSetting_UsageLimitsSetting {
+// seedLegacyUsageLimits stores a quota row from an older Cat_two release.
+func seedLegacyUsageLimits(ctx context.Context, t *testing.T, ts *TestService, limits ...*storepb.InstanceUsageLimitsSetting_UsageLimit) {
 	t.Helper()
-	setting, err := ts.Service.UpdateInstanceSetting(ctx, &apipb.UpdateInstanceSettingRequest{InstanceSetting: usageLimitsSetting(limits...)})
+	_, err := ts.Store.UpsertInstanceSetting(ctx, &storepb.InstanceSetting{
+		Key: storepb.InstanceSettingKey_USAGE_LIMITS,
+		Value: &storepb.InstanceSetting_UsageLimitsSetting{
+			UsageLimitsSetting: &storepb.InstanceUsageLimitsSetting{Limits: limits},
+		},
+	})
 	require.NoError(t, err)
-	return setting.GetUsageLimitsSetting()
 }
 
 func TestUsageLimitsSettingPermissions(t *testing.T) {
@@ -67,7 +72,7 @@ func TestUsageLimitsSettingPermissions(t *testing.T) {
 	require.Nil(t, limits[0].MemoCount)
 }
 
-func TestUsageLimitsSettingUpdate(t *testing.T) {
+func TestLegacyUsageLimitsSettingIsReadOnly(t *testing.T) {
 	ctx := context.Background()
 	ts := NewTestService(t)
 	defer ts.Cleanup()
@@ -80,20 +85,20 @@ func TestUsageLimitsSettingUpdate(t *testing.T) {
 	adminCtx := ts.CreateUserContext(ctx, admin.ID)
 	aliceName, bobName := api.BuildUserName(alice.Username), api.BuildUserName(bob.Username)
 
-	saved := setUsageLimits(adminCtx, t, ts,
-		&usageLimitEntry{Users: []string{aliceName, bobName}, StorageBytes: new(int64(5 << 30))},
-		&usageLimitEntry{Users: []string{aliceName}, MemoCount: new(int64(0))},
-		&usageLimitEntry{AllUsers: true, StorageBytes: new(int64(1 << 30)), MemoCount: new(int64(1000))},
+	seedLegacyUsageLimits(ctx, t, ts,
+		&storepb.InstanceUsageLimitsSetting_UsageLimit{UserIds: []int32{alice.ID, bob.ID}, StorageBytes: new(int64(5 << 30))},
+		&storepb.InstanceUsageLimitsSetting_UsageLimit{UserIds: []int32{alice.ID}, MemoCount: new(int64(0))},
+		&storepb.InstanceUsageLimitsSetting_UsageLimit{AllUsers: true, StorageBytes: new(int64(1 << 30)), MemoCount: new(int64(1000))},
 	)
+	got, err := ts.Service.GetInstanceSetting(adminCtx, &apipb.GetInstanceSettingRequest{Name: usageLimitsSettingName})
+	require.NoError(t, err)
+	saved := got.GetUsageLimitsSetting()
 	require.Len(t, saved.Limits, 3)
 	require.Equal(t, []string{aliceName, bobName}, saved.Limits[0].Users)
 	require.Equal(t, int64(5<<30), saved.Limits[0].GetStorageBytes())
 	require.Nil(t, saved.Limits[0].MemoCount, "unset stays unset")
 	require.Zero(t, saved.Limits[1].GetMemoCount())
 	require.NotNil(t, saved.Limits[1].MemoCount, "an explicit zero stays explicit")
-	got, err := ts.Service.GetInstanceSetting(adminCtx, &apipb.GetInstanceSettingRequest{Name: usageLimitsSettingName})
-	require.NoError(t, err)
-	require.Equal(t, saved.String(), got.GetUsageLimitsSetting().String(), "the update response is what a read returns")
 
 	for _, name := range []string{aliceName, api.BuildUserName(admin.Username)} {
 		usage, err := ts.Service.GetUserUsage(adminCtx, &apipb.GetUserUsageRequest{Name: name + "/usage"})
@@ -103,24 +108,11 @@ func TestUsageLimitsSettingUpdate(t *testing.T) {
 		require.Nil(t, usage.Limits.MemoCount)
 	}
 
-	for name, request := range map[string]*apipb.InstanceSetting{
-		"missing setting":     {Name: usageLimitsSettingName},
-		"empty list":          usageLimitsSetting(),
-		"no all-users entry":  usageLimitsSetting(&usageLimitEntry{Users: []string{aliceName}}),
-		"all users not last":  usageLimitsSetting(&usageLimitEntry{AllUsers: true}, &usageLimitEntry{Users: []string{aliceName}}),
-		"users and all users": usageLimitsSetting(&usageLimitEntry{AllUsers: true, Users: []string{aliceName}}),
-		"entry without users": usageLimitsSetting(&usageLimitEntry{}, &usageLimitEntry{AllUsers: true}),
-		"repeated user":       usageLimitsSetting(&usageLimitEntry{Users: []string{aliceName, aliceName}}, &usageLimitEntry{AllUsers: true}),
-		"negative value":      usageLimitsSetting(&usageLimitEntry{AllUsers: true, MemoCount: new(int64(-1))}),
-		"bad user name":       usageLimitsSetting(&usageLimitEntry{Users: []string{"people/alice"}}, &usageLimitEntry{AllUsers: true}),
-	} {
-		_, err := ts.Service.UpdateInstanceSetting(adminCtx, &apipb.UpdateInstanceSettingRequest{InstanceSetting: request})
-		require.Equal(t, codes.InvalidArgument, status.Code(err), name)
-	}
 	_, err = ts.Service.UpdateInstanceSetting(adminCtx, &apipb.UpdateInstanceSettingRequest{
-		InstanceSetting: usageLimitsSetting(&usageLimitEntry{Users: []string{"users/nobody"}}, &usageLimitEntry{AllUsers: true}),
+		InstanceSetting: usageLimitsSetting(&usageLimitEntry{AllUsers: true, StorageBytes: new(int64(1))}),
 	})
-	require.Equal(t, codes.NotFound, status.Code(err))
+	require.Equal(t, codes.Unimplemented, status.Code(err))
+
 	got, err = ts.Service.GetInstanceSetting(adminCtx, &apipb.GetInstanceSettingRequest{Name: usageLimitsSettingName})
 	require.NoError(t, err)
 	require.Equal(t, saved.String(), got.GetUsageLimitsSetting().String(), "a refused update leaves the limits unchanged")
@@ -146,15 +138,13 @@ func TestStoredUsageLimitsDoNotRestrictMemos(t *testing.T) {
 	ts := NewTestService(t)
 	defer ts.Cleanup()
 	defer ts.Service.CloseUploads()
-	admin, err := ts.CreateHostUser(ctx, "memo-admin")
-	require.NoError(t, err)
 	user, err := ts.CreateRegularUser(ctx, "memo-user")
 	require.NoError(t, err)
 	userCtx := ts.CreateUserContext(ctx, user.ID)
 	subject := api.BuildUserName(user.Username)
 
-	setUsageLimits(ts.CreateUserContext(ctx, admin.ID), t, ts,
-		&usageLimitEntry{AllUsers: true, MemoCount: new(int64(1)), MemoContentBytes: new(int64(6))},
+	seedLegacyUsageLimits(ctx, t, ts,
+		&storepb.InstanceUsageLimitsSetting_UsageLimit{AllUsers: true, MemoCount: new(int64(1)), MemoContentBytes: new(int64(6))},
 	)
 
 	content := strings.Repeat("a", 8193)
@@ -200,15 +190,13 @@ func TestStoredUsageLimitsDoNotRestrictAttachmentWrites(t *testing.T) {
 	ts := NewTestService(t)
 	defer ts.Cleanup()
 	defer ts.Service.CloseUploads()
-	admin, err := ts.CreateHostUser(ctx, "upload-admin")
-	require.NoError(t, err)
 	user, err := ts.CreateRegularUser(ctx, "upload-user")
 	require.NoError(t, err)
 	userCtx := ts.CreateUserContext(ctx, user.ID)
 	subject := api.BuildUserName(user.Username)
 
-	setUsageLimits(ts.CreateUserContext(ctx, admin.ID), t, ts,
-		&usageLimitEntry{AllUsers: true, StorageBytes: new(int64(1)), UploadBytes: new(int64(1))},
+	seedLegacyUsageLimits(ctx, t, ts,
+		&storepb.InstanceUsageLimitsSetting_UsageLimit{AllUsers: true, StorageBytes: new(int64(1)), UploadBytes: new(int64(1))},
 	)
 
 	first, err := ts.Service.CreateAttachment(userCtx, &apipb.CreateAttachmentRequest{

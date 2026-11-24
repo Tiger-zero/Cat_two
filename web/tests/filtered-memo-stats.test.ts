@@ -136,6 +136,7 @@ describe("useFilteredMemoStats", () => {
         memoCreatedTimestamps: [ts(2026, 5, 1)],
         memoUpdatedTimestamps: [],
         tagCounts: {},
+        totalMemoCount: 1,
       },
       isLoading: false,
     } as unknown as ReturnType<typeof useUserStats>);
@@ -147,9 +148,10 @@ describe("useFilteredMemoStats", () => {
     });
 
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-    const { result } = renderHook(() => useFilteredMemoStats({ userName: "users/test" }), { wrapper });
+    const { result } = renderHook(() => useFilteredMemoStats({ context: "home", userName: "users/test" }), { wrapper });
 
     expect(result.current.statistics.activityStats).toEqual({ "2026-05-01": 1 });
+    expect(result.current.summary).toEqual({ memoCount: 1, tagCount: 0, recordedDays: 1 });
     expect(warn).toHaveBeenCalled();
     warn.mockRestore();
   });

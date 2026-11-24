@@ -24,8 +24,7 @@ func (s *APIService) ListPersonalAccessTokens(ctx context.Context, request *apip
 	}
 	userID := user.ID
 
-	// Verify permission
-	if _, err := s.authorizeUserResourceAccess(ctx, userID, true); err != nil {
+	if err := s.authorizePersonalAccessTokenManagement(ctx, userID, true); err != nil {
 		return nil, err
 	}
 
@@ -66,7 +65,7 @@ func (s *APIService) ListPersonalAccessTokens(ctx context.Context, request *apip
 // - User should copy and store it securely
 // - Token can be revoked by deleting it from settings
 //
-// Authentication: Required (session cookie or access token)
+// Authentication: Requires a signed-in browser session.
 // Authorization: User can only create tokens for themselves.
 func (s *APIService) CreatePersonalAccessToken(ctx context.Context, request *apipb.CreatePersonalAccessTokenRequest) (*apipb.CreatePersonalAccessTokenResponse, error) {
 	user, err := s.resolveUserFromName(ctx, request.Parent)
@@ -75,9 +74,12 @@ func (s *APIService) CreatePersonalAccessToken(ctx context.Context, request *api
 	}
 	userID := user.ID
 
-	// Verify permission
-	if _, err := s.authorizeUserResourceAccess(ctx, userID, false); err != nil {
+	if err := s.authorizePersonalAccessTokenManagement(ctx, userID, false); err != nil {
 		return nil, err
+	}
+
+	if request.ExpiresInDays < 0 {
+		return nil, status.Error(codes.InvalidArgument, "expiration must be zero or a positive number of days")
 	}
 
 	// Generate PAT
@@ -124,7 +126,7 @@ func (s *APIService) CreatePersonalAccessToken(ctx context.Context, request *api
 // - User removes token for unused app/device
 // - User cleans up old tokens
 //
-// Authentication: Required (session cookie or access token)
+// Authentication: Requires a signed-in browser session.
 // Authorization: User can only delete their own tokens.
 func (s *APIService) DeletePersonalAccessToken(ctx context.Context, request *apipb.DeletePersonalAccessTokenRequest) (*emptypb.Empty, error) {
 	parts := strings.Split(request.Name, "/")
@@ -139,8 +141,7 @@ func (s *APIService) DeletePersonalAccessToken(ctx context.Context, request *api
 	userID := user.ID
 	tokenID := parts[3]
 
-	// Verify permission
-	if _, err := s.authorizeUserResourceAccess(ctx, userID, false); err != nil {
+	if err := s.authorizePersonalAccessTokenManagement(ctx, userID, false); err != nil {
 		return nil, err
 	}
 
@@ -149,4 +150,14 @@ func (s *APIService) DeletePersonalAccessToken(ctx context.Context, request *api
 	}
 
 	return &emptypb.Empty{}, nil
+}
+
+func (s *APIService) authorizePersonalAccessTokenManagement(ctx context.Context, userID int32, allowAdmin bool) error {
+	if _, err := s.authorizeUserResourceAccess(ctx, userID, allowAdmin); err != nil {
+		return err
+	}
+	if auth.GetUserClaims(ctx) == nil {
+		return status.Error(codes.PermissionDenied, "sign in to manage personal access tokens")
+	}
+	return nil
 }

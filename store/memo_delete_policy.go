@@ -22,23 +22,9 @@ type DeleteMemoWithPolicyResult struct {
 	Attachments  []*Attachment
 }
 
-// MemoDeleteActorCanRead applies the memo-local audience matrix after the
-// deletion transaction has established that the actor is the active author or
-// an instance administrator, who counts as a member everywhere. Invalid
-// lifecycle or audience state fails closed. Placement validity matters only
-// for the Space audience; it is not an extra read gate for other values.
-func MemoDeleteActorCanRead(rowStatus RowStatus, visibility Visibility, spaceID *int32, spaceExists, actorMember bool) bool {
-	if rowStatus != Normal && rowStatus != Archived {
-		return false
-	}
-	switch visibility {
-	case Public, Protected, Private:
-		return true
-	case SpaceAudience:
-		return spaceID != nil && spaceExists && actorMember
-	default:
-		return false
-	}
+// MemoDeleteActorCanRead checks the memo state for an authorized author.
+func MemoDeleteActorCanRead(rowStatus RowStatus, visibility Visibility) bool {
+	return (rowStatus == Normal || rowStatus == Archived) && isValidVisibility(visibility)
 }
 
 // DeleteMemoWithPolicy atomically deletes one memo, its whole comment

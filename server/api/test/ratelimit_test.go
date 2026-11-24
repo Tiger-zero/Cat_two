@@ -272,7 +272,7 @@ func TestChallengeSeam(t *testing.T) {
 		require.Equal(t, "site-key", profile.GetChallenge().GetSiteKey())
 	})
 
-	t.Run("password sign-in requires a valid token, SSO does not", func(t *testing.T) {
+	t.Run("password sign-in requires a valid token", func(t *testing.T) {
 		ts := NewTestService(t)
 		defer ts.Cleanup()
 		createPasswordUser(ctx, t, ts, "alice", "correct-password")

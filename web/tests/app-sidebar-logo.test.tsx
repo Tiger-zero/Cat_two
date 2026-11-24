@@ -180,7 +180,7 @@ describe("App sidebar", () => {
       </MemoryRouter>,
     );
 
-    expect(filteredStatsHook).toHaveBeenCalledWith(expect.objectContaining({ context: "collection", filter: 'creator == "users/test"' }));
+    expect(filteredStatsHook).toHaveBeenCalledWith(expect.objectContaining({ context: "home", userName: "users/test" }));
     expect(tagsSectionHook).toHaveBeenCalledWith(expect.objectContaining({ scope: "users/test:home" }));
   });
 
@@ -191,7 +191,7 @@ describe("App sidebar", () => {
       </MemoryRouter>,
     );
 
-    expect(filteredStatsHook).toHaveBeenCalledWith(expect.objectContaining({ context: "archived", filter: undefined }));
+    expect(filteredStatsHook).toHaveBeenCalledWith(expect.objectContaining({ context: "archived", userName: undefined }));
     expect(tagsSectionHook).toHaveBeenCalledWith(expect.objectContaining({ scope: "users/test:archived" }));
   });
 
@@ -321,7 +321,7 @@ describe("App sidebar", () => {
   });
 
   it.each([
-    ["/", "collection"],
+    ["/", "home"],
     ["/archived", "archived"],
   ])("keeps the %s calendar and tag list mounted when opening trash", (path, context) => {
     render(

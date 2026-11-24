@@ -12,6 +12,8 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 candidate_image="${MEMOS_SMOKE_CANDIDATE_IMAGE:-}"
 previous_image="${MEMOS_SMOKE_PREVIOUS_IMAGE:-}"
+expected_commit=""
+platform=""
 keep_resources="${MEMOS_SMOKE_KEEP_RESOURCES:-0}"
 fresh_only=0
 
@@ -25,6 +27,8 @@ Cat_two image to also verify an upgrade.
 Options:
   --candidate-image IMAGE  Test an existing image instead of building locally.
   --previous-image IMAGE   Cat_two image used to seed an optional upgrade test.
+  --expected-commit SHA    Check the running candidate's complete commit SHA.
+  --platform PLATFORM      Pull and run a specific platform, such as linux/arm64.
   --fresh-only             Run fresh install and persistence checks regardless of the previous image.
   --keep-resources         Keep containers and volumes after the test for debugging.
   -h, --help               Show this help text.
@@ -63,6 +67,16 @@ while (($# > 0)); do
       previous_image="$2"
       shift 2
       ;;
+    --expected-commit)
+      (($# >= 2)) || die "--expected-commit requires a value"
+      expected_commit="$2"
+      shift 2
+      ;;
+    --platform)
+      (($# >= 2)) || die "--platform requires a value"
+      platform="$2"
+      shift 2
+      ;;
     --keep-resources)
       keep_resources=1
       shift
@@ -82,11 +96,20 @@ while (($# > 0)); do
   esac
 done
 
+[[ -z "$expected_commit" || "$expected_commit" =~ ^[0-9a-f]{40}$ ]] || die "expected a complete Git commit SHA"
+platform_option=()
+if [[ -n "$platform" ]]; then
+  case "$platform" in
+    linux/amd64|linux/arm64) platform_option=(--platform "$platform") ;;
+    *) die "unsupported smoke-test platform: $platform" ;;
+  esac
+fi
+
 if [[ -z "$previous_image" ]]; then
   fresh_only=1
 fi
 
-for command_name in curl docker git jq; do
+for command_name in cmp curl docker git jq; do
   command -v "$command_name" >/dev/null 2>&1 || die "$command_name is required"
 done
 
@@ -99,23 +122,6 @@ upgrade_new_container="memos-smoke-upgrade-new-$run_id"
 fresh_volume="memos-smoke-fresh-$run_id"
 upgrade_volume="memos-smoke-upgrade-$run_id"
 temp_dir="$(mktemp -d)"
-frontend_index="$REPO_ROOT/server/frontend/dist/index.html"
-frontend_index_backup="$temp_dir/frontend-index.html"
-frontend_index_existed=0
-frontend_index_backed_up=0
-
-restore_frontend_index() {
-  if [[ "$frontend_index_backed_up" != "1" ]]; then
-    return
-  fi
-
-  if [[ "$frontend_index_existed" == "1" ]]; then
-    cp "$frontend_index_backup" "$frontend_index"
-  else
-    rm -f "$frontend_index"
-  fi
-  frontend_index_backed_up=0
-}
 
 container_exists() {
   docker container inspect "$1" >/dev/null 2>&1
@@ -124,8 +130,6 @@ container_exists() {
 cleanup() {
   local status=$?
   trap - EXIT
-
-  restore_frontend_index
 
   if ((status != 0)); then
     for container_name in "$fresh_container" "$upgrade_old_container" "$upgrade_new_container"; do
@@ -151,45 +155,53 @@ cleanup() {
 trap cleanup EXIT
 
 build_local_candidate() {
-  local commit_sha build_version image_tag
+  local commit_sha build_version image_tag source_path build_context="$temp_dir/context"
   command -v pnpm >/dev/null 2>&1 || die "pnpm is required to build the local candidate"
+  command -v tar >/dev/null 2>&1 || die "tar is required to build the local candidate"
 
   commit_sha="$(git -C "$REPO_ROOT" rev-parse HEAD)"
   build_version="$(bash "$SCRIPT_DIR/release_version.sh" development-version "$REPO_ROOT")"
   image_tag="memos-smoke:${commit_sha:0:12}-${run_id}"
 
-  mkdir -p "$(dirname "$frontend_index")"
-  if [[ -f "$frontend_index" ]]; then
-    cp "$frontend_index" "$frontend_index_backup"
-    frontend_index_existed=1
-  fi
-  frontend_index_backed_up=1
+  # Stage the current source, including local edits and new files, without taking
+  # the existing embedded bundle or ignored caches into the Docker build context.
+  mkdir -p "$build_context"
+  git -C "$REPO_ROOT" ls-files --cached --others --exclude-standard -z \
+    -- . ':(exclude)web' ':(exclude)server/frontend/dist' |
+    while IFS= read -r -d '' source_path; do
+      if [[ -f "$REPO_ROOT/$source_path" || -L "$REPO_ROOT/$source_path" ]]; then
+        printf '%s\0' "$source_path"
+      fi
+    done |
+    tar -cf - -C "$REPO_ROOT" --null -T - |
+    tar -xf - -C "$build_context"
 
   log "Building frontend release assets"
   (
     cd "$REPO_ROOT/web"
-    pnpm release
+    pnpm exec vite build --mode release --outDir "$build_context/server/frontend/dist" --emptyOutDir
   )
 
   log "Building candidate image $image_tag"
   docker build \
-    --file "$REPO_ROOT/scripts/Dockerfile" \
+    --file "$build_context/scripts/Dockerfile" \
+    "${platform_option[@]}" \
     --build-arg VERSION="$build_version" \
     --build-arg COMMIT="$commit_sha" \
     --tag "$image_tag" \
-    "$REPO_ROOT"
+    "$build_context"
 
-  restore_frontend_index
   candidate_image="$image_tag"
 }
 
 ensure_image() {
-  local image="$1"
-  if docker image inspect "$image" >/dev/null 2>&1; then
+  local image="$1" cached_platform
+  if cached_platform="$(docker image inspect --format '{{.Os}}/{{.Architecture}}' "$image" 2>/dev/null)" &&
+    [[ -z "$platform" || "$cached_platform" == "$platform" ]]; then
     return
   fi
   log "Pulling image $image"
-  docker pull "$image"
+  docker pull "${platform_option[@]}" "$image"
 }
 
 wait_until_ready() {
@@ -239,6 +251,7 @@ start_container() {
   local volume="$3"
 
   docker run --detach \
+    "${platform_option[@]}" \
     --name "$container_name" \
     --label "org.usememos.release-smoke=$run_id" \
     --publish "127.0.0.1::5230" \
@@ -264,6 +277,15 @@ assert_frontend_assets() {
     *) asset_url="$current_base_url/$asset_path" ;;
   esac
   curl --fail --silent --show-error "$asset_url" >/dev/null
+}
+
+assert_candidate_commit() {
+  if [[ -z "$expected_commit" ]]; then
+    return
+  fi
+  curl --fail --silent --show-error "$(api_url)/instance/profile" |
+    jq -e --arg commit "$expected_commit" '.commit == $commit' >/dev/null ||
+    die "running candidate did not report commit $expected_commit"
 }
 
 create_admin() {
@@ -309,6 +331,30 @@ assert_memo() {
     jq -e --arg content "$content" '.content == $content' >/dev/null
 }
 
+attachment_filename="release-smoke.txt"
+attachment_contents="Cat_two release smoke attachment"
+
+create_attachment() {
+  local token="$1" memo_id="$2" payload
+  payload="$(jq -nc --arg filename "$attachment_filename" --arg contents "$attachment_contents" \
+    --arg memo "memos/$memo_id" '{filename:$filename,type:"text/plain",content:($contents|@base64),memo:$memo}')"
+  curl --fail --silent --show-error \
+    --header "Authorization: Bearer $token" \
+    --header 'Content-Type: application/json' \
+    --data "$payload" "$(api_url)/attachments" |
+    jq -er '.name | select(test("^attachments/[A-Za-z0-9-]+$"))'
+}
+
+assert_attachment() {
+  local token="$1" attachment="$2" memo_id="$3"
+  curl --fail --silent --show-error --header "Authorization: Bearer $token" "$(api_url)/$attachment" |
+    jq -e --arg memo "memos/$memo_id" --arg filename "$attachment_filename" \
+      '.memo == $memo and .filename == $filename' >/dev/null
+  curl --fail --silent --show-error --header "Authorization: Bearer $token" \
+    "$current_base_url/file/$attachment/$attachment_filename" --output "$temp_dir/attachment"
+  printf '%s' "$attachment_contents" | cmp -s - "$temp_dir/attachment" || die "downloaded attachment bytes changed"
+}
+
 if [[ -z "$candidate_image" ]]; then
   build_local_candidate
 else
@@ -326,15 +372,18 @@ log "Candidate image: $candidate_image"
 log "Running fresh-install smoke test"
 docker volume create "$fresh_volume" >/dev/null
 start_container "$fresh_container" "$candidate_image" "$fresh_volume"
+assert_candidate_commit
 assert_frontend_assets
 create_admin
 fresh_token="$(sign_in)"
 create_memo "$fresh_token" "release-smoke" "fresh install smoke sentinel"
+fresh_attachment="$(create_attachment "$fresh_token" "release-smoke")"
 
 docker rm -f "$fresh_container" >/dev/null
 start_container "$fresh_container" "$candidate_image" "$fresh_volume"
 fresh_token="$(sign_in)"
 assert_memo "$fresh_token" "release-smoke" "fresh install smoke sentinel"
+assert_attachment "$fresh_token" "$fresh_attachment" "release-smoke"
 docker rm -f "$fresh_container" >/dev/null
 
 if [[ "$fresh_only" == "1" ]]; then
@@ -348,12 +397,23 @@ start_container "$upgrade_old_container" "$previous_image" "$upgrade_volume"
 create_admin
 upgrade_token="$(sign_in)"
 create_memo "$upgrade_token" "pre-upgrade-smoke" "created before release upgrade"
+upgrade_attachment="$(create_attachment "$upgrade_token" "pre-upgrade-smoke")"
+create_memo "$upgrade_token" "pre-upgrade-trash" "trashed before release upgrade"
+curl --fail --silent --show-error --request DELETE --header "Authorization: Bearer $upgrade_token" \
+  "$(api_url)/memos/pre-upgrade-trash" >/dev/null
 docker rm -f "$upgrade_old_container" >/dev/null
 
 start_container "$upgrade_new_container" "$candidate_image" "$upgrade_volume"
+assert_candidate_commit
 assert_frontend_assets
 upgrade_token="$(sign_in)"
 assert_memo "$upgrade_token" "pre-upgrade-smoke" "created before release upgrade"
+assert_attachment "$upgrade_token" "$upgrade_attachment" "pre-upgrade-smoke"
+curl --fail --silent --show-error --header "Authorization: Bearer $upgrade_token" "$current_base_url/api/trash" |
+  jq -e '.memos | any(.memo.name == "memos/pre-upgrade-trash" and .memo.content == "trashed before release upgrade")' >/dev/null
+curl --fail --silent --show-error --request POST --header "Authorization: Bearer $upgrade_token" \
+  "$current_base_url/api/trash/pre-upgrade-trash/restore" >/dev/null
+assert_memo "$upgrade_token" "pre-upgrade-trash" "trashed before release upgrade"
 create_memo "$upgrade_token" "post-upgrade-smoke" "created after release upgrade"
 assert_memo "$upgrade_token" "post-upgrade-smoke" "created after release upgrade"
 

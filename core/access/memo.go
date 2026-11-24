@@ -30,7 +30,6 @@ type MemoReadContext struct {
 	Memo         *store.Memo
 	Viewer       *store.User
 	CreatorValid bool
-	SpaceValid   bool
 }
 
 // Allowed reports whether the read is permitted.
@@ -67,9 +66,6 @@ func CheckMemoReadContext(ctx MemoReadContext) MemoReadDecision {
 		return MemoReadDecision{Denial: MemoReadDenialNotFound}
 	}
 	if memo.Visibility != store.Public && memo.Visibility != store.Protected && memo.Visibility != store.Private && memo.Visibility != store.SpaceAudience {
-		return MemoReadDecision{Denial: MemoReadDenialNotFound}
-	}
-	if memo.Visibility == store.SpaceAudience && (memo.SpaceID == nil || !ctx.SpaceValid) {
 		return MemoReadDecision{Denial: MemoReadDenialNotFound}
 	}
 	if memo.RowStatus != store.Normal && memo.RowStatus != store.Archived {

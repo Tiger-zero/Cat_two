@@ -1212,9 +1212,6 @@ func TestMemoFilterNullPayload(t *testing.T) {
 	defer tc.Close()
 
 	query := "UPDATE memo SET payload = ? WHERE id = ?"
-	if getDriverFromEnv() == "postgres" {
-		query = "UPDATE memo SET payload = $1 WHERE id = $2"
-	}
 	for i, payload := range []string{
 		`{}`,
 		`{"property":{}}`,

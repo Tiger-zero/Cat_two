@@ -91,25 +91,25 @@ describe("memo editor cache", () => {
     expect(cacheService.load(key)).toBe(jsonDraft);
   });
 
-  it("persists a chosen destination before typing, and clears it with the draft", () => {
-    cacheService.saveNow("destination", { content: "", attachments: [], space: "spaces/work" });
-    expect(cacheService.loadDraft("destination")).toMatchObject({ space: "spaces/work" });
-    cacheService.saveNow("destination", { content: "draft", attachments: [] });
-    expect(cacheService.loadDraft("destination").space).toBeUndefined();
-    cacheService.clear("destination");
-    expect(cacheService.loadDraft("destination").space).toBeUndefined();
-  });
-
-  it("ignores invalid cached settings and legacy location while preserving draft content", () => {
+  it("ignores retired settings while preserving a legacy draft's content and attachments", () => {
     localStorage.setItem(
       "legacy-location",
-      JSON.stringify({ kind: "memos.editor-cache", version: 3, content: "old", location: null, space: 42, visibility: 999 }),
+      JSON.stringify({
+        kind: "memos.editor-cache",
+        version: 3,
+        content: "old",
+        attachments: [{ name: "attachments/a", filename: "a.txt" }],
+        location: null,
+        space: "spaces/work",
+        visibility: 999,
+      }),
     );
     expect(cacheService.loadDraft("legacy-location")).toMatchObject({
       content: "old",
-      space: undefined,
+      attachments: [{ name: "attachments/a", filename: "a.txt" }],
     });
     expect(cacheService.loadDraft("legacy-location")).not.toHaveProperty("location");
+    expect(cacheService.loadDraft("legacy-location")).not.toHaveProperty("space");
   });
 
   it("keeps the cursor for the next editor mount", () => {

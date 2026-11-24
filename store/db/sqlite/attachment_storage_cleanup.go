@@ -8,6 +8,10 @@ import (
 	"github.com/usememos/memos/store"
 )
 
+const enqueueAttachmentStorageCleanupSQL = `
+        INSERT INTO attachment_storage_cleanup (attachment_id, uid, creator_id, memo_id, storage_type, reference, payload)
+        VALUES (?, ?, ?, ?, ?, ?, ?)`
+
 func (d *DB) ListMemoTrashAttachmentCleanup(ctx context.Context, afterID int32, nowTs int64, limit int) ([]*store.Attachment, error) {
 	var attachments []*store.Attachment
 	err := appendDeleteUserAttachments(ctx, d.db, `
@@ -48,19 +52,53 @@ func (d *DB) ListLocalAttachmentStorageMatches(ctx context.Context, basename, su
 func (d *DB) ListLegacyAttachmentIDs(ctx context.Context, afterID int32, limit int) (*sql.Rows, error) {
 	return d.db.QueryContext(ctx, `
         SELECT id FROM attachment
-        WHERE id > ? AND storage_type NOT IN ('LOCAL', 'EXTERNAL') ORDER BY id LIMIT ?`, afterID, limit)
+        WHERE id > ? AND storage_type NOT IN ('LOCAL', 'EXTERNAL', 'S3') ORDER BY id LIMIT ?`, afterID, limit)
 }
 
 func (d *DB) LocalizeAttachment(ctx context.Context, original *store.Attachment, reference, payload string) (bool, error) {
 	result, err := d.db.ExecContext(ctx, `
         UPDATE attachment SET storage_type = 'LOCAL', reference = ?, payload = ?, blob = NULL
         WHERE id = ? AND uid = ? AND updated_ts = ? AND reference = ?
-          AND storage_type NOT IN ('LOCAL', 'EXTERNAL') AND (storage_type = 'S3') = ?`,
-		reference, payload, original.ID, original.UID, original.UpdatedTs, original.Reference,
-		original.StorageType == storepb.AttachmentStorageType_S3)
+          AND storage_type NOT IN ('LOCAL', 'EXTERNAL', 'S3')`,
+		reference, payload, original.ID, original.UID, original.UpdatedTs, original.Reference)
 	if err != nil {
 		return false, err
 	}
 	count, err := result.RowsAffected()
 	return count == 1, err
+}
+
+func appendDeleteUserAttachments(ctx context.Context, tx dbExecutor, query string, args []any, seen map[int32]struct{}, attachments *[]*store.Attachment) error {
+	rows, err := tx.QueryContext(ctx, query, args...)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		attachment := &store.Attachment{}
+		var memoID sql.NullInt32
+		var storageType string
+		var payloadBytes []byte
+		if err := rows.Scan(&attachment.ID, &attachment.UID, &attachment.CreatorID, &memoID, &storageType, &attachment.Reference, &payloadBytes); err != nil {
+			return err
+		}
+		if _, exists := seen[attachment.ID]; exists {
+			continue
+		}
+		seen[attachment.ID] = struct{}{}
+		if memoID.Valid {
+			attachment.MemoID = &memoID.Int32
+		}
+		attachment.StorageType = storepb.AttachmentStorageType(storepb.AttachmentStorageType_value[storageType])
+		payload := &storepb.AttachmentPayload{}
+		if len(payloadBytes) > 0 {
+			if err := protojsonUnmarshaler.Unmarshal(payloadBytes, payload); err != nil {
+				return err
+			}
+		}
+		attachment.Payload = payload
+		*attachments = append(*attachments, attachment)
+	}
+	return rows.Err()
 }

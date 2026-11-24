@@ -6,7 +6,7 @@ import { TimelineViewProvider } from "./contexts/ViewContext";
 import useNavigateTo from "./hooks/useNavigateTo";
 import { useUserLocale } from "./hooks/useUserLocale";
 import { useUserTheme } from "./hooks/useUserTheme";
-import { DEFAULT_FAVICON, getCustomLogoUrl } from "./lib/branding";
+import { DEFAULT_APP_NAME, DEFAULT_FAVICON, getCustomLogoUrl } from "./lib/branding";
 
 const App = () => {
   const navigateTo = useNavigateTo();
@@ -37,7 +37,7 @@ const App = () => {
   // Dynamic update metadata with customized profile
   useEffect(() => {
     const customProfile = instanceGeneralSetting.customProfile;
-    document.title = customProfile?.title || "Memos";
+    document.title = customProfile?.title || DEFAULT_APP_NAME;
     const link = document.querySelector<HTMLLinkElement>("link[rel~='icon']");
     if (!link) return;
 

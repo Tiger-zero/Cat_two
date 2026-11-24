@@ -32,8 +32,8 @@ const (
 //
 // AuthService manages sign-in sessions: it issues, refreshes, and revokes the tokens that authenticate API calls.
 type AuthServiceClient interface {
-	// SignIn authenticates a user with password or SSO credentials.
-	// Password sign-in also requires a one-time code when two-factor authentication is enabled.
+	// SignIn authenticates a user with their username and password.
+	// A one-time code is required when two-factor authentication is enabled.
 	// On success, returns a short-lived access token and sets a refresh token in an HttpOnly cookie.
 	// Public. Attempts are rate limited. Archived users cannot sign in.
 	SignIn(ctx context.Context, in *SignInRequest, opts ...grpc.CallOption) (*SignInResponse, error)
@@ -105,8 +105,8 @@ func (c *authServiceClient) SignOut(ctx context.Context, in *SignOutRequest, opt
 //
 // AuthService manages sign-in sessions: it issues, refreshes, and revokes the tokens that authenticate API calls.
 type AuthServiceServer interface {
-	// SignIn authenticates a user with password or SSO credentials.
-	// Password sign-in also requires a one-time code when two-factor authentication is enabled.
+	// SignIn authenticates a user with their username and password.
+	// A one-time code is required when two-factor authentication is enabled.
 	// On success, returns a short-lived access token and sets a refresh token in an HttpOnly cookie.
 	// Public. Attempts are rate limited. Archived users cannot sign in.
 	SignIn(context.Context, *SignInRequest) (*SignInResponse, error)

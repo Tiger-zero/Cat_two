@@ -594,6 +594,18 @@ message UserStats {
   // own stats, independently of the request's memo filter.
   optional int64 attachment_storage_bytes = 8 [(google.api.field_behavior) = OUTPUT_ONLY];
 
+  // Output only. Daily activity returned when GetUserStats requests activity_by_day.
+  DailyActivity daily_activity = 9 [(google.api.field_behavior) = OUTPUT_ONLY];
+
+  // DailyActivity groups times by Asia/Shanghai date (YYYY-MM-DD).
+  message DailyActivity {
+    // Count of memos created on each date.
+    map<string, int32> created_counts = 1;
+
+    // Count of memos last updated on each date.
+    map<string, int32> updated_counts = 2;
+  }
+
   // MemoTypeStats counts memos by the kind of content they contain.
   message MemoTypeStats {
     // The number of memos that contain a link.
@@ -645,8 +657,12 @@ message GetUserStatsRequest {
   ];
 
   // Optional. A CEL expression selecting the readable non-comment memos to
-  // count. Supports the same fields as ListMemos, including `space`.
+  // count. Supports the same filter syntax as ListMemos.
   string filter = 2 [(google.api.field_behavior) = OPTIONAL];
+
+  // Optional. Return daily_activity in place of the individual memo timestamps.
+  // Other statistics retain their usual meaning.
+  bool activity_by_day = 3 [(google.api.field_behavior) = OPTIONAL];
 }
 
 // UserUsage is a user's usage and the limit set in effect for the user.

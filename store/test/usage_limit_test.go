@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
 
+	"github.com/usememos/memos/internal/testutil/legacyspace"
 	storepb "github.com/usememos/memos/proto/gen/store"
 	"github.com/usememos/memos/store"
 )
@@ -60,9 +61,12 @@ func TestCountUserMemos(t *testing.T) {
 	require.NoError(t, err)
 	archivedStatus := store.Archived
 	require.NoError(t, ts.UpdateMemo(ctx, &store.UpdateMemo{ID: archived.ID, RowStatus: &archivedStatus}))
-	space, err := ts.CreateSpace(ctx, &store.Space{UID: "count-space", Title: "Count"}, owner.ID)
+	sqlite := ts.GetDriver().GetDB()
+	spaceID, err := legacyspace.Seed(ctx, sqlite, "count-space", "Count", owner.ID)
 	require.NoError(t, err)
-	_, err = ts.CreateMemo(ctx, &store.Memo{UID: "count-space-memo", CreatorID: owner.ID, Content: "space", Visibility: store.SpaceAudience, SpaceID: &space.ID})
+	legacyMemo, err := ts.CreateMemo(ctx, &store.Memo{UID: "count-space-memo", CreatorID: owner.ID, Content: "space", Visibility: store.Private})
+	require.NoError(t, err)
+	_, err = sqlite.ExecContext(ctx, `UPDATE memo SET space_id = ?, visibility = 'SPACE' WHERE id = ?`, spaceID, legacyMemo.ID)
 	require.NoError(t, err)
 	_, err = ts.CreateMemoComment(ctx, &store.Memo{UID: "count-comment", CreatorID: owner.ID, Content: "comment", Visibility: store.Public}, root.ID, owner.ID)
 	require.NoError(t, err)
@@ -221,7 +225,7 @@ func TestUpsertInstanceSettingValidatesUsageLimits(t *testing.T) {
 	require.ErrorIs(t, err, store.ErrInvalidUsageLimits)
 }
 
-func TestDeleteUserRemovesFromUsageLimits(t *testing.T) {
+func TestDeleteUserPreservesHistoricalUsageLimits(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	ts := NewTestingStore(ctx, t)
@@ -239,12 +243,6 @@ func TestDeleteUserRemovesFromUsageLimits(t *testing.T) {
 
 	_, err = ts.DeleteUser(ctx, &store.DeleteUser{ID: alice.ID})
 	require.NoError(t, err)
-	require.Equal(t, [][]int32{{bob.ID}, {bob.ID}, nil}, storedUserIDs(ctx, t, ts), "the user leaves shared entries and takes entries of their own with them")
-	setting, err := ts.GetInstanceUsageLimitsSetting(ctx)
-	require.NoError(t, err)
-	require.Equal(t, int64(5<<30), setting.Limits[0].GetStorageBytes())
-	require.True(t, setting.Limits[2].AllUsers)
-
-	require.NoError(t, ts.RemoveUserFromUsageLimits(ctx, 99999), "an unknown user is a no-op")
-	require.Equal(t, [][]int32{{bob.ID}, {bob.ID}, nil}, storedUserIDs(ctx, t, ts))
+	require.Equal(t, [][]int32{{alice.ID, bob.ID}, {alice.ID}, {bob.ID}, nil}, storedUserIDs(ctx, t, ts),
+		"deleting an account leaves legacy quota configuration untouched")
 }

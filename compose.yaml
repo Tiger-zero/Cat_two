@@ -6,7 +6,6 @@ services:
     restart: unless-stopped
     environment:
       TZ: Asia/Shanghai
-      MEMOS_DRIVER: sqlite
       # 绿联 NAS 常用的用户和组编号。按实际数据目录权限修改。
       PUID: "1000"
       PGID: "10"

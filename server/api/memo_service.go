@@ -66,17 +66,19 @@ func (s *APIService) CreateMemo(ctx context.Context, request *apipb.CreateMemoRe
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to convert memo")
 	}
-	// Try to dispatch webhook when memo is created.
-	if err := s.DispatchMemoCreatedWebhook(ctx, memoMessage); err != nil {
-		slog.Warn("Failed to dispatch memo created webhook", slog.Any("err", err))
-	}
-
-	s.dispatchMemoMentionNotificationsBestEffort(ctx, memo, nil, "")
-
 	return memoMessage, nil
 }
 
 func (s *APIService) ListMemos(ctx context.Context, request *apipb.ListMemosRequest) (*apipb.ListMemosResponse, error) {
+	return s.listMemoPage(ctx, request, 0)
+}
+
+// ListMCPMemos applies a Markdown byte budget to each MCP response page.
+func (s *APIService) ListMCPMemos(ctx context.Context, request *apipb.ListMemosRequest) (*apipb.ListMemosResponse, error) {
+	return s.listMemoPage(ctx, request, 4<<20)
+}
+
+func (s *APIService) listMemoPage(ctx context.Context, request *apipb.ListMemosRequest, contentBudget int) (*apipb.ListMemosResponse, error) {
 	memoFind := &store.FindMemo{
 		// Exclude comments by default.
 		ExcludeComments: true,
@@ -109,10 +111,11 @@ func (s *APIService) ListMemos(ctx context.Context, request *apipb.ListMemosRequ
 	}
 
 	if request.Filter != "" {
-		if err := s.validateMemoFilterForUser(ctx, request.Filter, currentUser); err != nil {
+		prepared, err := prepareMemoFilter(ctx, request.Filter)
+		if err != nil {
 			return nil, err
 		}
-		memoFind.Filters = append(memoFind.Filters, request.Filter)
+		memoFind.PreparedFilter = prepared
 	}
 
 	var limit, offset int
@@ -130,19 +133,29 @@ func (s *APIService) ListMemos(ctx context.Context, request *apipb.ListMemosRequ
 	limitPlusOne := limit + 1
 	memoFind.Limit = &limitPlusOne
 	memoFind.Offset = &offset
-	memos, err := s.Store.ListMemos(ctx, memoFind)
+	page, err := s.listMemoContentPage(ctx, memoFind, limit, contentBudget)
 	if err != nil {
+		if errors.Is(err, store.ErrMemoContentBudgetExceeded) || errors.Is(err, store.ErrMemoPageChanged) {
+			return nil, status.Error(codes.Aborted, "memo content changed while reading the page; retry the request")
+		}
 		return nil, status.Errorf(codes.Internal, "failed to list memos: %v", err)
 	}
 
+	memos := page.Memos
 	memoMessages := []*apipb.Memo{}
 	nextPageToken := ""
-	if len(memos) == limitPlusOne {
-		memos = memos[:limit]
-		nextPageToken, err = getPageToken(limit, offset+limit)
+	if page.HasMore {
+		nextPageToken, err = getPageToken(limit, offset+page.Consumed)
 		if err != nil {
 			return nil, status.Errorf(codes.Internal, "failed to get next page token, error: %v", err)
 		}
+	}
+	if page.OversizedUID != "" {
+		message := "memo " + MemoNamePrefix + page.OversizedUID + " exceeds 4 MiB of Markdown; read it with memo_get_memo"
+		if nextPageToken != "" {
+			message += ". Resume this list with pageToken " + nextPageToken
+		}
+		return nil, status.Error(codes.ResourceExhausted, message)
 	}
 
 	if len(memos) == 0 {
@@ -222,6 +235,18 @@ func (s *APIService) ListMemos(ctx context.Context, request *apipb.ListMemosRequ
 		NextPageToken: nextPageToken,
 	}
 	return response, nil
+}
+
+func (s *APIService) listMemoContentPage(ctx context.Context, find *store.FindMemo, limit, budget int) (store.MemoContentPage, error) {
+	if budget > 0 {
+		return s.Store.ListMemoContentPage(ctx, find, limit, budget)
+	}
+	memos, err := s.Store.ListMemos(ctx, find)
+	if err != nil {
+		return store.MemoContentPage{}, err
+	}
+	count := min(limit, len(memos))
+	return store.MemoContentPage{Memos: memos[:count], Consumed: count, HasMore: len(memos) > limit}, nil
 }
 
 func (s *APIService) GetMemo(ctx context.Context, request *apipb.GetMemoRequest) (*apipb.Memo, error) {
@@ -305,6 +330,9 @@ func (s *APIService) UpdateMemo(ctx context.Context, request *apipb.UpdateMemoRe
 	if !access.CanManageMemo(user, memo) {
 		return nil, status.Errorf(codes.PermissionDenied, "permission denied")
 	}
+	if request.Memo.GetSpace() != "" {
+		return nil, retiredModuleError()
+	}
 
 	update := &store.UpdateMemo{
 		ID: memo.ID,
@@ -317,43 +345,15 @@ func (s *APIService) UpdateMemo(ctx context.Context, request *apipb.UpdateMemoRe
 	}
 	updatePaths := make(map[string]bool, len(request.UpdateMask.Paths))
 	for _, path := range request.UpdateMask.Paths {
-		// Old clients can still send this field. Existing locations are read-only.
-		if path == "location" {
+		// Older clients can include the retired Space field in the mask. Locations are read-only.
+		if path == "space" || path == "location" {
 			continue
 		}
 		updatePaths[path] = true
 	}
-	if s.personalMode() && updatePaths["space"] {
-		if err := s.requireUnchangedMemoSpace(ctx, memo, request.Memo.GetSpace()); err != nil {
-			return nil, err
-		}
-		delete(updatePaths, "space")
-	}
 	if len(updatePaths) == 0 {
 		return s.GetMemo(ctx, &apipb.GetMemoRequest{Name: request.Memo.Name})
 	}
-	lifecycleOnly := updatePaths["space"]
-	for path := range updatePaths {
-		if path != "space" && path != "visibility" {
-			lifecycleOnly = false
-		}
-	}
-	nextSpaceID := memo.SpaceID
-	if updatePaths["space"] {
-		if request.Memo.Space == nil || request.Memo.GetSpace() == "" {
-			nextSpaceID = nil
-			update.ClearSpace = true
-		} else {
-			target, err := s.resolveSpaceForMemoPlacement(ctx, request.Memo.GetSpace(), user)
-			if err != nil {
-				return nil, err
-			}
-			nextSpaceID = &target.ID
-			update.SpaceID = &target.ID
-			update.ClearSpace = false
-		}
-	}
-
 	if updatePaths["visibility"] {
 		nextVisibility, err := validateUpdateMemoVisibility(request.Memo.Visibility)
 		if err != nil {
@@ -361,17 +361,7 @@ func (s *APIService) UpdateMemo(ctx context.Context, request *apipb.UpdateMemoRe
 		}
 		update.Visibility = &nextVisibility
 	}
-	spaceChanged := !sameOptionalInt32(memo.SpaceID, nextSpaceID)
-	// A removed author receives a lifecycle exception only for a real withdraw
-	// or move. Merely including the current Space in the mask must not smuggle
-	// an audience-only mutation past membership checks.
-	lifecycleOnly = lifecycleOnly && spaceChanged
-	if memo.Visibility == store.SpaceAudience && spaceChanged {
-		private := store.Private
-		update.Visibility = &private
-	}
-	update.Policy = s.memoWritePolicy(user.ID, lifecycleOnly)
-	previousContent := memo.Content
+	update.Policy = &store.MemoWritePolicy{ActorUserID: user.ID}
 	contentUpdated := false
 	attachmentsUpdated := false
 	relationsUpdated := false
@@ -468,15 +458,11 @@ func (s *APIService) UpdateMemo(ctx context.Context, request *apipb.UpdateMemoRe
 		return nil, mapMemoWriteError(err, "failed to update memo")
 	}
 
-	memo, commentContext, memoMessage, err := s.buildUpdatedMemoState(ctx, memo.ID)
+	memoMessage, err := s.loadUpdatedMemo(ctx, memo.ID)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to build updated memo state")
 	}
-	if contentUpdated {
-		s.dispatchMemoMentionNotificationsBestEffort(ctx, memo, commentContext, previousContent)
-	}
-	s.dispatchMemoUpdatedSideEffects(ctx, memoMessage)
-
+	s.SSEHub.publishMemoChanged()
 	return memoMessage, nil
 }
 
@@ -505,26 +491,6 @@ func (s *APIService) DeleteMemo(ctx context.Context, request *apipb.DeleteMemoRe
 	if !access.CanManageMemo(user, memo) {
 		return nil, status.Errorf(codes.PermissionDenied, "permission denied")
 	}
-	var deletedMemoMessage *apipb.Memo
-	// Deletion is a narrow lifecycle capability and may remain available after
-	// the author loses read access to a memo with the SPACE audience. Only
-	// build a content-bearing webhook payload when the actor can still read the
-	// memo immediately before deletion.
-	if !s.personalMode() && s.checkMemoReadAccess(ctx, memo) == nil {
-		reactions, err := s.Store.ListReactions(ctx, &store.FindReaction{MemoID: &memo.ID})
-		if err != nil {
-			return nil, status.Errorf(codes.Internal, "failed to list reactions")
-		}
-		attachments, err := s.Store.ListAttachments(ctx, &store.FindAttachment{MemoID: &memo.ID})
-		if err != nil {
-			return nil, status.Errorf(codes.Internal, "failed to list attachments")
-		}
-		deleteRelations, _ := s.loadMemoRelations(ctx, memo)
-		if memoMessage, err := s.convertMemoFromStore(ctx, memo, reactions, attachments, deleteRelations); err == nil {
-			deletedMemoMessage = memoMessage
-		}
-	}
-
 	_, err = s.Store.ApplyMemoTrash(ctx, &store.MemoTrashMutation{
 		MemoID: memo.ID, ActorUserID: user.ID, Action: store.MemoTrashMove, NowTs: time.Now().Unix(),
 	})
@@ -539,12 +505,5 @@ func (s *APIService) DeleteMemo(ctx context.Context, request *apipb.DeleteMemoRe
 		}
 	}
 	s.SSEHub.publishMemoChanged()
-	if deletedMemoMessage != nil {
-		if err := s.DispatchMemoDeletedWebhook(ctx, deletedMemoMessage); err != nil {
-			slog.Warn("Failed to dispatch memo deleted webhook", slog.Any("err", err))
-		}
-	}
 	return &emptypb.Empty{}, nil
 }
-
-// DispatchMemoCreatedWebhook dispatches webhook when memo is created.

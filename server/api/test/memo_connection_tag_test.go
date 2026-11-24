@@ -42,7 +42,7 @@ func TestMemoConnectionTagThroughAPI(t *testing.T) {
 	require.NoError(t, err)
 	sessionToken := signedIn.Msg.GetAccessToken()
 	require.NotEmpty(t, sessionToken)
-	pat, err := ts.Service.CreatePersonalAccessToken(ts.CreateUserContext(ctx, user.ID), &apipb.CreatePersonalAccessTokenRequest{
+	pat, err := ts.Service.CreatePersonalAccessToken(ts.CreateSessionContext(ctx, user.ID), &apipb.CreatePersonalAccessTokenRequest{
 		Parent: "users/" + user.Username, Description: "memo connection tag integration",
 	})
 	require.NoError(t, err)

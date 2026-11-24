@@ -288,8 +288,8 @@ paths:
             tags:
                 - AuthService
             description: |-
-                SignIn authenticates a user with password or SSO credentials.
-                 Password sign-in also requires a one-time code when two-factor authentication is enabled.
+                SignIn authenticates a user with their username and password.
+                 A one-time code is required when two-factor authentication is enabled.
                  On success, returns a short-lived access token and sets a refresh token in an HttpOnly cookie.
                  Public. Attempts are rate limited. Archived users cannot sign in.
             operationId: AuthService_SignIn
@@ -525,7 +525,7 @@ paths:
         post:
             tags:
                 - InstanceService
-            description: TestInstanceEmailSetting sends a test email with the provided or stored SMTP settings. Admin only.
+            description: TestInstanceEmailSetting is a retired SMTP test RPC retained for protocol compatibility.
             operationId: InstanceService_TestInstanceEmailSetting
             requestBody:
                 content:
@@ -701,7 +701,6 @@ paths:
                      the create_time / update_time names used by order_by.
                      Examples:
                        pinned == true && visibility == "PUBLIC"
-                       space == "spaces/team" or space == null
                        tags.exists(t, t == "urgent")
                        content.contains("roadmap") && created_ts > now - duration("168h")
                   schema:
@@ -2941,9 +2940,16 @@ paths:
                   in: query
                   description: |-
                     Optional. A CEL expression selecting the readable non-comment memos to
-                     count. Supports the same fields as ListMemos, including `space`.
+                     count. Supports the same filter syntax as ListMemos.
                   schema:
                     type: string
+                - name: activityByDay
+                  in: query
+                  description: |-
+                    Optional. Return daily_activity in place of the individual memo timestamps.
+                     Other statistics retain their usual meaning.
+                  schema:
+                    type: boolean
             responses:
                 "200":
                     description: OK
@@ -4038,7 +4044,7 @@ components:
             properties:
                 driver:
                     type: string
-                    description: 'The database driver: "sqlite", "mysql" or "postgres".'
+                    description: The database driver is "sqlite".
                 sizeBytes:
                     type: string
                     description: The database size in bytes. -1 if unavailable.
@@ -5557,7 +5563,28 @@ components:
                          uploads and attachments in all spaces. Excludes temporary uploads and
                          derived files. Returned only by GetUserStats for the authenticated user's
                          own stats, independently of the request's memo filter.
+                dailyActivity:
+                    readOnly: true
+                    allOf:
+                        - $ref: '#/components/schemas/UserStats_DailyActivity'
+                    description: Output only. Daily activity returned when GetUserStats requests activity_by_day.
             description: UserStats is a summary of a user's memos. Comments are not counted.
+        UserStats_DailyActivity:
+            type: object
+            properties:
+                createdCounts:
+                    type: object
+                    additionalProperties:
+                        type: integer
+                        format: int32
+                    description: Count of memos created on each date.
+                updatedCounts:
+                    type: object
+                    additionalProperties:
+                        type: integer
+                        format: int32
+                    description: Count of memos last updated on each date.
+            description: DailyActivity groups times by Asia/Shanghai date (YYYY-MM-DD).
         UserStats_MemoTypeStats:
             type: object
             properties:
@@ -5674,7 +5701,9 @@ tags:
     - name: AuthService
       description: 'AuthService manages sign-in sessions: it issues, refreshes, and revokes the tokens that authenticate API calls.'
     - name: IdentityProviderService
-      description: IdentityProviderService manages the external identity providers users can sign in with.
+      description: |-
+        IdentityProviderService is a legacy API retained for protocol compatibility.
+         The external identity provider methods are retired in Cat_two.
     - name: InstanceService
       description: InstanceService exposes the instance profile, instance-wide settings and usage statistics.
     - name: MemoService
@@ -5682,7 +5711,9 @@ tags:
         MemoService manages memos and their attachments, relations, comments,
          reactions, and share links.
     - name: SpaceService
-      description: SpaceService manages collaborative spaces, their members and their invitations.
+      description: |-
+        SpaceService is a legacy API retained for protocol compatibility.
+         The collaborative space, membership and invitation methods are retired in Cat_two.
     - name: UserService
       description: |-
         UserService manages users and the resources they own: settings, statistics,

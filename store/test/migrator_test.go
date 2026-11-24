@@ -56,15 +56,9 @@ func TestFreshInstall(t *testing.T) {
 
 	// The fresh schema supports memo-local Space placement without adding a
 	// canonical thread shape. COMMENT remains an ordinary relation row.
-	driver := getDriverFromEnv()
 	insertSpace := "INSERT INTO space (id, uid, title, description, payload) VALUES (?, ?, ?, ?, '{}')"
 	insertMemo := "INSERT INTO memo (id, uid, creator_id, content, visibility, payload, space_id) VALUES (?, ?, ?, ?, ?, ?, ?)"
 	insertRelation := "INSERT INTO memo_relation (memo_id, related_memo_id, type) VALUES (?, ?, ?)"
-	if driver == "postgres" {
-		insertSpace = "INSERT INTO space (id, uid, title, description, payload) VALUES ($1, $2, $3, $4, '{}')"
-		insertMemo = "INSERT INTO memo (id, uid, creator_id, content, visibility, payload, space_id) VALUES ($1, $2, $3, $4, $5, $6, $7)"
-		insertRelation = "INSERT INTO memo_relation (memo_id, related_memo_id, type) VALUES ($1, $2, $3)"
-	}
 	_, err = ts.GetDriver().GetDB().ExecContext(ctx, insertSpace, 900001, "fresh-space", "Fresh Space", "schema fixture")
 	require.NoError(t, err)
 	_, err = ts.GetDriver().GetDB().ExecContext(ctx, insertMemo, 900001, "fresh-context", 1, "context", store.Public, `{}`, nil)
@@ -82,58 +76,27 @@ func TestFreshInstall(t *testing.T) {
 
 	requireQueryError(ctx, t, ts.GetDriver().GetDB(), "SELECT parent_memo_id, root_memo_id FROM memo LIMIT 0", "fresh memo schema must not contain canonical-root columns")
 	requireQueryError(ctx, t, ts.GetDriver().GetDB(), "SELECT row_status FROM space LIMIT 0", "fresh Space schema has no archived state")
-	requireLookupIndexes(ctx, t, ts, driver)
+	requireLookupIndexes(ctx, t, ts)
 }
 
 // requireLookupIndexes checks the indexes that usage limit checks rely on to
 // count a user's memos and sum a user's attachment sizes, and the index that
 // memo lists and the has_attachments and has_image filters use to find a
 // memo's attachments without scanning the attachment table.
-func requireLookupIndexes(ctx context.Context, t *testing.T, ts *store.Store, driver string) {
+func requireLookupIndexes(ctx context.Context, t *testing.T, ts *store.Store) {
 	t.Helper()
 	for _, indexName := range []string{"idx_memo_creator_id", "idx_attachment_creator_id"} {
-		var query string
-		switch driver {
-		case "sqlite":
-			query = "SELECT COUNT(*) FROM sqlite_master WHERE type = 'index' AND name = ?"
-		case "mysql":
-			query = "SELECT COUNT(DISTINCT INDEX_NAME) FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = DATABASE() AND INDEX_NAME = ?"
-		case "postgres":
-			query = "SELECT COUNT(*) FROM pg_indexes WHERE schemaname = current_schema() AND indexname = $1"
-		default:
-			t.Fatalf("unsupported driver: %s", driver)
-		}
+		const query = "SELECT COUNT(*) FROM sqlite_master WHERE type = 'index' AND name = ?"
 		var count int
 		require.NoError(t, ts.GetDriver().GetDB().QueryRowContext(ctx, query, indexName).Scan(&count))
 		require.Equal(t, 1, count, "index %s must exist", indexName)
 	}
 
 	columns := []string{"memo_id", "type"}
-	index := attachmentLookupIndex(driver)
-	var query string
-	switch driver {
-	case "sqlite":
-		query = `SELECT info.name FROM pragma_index_list('attachment') AS list
-			JOIN pragma_index_info(list.name) AS info
-			WHERE list.name = ? AND list."unique" = 0 AND list.partial = 0 ORDER BY info.seqno`
-	case "mysql":
-		query = `SELECT COLUMN_NAME FROM information_schema.STATISTICS
-			WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'attachment' AND INDEX_NAME = ?
-			AND NON_UNIQUE = 1 AND SUB_PART IS NULL AND INDEX_TYPE = 'BTREE'
-			ORDER BY SEQ_IN_INDEX`
-	case "postgres":
-		columns = []string{"memo_id"}
-		query = `SELECT pg_get_indexdef(i.indexrelid, k, true)
-			FROM pg_index i JOIN pg_class c ON c.oid = i.indexrelid
-			JOIN pg_am am ON am.oid = c.relam
-			CROSS JOIN LATERAL generate_series(1, i.indnatts) AS k
-			WHERE i.indexrelid = to_regclass($1) AND i.indrelid = 'attachment'::regclass
-			AND i.indisvalid AND i.indisready AND NOT i.indisunique
-			AND i.indpred IS NULL AND i.indexprs IS NULL AND am.amname = 'btree' ORDER BY k`
-	default:
-		t.Fatalf("unsupported driver: %s", driver)
-	}
-	rows, err := ts.GetDriver().GetDB().QueryContext(ctx, query, index)
+	const indexQuery = `SELECT info.name FROM pragma_index_list('attachment') AS list
+		JOIN pragma_index_info(list.name) AS info
+		WHERE list.name = ? AND list."unique" = 0 AND list.partial = 0 ORDER BY info.seqno`
+	rows, err := ts.GetDriver().GetDB().QueryContext(ctx, indexQuery, attachmentLookupIndex)
 	require.NoError(t, err)
 	defer rows.Close()
 	var actual []string
@@ -143,7 +106,7 @@ func requireLookupIndexes(ctx context.Context, t *testing.T, ts *store.Store, dr
 		actual = append(actual, column)
 	}
 	require.NoError(t, rows.Err())
-	require.Equal(t, columns, actual, "index %s must have the expected ordered attachment columns", index)
+	require.Equal(t, columns, actual, "index %s must have the expected ordered attachment columns", attachmentLookupIndex)
 }
 
 // TestMigrationReRun verifies that re-running the migration on an already
@@ -226,8 +189,7 @@ func TestMigrationMultipleReRuns(t *testing.T) {
 
 func TestConcurrentInstanceAccessInitializationKeepsFirstInsert(t *testing.T) {
 	ctx := context.Background()
-	driverName := getDriverFromEnv()
-	baseProfile := getTestingProfileForDriver(t, driverName)
+	baseProfile := getTestingProfile(t)
 
 	baseDriver, err := storedb.NewDBDriver(baseProfile)
 	require.NoError(t, err)

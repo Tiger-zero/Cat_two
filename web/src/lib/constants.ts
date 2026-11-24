@@ -8,5 +8,5 @@ export const DEFAULT_LIST_MEMOS_PAGE_SIZE = 16;
 // Loads that finish faster than this never render the spinner, avoiding a flash on fast/self-hosted networks.
 export const LOADING_INDICATOR_DELAY_MS = 250;
 
-// Official companion browser extension for saving web content to Memos.
+// Upstream Memos Web Clipper can use the compatible Cat_two REST API.
 export const WEB_CLIPPER_URL = "https://github.com/usememos/web-clipper";

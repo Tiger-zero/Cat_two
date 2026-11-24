@@ -274,13 +274,13 @@ func TestInstanceSettingStorageSetting(t *testing.T) {
 	ts.Close()
 }
 
-func TestDeleteInstanceStorageSettingInvalidatesCaches(t *testing.T) {
+func TestDeleteInstanceStorageSettingInvalidatesCache(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	ts := NewTestingStore(ctx, t)
 	defer ts.Close()
 
-	upserted, err := ts.UpsertInstanceSetting(ctx, &storepb.InstanceSetting{
+	_, err := ts.UpsertInstanceSetting(ctx, &storepb.InstanceSetting{
 		Key: storepb.InstanceSettingKey_STORAGE,
 		Value: &storepb.InstanceSetting_StorageSetting{
 			StorageSetting: &storepb.InstanceStorageSetting{
@@ -302,13 +302,10 @@ func TestDeleteInstanceStorageSettingInvalidatesCaches(t *testing.T) {
 		},
 	})
 	require.NoError(t, err)
-	configuredStorage := store.GetDefaultStorage(upserted.GetStorageSetting())
-	require.NotNil(t, configuredStorage)
-
-	cachedDriver, err := ts.StorageDriver(ctx, configuredStorage)
+	configuredSetting, err := ts.GetInstanceStorageSetting(ctx)
 	require.NoError(t, err)
-	_, err = ts.GetInstanceStorageSetting(ctx)
-	require.NoError(t, err)
+	require.Equal(t, "primary", configuredSetting.DefaultStorageId)
+	require.Equal(t, storepb.InstanceStorageSetting_S3, configuredSetting.StorageType)
 
 	err = ts.DeleteInstanceSetting(ctx, &store.DeleteInstanceSetting{Name: storepb.InstanceSettingKey_STORAGE.String()})
 	require.NoError(t, err)
@@ -320,10 +317,6 @@ func TestDeleteInstanceStorageSettingInvalidatesCaches(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, storepb.InstanceStorageSetting_LOCAL, defaultSetting.StorageType)
 	require.Nil(t, defaultSetting.S3Config)
-
-	rebuiltDriver, err := ts.StorageDriver(ctx, configuredStorage)
-	require.NoError(t, err)
-	require.NotSame(t, cachedDriver, rebuiltDriver)
 }
 
 func TestInstanceStorageSettingCacheIsolation(t *testing.T) {

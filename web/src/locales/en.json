@@ -48,26 +48,22 @@
     "back-to-sign-in": "Back to sign in",
     "signing-in": "Signing in…",
     "create-admin-account": "Create admin account",
-    "create-your-account": "Create your account",
     "hide-password": "Hide password",
     "incorrect-credentials": "Incorrect username or password.",
     "login-ip-blocked": "Sign-in from this IP address is blocked until an administrator unblocks it.",
     "new-password": "New password",
     "repeat-new-password": "Repeat the new password",
     "session-idle-expired": "You haven’t edited a note for 45 minutes. Please sign in again.",
+    "settings-load-error": "Could not load your settings. Retry to view your notes.",
     "setup-description": "Create the administrator account for this instance.",
     "setup-title": "Set up your instance",
     "show-password": "Show password",
-    "sign-in-tip": "Already have an account?",
-    "sign-up-tip": "Don't have an account yet?",
-    "signin-unavailable-description": "This instance restricts password sign-in to administrators. Contact your administrator if you need access.",
-    "signin-unavailable-title": "Sign-in is unavailable",
     "signups-closed-description": "New accounts are disabled on this instance. Contact your administrator if you need access."
   },
   "demo": {
     "banner-description": "Feel free to explore! This demo is reset periodically.",
-    "banner-title": "Memos demo",
-    "deploy-link": "Deploy your own Memos"
+    "banner-title": "Cat_two demo",
+    "deploy-link": "Deploy Cat_two"
   },
   "attachment-details": {
     "actions": {
@@ -165,9 +161,8 @@
     "settings": "Settings",
     "share": "Share",
     "sign-in": "Sign in",
-    "sign-in-to-memos": "Sign in to Memos",
+    "sign-in-to-memos": "Sign in",
     "sign-out": "Sign out",
-    "sign-up": "Sign up",
     "statistics": "Statistics",
     "tags": "Tags",
     "title": "Title",
@@ -200,6 +195,7 @@
     "exit-focus-mode": "Exit Focus Mode",
     "focus-mode": "Focus Mode",
     "markdown-mode": "Markdown mode",
+    "task-update-failed": "Could not save the task change. Check the current note and try again.",
     "comment": "Comment",
     "footnotes": "Footnotes",
     "back-to-reference": "Back to reference",
@@ -287,7 +283,7 @@
     },
     "no-changes-detected": "No changes detected",
     "draft": {
-      "storage-failed": "Couldn't save the local draft. Save the memo before leaving this page.",
+      "storage-failed": "The draft is only in this tab. Save the note before closing or reloading the tab.",
       "outdated": "This memo has a newer version. The older draft wasn't applied.",
       "copy-text": "Copy draft text",
       "review": "Review saved draft",
@@ -396,7 +392,6 @@
     "parent-load-error": "Couldn’t load the original memo.",
     "parent-unavailable": "Original memo unavailable",
     "parent-unavailable-description": "It may have been deleted or you may no longer have access.",
-    "moved": "Memo moved",
     "click-to-show-sensitive-content": "Click to show sensitive content",
     "comment": {
       "self": "Comments",
@@ -487,8 +482,7 @@
     "restored-successfully": "Restored successfully",
     "succeed-copy-content": "Content copied successfully.",
     "succeed-copy-link": "Link copied successfully.",
-    "update-succeed": "Update succeeded",
-    "invalid-datetime": "Invalid date and time. Use the format 2023-12-31 23:59:59."
+    "update-succeed": "Update succeeded"
   },
   "reference": {
     "no-memos-found": "No memos found",
@@ -841,15 +835,14 @@
       "emoji": "Emoji",
       "search-emoji": "Search or paste emoji…",
       "no-results": "No matches"
-    },
-    "spaces": "Spaces"
+    }
   },
   "tooltip": {
     "link-memo": "Link Memo",
     "link-memo-description": "Search and select a memo to link"
   },
   "welcome": {
-    "title": "Welcome to Memos",
+    "title": "Welcome to Cat_two",
     "headline": "Simple note-taking for your everyday thoughts.",
     "intro-write": "A single sentence can be a whole memo.",
     "intro-keep": "Each memo stays with the day you wrote it.",
@@ -861,14 +854,15 @@
     "markdown": "Markdown",
     "markdown-text": "Markdown gives your words structure when you want it.",
     "attach": "Attach",
-    "attach-text": "Images, files, audio and a place come in through ＋.",
+    "attach-text": "Add images, audio, and files with the ＋ menu.",
     "keep": "Keep",
     "keep-sub": "Each memo stays with the day you wrote it.",
     "calendar-text": "Pick a day in the sidebar to see notes for that date.",
     "tags-text": "A word after # becomes a tag you can use to filter notes.",
     "share": "Personal notes",
-    "share-sub": "Organize topics in Spaces and add follow-up thoughts to your notes.",
-    "spaces-text": "Organize notes by topic in Spaces.",
+    "share-sub": "Keep follow-up thoughts with your notes.",
+    "private-label": "Private",
+    "private-note-text": "Sign in to access the notes you created.",
     "comments": "Comments",
     "comments-text": "Add follow-up thoughts and updates to a note.",
     "skip": "Skip",
@@ -889,7 +883,6 @@
       "write-strong": "Reveal the details",
       "write-tail": "when they’re needed.",
       "write-task": "Write a short changelog",
-      "space": "Product",
       "share-memo": "Try showing the result before asking people to sign up.",
       "comment": "Agreed. The preview did the convincing.",
       "tag-design": "design",

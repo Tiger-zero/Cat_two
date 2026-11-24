@@ -10,9 +10,11 @@ import (
 	"github.com/pkg/errors"
 )
 
-// EnqueueMemoTrashAttachmentCleanup saves deleted attachment metadata within
-// the memo purge transaction so local files can be removed after commit.
-func EnqueueMemoTrashAttachmentCleanup(ctx context.Context, tx *sql.Tx, attachments []*Attachment, insert string) error {
+// EnqueueAttachmentStorageCleanup saves deleted attachment metadata in the
+// deletion transaction so file removal can be retried after commit.
+func EnqueueAttachmentStorageCleanup(ctx context.Context, tx interface {
+	ExecContext(context.Context, string, ...any) (sql.Result, error)
+}, attachments []*Attachment, insert string) error {
 	for _, attachment := range attachments {
 		if _, err := tx.ExecContext(ctx, insert, attachment.ID, attachment.UID, attachment.CreatorID, attachment.MemoID,
 			attachment.StorageType.String(), attachment.Reference, "{}"); err != nil {

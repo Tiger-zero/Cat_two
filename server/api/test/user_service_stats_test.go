@@ -4,11 +4,13 @@ import (
 	"context"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	"github.com/usememos/memos/internal/testutil/legacyspace"
 	apipb "github.com/usememos/memos/proto/gen/api"
 	storepb "github.com/usememos/memos/proto/gen/store"
 	"github.com/usememos/memos/store"
@@ -204,6 +206,7 @@ func TestGetUserStats_MemoUpdatedTimestamps(t *testing.T) {
 	resp, err := ts.Service.GetUserStats(userCtx, &apipb.GetUserStatsRequest{Name: userName})
 	require.NoError(t, err)
 	require.NotNil(t, resp)
+	require.Nil(t, resp.DailyActivity)
 
 	require.Len(t, resp.MemoCreatedTimestamps, 1, "should have one created timestamp")
 	require.Len(t, resp.MemoUpdatedTimestamps, 1, "should have one updated timestamp")
@@ -216,6 +219,57 @@ func TestGetUserStats_MemoUpdatedTimestamps(t *testing.T) {
 		resp.MemoCreatedTimestamps[0].AsTime().Unix(),
 		"updated_ts should be after created_ts after an edit",
 	)
+}
+
+func TestGetUserStats_DailyActivity(t *testing.T) {
+	ctx := context.Background()
+	ts := NewTestService(t)
+	defer ts.Cleanup()
+
+	user, err := ts.CreateHostUser(ctx, "daily-stats-user")
+	require.NoError(t, err)
+	userCtx := ts.CreateUserContext(ctx, user.ID)
+	request := &apipb.GetUserStatsRequest{Name: "users/" + user.Username, ActivityByDay: true}
+
+	empty, err := ts.Service.GetUserStats(userCtx, request)
+	require.NoError(t, err)
+	require.NotNil(t, empty.DailyActivity)
+	require.Empty(t, empty.DailyActivity.CreatedCounts)
+	require.Empty(t, empty.DailyActivity.UpdatedCounts)
+
+	// Shanghai midnight is 16:00 UTC on the preceding date.
+	midnight := time.Date(2026, time.May, 1, 16, 0, 0, 0, time.UTC)
+	for index, created := range []time.Time{midnight.Add(-time.Second), midnight, midnight.Add(time.Minute), midnight.AddDate(0, 0, 1)} {
+		memo, err := ts.Store.CreateMemo(ctx, &store.Memo{
+			UID:        fmt.Sprintf("daily-stats-memo-%d", index),
+			CreatorID:  user.ID,
+			Visibility: store.Private,
+			CreatedTs:  created.Unix(),
+			UpdatedTs:  midnight.AddDate(0, 0, 2).Unix(),
+			Payload:    &storepb.MemoPayload{Tags: []string{"work/project"}},
+		})
+		require.NoError(t, err)
+		if index == 3 {
+			archived := store.Archived
+			require.NoError(t, ts.Store.UpdateMemo(ctx, &store.UpdateMemo{ID: memo.ID, RowStatus: &archived}))
+		}
+	}
+
+	stats, err := ts.Service.GetUserStats(userCtx, request)
+	require.NoError(t, err)
+	require.NotNil(t, stats.DailyActivity)
+	require.EqualValues(t, 3, stats.TotalMemoCount)
+	require.Equal(t, map[string]int32{"work": 3, "work/project": 3}, stats.TagCounts)
+	require.Equal(t, map[string]int32{"2026-05-01": 1, "2026-05-02": 2}, stats.DailyActivity.CreatedCounts)
+	require.Equal(t, map[string]int32{"2026-05-04": 3}, stats.DailyActivity.UpdatedCounts)
+	require.Empty(t, stats.MemoCreatedTimestamps)
+	require.Empty(t, stats.MemoUpdatedTimestamps)
+
+	archives, err := ts.Service.ListUserStats(userCtx, &apipb.ListUserStatsRequest{Parent: request.Name, State: apipb.State_ARCHIVED})
+	require.NoError(t, err)
+	require.Len(t, archives.UserStats, 1)
+	require.Len(t, archives.UserStats[0].MemoCreatedTimestamps, 1)
+	require.Nil(t, archives.UserStats[0].DailyActivity)
 }
 
 func TestGetUserStats_PinnedMemoUsesCanonicalResourceName(t *testing.T) {
@@ -296,28 +350,19 @@ func TestUserStatsUseMemoLocalAccess(t *testing.T) {
 	applicationAdmin, err := ts.CreateHostUser(ctx, "stats-access-app-admin")
 	require.NoError(t, err)
 
-	space, err := ts.Store.CreateSpace(ctx, &store.Space{
-		UID:   "stats-access-space",
-		Title: "Stats access",
-	}, owner.ID)
+	db := ts.Store.GetDriver().GetDB()
+	spaceID, err := legacyspace.Seed(ctx, db, "stats-access-space", "Stats access", owner.ID)
 	require.NoError(t, err)
-	_, err = ts.InviteAndAcceptSpaceMember(ctx, &store.SpaceMember{
-		SpaceID: space.ID,
-		UserID:  member.ID,
-		Role:    store.SpaceMemberRoleUser,
-	}, owner.ID)
-	require.NoError(t, err)
+	require.NoError(t, legacyspace.AddMember(ctx, db, spaceID, member.ID, "USER"))
 
 	fixtures := []struct {
 		uid        string
 		visibility store.Visibility
-		spaceID    *int32
 		tag        string
 	}{
 		{uid: "stats-access-public", visibility: store.Public, tag: "public"},
 		{uid: "stats-access-protected", visibility: store.Protected, tag: "protected"},
 		{uid: "stats-access-private", visibility: store.Private, tag: "private"},
-		{uid: "stats-access-members", visibility: store.SpaceAudience, spaceID: &space.ID, tag: "space"},
 	}
 	for _, fixture := range fixtures {
 		_, err := ts.Store.CreateMemo(ctx, &store.Memo{
@@ -325,11 +370,16 @@ func TestUserStatsUseMemoLocalAccess(t *testing.T) {
 			CreatorID:  owner.ID,
 			Content:    fixture.tag,
 			Visibility: fixture.visibility,
-			SpaceID:    fixture.spaceID,
 			Payload:    &storepb.MemoPayload{Tags: []string{fixture.tag}},
 		})
 		require.NoError(t, err)
 	}
+	legacyMemo, err := ts.Store.CreateMemo(ctx, &store.Memo{
+		UID: "stats-access-members", CreatorID: owner.ID, Content: "space", Visibility: store.Private,
+		Payload: &storepb.MemoPayload{Tags: []string{"space"}},
+	})
+	require.NoError(t, err)
+	require.NoError(t, legacyspace.PlaceMemo(ctx, db, legacyMemo.ID, spaceID, "SPACE"))
 
 	ownerName := fmt.Sprintf("users/%s", owner.Username)
 	tests := []struct {
@@ -376,109 +426,6 @@ func TestUserStatsUseMemoLocalAccess(t *testing.T) {
 	memberStats, err := ts.Service.ListUserStats(ts.CreateUserContext(ctx, member.ID), &apipb.ListUserStatsRequest{Parent: "users/-"})
 	require.NoError(t, err)
 	require.Empty(t, memberStats.UserStats)
-}
-
-func TestUserStatsSpaceFilter(t *testing.T) {
-	ctx := context.Background()
-	ts := NewTestService(t)
-	defer ts.Cleanup()
-
-	owner, err := ts.CreateRegularUser(ctx, "stats-scope-owner")
-	require.NoError(t, err)
-	member, err := ts.CreateRegularUser(ctx, "stats-scope-member")
-	require.NoError(t, err)
-	outsider, err := ts.CreateRegularUser(ctx, "stats-scope-outsider")
-	require.NoError(t, err)
-
-	spaceA, err := ts.Store.CreateSpace(ctx, &store.Space{UID: "stats-scope-a", Title: "A"}, owner.ID)
-	require.NoError(t, err)
-	_, err = ts.InviteAndAcceptSpaceMember(ctx, &store.SpaceMember{
-		SpaceID: spaceA.ID,
-		UserID:  member.ID,
-		Role:    store.SpaceMemberRoleUser,
-	}, owner.ID)
-	require.NoError(t, err)
-	spaceB, err := ts.Store.CreateSpace(ctx, &store.Space{UID: "stats-scope-b", Title: "B"}, owner.ID)
-	require.NoError(t, err)
-
-	spaceAName := "spaces/" + spaceA.UID
-	fixtures := []struct {
-		uid        string
-		creatorID  int32
-		visibility store.Visibility
-		spaceID    *int32
-		tag        string
-	}{
-		{uid: "stats-scope-unassigned", creatorID: owner.ID, visibility: store.Public, tag: "unassigned"},
-		{uid: "stats-scope-a-members", creatorID: owner.ID, visibility: store.SpaceAudience, spaceID: &spaceA.ID, tag: "a-members"},
-		{uid: "stats-scope-a-private", creatorID: owner.ID, visibility: store.Private, spaceID: &spaceA.ID, tag: "a-private"},
-		{uid: "stats-scope-a-member-private", creatorID: member.ID, visibility: store.Private, spaceID: &spaceA.ID, tag: "member-private"},
-		{uid: "stats-scope-b-public", creatorID: owner.ID, visibility: store.Public, spaceID: &spaceB.ID, tag: "b-public"},
-	}
-	for _, fixture := range fixtures {
-		_, err := ts.Store.CreateMemo(ctx, &store.Memo{
-			UID:        fixture.uid,
-			CreatorID:  fixture.creatorID,
-			Content:    fixture.tag,
-			Visibility: fixture.visibility,
-			SpaceID:    fixture.spaceID,
-			Payload:    &storepb.MemoPayload{Tags: []string{fixture.tag}},
-		})
-		require.NoError(t, err)
-	}
-
-	ownerName := fmt.Sprintf("users/%s", owner.Username)
-	ownerCtx := ts.CreateUserContext(ctx, owner.ID)
-	ownerSpaceStats, err := ts.Service.GetUserStats(ownerCtx, &apipb.GetUserStatsRequest{
-		Name:   ownerName,
-		Filter: fmt.Sprintf(`space == %q`, spaceAName),
-	})
-	require.NoError(t, err)
-	require.Equal(t, int32(2), ownerSpaceStats.TotalMemoCount)
-	require.Contains(t, ownerSpaceStats.TagCounts, "a-members")
-	require.Contains(t, ownerSpaceStats.TagCounts, "a-private")
-	require.NotContains(t, ownerSpaceStats.TagCounts, "unassigned")
-	require.NotContains(t, ownerSpaceStats.TagCounts, "b-public")
-
-	ownerUnassignedStats, err := ts.Service.GetUserStats(ownerCtx, &apipb.GetUserStatsRequest{
-		Name:   ownerName,
-		Filter: `space == null`,
-	})
-	require.NoError(t, err)
-	require.Equal(t, int32(1), ownerUnassignedStats.TotalMemoCount)
-	require.Contains(t, ownerUnassignedStats.TagCounts, "unassigned")
-
-	memberSpaceStats, err := ts.Service.ListUserStats(ts.CreateUserContext(ctx, member.ID), &apipb.ListUserStatsRequest{
-		Parent: "users/-",
-		Filter: fmt.Sprintf(`space == %q`, spaceAName),
-	})
-	require.NoError(t, err)
-	require.Len(t, memberSpaceStats.UserStats, 1)
-	visibleTags := map[string]int32{}
-	for _, stats := range memberSpaceStats.UserStats {
-		for tag, count := range stats.TagCounts {
-			visibleTags[tag] += count
-		}
-	}
-	require.Equal(t, map[string]int32{"member-private": 1}, visibleTags)
-
-	_, err = ts.Service.ListUserStats(ts.CreateUserContext(ctx, outsider.ID), &apipb.ListUserStatsRequest{
-		Parent: "users/-",
-		Filter: fmt.Sprintf(`space == %q`, spaceAName),
-	})
-	require.Equal(t, codes.NotFound, status.Code(err))
-
-	_, err = ts.Service.ListUserStats(ctx, &apipb.ListUserStatsRequest{
-		Parent: "users/-",
-		Filter: fmt.Sprintf(`space == %q`, spaceAName),
-	})
-	require.Equal(t, codes.Unauthenticated, status.Code(err))
-
-	_, err = ts.Service.GetUserStats(ownerCtx, &apipb.GetUserStatsRequest{
-		Name:   ownerName,
-		Filter: `space != null`,
-	})
-	require.Equal(t, codes.InvalidArgument, status.Code(err))
 }
 
 func TestGetUserStats_AttachmentStorage(t *testing.T) {

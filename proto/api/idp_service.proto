@@ -11,7 +11,8 @@ import "google/protobuf/field_mask.proto";
 
 option go_package = "gen/api";
 
-// IdentityProviderService manages the external identity providers users can sign in with.
+// IdentityProviderService is a legacy API retained for protocol compatibility.
+// The external identity provider methods are retired in Cat_two.
 service IdentityProviderService {
   // ListIdentityProviders lists identity providers.
   // Public, so the sign-in page can show SSO options. Client secrets are never returned.

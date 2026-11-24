@@ -20,7 +20,6 @@ behavior; a design document does not have to.
 Implemented, awaiting release:
 
 - [Markup: image annotation and saving](drawing-annotation-and-recovery.md)
-- [MariaDB compatibility testing](mariadb-compatibility-testing.md)
 
 Implemented and frozen:
 
@@ -31,6 +30,10 @@ Implemented and frozen:
 - [Multi-Spaces](multi-spaces.md)
 - [Unique email](unique-email.md)
 - [User usage limits](user-usage-limits.md)
+
+## Historical database compatibility
+
+As of 2026-11-24, Cat_two supports and verifies SQLite only. The [MariaDB compatibility design](mariadb-compatibility-testing.md) preserves the earlier multi-database decisions and test results. See the [current storage verification policy](../../SKILL.md#验证).
 
 ## Historical links
 

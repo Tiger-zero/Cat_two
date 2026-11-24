@@ -165,10 +165,6 @@ export function useMemoSave({
 
       // Prevent the autosave unmount flush from restoring the saved draft.
       await discardDraft();
-      // A moved memo may leave the feed it was edited in; say where it went.
-      if (result.moved) {
-        toast.add({ title: t("memo.moved"), type: "success" });
-      }
 
       dispatch(actions.reset());
       // Reset creates a fresh editor state, so restore calendar-derived values

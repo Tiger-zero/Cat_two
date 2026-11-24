@@ -33,8 +33,8 @@ func (d *DB) CreateMemo(ctx context.Context, create *store.Memo) (*store.Memo, e
 }
 
 func insertSQLiteMemo(ctx context.Context, tx dbExecutor, create *store.Memo, preserveInitialState bool) error {
-	fields := []string{"`uid`", "`creator_id`", "`content`", "`body_digest`", "`visibility`", "`payload`", "`space_id`", "`creation_request_digest`"}
-	placeholder := []string{"?", "?", "?", "?", "?", "?", "?", "?"}
+	fields := []string{"`uid`", "`creator_id`", "`content`", "`body_digest`", "`visibility`", "`payload`", "`creation_request_digest`"}
+	placeholder := []string{"?", "?", "?", "?", "?", "?", "?"}
 	payload := "{}"
 	if create.Payload != nil {
 		payloadBytes, err := protojson.Marshal(create.Payload)
@@ -43,7 +43,7 @@ func insertSQLiteMemo(ctx context.Context, tx dbExecutor, create *store.Memo, pr
 		}
 		payload = string(payloadBytes)
 	}
-	args := []any{create.UID, create.CreatorID, create.Content, create.BodyDigest, create.Visibility, payload, create.SpaceID, create.CreationRequestDigest}
+	args := []any{create.UID, create.CreatorID, create.Content, create.BodyDigest, create.Visibility, payload, create.CreationRequestDigest}
 
 	if preserveInitialState {
 		fields = append(fields, "`row_status`", "`pinned`")
@@ -77,61 +77,24 @@ func insertSQLiteMemo(ctx context.Context, tx dbExecutor, create *store.Memo, pr
 }
 
 func validateSQLiteMemoCreate(ctx context.Context, tx dbExecutor, create *store.Memo) error {
-	actor, err := readSQLiteMemoActor(ctx, tx, create.CreatorID)
-	if err != nil {
-		return err
-	}
-	if !actor.Active {
-		return store.ErrMemoSpaceMembershipRequired
-	}
-	if create.SpaceID == nil {
-		return nil
-	}
-	if !actor.Admin {
-		return validateSQLiteMemoSpaceMember(ctx, tx, *create.SpaceID, create.CreatorID)
-	}
-	// An instance administrator places memos without membership; the target
-	// Space must still exist.
-	exists, err := sqliteSpaceExists(ctx, tx, *create.SpaceID)
-	if err != nil {
-		return err
-	}
-	if !exists {
-		return store.ErrMemoSpaceNotWritable
-	}
-	return nil
-}
-
-func validateSQLiteMemoSpaceMember(ctx context.Context, tx dbExecutor, spaceID, userID int32) error {
-	exists, err := sqliteSpaceExists(ctx, tx, spaceID)
-	if err != nil {
-		return err
-	}
-	if !exists {
-		return store.ErrMemoSpaceNotWritable
-	}
-	err = tx.QueryRowContext(ctx, `SELECT EXISTS(
-		SELECT 1 FROM space_member sm JOIN user u ON u.id = sm.user_id
-		WHERE sm.space_id = ? AND sm.user_id = ? AND sm.status = 'ACTIVE'
-			AND sm.role IN ('ADMIN', 'USER') AND u.row_status = 'NORMAL')`, spaceID, userID).Scan(&exists)
-	if err != nil {
-		return err
-	}
-	if !exists {
-		return store.ErrMemoSpaceMembershipRequired
-	}
-	return nil
+	_, err := requireSQLiteActiveMemoActor(ctx, tx, create.CreatorID)
+	return err
 }
 
 func (d *DB) ListMemos(ctx context.Context, find *store.FindMemo) ([]*store.Memo, error) {
 	where, args := []string{"1 = 1"}, []any{}
 
-	engine, err := filter.DefaultEngine()
-	if err != nil {
+	if err := filter.AppendProgramCondition(find.PreparedFilter, &where, &args); err != nil {
 		return nil, err
 	}
-	if err := filter.AppendConditions(ctx, engine, find.Filters, filter.DialectSQLite, &where, &args); err != nil {
-		return nil, err
+	if len(find.Filters) > 0 {
+		engine, err := filter.DefaultEngine()
+		if err != nil {
+			return nil, err
+		}
+		if err := filter.AppendConditions(ctx, engine, find.Filters, &where, &args); err != nil {
+			return nil, err
+		}
 	}
 	if v := find.ID; v != nil {
 		where, args = append(where, "`memo`.`id` = ?"), append(args, *v)
@@ -196,7 +159,7 @@ func (d *DB) ListMemos(ctx context.Context, find *store.FindMemo) ([]*store.Memo
 		)`), append(args, *v)
 	}
 	if access := find.Access; access != nil {
-		where = append(where, sqliteMemoAccessPredicate(access, "`memo`", "`access_member`", &args))
+		where = append(where, sqliteMemoAccessPredicate(access, "`memo`", &args))
 	}
 	if find.ExcludeComments {
 		where = append(where, `NOT EXISTS (
@@ -241,6 +204,9 @@ func (d *DB) ListMemos(ctx context.Context, find *store.FindMemo) ([]*store.Memo
 			ORDER BY parent_memo.id LIMIT 1) AS parent_uid`,
 	}
 	fields = append(fields, "`memo`.`revision`", "`memo`.`creation_request_digest`")
+	if find.IncludeContentSize {
+		fields = append(fields, "length(CAST(`memo`.`content` AS BLOB))")
+	}
 	checkContentBudget := !find.ExcludeContent && find.MaxTotalContentBytes > 0 && find.Limit == nil
 	if !find.ExcludeContent {
 		readLegacyBody := "`memo`.`body_digest` = ''"
@@ -257,7 +223,6 @@ func (d *DB) ListMemos(ctx context.Context, find *store.FindMemo) ([]*store.Memo
 
 	query := "SELECT " + strings.Join(fields, ", ") + " FROM `memo` " +
 		"LEFT JOIN `user` AS `memo_creator` ON `memo`.`creator_id` = `memo_creator`.`id` " +
-		"LEFT JOIN `space` AS `memo_space` ON `memo`.`space_id` = `memo_space`.`id` " +
 		"WHERE " + strings.Join(where, " AND ") + " " +
 		"ORDER BY " + strings.Join(orderBy, ", ")
 	if find.Limit != nil {
@@ -294,6 +259,9 @@ func (d *DB) ListMemos(ctx context.Context, find *store.FindMemo) ([]*store.Memo
 			&memo.Revision,
 			&memo.CreationRequestDigest,
 		}
+		if find.IncludeContentSize {
+			dests = append(dests, &memo.ContentSizeBytes)
+		}
 		if checkContentBudget {
 			dests = append(dests, &totalContentBytes)
 		}
@@ -323,7 +291,7 @@ func (d *DB) ListMemos(ctx context.Context, find *store.FindMemo) ([]*store.Memo
 
 func (d *DB) QueryActiveMemoTags(ctx context.Context, creatorID int32) (*sql.Rows, error) {
 	var args []any
-	owner := sqliteMemoAccessPredicate(&store.MemoAccessScope{UserID: &creatorID, OwnerOnly: true}, "memo", "access_member", &args)
+	owner := sqliteMemoAccessPredicate(&store.MemoAccessScope{UserID: &creatorID}, "memo", &args)
 	return d.db.QueryContext(ctx, `SELECT json_extract(memo.payload, '$.tags') FROM memo
 		WHERE memo.row_status = 'NORMAL' AND memo.deleted_ts IS NULL AND `+owner+`
 		AND NOT EXISTS (SELECT 1 FROM memo_relation AS r WHERE r.memo_id = memo.id AND r.type = 'COMMENT')`, args...)

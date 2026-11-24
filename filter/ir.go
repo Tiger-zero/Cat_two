@@ -135,7 +135,7 @@ type FunctionValue struct {
 func (*FunctionValue) isValueExpr() {}
 
 // FieldAccessorValue captures a CEL timestamp accessor on a field, such as
-// created_ts.getMonth(). It renders to a dialect-specific date-part extraction.
+// created_ts.getMonth(). It renders to a SQLite date-part extraction.
 type FieldAccessorValue struct {
 	Field    string
 	Accessor string // e.g. "getFullYear", "getMonth"

@@ -23,8 +23,8 @@ func newTwoFactorCommand() *cobra.Command {
 	}
 	flags := cmd.PersistentFlags()
 	flags.String("data", "", "data directory of the instance")
-	flags.String("driver", "sqlite", "database driver of the instance (sqlite, mysql, postgres)")
-	flags.String("dsn", "", "database source name of the instance")
+	flags.String("driver", profile.SQLiteDriver, "database driver (sqlite)")
+	flags.String("dsn", "", "SQLite database path or file URI")
 	reset := &cobra.Command{
 		Use:   "reset",
 		Short: "Disable two-factor authentication and revoke sign-in sessions for one user",

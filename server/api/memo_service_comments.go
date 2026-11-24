@@ -11,7 +11,6 @@ import (
 
 	"github.com/usememos/memos/internal/ratelimit"
 	apipb "github.com/usememos/memos/proto/gen/api"
-	storepb "github.com/usememos/memos/proto/gen/store"
 	"github.com/usememos/memos/store"
 )
 
@@ -78,54 +77,7 @@ func (s *APIService) CreateMemoComment(ctx context.Context, request *apipb.Creat
 		return nil, status.Errorf(codes.Internal, "failed to convert memo comment")
 	}
 
-	s.createMemoCommentNotification(ctx, user.ID, memo, relatedMemo)
-
-	if err := s.DispatchMemoCommentCreatedWebhook(ctx, memo, relatedMemo, relatedMemo.CreatorID); err != nil {
-		slog.Warn("Failed to dispatch memo comment created webhook", slog.Any("err", err))
-	}
-
-	s.dispatchMemoMentionNotificationsBestEffort(ctx, memo, relatedMemo, "")
-
 	return memoComment, nil
-}
-
-// createMemoCommentNotification records the comment in the related memo
-// creator's inbox. The comment itself is already persisted, so a failure here
-// only loses the notification and is logged instead of failing the request;
-// failing it would make clients retry and create a duplicate comment.
-func (s *APIService) createMemoCommentNotification(ctx context.Context, creatorID int32, memo *store.Memo, relatedMemo *store.Memo) {
-	if s.personalMode() || creatorID == relatedMemo.CreatorID {
-		return
-	}
-	relatedCreator, err := s.Store.GetUser(ctx, &store.FindUser{ID: &relatedMemo.CreatorID})
-	if err != nil {
-		slog.Warn("Failed to get related memo creator for comment notification",
-			slog.Any("err", err),
-			slog.Int64("memo_id", int64(memo.ID)))
-		return
-	}
-	if !s.canUserAccessMentionMemos(ctx, relatedCreator, memo, relatedMemo) {
-		return
-	}
-	if _, err := s.createInboxWithEmailNotification(ctx, &store.Inbox{
-		SenderID:   creatorID,
-		ReceiverID: relatedMemo.CreatorID,
-		Status:     store.UNREAD,
-		Message: &storepb.InboxMessage{
-			Type: storepb.InboxMessage_MEMO_COMMENT,
-			Payload: &storepb.InboxMessage_MemoComment{
-				MemoComment: &storepb.InboxMessage_MemoCommentPayload{
-					MemoId:        memo.ID,
-					RelatedMemoId: relatedMemo.ID,
-				},
-			},
-		},
-	}); err != nil {
-		slog.Warn("Failed to create memo comment notification",
-			slog.Any("err", err),
-			slog.Int64("memo_id", int64(memo.ID)),
-			slog.Int64("receiver_id", int64(relatedMemo.CreatorID)))
-	}
 }
 
 func (s *APIService) ListMemoComments(ctx context.Context, request *apipb.ListMemoCommentsRequest) (*apipb.ListMemoCommentsResponse, error) {

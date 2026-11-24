@@ -7,6 +7,7 @@ import { memoKeys, useDeleteMemo, useUpdateMemo } from "@/hooks/useMemoQueries";
 import useNavigateTo from "@/hooks/useNavigateTo";
 import { userKeys } from "@/hooks/useUserQueries";
 import { handleError } from "@/lib/error";
+import { recordMemoEditingActivity } from "@/lib/memo-editing-activity";
 import { extractMemoIdFromName } from "@/lib/resource-names";
 import { showErrorToast, toast } from "@/lib/toast";
 import { ROUTES } from "@/router/routes";
@@ -39,11 +40,12 @@ export const useMemoActionHandlers = ({ memo, parentPage, onEdit, setDeleteDialo
   }, [queryClient]);
 
   const updateMemoContent = useCallback(
-    async (nextContent: string, context: string) => {
+    async (nextContent: string) => {
       if (nextContent === memo.content) {
         return;
       }
 
+      recordMemoEditingActivity();
       try {
         await updateMemo({
           update: {
@@ -51,16 +53,15 @@ export const useMemoActionHandlers = ({ memo, parentPage, onEdit, setDeleteDialo
             content: nextContent,
           },
           updateMask: ["content", "update_time"],
+          expectedRevision: memo.revision,
+          taskBaseContent: memo.content,
         });
         toast.add({ title: t("memo.task-actions.updated"), type: "success" });
-      } catch (error: unknown) {
-        handleError(error, showErrorToast, {
-          context,
-          fallbackMessage: t("common.error-occurred"),
-        });
+      } catch {
+        showErrorToast(t("editor.task-update-failed"));
       }
     },
-    [memo.content, memo.name, t, updateMemo],
+    [memo.content, memo.name, memo.revision, t, updateMemo],
   );
 
   const handleTogglePinMemoBtnClick = useCallback(async () => {
@@ -126,11 +127,11 @@ export const useMemoActionHandlers = ({ memo, parentPage, onEdit, setDeleteDialo
   }, [memo.content, t]);
 
   const handleCheckAllTaskListItemsClick = useCallback(async () => {
-    await updateMemoContent(checkAllTasks(memo.content), "Check memo task list items");
+    await updateMemoContent(checkAllTasks(memo.content));
   }, [memo.content, updateMemoContent]);
 
   const handleUncheckAllTaskListItemsClick = useCallback(async () => {
-    await updateMemoContent(uncheckAllTasks(memo.content), "Uncheck memo task list items");
+    await updateMemoContent(uncheckAllTasks(memo.content));
   }, [memo.content, updateMemoContent]);
 
   const handleDeleteMemoClick = useCallback(() => {

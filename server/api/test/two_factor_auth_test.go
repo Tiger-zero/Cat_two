@@ -35,7 +35,7 @@ func TestTwoFactorAuthenticationAndSessionReset(t *testing.T) {
 	require.NoError(t, err)
 	user, err := ts.Store.CreateUser(ctx, &store.User{Username: "authenticator-owner", Role: store.RoleAdmin, PasswordHash: string(hash)})
 	require.NoError(t, err)
-	pat, err := ts.Service.CreatePersonalAccessToken(ts.CreateUserContext(ctx, user.ID), &apipb.CreatePersonalAccessTokenRequest{
+	pat, err := ts.Service.CreatePersonalAccessToken(ts.CreateSessionContext(ctx, user.ID), &apipb.CreatePersonalAccessTokenRequest{
 		Parent: "users/" + user.Username, Description: "integration client",
 	})
 	require.NoError(t, err)

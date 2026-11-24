@@ -20,7 +20,7 @@ linters:
   settings:
     # Import direction. Each rule names a layer by file path and lists the
     # layers it must not import. See internal/README.md, core/README.md,
-    # provider/README.md, and the doc.go of server, store, markdown, filter.
+    # and the doc.go of server, store, markdown, and filter.
     depguard:
       rules:
         internal-has-no-app-imports:
@@ -34,26 +34,23 @@ linters:
               desc: internal packages must not import core
             - pkg: github.com/usememos/memos/server
               desc: internal packages must not import server
-            - pkg: github.com/usememos/memos/provider
-              desc: internal packages must not import provider
             - pkg: github.com/usememos/memos/markdown
               desc: internal packages must not import markdown
             - pkg: github.com/usememos/memos/filter
               desc: internal packages must not import filter
             - pkg: github.com/usememos/memos/proto
               desc: internal packages must not import generated protos; only internal/testutil may
-        engines-and-providers-sit-below-store:
+        engines-sit-below-store:
           files:
             - "**/markdown/**"
             - "**/filter/**"
-            - "**/provider/**"
           deny:
             - pkg: github.com/usememos/memos/store
-              desc: markdown, filter, and provider must not import store
+              desc: markdown and filter must not import store
             - pkg: github.com/usememos/memos/core
-              desc: markdown, filter, and provider must not import core
+              desc: markdown and filter must not import core
             - pkg: github.com/usememos/memos/server
-              desc: markdown, filter, and provider must not import server
+              desc: markdown and filter must not import server
         store-sits-below-core:
           files:
             - "**/store/**"

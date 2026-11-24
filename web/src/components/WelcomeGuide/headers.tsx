@@ -1,14 +1,5 @@
 import { Badge, Checkbox } from "@usememos/ui";
-import {
-  AstroidIcon,
-  CalendarDaysIcon,
-  ChevronDownIcon,
-  HashIcon,
-  MoreVerticalIcon,
-  PaperclipIcon,
-  PlusIcon,
-  SearchIcon,
-} from "lucide-react";
+import { CalendarDaysIcon, ChevronDownIcon, HashIcon, LockIcon, MoreVerticalIcon, PaperclipIcon, PlusIcon, SearchIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { MonthCalendar } from "@/components/ActivityCalendar/MonthCalendar";
 import { SIDEBAR_ROW_CLASSES, SidebarRowIconSlot, sidebarRowStateClasses } from "@/components/AppSidebar/SidebarRow";
@@ -159,15 +150,15 @@ export const KeepHeader = () => {
   );
 };
 
-/** Share: a memo in a space, with a comment beneath it. */
-export const ShareHeader = () => {
+/** A private note with one follow-up comment. */
+export const PrivateHeader = () => {
   const t = useTranslate();
   return (
     <Still>
       <Card className="absolute top-4 left-0 right-0">
         <Meta time={t("welcome.sample.today-early")}>
-          <Badge tone="outline" icon={<AstroidIcon />}>
-            {t("welcome.sample.space")}
+          <Badge tone="outline" icon={<LockIcon />}>
+            {t("welcome.private-label")}
           </Badge>
           <MetaActions />
         </Meta>

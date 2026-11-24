@@ -382,71 +382,44 @@ func TestReactionUpsertBlocksWhileMemoDeleteIsUncommitted(t *testing.T) {
 	}()
 
 	deleteMemoQuery := "DELETE FROM memo WHERE id = ?"
-	if getDriverFromEnv() == "postgres" {
-		deleteMemoQuery = "DELETE FROM memo WHERE id = $1"
-	}
 	_, err = dbTx.ExecContext(ctx, deleteMemoQuery, memo.ID)
 	require.NoError(t, err)
 
 	var reaction *store.Reaction
 	var upsertErr error
-	if getDriverFromEnv() == "sqlite" {
-		type upsertResult struct {
-			reaction *store.Reaction
-			err      error
-		}
-		resultChannel := make(chan upsertResult, 1)
-		go func() {
-			reaction, err := ts.UpsertReaction(ctx, &store.Reaction{
-				CreatorID:    user.ID,
-				MemoID:       memo.ID,
-				ReactionType: "👍",
-			})
-			resultChannel <- upsertResult{reaction: reaction, err: err}
-		}()
+	type upsertResult struct {
+		reaction *store.Reaction
+		err      error
+	}
+	resultChannel := make(chan upsertResult, 1)
+	go func() {
+		reaction, err := ts.UpsertReaction(ctx, &store.Reaction{
+			CreatorID:    user.ID,
+			MemoID:       memo.ID,
+			ReactionType: "👍",
+		})
+		resultChannel <- upsertResult{reaction: reaction, err: err}
+	}()
 
-		poll := time.NewTicker(time.Millisecond)
-		defer poll.Stop()
-		for ts.GetDriver().GetDB().Stats().InUse < 2 {
-			select {
-			case result := <-resultChannel:
-				require.FailNowf(t, "reaction upsert completed before memo delete committed", "reaction: %+v, error: %v", result.reaction, result.err)
-			case <-poll.C:
-			case <-ctx.Done():
-				require.FailNow(t, "timed out waiting for reaction upsert to reach SQLite")
-			}
-		}
-
-		require.NoError(t, dbTx.Commit())
-		txOpen = false
+	poll := time.NewTicker(time.Millisecond)
+	defer poll.Stop()
+	for ts.GetDriver().GetDB().Stats().InUse < 2 {
 		select {
 		case result := <-resultChannel:
-			reaction, upsertErr = result.reaction, result.err
+			require.FailNowf(t, "reaction upsert completed before memo delete committed", "reaction: %+v, error: %v", result.reaction, result.err)
+		case <-poll.C:
 		case <-ctx.Done():
-			require.FailNow(t, "timed out waiting for SQLite reaction upsert")
+			require.FailNow(t, "timed out waiting for reaction upsert to reach SQLite")
 		}
-	} else {
-		// Both client/server database engines must wait for the uncommitted
-		// parent deletion before deciding whether the memo still exists.
-		lockWaitContext, lockWaitCancel := context.WithTimeout(ctx, 500*time.Millisecond)
-		startTime := time.Now()
-		reaction, upsertErr = ts.UpsertReaction(lockWaitContext, &store.Reaction{
-			CreatorID:    user.ID,
-			MemoID:       memo.ID,
-			ReactionType: "👍",
-		})
-		lockWaitCancel()
-		require.Error(t, upsertErr)
-		require.Nil(t, reaction)
-		require.GreaterOrEqual(t, time.Since(startTime), 450*time.Millisecond, "reaction upsert must wait for the memo delete transaction")
+	}
 
-		require.NoError(t, dbTx.Commit())
-		txOpen = false
-		reaction, upsertErr = ts.UpsertReaction(ctx, &store.Reaction{
-			CreatorID:    user.ID,
-			MemoID:       memo.ID,
-			ReactionType: "👍",
-		})
+	require.NoError(t, dbTx.Commit())
+	txOpen = false
+	select {
+	case result := <-resultChannel:
+		reaction, upsertErr = result.reaction, result.err
+	case <-ctx.Done():
+		require.FailNow(t, "timed out waiting for SQLite reaction upsert")
 	}
 	require.ErrorIs(t, upsertErr, store.ErrReactionMemoNotFound)
 	require.Nil(t, reaction)
@@ -474,7 +447,7 @@ func (d *memoDeleteBarrierDriver) DeleteMemoWithPolicy(ctx context.Context, dele
 
 func newReactionTestingStoreWithDriver(ctx context.Context, t *testing.T, wrap func(store.Driver) store.Driver) *store.Store {
 	t.Helper()
-	testingProfile := getTestingProfileForDriver(t, getDriverFromEnv())
+	testingProfile := getTestingProfile(t)
 	databaseDriver, err := db.NewDBDriver(testingProfile)
 	require.NoError(t, err)
 

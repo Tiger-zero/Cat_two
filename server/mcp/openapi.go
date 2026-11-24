@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"os"
+	"slices"
 	"strings"
 
 	"github.com/pkg/errors"
@@ -70,11 +71,14 @@ func loadOpenAPISpec(path string) (*openAPISpec, error) {
 	return spec, nil
 }
 
-func buildOperationRegistry(spec *openAPISpec) (map[string]*openAPIOperation, error) {
+func buildOperationRegistry(spec *openAPISpec, operationIDs ...string) (map[string]*openAPIOperation, error) {
 	registry := map[string]*openAPIOperation{}
 	for path, pathItem := range spec.Paths {
 		for method, operation := range pathItem {
 			if operation == nil || operation.OperationID == "" {
+				continue
+			}
+			if len(operationIDs) > 0 && !slices.Contains(operationIDs, operation.OperationID) {
 				continue
 			}
 			if _, exists := registry[operation.OperationID]; exists {

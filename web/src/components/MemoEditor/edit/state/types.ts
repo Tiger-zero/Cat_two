@@ -8,7 +8,6 @@ export interface EditorState {
   content: string;
   metadata: {
     /** Destination chosen in an unscoped new-memo composer. */
-    space?: string;
     attachments: Attachment[];
     relations: MemoRelation[];
   };

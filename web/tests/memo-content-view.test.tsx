@@ -72,7 +72,7 @@ describe("memo view", () => {
     const checkbox = container.querySelector<HTMLInputElement>("input.mbe-checkbox");
     expect(checkbox).not.toBeDisabled();
     fireEvent.mouseDown(checkbox!);
-    await waitFor(() => expect(onTaskToggle).toHaveBeenCalledWith("- [x] First\n- [x] Second\n\nNote"));
+    await waitFor(() => expect(onTaskToggle).toHaveBeenCalledWith("- [x] First\n- [x] Second\n\nNote", content));
   });
 
   it("lets an owner tick a task in a quote, changing only its bracket", async () => {
@@ -81,7 +81,7 @@ describe("memo view", () => {
     const { container } = renderMemo(content, { onTaskToggle });
     const checkboxes = container.querySelectorAll<HTMLInputElement>("input.mbe-checkbox");
     fireEvent.mouseDown(checkboxes[2]!);
-    await waitFor(() => expect(onTaskToggle).toHaveBeenCalledWith("- [ ] First\n\n> - [ ] Quoted\n>   - [x] Nested"));
+    await waitFor(() => expect(onTaskToggle).toHaveBeenCalledWith("- [ ] First\n\n> - [ ] Quoted\n>   - [x] Nested", content));
   });
 
   it("keeps tasks locked for readers", () => {

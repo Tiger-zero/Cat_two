@@ -22,12 +22,8 @@ import (
 	"github.com/usememos/memos/store"
 )
 
-const (
-	// Non-personal tools can upload attachments inline. Personal mode uses
-	// REST for file uploads and needs only room for note and filter text.
-	maxMCPRequestBytes         int64 = api.MaxAPIRequestBytes
-	maxPersonalMCPRequestBytes int64 = 16 << 20
-)
+// MCP carries note and filter text. Attachments are uploaded through REST.
+const maxMCPRequestBytes int64 = 16 << 20
 
 // toolCatalogTTL is the freshness hint advertised on tools/list and
 // server/discover results. The catalog is fixed at startup, so clients may cache
@@ -41,22 +37,19 @@ type MCPService struct {
 	// RateLimiter shares API request budgets and bounds MCP transport requests.
 	RateLimiter ratelimit.Limiter
 
-	operationsByTool map[string]*registeredOperation
-	handler          http.Handler
-	requestBodyLimit int64
+	handler http.Handler
 }
 
-// NewMCPService connects personal tools to the typed API service.
-func NewMCPService(profile *profile.Profile, handler http.Handler, apiService *api.APIService) (*MCPService, error) {
-	personal := profile != nil && profile.Personal
-	if personal && (apiService == nil || apiService.Store == nil) {
+// NewMCPService connects the personal tool catalog to the typed API service.
+func NewMCPService(profile *profile.Profile, apiService *api.APIService) (*MCPService, error) {
+	if apiService == nil || apiService.Store == nil {
 		return nil, errors.New("MCP connection authentication requires the API service and store")
 	}
 	spec, err := loadMCPServiceOpenAPISpec()
 	if err != nil {
 		return nil, err
 	}
-	registry, err := buildOperationRegistry(spec)
+	registry, err := buildOperationRegistry(spec, curatedOperationIDs...)
 	if err != nil {
 		return nil, err
 	}
@@ -83,32 +76,15 @@ func NewMCPService(profile *profile.Profile, handler http.Handler, apiService *a
 	})
 	server.AddReceivingMiddleware(catalogCacheMiddleware)
 
-	var execute toolExecutor = newAPIAdapter(handler).execute
-	if personal {
-		execute = personalAPI{service: apiService, marshaler: api.NewJSONMarshaler()}.execute
-	}
+	service := &MCPService{profile: profile, store: apiService.Store, RateLimiter: apiService.RateLimiter}
+	execute := personalAPI{service: apiService, marshaler: api.NewJSONMarshaler()}.execute
 	for _, tool := range tools {
-		operation := operationsByTool[tool.Name]
-		if personal && !isPersonalMCPOperation(operation.OperationID) {
-			delete(operationsByTool, tool.Name)
-			continue
-		}
-		server.AddTool(tool, newMCPToolHandler(execute, operation))
+		server.AddTool(tool, newMCPToolHandler(execute, operationsByTool[tool.Name]))
 	}
-	service := &MCPService{
-		profile:          profile,
-		operationsByTool: operationsByTool,
-		requestBodyLimit: maxMCPRequestBytes,
-	}
-	if personal {
-		service.store = apiService.Store
-		service.RateLimiter = apiService.RateLimiter
-		service.requestBodyLimit = maxPersonalMCPRequestBytes
-		registerPersonalMemoSearch(server, execute, operationsByTool["memo_list_memos"])
-		registerPersonalMemoBatchGet(server, apiService)
-		registerPersonalTagTools(server, apiService)
-		server.AddReceivingMiddleware(service.authorizePersonalTools)
-	}
+	registerPersonalMemoSearch(server, execute, operationsByTool["memo_list_memos"])
+	registerPersonalMemoBatchGet(server, apiService)
+	registerPersonalTagTools(server, apiService)
+	server.AddReceivingMiddleware(service.authorizePersonalTools)
 
 	streamableHandler := sdkmcp.NewStreamableHTTPHandler(func(*http.Request) *sdkmcp.Server {
 		return server
@@ -117,7 +93,7 @@ func NewMCPService(profile *profile.Profile, handler http.Handler, apiService *a
 		// 2026-07-28; stateful handlers negotiate down to 2025-11-25.
 		Stateless:           true,
 		JSONResponse:        true,
-		MaxRequestBodyBytes: service.requestBodyLimit,
+		MaxRequestBodyBytes: maxMCPRequestBytes,
 		// memos is typically served behind a reverse proxy with the app bound to a
 		// loopback address while the public Host header is a real domain. The SDK's
 		// DNS-rebinding guard treats that shape as an attack and rejects every
@@ -128,16 +104,6 @@ func NewMCPService(profile *profile.Profile, handler http.Handler, apiService *a
 	})
 	service.handler = streamableHandler
 	return service, nil
-}
-
-func isPersonalMCPOperation(id string) bool {
-	switch id {
-	case "AuthService_GetCurrentUser",
-		"MemoService_ListMemos", "MemoService_GetMemo", "MemoService_CreateMemo", "MemoService_UpdateMemo":
-		return true
-	default:
-		return false
-	}
 }
 
 // catalogCacheMiddleware stamps the static-catalog TTL onto results the SDK
@@ -171,6 +137,8 @@ func loadMCPServiceOpenAPISpec() (*openAPISpec, error) {
 	return spec, nil
 }
 
+type toolExecutor func(context.Context, *openAPIOperation, map[string]any) (*sdkmcp.CallToolResult, error)
+
 func newMCPToolHandler(execute toolExecutor, operation *registeredOperation) sdkmcp.ToolHandler {
 	return func(ctx context.Context, request *sdkmcp.CallToolRequest) (*sdkmcp.CallToolResult, error) {
 		arguments := map[string]any{}
@@ -183,21 +151,17 @@ func newMCPToolHandler(execute toolExecutor, operation *registeredOperation) sdk
 			return newToolErrorResult(err.Error()), nil
 		}
 
-		authorization := ""
-		if request.Extra != nil {
-			authorization = request.Extra.Header.Get("Authorization")
-		}
 		if operation.OperationID == "MemoService_CreateMemo" {
 			ctx = api.WithMCPMemoCreation(ctx)
 		}
-		return execute(ctx, operation.Operation, arguments, authorization)
+		return execute(ctx, operation.Operation, arguments)
 	}
 }
 
 // RegisterRoutes registers the streamable HTTP MCP endpoint.
 func (s *MCPService) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/mcp", func(w http.ResponseWriter, r *http.Request) {
-		if r.ContentLength > s.requestBodyLimit {
+		if r.ContentLength > maxMCPRequestBytes {
 			httphandler.WriteError(w, r, &httphandler.Error{Code: http.StatusRequestEntityTooLarge, Message: http.StatusText(http.StatusRequestEntityTooLarge)})
 			return
 		}
@@ -205,12 +169,8 @@ func (s *MCPService) RegisterRoutes(mux *http.ServeMux) {
 			w.WriteHeader(http.StatusForbidden)
 			return
 		}
-		r.Body = http.MaxBytesReader(w, r.Body, s.requestBodyLimit)
-		if s.profile != nil && s.profile.Personal {
-			s.servePersonal(w, r)
-			return
-		}
-		s.handler.ServeHTTP(w, r)
+		r.Body = http.MaxBytesReader(w, r.Body, maxMCPRequestBytes)
+		s.servePersonal(w, r)
 	})
 }
 

@@ -38,7 +38,8 @@ const useWeekdayLabels = (weekStartDayOffset: number) => {
   );
 };
 
-export const MonthCalendar = memo(({ month, data, selectedDate, onClick, timeBasis = "create_time" }: MonthCalendarProps) => {
+export const MonthCalendar = memo((props: MonthCalendarProps) => {
+  const { month, data, selectedDate, showDateLabels = true, onClick, timeBasis = "create_time" } = props;
   const t = useTranslate();
   const { generalSetting } = useInstance();
   const weekDays = useWeekdayLabels(generalSetting.weekStartDayOffset);
@@ -53,17 +54,25 @@ export const MonthCalendar = memo(({ month, data, selectedDate, onClick, timeBas
   return (
     <div className="flex flex-col" role="group" aria-label={t("common.calendar-for-month", { month })}>
       {/* Every day button already announces its full date, so the initials are decoration. */}
-      <div className={cn("mb-1", CALENDAR_GRID_CLASSES)} aria-hidden="true">
-        {weekDays.map((label, index) => (
-          <div key={index} className={cn("flex h-5 items-center justify-center", WEEKDAY_LABEL_CLASSES)}>
-            {Array.from(label)[0]}
-          </div>
-        ))}
-      </div>
+      {showDateLabels && (
+        <div className={cn("mb-1", CALENDAR_GRID_CLASSES)} aria-hidden="true">
+          {weekDays.map((label, index) => (
+            <div key={index} className={cn("flex h-5 items-center justify-center", WEEKDAY_LABEL_CLASSES)}>
+              {Array.from(label)[0]}
+            </div>
+          ))}
+        </div>
+      )}
 
       <div className={CALENDAR_GRID_CLASSES}>
         {days.map((day) => (
-          <CalendarCell key={day.date} day={day} tooltipText={getTooltipText(day.count, day.date, t, timeBasis)} onClick={onClick} />
+          <CalendarCell
+            key={day.date}
+            day={day}
+            tooltipText={getTooltipText(day.count, day.date, t, timeBasis)}
+            showDateLabels={showDateLabels}
+            onClick={onClick}
+          />
         ))}
       </div>
     </div>

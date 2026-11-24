@@ -52,7 +52,7 @@ describe("<AuthPageLayout>", () => {
 
     expect(container.querySelector(".memos-mark")).toHaveAttribute("height", "32");
     expect(container.querySelector(".memos-mark")).toHaveAttribute("src", "/logo.webp?v=cat-two");
-    expect(screen.getByText("Memos")).toBeInTheDocument();
+    expect(screen.getByText("Cat_two")).toBeInTheDocument();
   });
 
   it("preserves custom logos and titles", () => {

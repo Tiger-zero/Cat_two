@@ -26,7 +26,8 @@ export const queryClient = new QueryClient({
       refetchOnReconnect: true, // Refetch when network reconnects
     },
     mutations: {
-      retry: shouldRetry,
+      // A rejected revision requires a fresh read and a new user decision.
+      retry: (failureCount, error) => !hasConnectCode(error, Code.Aborted) && shouldRetry(failureCount, error),
     },
   },
 });

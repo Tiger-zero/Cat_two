@@ -275,8 +275,8 @@ export const SignOutRequestSchema: GenMessage<SignOutRequest> = /*@__PURE__*/
  */
 export const AuthService: GenService<{
   /**
-   * SignIn authenticates a user with password or SSO credentials.
-   * Password sign-in also requires a one-time code when two-factor authentication is enabled.
+   * SignIn authenticates a user with their username and password.
+   * A one-time code is required when two-factor authentication is enabled.
    * On success, returns a short-lived access token and sets a refresh token in an HttpOnly cookie.
    * Public. Attempts are rate limited. Archived users cannot sign in.
    *

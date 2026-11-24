@@ -36,8 +36,10 @@ instead, and update `core/configuration/testdata/compat/` in the same change. Af
   `user_list_memo_views` MCP tool. Existing saved view records remain in the database. Pass a CEL expression to
   `MemoService.ListMemos` to filter notes.
 - Cat_two retires the Space, identity provider, linked identity, notification, webhook and configuration status APIs.
-  Affected REST and Connect calls return `UNIMPLEMENTED`. An existing note's author can still use notes that belonged
-  to a Space.
+  Affected REST and Connect calls return `UNIMPLEMENTED`. SSO sign-in is retired and the server stops dispatching
+  outgoing webhooks. Legacy database records are retained. Notes keep their authors, and access depends only on the
+  author. Memo responses omit Space placement. ZIP archives can carry historical placement metadata, which import
+  ignores with a warning.
 - Cat_two personal mode requires a dedicated connection token for `/mcp`. `POST /api/mcpConnections` accepts
   `label`, `duration`, and `permission`. Choose `7d` (the default), `14d`, `1y` (one calendar year), or `permanent`.
   `read_only` limits discovery and calls to read tools. `read_write` is the default for existing and new connections.
@@ -68,14 +70,15 @@ instead, and update `core/configuration/testdata/compat/` in the same change. Af
 - Cat_two restricts note and attachment reads, statistics derived from notes, and memo archive exports to their owners.
   Existing audience values stay stored and notes are returned as `PRIVATE`. Legacy share links return `NOT_FOUND`
   and `CreateMemoShare` returns `FAILED_PRECONDITION`.
-- Memos can no longer set `location` through create and update requests. The API accepts and ignores the field
+- Cat_two no longer sets `location` through create and update requests. The API accepts and ignores the field
   from older clients. Saved locations remain readable and can round-trip in ZIP archives.
 - Cat_two no longer enforces the `USAGE_LIMITS` instance setting on memos or attachments.
   Existing entries and configuration files remain readable. `GetUserUsage` reports usage with empty `limits`
   and a `limit_index` of `-1`. Request and upload chunk validation continue to apply.
 - Cat_two stores new attachment files in the managed `assets/` directory. Reading `instance/settings/STORAGE`
   reports `LOCAL` and the managed path template. Updates return `FAILED_PRECONDITION`.
-  Existing declarative `STORAGE` entries remain accepted to support migration of legacy attachments.
+  Upgrade still migrates legacy SQLite file bytes into `assets/`. Old S3 attachment records are retained,
+  and file downloads for S3-only attachments return `404`. Cat_two no longer fetches or removes S3 objects.
   Admin-only `GetInstanceStats` adds the running data directory, managed Markdown directory, and managed
   attachment directory.
 - Removed `InstanceSetting.MemoRelatedSetting`, `memo_related_setting`, and the `MEMO_RELATED` key.

@@ -70,7 +70,7 @@ type InstanceServiceClient interface {
 	// UpdateInstanceSetting replaces an instance setting. Admin only. Fields declarative configuration manages cannot be
 	// changed. Empty write-only credentials keep the stored values.
 	UpdateInstanceSetting(context.Context, *connect.Request[api.UpdateInstanceSettingRequest]) (*connect.Response[api.InstanceSetting], error)
-	// TestInstanceEmailSetting sends a test email with the provided or stored SMTP settings. Admin only.
+	// TestInstanceEmailSetting is a retired SMTP test RPC retained for protocol compatibility.
 	TestInstanceEmailSetting(context.Context, *connect.Request[api.TestInstanceEmailSettingRequest]) (*connect.Response[emptypb.Empty], error)
 	// GetInstanceStats gets resource usage statistics for the instance. Admin only. Results are cached for 60 seconds.
 	GetInstanceStats(context.Context, *connect.Request[api.GetInstanceStatsRequest]) (*connect.Response[api.InstanceStats], error)
@@ -194,7 +194,7 @@ type InstanceServiceHandler interface {
 	// UpdateInstanceSetting replaces an instance setting. Admin only. Fields declarative configuration manages cannot be
 	// changed. Empty write-only credentials keep the stored values.
 	UpdateInstanceSetting(context.Context, *connect.Request[api.UpdateInstanceSettingRequest]) (*connect.Response[api.InstanceSetting], error)
-	// TestInstanceEmailSetting sends a test email with the provided or stored SMTP settings. Admin only.
+	// TestInstanceEmailSetting is a retired SMTP test RPC retained for protocol compatibility.
 	TestInstanceEmailSetting(context.Context, *connect.Request[api.TestInstanceEmailSettingRequest]) (*connect.Response[emptypb.Empty], error)
 	// GetInstanceStats gets resource usage statistics for the instance. Admin only. Results are cached for 60 seconds.
 	GetInstanceStats(context.Context, *connect.Request[api.GetInstanceStatsRequest]) (*connect.Response[api.InstanceStats], error)

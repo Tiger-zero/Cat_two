@@ -19,16 +19,16 @@ func TestCheckMemoReadIsCreatorOnlyForAllStoredAudiences(t *testing.T) {
 	for _, visibility := range []store.Visibility{store.Public, store.Protected, store.Private, store.SpaceAudience} {
 		t.Run(string(visibility), func(t *testing.T) {
 			memo := &store.Memo{ID: 10, CreatorID: owner.ID, RowStatus: store.Normal, Visibility: visibility, SpaceID: &spaceID, ParentUID: &parentUID}
-			read := MemoReadFacts{Memo: memo, CreatorValid: true, SpaceValid: true}
-			require.True(t, CheckMemoReadContext(read.WithViewer(owner)).Allowed())
-			require.Equal(t, MemoReadDenialPermission, CheckMemoReadContext(read.WithViewer(other)).Denial)
-			require.Equal(t, MemoReadDenialPermission, CheckMemoReadContext(read.WithViewer(admin)).Denial)
-			require.Equal(t, MemoReadDenialUnauthenticated, CheckMemoReadContext(read.WithViewer(archived)).Denial)
-			require.Equal(t, MemoReadDenialUnauthenticated, CheckMemoReadContext(read.WithViewer(nil)).Denial)
+			read := MemoReadContext{Memo: memo, CreatorValid: true}
+			require.True(t, CheckMemoReadContext(withViewer(read, owner)).Allowed())
+			require.Equal(t, MemoReadDenialPermission, CheckMemoReadContext(withViewer(read, other)).Denial)
+			require.Equal(t, MemoReadDenialPermission, CheckMemoReadContext(withViewer(read, admin)).Denial)
+			require.Equal(t, MemoReadDenialUnauthenticated, CheckMemoReadContext(withViewer(read, archived)).Denial)
+			require.Equal(t, MemoReadDenialUnauthenticated, CheckMemoReadContext(withViewer(read, nil)).Denial)
 
 			memo.RowStatus = store.Archived
-			require.True(t, CheckMemoReadContext(read.WithViewer(owner)).Allowed())
-			require.Equal(t, MemoReadDenialNotFound, CheckMemoReadContext(read.WithViewer(admin)).Denial)
+			require.True(t, CheckMemoReadContext(withViewer(read, owner)).Allowed())
+			require.Equal(t, MemoReadDenialNotFound, CheckMemoReadContext(withViewer(read, admin)).Denial)
 		})
 	}
 }
@@ -50,17 +50,22 @@ func TestMemoAndAttachmentManagementRequireOwnership(t *testing.T) {
 func TestCheckMemoReadInvalidStateFailsClosed(t *testing.T) {
 	owner := &store.User{ID: 1, RowStatus: store.Normal}
 	memo := &store.Memo{ID: 10, CreatorID: owner.ID, RowStatus: store.Normal, Visibility: store.Public}
-	read := MemoReadFacts{Memo: memo, CreatorValid: true, SpaceValid: false}
-	require.True(t, CheckMemoReadContext(read.WithViewer(owner)).Allowed(), "legacy public note remains visible to its owner")
+	read := MemoReadContext{Memo: memo, CreatorValid: true}
+	require.True(t, CheckMemoReadContext(withViewer(read, owner)).Allowed(), "legacy public note remains visible to its owner")
 
 	memo.Visibility = store.SpaceAudience
-	require.Equal(t, MemoReadDenialNotFound, CheckMemoReadContext(read.WithViewer(owner)).Denial, "a corrupt Space placement remains unreadable")
+	require.True(t, CheckMemoReadContext(withViewer(read, owner)).Allowed(), "a historical placement does not affect the author")
 	memo.Visibility = store.Visibility("FUTURE_AUDIENCE")
-	require.Equal(t, MemoReadDenialNotFound, CheckMemoReadContext(read.WithViewer(owner)).Denial)
+	require.Equal(t, MemoReadDenialNotFound, CheckMemoReadContext(withViewer(read, owner)).Denial)
 	memo.Visibility = store.Public
 	memo.RowStatus = store.RowStatus("UNKNOWN")
-	require.Equal(t, MemoReadDenialNotFound, CheckMemoReadContext(read.WithViewer(owner)).Denial)
+	require.Equal(t, MemoReadDenialNotFound, CheckMemoReadContext(withViewer(read, owner)).Denial)
 	memo.RowStatus = store.Normal
 	read.CreatorValid = false
-	require.Equal(t, MemoReadDenialNotFound, CheckMemoReadContext(read.WithViewer(owner)).Denial)
+	require.Equal(t, MemoReadDenialNotFound, CheckMemoReadContext(withViewer(read, owner)).Denial)
+}
+
+func withViewer(read MemoReadContext, viewer *store.User) MemoReadContext {
+	read.Viewer = viewer
+	return read
 }

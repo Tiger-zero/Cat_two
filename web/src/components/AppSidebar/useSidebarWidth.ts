@@ -11,6 +11,7 @@ export const SIDEBAR_MIN_WIDTH = 224;
 /** Wider than this only starves the feed: its columns need 260px each and the rail holds short labels. */
 export const SIDEBAR_MAX_WIDTH = 400;
 export const SIDEBAR_DEFAULT_WIDTH = 320;
+const LIGHT_HOME_SIDEBAR_DEFAULT_WIDTH = 360;
 
 /** The rail may never take more than this share of the window. */
 const MAX_VIEWPORT_SHARE = 0.4;
@@ -28,14 +29,14 @@ const viewportMaxWidth = ({ minWidth, maxWidthFor }: PersistedWidthConfig): numb
   return Math.max(minWidth, Math.round(maxWidthFor(window.innerWidth)));
 };
 
-const readStoredWidth = ({ storageKey, defaultWidth }: PersistedWidthConfig): number => {
+const readStoredWidth = (storageKey: string): number | undefined => {
   try {
     const stored = Number(localStorage.getItem(storageKey));
     if (Number.isFinite(stored) && stored > 0) return stored;
   } catch (error) {
     console.warn(`Failed to load ${storageKey} from localStorage:`, error);
   }
-  return defaultWidth;
+  return undefined;
 };
 
 /**
@@ -43,9 +44,9 @@ const readStoredWidth = ({ storageKey, defaultWidth }: PersistedWidthConfig): nu
  * spare. Read synchronously on mount so a stored width never flashes past the default.
  */
 export const usePersistedWidth = (config: PersistedWidthConfig) => {
-  const [preferredWidth, setPreferredWidth] = useState(() => readStoredWidth(config));
+  const { storageKey, minWidth, defaultWidth } = config;
+  const [preferredWidth, setPreferredWidth] = useState(() => readStoredWidth(storageKey));
   const [maxWidth, setMaxWidth] = useState(() => viewportMaxWidth(config));
-  const { storageKey, minWidth } = config;
 
   useEffect(() => {
     const handleResize = () => setMaxWidth(viewportMaxWidth(config));
@@ -55,7 +56,7 @@ export const usePersistedWidth = (config: PersistedWidthConfig) => {
 
   // A narrow window caps what is rendered but leaves the stored preference alone, so widening
   // the window restores the width the user actually chose.
-  const width = Math.min(Math.max(preferredWidth, minWidth), maxWidth);
+  const width = Math.min(Math.max(preferredWidth ?? defaultWidth, minWidth), maxWidth);
 
   const setWidth = useCallback(
     (next: number) => {
@@ -70,7 +71,7 @@ export const usePersistedWidth = (config: PersistedWidthConfig) => {
     [storageKey, minWidth, maxWidth],
   );
 
-  return { width, minWidth, maxWidth, setWidth };
+  return { width, minWidth, maxWidth, defaultWidth, setWidth };
 };
 
 const SIDEBAR_WIDTH_CONFIG: PersistedWidthConfig = {
@@ -80,7 +81,9 @@ const SIDEBAR_WIDTH_CONFIG: PersistedWidthConfig = {
   maxWidthFor: (viewportWidth) => Math.min(SIDEBAR_MAX_WIDTH, viewportWidth * MAX_VIEWPORT_SHARE),
 };
 
+const LIGHT_HOME_SIDEBAR_WIDTH_CONFIG = { ...SIDEBAR_WIDTH_CONFIG, defaultWidth: LIGHT_HOME_SIDEBAR_DEFAULT_WIDTH };
+
 /** Desktop rail width. */
-const useSidebarWidth = () => usePersistedWidth(SIDEBAR_WIDTH_CONFIG);
+const useSidebarWidth = (lightHome = false) => usePersistedWidth(lightHome ? LIGHT_HOME_SIDEBAR_WIDTH_CONFIG : SIDEBAR_WIDTH_CONFIG);
 
 export default useSidebarWidth;

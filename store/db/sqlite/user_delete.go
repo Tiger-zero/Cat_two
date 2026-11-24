@@ -38,15 +38,8 @@ func (d *DB) DeleteUser(ctx context.Context, delete *store.DeleteUser) (*store.D
 	} else if err != nil {
 		return nil, errors.Wrap(err, "failed to read user")
 	}
-	var membershipCount int
-	if err := tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM space_member WHERE user_id = ? AND status <> 'INVITED'", delete.ID).Scan(&membershipCount); err != nil {
-		return nil, errors.Wrap(err, "failed to check user space memberships")
-	}
-	if membershipCount != 0 {
-		return nil, store.ErrUserHasSpaceMembership
-	}
-	if _, err := tx.ExecContext(ctx, "DELETE FROM space_member WHERE user_id = ? AND status = 'INVITED'", delete.ID); err != nil {
-		return nil, errors.Wrap(err, "failed to delete user space invitations")
+	if _, err := tx.ExecContext(ctx, "DELETE FROM space_member WHERE user_id = ?", delete.ID); err != nil {
+		return nil, errors.Wrap(err, "failed to delete the user's historical Space memberships")
 	}
 
 	targets, err := collectDeleteUserTargets(ctx, tx, delete.ID)
@@ -81,7 +74,7 @@ func collectDeleteUserTargets(ctx context.Context, tx dbExecutor, userID int32) 
 	}
 	targets.memoIDs = memoIDs
 
-	attachments, err := listDeleteUserAttachments(ctx, tx, userID, memoIDs)
+	attachments, err := listDeleteUserAttachments(ctx, tx, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -105,6 +98,9 @@ func collectDeleteUserTargets(ctx context.Context, tx dbExecutor, userID int32) 
 
 func deleteUserTargetsTx(ctx context.Context, tx dbExecutor, userID int32, targets *deleteUserTargetSet) error {
 	memoIDs := targets.memoIDs
+	if err := detachOtherUsersAttachments(ctx, tx, userID, memoIDs); err != nil {
+		return err
+	}
 
 	// Delete the memo rows before their reactions: a concurrent UpsertReaction
 	// then blocks on the uncommitted parent delete instead of inserting a row
@@ -164,8 +160,8 @@ func listDeleteUserMemos(ctx context.Context, tx dbExecutor, userID int32) ([]in
 	return memoIDs, nil
 }
 
-func listDeleteUserAttachments(ctx context.Context, tx dbExecutor, userID int32, memoIDs []int32) ([]*store.Attachment, error) {
-	attachments := make([]*store.Attachment, 0)
+func listDeleteUserAttachments(ctx context.Context, tx dbExecutor, userID int32) ([]*store.Attachment, error) {
+	var attachments []*store.Attachment
 	seen := make(map[int32]struct{})
 	if err := appendDeleteUserAttachments(ctx, tx, `
 		SELECT
@@ -180,60 +176,20 @@ func listDeleteUserAttachments(ctx context.Context, tx dbExecutor, userID int32,
 		WHERE creator_id = `+deleteUserPlaceholder(1), []any{userID}, seen, &attachments); err != nil {
 		return nil, err
 	}
-
-	for _, batch := range deleteUserBatches(memoIDs, deleteUserBatchSize) {
-		clause, args := deleteUserInClause(1, batch)
-		if err := appendDeleteUserAttachments(ctx, tx, `
-			SELECT
-				id,
-				uid,
-				creator_id,
-				memo_id,
-				storage_type,
-				reference,
-				payload
-			FROM attachment
-			WHERE memo_id IN `+clause, args, seen, &attachments); err != nil {
-			return nil, err
-		}
-	}
-
 	return attachments, nil
 }
 
-func appendDeleteUserAttachments(ctx context.Context, tx dbExecutor, query string, args []any, seen map[int32]struct{}, attachments *[]*store.Attachment) error {
-	rows, err := tx.QueryContext(ctx, query, args...)
-	if err != nil {
-		return err
-	}
-	defer rows.Close()
-
-	for rows.Next() {
-		attachment := &store.Attachment{}
-		var memoID sql.NullInt32
-		var storageType string
-		var payloadBytes []byte
-		if err := rows.Scan(&attachment.ID, &attachment.UID, &attachment.CreatorID, &memoID, &storageType, &attachment.Reference, &payloadBytes); err != nil {
+// detachOtherUsersAttachments preserves file ownership and content when an
+// old cross-account attachment loses the memo it was linked to.
+func detachOtherUsersAttachments(ctx context.Context, tx dbExecutor, userID int32, memoIDs []int32) error {
+	for _, batch := range deleteUserBatches(memoIDs, deleteUserBatchSize) {
+		clause, args := deleteUserInClause(1, batch)
+		args = append(args, userID)
+		if _, err := tx.ExecContext(ctx, `UPDATE attachment SET memo_id = NULL WHERE memo_id IN `+clause+` AND creator_id <> ?`, args...); err != nil {
 			return err
 		}
-		if _, exists := seen[attachment.ID]; exists {
-			continue
-		}
-		seen[attachment.ID] = struct{}{}
-		if memoID.Valid {
-			attachment.MemoID = &memoID.Int32
-		}
-		attachment.StorageType = storepb.AttachmentStorageType(storepb.AttachmentStorageType_value[storageType])
-		payload := &storepb.AttachmentPayload{}
-		if len(payloadBytes) > 0 {
-			if err := protojsonUnmarshaler.Unmarshal(payloadBytes, payload); err != nil {
-				return err
-			}
-		}
-		attachment.Payload = payload
-		*attachments = append(*attachments, attachment)
 	}
-	return rows.Err()
+	return nil
 }
 
 func listDeleteUserSettingKeys(ctx context.Context, tx dbExecutor, userID int32) ([]storepb.UserSetting_Key, error) {

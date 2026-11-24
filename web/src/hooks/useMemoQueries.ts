@@ -5,6 +5,7 @@ import {
   type InfiniteData,
   type Mutation,
   type MutationKey,
+  notifyManager,
   type QueryClient,
   queryOptions,
   useInfiniteQuery,
@@ -149,40 +150,49 @@ function findMemoInQueryData(data: unknown, name: string): Memo | undefined {
   return undefined;
 }
 
-/**
- * Looks a memo up by name in lists and comments already fetched, seeding detail
- * queries for memos the page already shows. A detail cached as unavailable (`null`) wins.
- */
-export function findMemoInCollectionQueries(queryClient: QueryClient, name: string, freshOnly = false): Memo | undefined {
-  if (queryClient.getQueryData(memoKeys.detail(name)) === null) return undefined;
-  for (const [key, data] of queryClient.getQueriesData<unknown>({ queryKey: memoKeys.all })) {
-    if (isMemo(data)) continue;
-    const state = queryClient.getQueryState(key);
-    if (freshOnly && (!state || state.isInvalidated || state.dataUpdatedAt < Date.now() - 10_000)) continue;
-    const memo = findMemoInQueryData(data, name);
-    if (memo) return memo;
-  }
-  return undefined;
+// Cat_two emits <row-id>:<counter> for the writable memo state. Compare counters
+// only within a row. Earlier servers and other revision formats use fetch order.
+function compareMemoRevisions(left: string, right: string): number {
+  if (left === right) return 0;
+  const first = /^(\d+):(\d+)$/.exec(left);
+  const second = /^(\d+):(\d+)$/.exec(right);
+  if (!first || !second || first[1] !== second[1]) return 0;
+  const firstCounter = BigInt(first[2]);
+  const secondCounter = BigInt(second[2]);
+  return firstCounter > secondCounter ? 1 : firstCounter < secondCounter ? -1 : 0;
 }
 
-/**
- * The freshest copy of a memo any query holds, by name: a detail or an entry in
- * a list or comment page. `null` when a detail query recorded it as
- * unavailable, `undefined` when no query holds it.
- */
+function findNewestMemo(queryClient: QueryClient, name: string, includeDetails: boolean, freshOnly = false): Memo | undefined {
+  const freshnessThreshold = freshOnly ? Date.now() - 10_000 : 0;
+  let found: { memo: Memo; updatedAt: number; detail: boolean } | undefined;
+  for (const { state } of queryClient.getQueryCache().findAll({ queryKey: memoKeys.all })) {
+    const detail = isMemo(state.data);
+    if (!includeDetails && detail) continue;
+    if (freshOnly && (state.isInvalidated || state.dataUpdatedAt < freshnessThreshold)) continue;
+    const memo = findMemoInQueryData(state.data, name);
+    if (!memo) continue;
+    // Appending a list page changes its timestamp even when this memo was not
+    // fetched. Prefer an actual newer revision before using the query timestamp.
+    const order = found
+      ? compareMemoRevisions(memo.revision, found.memo.revision) ||
+        state.dataUpdatedAt - found.updatedAt ||
+        Number(detail) - Number(found.detail)
+      : 1;
+    if (order > 0) found = { memo, updatedAt: state.dataUpdatedAt, detail };
+  }
+  return found?.memo;
+}
+
+/** Seeds a detail query from a cached list or comment page. A cached denial wins. */
+export function findMemoInCollectionQueries(queryClient: QueryClient, name: string, freshOnly = false): Memo | undefined {
+  if (queryClient.getQueryData(memoKeys.detail(name)) === null) return undefined;
+  return findNewestMemo(queryClient, name, false, freshOnly);
+}
+
+/** The newest cached copy of a memo, or `null` if its detail query denied access. */
 export function findMemoRecord(queryClient: QueryClient, name: string): Memo | null | undefined {
   if (queryClient.getQueryData(memoKeys.detail(name)) === null) return null;
-  let found: Memo | undefined;
-  let foundAt = -1;
-  for (const query of queryClient.getQueryCache().findAll({ queryKey: memoKeys.all })) {
-    if (query.state.dataUpdatedAt < foundAt || (query.state.dataUpdatedAt === foundAt && !isMemo(query.state.data))) continue;
-    const memo = findMemoInQueryData(query.state.data, name);
-    if (memo) {
-      found = memo;
-      foundAt = query.state.dataUpdatedAt;
-    }
-  }
-  return found;
+  return findNewestMemo(queryClient, name, true);
 }
 
 function patchMemoInCollectionQueries(queryClient: QueryClient, update: MemoPatch) {
@@ -211,11 +221,18 @@ export function updateMemoReactions(queryClient: QueryClient, name: string, upda
 export function useMemoRecord(name: string): Memo | null | undefined {
   const queryClient = useQueryClient();
   const subscribe = useCallback(
-    (onChange: () => void) =>
-      queryClient.getQueryCache().subscribe((event) => {
-        if (event.query.queryKey[0] === memoKeys.all[0]) onChange();
-      }),
-    [queryClient],
+    (onChange: () => void) => {
+      // Queries can be added during another component's render. Defer these
+      // notifications in the same way as React Query's own observers.
+      const notify = notifyManager.batchCalls(onChange);
+      return queryClient.getQueryCache().subscribe((event) => {
+        if (event.query.queryKey[0] !== memoKeys.all[0]) return;
+        if (event.query.queryKey[1] === "linkMetadata") return;
+        if (event.query.queryKey[1] === "detail" && event.query.queryKey[2] !== name) return;
+        if (event.type === "added" || event.type === "removed" || event.type === "updated") notify();
+      });
+    },
+    [name, queryClient],
   );
   const getSnapshot = useCallback(() => findMemoRecord(queryClient, name), [queryClient, name]);
   return useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
@@ -354,6 +371,11 @@ function memoUpdateTurn(queryClient: QueryClient, mutationKey: MutationKey, vari
 
 /** What a memo update keeps while it is pending: the memo to roll back to, and its optimistic patch. */
 type MemoUpdateContext = { previousMemo?: Memo; memoPatch?: MemoPatch };
+type MemoUpdateVariables = { update: Partial<Memo>; updateMask: string[]; expectedRevision?: string; taskBaseContent?: string };
+
+// A queued task can adopt the revision of its own locally committed predecessor.
+// A refetch may contain someone else's edits and must never authorize this update.
+const taskRevisions = new WeakMap<MemoUpdateVariables, string>();
 
 /** Updates memo `name`; its updates share one queue. Only a caller with no memo to update yet passes `undefined`. */
 export function useUpdateMemo(name: string | undefined) {
@@ -385,17 +407,23 @@ export function useUpdateMemo(name: string | undefined) {
 
   return useMutation({
     mutationKey,
-    mutationFn: async (variables: { update: Partial<Memo>; updateMask: string[]; expectedRevision?: string }) => {
+    mutationFn: async (variables: MemoUpdateVariables) => {
       await memoUpdateTurn(queryClient, mutationKey, variables);
+      if (variables.taskBaseContent !== undefined) {
+        const pending = queryClient.getMutationCache().findAll({ mutationKey, exact: true, status: "pending" });
+        const context = pending.find((mutation) => mutation.state.variables === variables)?.state.context as MemoUpdateContext | undefined;
+        if (context?.previousMemo?.content !== variables.taskBaseContent) {
+          throw new ConnectError("task changed since it was read", Code.Aborted);
+        }
+      }
       const memo = await memoServiceClient.updateMemo({
         memo: create(MemoSchema, variables.update as Record<string, unknown>),
         updateMask: create(FieldMaskSchema, { paths: variables.updateMask }),
-        expectedRevision: variables.expectedRevision || undefined,
+        expectedRevision: taskRevisions.get(variables) ?? (variables.expectedRevision || undefined),
       });
       return memo;
     },
-    onMutate: async ({ update, updateMask }): Promise<MemoUpdateContext> => {
-      if (updateMask.includes("space")) return {};
+    onMutate: async ({ update }): Promise<MemoUpdateContext> => {
       if (!update.name) {
         return {};
       }
@@ -404,8 +432,7 @@ export function useUpdateMemo(name: string | undefined) {
       await queryClient.cancelQueries({ queryKey: memoKeys.all });
 
       // Snapshot previous value for rollback on error
-      const previousMemo =
-        queryClient.getQueryData<Memo>(memoKeys.detail(update.name)) || findMemoInCollectionQueries(queryClient, update.name);
+      const previousMemo = findMemoRecord(queryClient, update.name) ?? undefined;
       const memoPatch: MemoPatch = { ...update, name: update.name };
 
       // Optimistically update the cache
@@ -436,24 +463,22 @@ export function useUpdateMemo(name: string | undefined) {
       queryClient.invalidateQueries({ queryKey: memoKeys.detail(previousMemo.name) });
       invalidateAround(previousMemo);
     },
-    onSuccess: (updatedMemo, { updateMask }) => {
+    onSuccess: (updatedMemo, variables) => {
       const queued = queuedUpdates();
-      if (updateMask.includes("space")) {
-        if (queued.length === 0) {
-          queryClient.invalidateQueries({ queryKey: memoKeys.all });
-        } else {
-          // Awaiting the queue here would keep this mutation pending and prevent the next update from starting.
-          const cache = queryClient.getMutationCache();
-          const unsubscribe = cache.subscribe(() => {
-            if (cache.findAll({ mutationKey, exact: true, status: "pending" }).length > 0) return;
-            unsubscribe();
-            queryClient.invalidateQueries({ queryKey: memoKeys.all });
-          });
-        }
+      const next = queued[0]?.state.variables as MemoUpdateVariables | undefined;
+      const sentRevision = taskRevisions.get(variables) ?? variables.expectedRevision;
+      if (
+        next &&
+        next.taskBaseContent === updatedMemo.content &&
+        sentRevision &&
+        updatedMemo.revision &&
+        (next.expectedRevision === sentRevision || next.expectedRevision === variables.expectedRevision)
+      ) {
+        taskRevisions.set(next, updatedMemo.revision);
       }
       // Invalidate user stats
       queryClient.invalidateQueries({ queryKey: userKeys.stats() });
-      // Placement changes move linked attachments between scoped libraries.
+      // The updated memo may link or unlink attachments.
       queryClient.invalidateQueries({ queryKey: attachmentKeys.lists() });
       // Update cache with server response, under the patches of the updates queued behind this one
       const memo = rebaseQueued(updatedMemo, queued);

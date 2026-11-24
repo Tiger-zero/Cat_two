@@ -18,14 +18,12 @@ import type {
   UserSetting_EditorSetting,
   UserSetting_GeneralSetting,
   UserSetting_TagsSetting,
-  UserSetting_WebhooksSetting,
 } from "@/types/proto/api/user_service_pb";
 import { AUTH_REASON_IDLE_SESSION, AUTH_REASON_PARAM } from "@/utils/redirect-safety";
 
 interface AuthState {
   currentUser: User | undefined;
   userGeneralSetting: UserSetting_GeneralSetting | undefined;
-  userWebhooksSetting: UserSetting_WebhooksSetting | undefined;
   userTagsSetting: UserSetting_TagsSetting | undefined;
   /** Unset until the user first changes an editor preference. */
   userEditorSetting: UserSetting_EditorSetting | undefined;
@@ -33,6 +31,7 @@ interface AuthState {
   isIdentityInitialized: boolean;
   /** User settings that affect memo presentation are safe to consume. */
   isUserSettingsInitialized: boolean;
+  userSettingsLoadError: boolean;
   isInitialized: boolean;
   isLoading: boolean;
   sessionEndReason?: AccessSessionEndReason;
@@ -53,11 +52,11 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 const UNAUTHENTICATED_STATE: AuthState = {
   currentUser: undefined,
   userGeneralSetting: undefined,
-  userWebhooksSetting: undefined,
   userTagsSetting: undefined,
   userEditorSetting: undefined,
   isIdentityInitialized: true,
   isUserSettingsInitialized: true,
+  userSettingsLoadError: false,
   isInitialized: true,
   isLoading: false,
 };
@@ -65,14 +64,15 @@ const UNAUTHENTICATED_STATE: AuthState = {
 export function AuthProvider({ children }: { children: ReactNode }) {
   const queryClient = useQueryClient();
   const initialization = useRef(0);
+  const settingsRequest = useRef(0);
   const [state, setState] = useState<AuthState>({
     currentUser: undefined,
     userGeneralSetting: undefined,
-    userWebhooksSetting: undefined,
     userTagsSetting: undefined,
     userEditorSetting: undefined,
     isIdentityInitialized: false,
     isUserSettingsInitialized: false,
+    userSettingsLoadError: false,
     isInitialized: false,
     isLoading: true,
   });
@@ -90,31 +90,39 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const fetchUserSettings = useCallback(async (userName: string) => {
     const initializedAt = initialization.current;
-    const { userSettings: settings } = await userServiceClient.listUserSettings({ parent: userName });
-    const generalSetting = settings.find((s) => s.value.case === "generalSetting");
-    const webhooksSetting = settings.find((s) => s.value.case === "webhooksSetting");
-    const tagsSetting = settings.find((s) => s.value.case === "tagsSetting");
-    const editorSetting = settings.find((s) => s.value.case === "editorSetting");
-    const userSettings = {
-      userGeneralSetting: generalSetting?.value.case === "generalSetting" ? generalSetting.value.value : undefined,
-      userWebhooksSetting: webhooksSetting?.value.case === "webhooksSetting" ? webhooksSetting.value.value : undefined,
-      userTagsSetting: tagsSetting?.value.case === "tagsSetting" ? tagsSetting.value.value : undefined,
-      userEditorSetting: editorSetting?.value.case === "editorSetting" ? editorSetting.value.value : undefined,
-    };
+    const request = ++settingsRequest.current;
+    const isCurrent = (prev: AuthState) =>
+      initializedAt === initialization.current && request === settingsRequest.current && prev.currentUser?.name === userName;
+    setState((prev) => (isCurrent(prev) && prev.userSettingsLoadError ? { ...prev, isLoading: true } : prev));
 
-    // Tag settings control sensitive-content blurring. Publish them as soon as
-    // this request settles.
-    setState((prev) =>
-      initializedAt === initialization.current && prev.currentUser?.name === userName
-        ? {
-            ...prev,
-            ...userSettings,
-            isUserSettingsInitialized: true,
-          }
-        : prev,
-    );
+    try {
+      const { userSettings: settings } = await userServiceClient.listUserSettings({ parent: userName });
+      const generalSetting = settings.find((s) => s.value.case === "generalSetting");
+      const tagsSetting = settings.find((s) => s.value.case === "tagsSetting");
+      const editorSetting = settings.find((s) => s.value.case === "editorSetting");
 
-    return userSettings;
+      setState((prev) =>
+        isCurrent(prev)
+          ? {
+              ...prev,
+              userGeneralSetting: generalSetting?.value.case === "generalSetting" ? generalSetting.value.value : undefined,
+              userTagsSetting: tagsSetting?.value.case === "tagsSetting" ? tagsSetting.value.value : undefined,
+              userEditorSetting: editorSetting?.value.case === "editorSetting" ? editorSetting.value.value : undefined,
+              isUserSettingsInitialized: true,
+              userSettingsLoadError: false,
+              isInitialized: true,
+              isLoading: false,
+            }
+          : prev,
+      );
+    } catch (error) {
+      // A background refresh can keep the already loaded settings. During
+      // initialization, wait for a successful retry before showing notes.
+      setState((prev) =>
+        isCurrent(prev) && !prev.isUserSettingsInitialized ? { ...prev, userSettingsLoadError: true, isLoading: false } : prev,
+      );
+      throw error;
+    }
   }, []);
 
   const initialize = useCallback(async () => {
@@ -122,7 +130,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // `initialize` also runs after sign-in, when the previous unauthenticated
     // state is already marked initialized. Reset the full-readiness flag so
     // consumers cannot render with the new identity and stale/default settings.
-    setState((prev) => ({ ...prev, isUserSettingsInitialized: false, isInitialized: false, isLoading: true }));
+    setState((prev) => ({
+      ...prev,
+      isUserSettingsInitialized: false,
+      userSettingsLoadError: false,
+      isInitialized: false,
+      isLoading: true,
+    }));
 
     // Try to get or refresh the access token.
     // This handles PWA isolated storage scenarios (e.g., iOS Safari) where localStorage
@@ -150,44 +164,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return;
     }
 
+    let currentUser: User | undefined;
     try {
-      const { user: currentUser } = await authServiceClient.getCurrentUser({});
-      if (initialization.current !== attempt) return;
-
-      if (!currentUser) {
-        clearAccessToken();
-        setState(UNAUTHENTICATED_STATE);
-        return;
-      }
-
-      // Publish the verified identity immediately so route modules and their
-      // data queries can start while display-sensitive settings are loading.
-      setState((prev) => ({
-        ...prev,
-        currentUser,
-        sessionEndReason: undefined,
-        isIdentityInitialized: true,
-      }));
-
-      queryClient.setQueryData(userKeys.currentUser(), currentUser);
-      queryClient.setQueryData(userKeys.detail(currentUser.name), currentUser);
-
-      const settings = await fetchUserSettings(currentUser.name);
-      if (initialization.current !== attempt) return;
-
-      setState({
-        currentUser,
-        ...settings,
-        isIdentityInitialized: true,
-        isUserSettingsInitialized: true,
-        isInitialized: true,
-        isLoading: false,
-      });
+      ({ user: currentUser } = await authServiceClient.getCurrentUser({}));
     } catch (error) {
       if (initialization.current !== attempt) return;
       console.error("Failed to initialize auth:", error);
+    }
+    if (initialization.current !== attempt) return;
+    if (!currentUser) {
       clearAccessToken();
       setState(UNAUTHENTICATED_STATE);
+      return;
+    }
+
+    // Start route and data loading as soon as the identity is verified.
+    const verifiedUser = currentUser;
+    setState((prev) => ({ ...prev, currentUser: verifiedUser, sessionEndReason: undefined, isIdentityInitialized: true }));
+    queryClient.setQueryData(userKeys.currentUser(), verifiedUser);
+    queryClient.setQueryData(userKeys.detail(verifiedUser.name), verifiedUser);
+
+    try {
+      await fetchUserSettings(verifiedUser.name);
+    } catch (error) {
+      if (initialization.current === attempt) console.error("Failed to load user settings:", error);
     }
   }, [fetchUserSettings, queryClient]);
 
@@ -205,17 +205,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const refetchSettings = useCallback(async () => {
     const currentUserName = state.currentUser?.name;
-    if (!currentUserName) {
-      return;
-    }
-
-    const settings = await fetchUserSettings(currentUserName);
-    setState((prev) => {
-      if (prev.currentUser?.name !== currentUserName) {
-        return prev;
-      }
-      return { ...prev, ...settings };
-    });
+    if (currentUserName) await fetchUserSettings(currentUserName);
   }, [fetchUserSettings, state.currentUser?.name]);
 
   // Sync the updated user to AuthContext and React Query cache after profile changes

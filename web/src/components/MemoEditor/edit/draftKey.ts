@@ -2,10 +2,7 @@ import { cacheService } from "./services/cacheService";
 import { findFirstStagedDraftKey } from "./services/stagedDraftFiles";
 
 /** What an editing session is for, which decides where its draft and caret are kept. */
-export type MemoEditIdentity =
-  | { kind: "edit"; name: string }
-  | { kind: "comment"; parent: string }
-  | { kind: "new"; scope: string; space?: string };
+export type MemoEditIdentity = { kind: "edit"; name: string } | { kind: "comment"; parent: string } | { kind: "new"; scope: string };
 
 /** The suffix of the draft's storage key; `cacheService.key` prefixes the user. */
 export function draftKeyFor(identity: MemoEditIdentity): string {
@@ -15,7 +12,7 @@ export function draftKeyFor(identity: MemoEditIdentity): string {
     case "comment":
       return `comment:${identity.parent}`;
     case "new":
-      return identity.space ? `new:${identity.scope}:${identity.space}` : `new:${identity.scope}`;
+      return `new:${identity.scope}`;
   }
 }
 
@@ -33,8 +30,7 @@ export function legacyDraftKeyFor(identity: MemoEditIdentity): string | undefine
   const [head, ...rest] = identity.scope.split(":");
   const prefix = LEGACY_SCOPE_PREFIXES[head];
   if (!prefix) return undefined;
-  const scoped = rest.length > 0 ? `${prefix}:${rest.join(":")}` : prefix;
-  return identity.space ? `${scoped}:${identity.space}` : scoped;
+  return rest.length > 0 ? `${prefix}:${rest.join(":")}` : prefix;
 }
 
 /** Finds the first Home or former sidebar draft, keeping its text and staged files under their original key. */
@@ -50,7 +46,7 @@ export async function resolveHomeDraftKey(username: string): Promise<string> {
   ];
   try {
     const stagedKey = typeof indexedDB === "undefined" ? undefined : await findFirstStagedDraftKey(keys);
-    return keys.find((key) => key === stagedKey || cacheService.readRaw(key) !== null) ?? homeKey;
+    return keys.find((key) => key === stagedKey || cacheService.readForEditor(key) !== null) ?? homeKey;
   } catch {
     // A failed lookup can conceal staged Home files. Open the regular draft and leave all stored drafts in place.
     return homeKey;

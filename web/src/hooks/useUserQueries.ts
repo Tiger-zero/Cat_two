@@ -19,6 +19,7 @@ import {
 
 const BATCH_GET_USERS_LIMIT = 100;
 const USER_PROFILE_STALE_TIME = 1000 * 60 * 5;
+const OWNER_STATS_STALE_TIME = 1000 * 60 * 2;
 type ListUserStatsQuery = Pick<ListUserStatsRequest, "state" | "filter">;
 // ListUserStats aggregates across every user through the "users/-" wildcard parent.
 const ALL_USERS_PARENT = `${userNamePrefix}-`;
@@ -51,63 +52,54 @@ export function useUser(name: string, options?: { enabled?: boolean }) {
   });
 }
 
-export function useUserStats(username?: string, options?: { enabled?: boolean; filter?: string }) {
+const userStatsQueryOptions = (name?: string, filter?: string) => ({
+  queryKey: name ? userKeys.userStats(name, filter) : userKeys.stats(),
+  queryFn: async () => {
+    if (!name) {
+      throw new Error("User name is required");
+    }
+    return userServiceClient.getUserStats(filter ? { name, filter } : { name, activityByDay: true });
+  },
+  ...(filter ? {} : { staleTime: OWNER_STATS_STALE_TIME }),
+});
+
+export function useUserStats(name?: string, options?: { enabled?: boolean; filter?: string }) {
+  const enabled = !!name && (options?.enabled ?? true);
   return useQuery({
-    queryKey: username ? userKeys.userStats(username, options?.filter) : userKeys.stats(),
-    queryFn: async () => {
-      if (!username) {
-        throw new Error("Username is required");
-      }
-      const stats = await userServiceClient.getUserStats({ name: username, filter: options?.filter });
-      return stats;
-    },
-    enabled: !!username && (options?.enabled ?? true),
+    ...userStatsQueryOptions(name, options?.filter),
+    enabled,
+    subscribed: enabled,
   });
 }
 
+const allUserStatsQueryOptions = (request: Partial<ListUserStatsQuery>) => ({
+  queryKey: userKeys.allUserStats(request),
+  queryFn: async () => {
+    const { userStats } = await userServiceClient.listUserStats(
+      create(ListUserStatsRequestSchema, { ...request, parent: ALL_USERS_PARENT }),
+    );
+    return userStats;
+  },
+});
+
 export function useAllUserStats(request: Partial<ListUserStatsQuery> = {}, options?: { enabled?: boolean }) {
   return useQuery({
-    queryKey: userKeys.allUserStats(request),
-    queryFn: async () => {
-      const { userStats } = await userServiceClient.listUserStats(
-        create(ListUserStatsRequestSchema, { ...request, parent: ALL_USERS_PARENT }),
-      );
-      return userStats;
-    },
+    ...allUserStatsQueryOptions(request),
     enabled: options?.enabled ?? true,
   });
 }
 
+const selectTagCounts = (data: UserStats | UserStats[]) =>
+  Array.isArray(data) ? mergeTagCounts(...data.map((stats) => stats.tagCounts)) : mergeTagCounts(data.tagCounts);
+
 export function useTagCounts(forCurrentUser = false) {
   const currentUser = useCurrentUser();
+  const options = forCurrentUser ? userStatsQueryOptions(currentUser?.name) : allUserStatsQueryOptions({});
 
-  return useQuery<UserStats | Record<string, number>, Error, Record<string, number>>({
-    queryKey:
-      forCurrentUser && currentUser?.name
-        ? userKeys.userStats(currentUser.name)
-        : [...userKeys.stats(), "tagCounts", forCurrentUser ? "current" : "all"],
-    queryFn: async (): Promise<UserStats | Record<string, number>> => {
-      if (forCurrentUser) {
-        if (!currentUser?.name) {
-          return {};
-        }
-        return userServiceClient.getUserStats({ name: currentUser.name });
-      } else {
-        // Fetch all user stats
-        const { userStats } = await userServiceClient.listUserStats({ parent: ALL_USERS_PARENT });
-
-        // Aggregate tag counts from all users
-        return mergeTagCounts(...userStats.map((stats) => stats.tagCounts));
-      }
-    },
-    select: (data) => {
-      if (forCurrentUser) {
-        return mergeTagCounts((data as UserStats).tagCounts);
-      }
-      return data as Record<string, number>;
-    },
+  return useQuery<UserStats | UserStats[], Error, Record<string, number>>({
+    ...options,
+    select: selectTagCounts,
     enabled: !forCurrentUser || !!currentUser?.name,
-    staleTime: 1000 * 60 * 2, // 2 minutes - tags don't change frequently
   });
 }
 

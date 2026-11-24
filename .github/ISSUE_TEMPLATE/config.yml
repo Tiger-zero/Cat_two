@@ -1,8 +1,8 @@
 blank_issues_enabled: false
 contact_links:
-  - name: Questions & Support
-    url: https://github.com/usememos/memos/discussions
-    about: Ask questions or get help in GitHub Discussions — please don't open issues for questions
-  - name: Documentation
-    url: https://www.usememos.com/docs
-    about: Check the documentation before opening an issue
+  - name: Cat_two deployment and maintenance
+    url: https://github.com/Tiger-zero/Cat_two/blob/main/.agents/skills/cat-two-product-development/references/deployment.md
+    about: Find setup, update, backup, and troubleshooting instructions.
+  - name: Security reporting
+    url: https://github.com/Tiger-zero/Cat_two/security
+    about: Read the security policy before reporting a vulnerability.

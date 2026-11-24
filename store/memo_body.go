@@ -17,6 +17,8 @@ const MemoBodyDirectory = "notes"
 
 const memoBodyStagePrefix = ".memo-body-"
 
+var errMemoBodyDigestMismatch = errors.New("memo body digest does not match its file")
+
 // LegacyMemoBody carries one SQL body that has not been copied to its Markdown file.
 type LegacyMemoBody struct {
 	ID      int32
@@ -28,10 +30,12 @@ type memoBodyDriver interface {
 	ListLegacyMemoBodies(context.Context, int32, int) ([]LegacyMemoBody, error)
 	SetMemoBodyDigest(context.Context, int32, string, string) (bool, error)
 	ListMemoBodyDigests(context.Context) ([]string, error)
+	ListMemoBodyReferences(context.Context, int32, int) ([]MemoBodyReference, error)
+	GetMemoBodyProjection(context.Context, int32, string) (string, error)
 }
 
 func (s *Store) memoBodiesEnabled() bool {
-	return s.profile.Personal && s.profile.Driver == "sqlite"
+	return s.profile.Personal
 }
 
 // MigrateMemoBodies publishes legacy SQL bodies and removes unreferenced old
@@ -96,15 +100,22 @@ func (s *Store) stageMemoBody(ctx context.Context, content string) (string, erro
 	return publishMemoBody(notes, content)
 }
 
-func (s *Store) hydrateMemoBodies(ctx context.Context, memos []*Memo) error {
+func (s *Store) hydrateMemoBodies(ctx context.Context, memos []*Memo, budget int) error {
 	var notes *os.Root
 	defer func() {
 		if notes != nil {
 			_ = notes.Close()
 		}
 	}()
+	bounded := budget > 0
 	for _, memo := range memos {
 		if memo.BodyDigest == "" {
+			if bounded {
+				budget -= len(memo.Content)
+				if budget < 0 {
+					return ErrMemoContentBudgetExceeded
+				}
+			}
 			continue
 		}
 		if err := ctx.Err(); err != nil {
@@ -117,11 +128,18 @@ func (s *Store) hydrateMemoBodies(ctx context.Context, memos []*Memo) error {
 				return err
 			}
 		}
-		body, err := readMemoBody(notes, memo.BodyDigest)
+		limit := -1
+		if bounded {
+			limit = budget
+		}
+		body, err := readMemoBodyWithinBudget(notes, memo.BodyDigest, limit)
 		if err != nil {
 			return errors.Wrapf(err, "read body for memo %d", memo.ID)
 		}
 		memo.Content = string(body)
+		if bounded {
+			budget -= len(body)
+		}
 	}
 	return nil
 }
@@ -217,6 +235,10 @@ func memoBodyDigest(body []byte) string {
 }
 
 func readMemoBody(notes *os.Root, digest string) ([]byte, error) {
+	return readMemoBodyWithinBudget(notes, digest, -1)
+}
+
+func openMemoBodyFile(notes *os.Root, digest string, limit int) (*os.File, error) {
 	if !validMemoBodyHex(digest, sha256.Size) {
 		return nil, errors.New("invalid memo body digest")
 	}
@@ -228,12 +250,31 @@ func readMemoBody(notes *os.Root, digest string) ([]byte, error) {
 	if !info.Mode().IsRegular() {
 		return nil, errors.New("memo body must be a regular file")
 	}
-	body, err := notes.ReadFile(name)
+	if limit >= 0 && info.Size() > int64(limit) {
+		return nil, ErrMemoContentBudgetExceeded
+	}
+	return notes.Open(name)
+}
+
+func readMemoBodyWithinBudget(notes *os.Root, digest string, limit int) ([]byte, error) {
+	file, err := openMemoBodyFile(notes, digest, limit)
 	if err != nil {
 		return nil, err
 	}
+	defer file.Close()
+	var reader io.Reader = file
+	if limit >= 0 {
+		reader = io.LimitReader(reader, int64(limit)+1)
+	}
+	body, err := io.ReadAll(reader)
+	if err != nil {
+		return nil, err
+	}
+	if limit >= 0 && len(body) > limit {
+		return nil, ErrMemoContentBudgetExceeded
+	}
 	if memoBodyDigest(body) != digest {
-		return nil, errors.New("memo body digest does not match its file")
+		return nil, errMemoBodyDigestMismatch
 	}
 	return body, nil
 }
@@ -245,27 +286,31 @@ func publishMemoBody(notes *os.Root, content string) (string, error) {
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return "", errors.Wrap(err, "verify existing memo body")
 	}
+	return digest, writeMemoBody(notes, digest, content)
+}
+
+func writeMemoBody(notes *os.Root, digest, content string) error {
 	// Publish a durable immutable file before any SQL transaction can point to it.
 	temp := memoBodyStagePrefix + rand.Text()
 	file, err := notes.OpenFile(temp, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
 	if err != nil {
-		return "", errors.Wrap(err, "stage memo body")
+		return errors.Wrap(err, "stage memo body")
 	}
 	defer notes.Remove(temp)
 	defer file.Close()
 	if _, err := io.WriteString(file, content); err != nil {
-		return "", errors.Wrap(err, "write memo body")
+		return errors.Wrap(err, "write memo body")
 	}
 	if err := file.Sync(); err != nil {
-		return "", errors.Wrap(err, "sync memo body")
+		return errors.Wrap(err, "sync memo body")
 	}
 	if err := file.Close(); err != nil {
-		return "", errors.Wrap(err, "close memo body")
+		return errors.Wrap(err, "close memo body")
 	}
 	if err := notes.Rename(temp, digest+".md"); err != nil {
-		return "", errors.Wrap(err, "publish memo body")
+		return errors.Wrap(err, "publish memo body")
 	}
-	return digest, syncMemoBodyDirectory(notes)
+	return syncMemoBodyDirectory(notes)
 }
 
 func sweepMemoBodies(ctx context.Context, driver memoBodyDriver, notes *os.Root) error {
@@ -285,25 +330,29 @@ func sweepMemoBodies(ctx context.Context, driver memoBodyDriver, notes *os.Root)
 		return errors.Wrap(err, "open memo body directory for cleanup")
 	}
 	defer dir.Close()
-	entries, err := dir.ReadDir(-1)
-	if err != nil {
-		return errors.Wrap(err, "list memo body directory")
-	}
-	for _, entry := range entries {
-		if err := ctx.Err(); err != nil {
-			return err
+	for {
+		entries, readErr := dir.ReadDir(128)
+		if readErr != nil && !errors.Is(readErr, io.EOF) {
+			return errors.Wrap(readErr, "list memo body directory")
 		}
-		if !entry.Type().IsRegular() {
-			continue
-		}
-		name := entry.Name()
-		digest, markdown := strings.CutSuffix(name, ".md")
-		_, referenced := protected[digest]
-		if strings.HasPrefix(name, memoBodyStagePrefix) || (markdown && validMemoBodyHex(digest, sha256.Size) && !referenced) {
-			if err := notes.Remove(name); err != nil && !errors.Is(err, os.ErrNotExist) {
-				return errors.Wrap(err, "remove unreferenced memo body")
+		for _, entry := range entries {
+			if err := ctx.Err(); err != nil {
+				return err
+			}
+			if !entry.Type().IsRegular() {
+				continue
+			}
+			name := entry.Name()
+			digest, markdown := strings.CutSuffix(name, ".md")
+			_, referenced := protected[digest]
+			if strings.HasPrefix(name, memoBodyStagePrefix) || (markdown && validMemoBodyHex(digest, sha256.Size) && !referenced) {
+				if err := notes.Remove(name); err != nil && !errors.Is(err, os.ErrNotExist) {
+					return errors.Wrap(err, "remove unreferenced memo body")
+				}
 			}
 		}
+		if errors.Is(readErr, io.EOF) {
+			return syncMemoBodyDirectory(notes)
+		}
 	}
-	return syncMemoBodyDirectory(notes)
 }

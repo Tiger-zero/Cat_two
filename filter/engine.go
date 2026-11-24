@@ -10,7 +10,7 @@ import (
 	"github.com/pkg/errors"
 )
 
-// Engine parses CEL filters into a dialect-agnostic condition tree.
+// Engine parses CEL filters into a condition tree.
 type Engine struct {
 	schema Schema
 	env    *cel.Env
@@ -45,11 +45,6 @@ type Program struct {
 	condition Condition
 }
 
-// ConditionTree exposes the underlying condition tree.
-func (p *Program) ConditionTree() Condition {
-	return p.condition
-}
-
 // Compile parses the filter string into an executable program.
 func (e *Engine) Compile(_ context.Context, filter string) (*Program, error) {
 	if strings.TrimSpace(filter) == "" {
@@ -77,19 +72,12 @@ func (e *Engine) Compile(_ context.Context, filter string) (*Program, error) {
 }
 
 // CompileToStatement compiles and renders the filter in a single step.
-func (e *Engine) CompileToStatement(ctx context.Context, filter string, opts RenderOptions) (Statement, error) {
+func (e *Engine) CompileToStatement(ctx context.Context, filter string) (Statement, error) {
 	program, err := e.Compile(ctx, filter)
 	if err != nil {
 		return Statement{}, err
 	}
-	return program.Render(opts)
-}
-
-// RenderOptions configure SQL rendering.
-type RenderOptions struct {
-	Dialect           DialectName
-	PlaceholderOffset int
-	DisableNullChecks bool
+	return program.Render()
 }
 
 // Statement contains the rendered SQL fragment and its args.
@@ -98,9 +86,9 @@ type Statement struct {
 	Args []any
 }
 
-// Render converts the program into a dialect-specific SQL fragment.
-func (p *Program) Render(opts RenderOptions) (Statement, error) {
-	renderer := newRenderer(p.schema, opts)
+// Render converts the program into a SQLite predicate and its arguments.
+func (p *Program) Render() (Statement, error) {
+	renderer := renderer{schema: p.schema}
 	return renderer.Render(p.condition)
 }
 

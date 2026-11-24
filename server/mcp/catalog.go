@@ -14,41 +14,7 @@ var curatedOperationIDs = []string{
 	"MemoService_CreateMemo",
 	"MemoService_GetMemo",
 	"MemoService_UpdateMemo",
-	"MemoService_DeleteMemo",
-	"MemoService_ListMemoComments",
-	"MemoService_CreateMemoComment",
-	"MemoService_ListMemoAttachments",
-	"MemoService_SetMemoAttachments",
-	"MemoService_ListMemoReactions",
-	"MemoService_UpsertMemoReaction",
-	"MemoService_DeleteMemoReaction",
-	"MemoService_ListMemoRelations",
-	"MemoService_SetMemoRelations",
-	"AttachmentService_ListAttachments",
-	"AttachmentService_CreateAttachment",
-	"AttachmentService_GetAttachment",
-	"AttachmentService_DeleteAttachment",
-	// The only allowed auth/identity operation is a read-only "whoami".
 	"AuthService_GetCurrentUser",
-	// Spaces: memos carry a placement (Memo.space) and a SPACE audience, so an
-	// agent needs to discover, create, and administer the spaces it can place
-	// memos in, and to handle the invitations that grant membership.
-	"SpaceService_ListSpaces",
-	"SpaceService_GetSpace",
-	"SpaceService_CreateSpace",
-	"SpaceService_UpdateSpace",
-	"SpaceService_DeleteSpace",
-	"SpaceService_ListSpaceMembers",
-	"SpaceService_GetSpaceMember",
-	"SpaceService_UpdateSpaceMember",
-	"SpaceService_DeleteSpaceMember",
-	"SpaceService_ListSpaceInvitations",
-	"SpaceService_ListUserSpaceInvitations",
-	"SpaceService_GetSpaceInvitation",
-	"SpaceService_CreateSpaceInvitation",
-	"SpaceService_AcceptSpaceInvitation",
-	"SpaceService_DeclineSpaceInvitation",
-	"SpaceService_DeleteSpaceInvitation",
 }
 
 type registeredOperation struct {
@@ -70,10 +36,6 @@ type requestBodySchemaOverride struct {
 	// properties. It replaces a cleared required list for partial updates so an
 	// empty body is rejected up front instead of failing later at the API.
 	minProperties int
-	// bodyOptional drops "body" from the tool's required arguments. It is for
-	// body: "*" bindings whose only field is supplied by the path, so that a
-	// caller does not have to pass an empty object to satisfy the schema.
-	bodyOptional bool
 }
 
 // requestBodySchemaOverrides adjusts resource schemas to match how each HTTP
@@ -89,57 +51,6 @@ var requestBodySchemaOverrides = map[string]requestBodySchemaOverride{
 		omittedProperties: []string{"name"},
 		minProperties:     1,
 	},
-	"MemoService_CreateMemoComment": {
-		required: []string{"content"},
-	},
-	"MemoService_SetMemoAttachments": {
-		required:          []string{"attachments"},
-		omittedProperties: []string{"name"},
-	},
-	"MemoService_SetMemoRelations": {
-		required:          []string{"relations"},
-		omittedProperties: []string{"name"},
-	},
-	// The memo is the parent of its reactions; the path binds it.
-	"MemoService_UpsertMemoReaction": {
-		required:          []string{"reaction"},
-		omittedProperties: []string{"parent"},
-	},
-	// UpdateSpace requires an update mask, which the REST gateway infers from
-	// the fields present in the body. The space name comes from the path.
-	"SpaceService_UpdateSpace": {
-		clearRequired:     true,
-		omittedProperties: []string{"name"},
-		minProperties:     1,
-	},
-	// Only a member's role is mutable; the member name and user identity are
-	// both fixed by the path.
-	"SpaceService_UpdateSpaceMember": {
-		required:          []string{"role"},
-		omittedProperties: []string{"name", "user"},
-	},
-	// Accept and decline are body: "*" bindings whose single field, the
-	// invitation name, is already bound from the path.
-	"SpaceService_AcceptSpaceInvitation": {
-		clearRequired:     true,
-		omittedProperties: []string{"name"},
-		bodyOptional:      true,
-	},
-	"SpaceService_DeclineSpaceInvitation": {
-		clearRequired:     true,
-		omittedProperties: []string{"name"},
-		bodyOptional:      true,
-	},
-}
-
-// requestBodyRequired reports whether a tool call must carry a "body" argument
-// for the operation: the OpenAPI request body is required and no override has
-// made it optional.
-func requestBodyRequired(operation *openAPIOperation) bool {
-	if operation.RequestBody == nil || !operation.RequestBody.Required {
-		return false
-	}
-	return !requestBodySchemaOverrides[operation.OperationID].bodyOptional
 }
 
 var wordBoundary = regexp.MustCompile(`([a-z0-9])([A-Z])`)
@@ -149,25 +60,14 @@ var wordBoundary = regexp.MustCompile(`([a-z0-9])([A-Z])`)
 // rename). Without this, a stale key would silently miss and the renamed
 // operation would lose its schema/annotation override with no error.
 func validateOperationOverrides(registry map[string]*openAPIOperation) error {
-	tables := []struct {
-		name string
-		ids  []string
-	}{
-		{"requestBodySchemaOverrides", mapKeys(requestBodySchemaOverrides)},
-		{"idempotentOperationIDs", mapKeys(idempotentOperationIDs)},
-		{"destructiveOperationIDs", mapKeys(destructiveOperationIDs)},
-	}
-	for _, table := range tables {
-		for _, operationID := range table.ids {
-			if _, ok := registry[operationID]; !ok {
-				return errors.Errorf("%s references unknown operation %q", table.name, operationID)
-			}
-		}
-	}
 	// An omitted property must exist in the body, or the override is stale
 	// after a binding rename and silently leaves a path-bound field exposed.
 	for operationID, override := range requestBodySchemaOverrides {
-		properties := schemaProperties(registry[operationID].RequestBodySchema["properties"])
+		operation, ok := registry[operationID]
+		if !ok {
+			return errors.Errorf("requestBodySchemaOverrides references unknown operation %q", operationID)
+		}
+		properties := schemaProperties(operation.RequestBodySchema["properties"])
 		for _, name := range override.omittedProperties {
 			if _, ok := properties[name]; !ok {
 				return errors.Errorf("requestBodySchemaOverrides omits property %q missing from the %s request body", name, operationID)
@@ -175,14 +75,6 @@ func validateOperationOverrides(registry map[string]*openAPIOperation) error {
 		}
 	}
 	return nil
-}
-
-func mapKeys[V any](m map[string]V) []string {
-	keys := make([]string, 0, len(m))
-	for key := range m {
-		keys = append(keys, key)
-	}
-	return keys
 }
 
 func buildCuratedTools(registry map[string]*openAPIOperation) ([]*sdkmcp.Tool, map[string]*registeredOperation, error) {
@@ -280,7 +172,7 @@ func inputSchemaForOperation(operation *openAPIOperation) jsonSchema {
 		bodySchema := requestBodySchema(operation)
 		maps.Copy(defs, extractSchemaDefs(bodySchema))
 		properties["body"] = bodySchema
-		if requestBodyRequired(operation) {
+		if operation.RequestBody.Required {
 			required = append(required, "body")
 		}
 	}
@@ -351,36 +243,11 @@ func extractSchemaDefs(schema jsonSchema) map[string]any {
 	return defs
 }
 
-// idempotentOperationIDs lists operations whose idempotency the HTTP-method
-// heuristic gets wrong. The "Set*" operations declaratively replace the full
-// set on a memo, so repeating an identical call converges to the same state —
-// idempotent — even though they are served over PATCH (which the heuristic
-// treats as non-idempotent).
-var idempotentOperationIDs = map[string]bool{
-	"MemoService_SetMemoAttachments": true,
-	"MemoService_SetMemoRelations":   true,
-}
-
-// destructiveOperationIDs lists mutating operations that can overwrite or
-// remove existing user data despite not using DELETE.
-var destructiveOperationIDs = map[string]bool{
-	"MemoService_UpdateMemo":         true,
-	"MemoService_SetMemoAttachments": true,
-	"MemoService_SetMemoRelations":   true,
-	"SpaceService_UpdateSpace":       true,
-	"SpaceService_UpdateSpaceMember": true,
-}
-
-// annotationsForOperation derives the method-based annotations and then applies
-// per-operation overrides that the HTTP method alone cannot express.
+// An update can overwrite user content even though it uses PATCH.
 func annotationsForOperation(operation *openAPIOperation, title string) *sdkmcp.ToolAnnotations {
 	annotations := annotationsForMethod(operation.Method, title)
-	if idempotentOperationIDs[operation.OperationID] {
-		annotations.IdempotentHint = true
-	}
-	if destructiveOperationIDs[operation.OperationID] {
-		destructive := true
-		annotations.DestructiveHint = &destructive
+	if operation.OperationID == "MemoService_UpdateMemo" {
+		annotations.DestructiveHint = new(true)
 	}
 	return annotations
 }

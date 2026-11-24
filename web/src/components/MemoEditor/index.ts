@@ -1,3 +1,4 @@
+export { preloadMemoEditing } from "./edit/loadEditSession";
 export {
   type MemoDraftSeed,
   type MemoEditingProps,
@@ -6,5 +7,4 @@ export {
   type MemoEditorEditProps,
   type MemoEditorProps,
   type MemoEditorViewProps,
-  preloadMemoEditing,
 } from "./MemoEditor";

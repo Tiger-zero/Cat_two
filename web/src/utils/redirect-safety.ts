@@ -3,9 +3,6 @@ import { ROUTES } from "@/router/routes";
 /** Query parameter used to preserve the intended destination across the auth flow. */
 export const AUTH_REDIRECT_PARAM = "redirect";
 
-/** Set to false to show manual SSO controls instead of automatically redirecting. */
-export const AUTH_AUTO_SIGN_IN_PARAM = "auto_sign_in";
-
 /** Query parameter used to surface why the user was sent to the auth page. */
 export const AUTH_REASON_PARAM = "reason";
 
@@ -22,7 +19,7 @@ export const AUTH_REASON_SIGNUPS_CLOSED = "signups-closed";
  *
  * Returns the path when it is a safe same-origin internal destination, otherwise `undefined`.
  * Rejected targets include: non-string / empty, protocol-relative URLs (`//host`), absolute URLs,
- * and any auth-family route (`/auth`, `/auth/callback`, …) which must not be a landing target
+ * and any auth-family route (`/auth`, `/auth/admin`, …) which must not be a landing target
  * after sign-in.
  */
 export function getSafeRedirectPath(path: string | null | undefined): string | undefined {
@@ -34,8 +31,7 @@ export function getSafeRedirectPath(path: string | null | undefined): string | u
     return undefined;
   }
 
-  // Never let a redirect target point back into the auth flow — it would either
-  // bounce the user in a guest/auth guard loop or hijack the OAuth callback.
+  // Never let a redirect target point back into the auth flow and create a redirect loop.
   if (path === ROUTES.AUTH || path.startsWith(`${ROUTES.AUTH}/`) || path.startsWith(`${ROUTES.AUTH}?`)) {
     return undefined;
   }
@@ -47,7 +43,7 @@ export function getSafeRedirectPath(path: string | null | undefined): string | u
  * Builds a URL pointing at the auth entry page, optionally embedding a validated
  * `redirect` target and a machine-readable `reason` code.
  */
-export function buildAuthRoute(options?: { redirect?: string | null; reason?: string | null; autoSignIn?: boolean }): string {
+export function buildAuthRoute(options?: { redirect?: string | null; reason?: string | null }): string {
   const searchParams = new URLSearchParams();
   const redirectPath = getSafeRedirectPath(options?.redirect);
 
@@ -57,10 +53,6 @@ export function buildAuthRoute(options?: { redirect?: string | null; reason?: st
 
   if (options?.reason) {
     searchParams.set(AUTH_REASON_PARAM, options.reason);
-  }
-
-  if (options?.autoSignIn === false) {
-    searchParams.set(AUTH_AUTO_SIGN_IN_PARAM, "false");
   }
 
   const search = searchParams.toString();
@@ -86,13 +78,4 @@ export function isPublicRoute(path: string): boolean {
  */
 export function shouldGatePrivateInstance(params: { isPrivateInstance: boolean; isAuthenticated: boolean }): boolean {
   return params.isPrivateInstance && !params.isAuthenticated;
-}
-
-/**
- * Appends the given search params to a path, so links between auth pages
- * (sign-in <-> sign-up) preserve the redirect target and other params.
- */
-export function appendSearchParams(path: string, searchParams: URLSearchParams): string {
-  const queryString = searchParams.toString();
-  return queryString ? `${path}?${queryString}` : path;
 }

@@ -112,22 +112,13 @@ func testEmailForUsername(username string) string {
 	return strings.ReplaceAll(username, "@", "-at-") + "@example.com"
 }
 
-// InviteAndAcceptSpaceMember is a test fixture helper that exercises the invitation
-// lifecycle instead of bypassing invitee consent.
-func (ts *TestService) InviteAndAcceptSpaceMember(ctx context.Context, create *store.SpaceMember, actorUserID int32) (*store.SpaceMember, error) {
-	invitation, err := ts.Store.CreateSpaceInvitation(ctx, &store.SpaceInvitation{
-		SpaceID: create.SpaceID,
-		UserID:  create.UserID,
-		Role:    create.Role,
-	}, actorUserID)
-	if err != nil {
-		return nil, err
-	}
-	return ts.Store.AcceptSpaceInvitation(ctx, &store.AcceptSpaceInvitation{SpaceID: invitation.SpaceID, UserID: invitation.UserID}, invitation.UserID)
-}
-
 // CreateUserContext creates a context with the given user's ID for authentication.
 func (*TestService) CreateUserContext(ctx context.Context, userID int32) context.Context {
 	// Use the context key from the auth package
 	return context.WithValue(ctx, auth.UserIDContextKey, userID)
+}
+
+// CreateSessionContext also installs the claims normally added by web authentication.
+func (ts *TestService) CreateSessionContext(ctx context.Context, userID int32) context.Context {
+	return auth.SetUserClaimsInContext(ts.CreateUserContext(ctx, userID), &auth.UserClaims{UserID: userID})
 }

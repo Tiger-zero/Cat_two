@@ -22,8 +22,8 @@ func newLoginBlocklistCommand() *cobra.Command {
 	}
 	flags := cmd.PersistentFlags()
 	flags.String("data", "", "data directory of the instance")
-	flags.String("driver", "sqlite", "database driver of the instance (sqlite, mysql, postgres)")
-	flags.String("dsn", "", "database source name of the instance")
+	flags.String("driver", profile.SQLiteDriver, "database driver (sqlite)")
+	flags.String("dsn", "", "SQLite database path or file URI")
 	remove := &cobra.Command{
 		Use:   "remove",
 		Short: "Clear the sign-in block for one IP address",

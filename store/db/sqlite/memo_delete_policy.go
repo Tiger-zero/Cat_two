@@ -23,9 +23,8 @@ func (d *DB) DeleteMemoWithPolicy(ctx context.Context, delete *store.DeleteMemoW
 	var creatorID int32
 	var rowStatus store.RowStatus
 	var visibility store.Visibility
-	var space sql.NullInt64
-	if err := tx.QueryRowContext(ctx, "SELECT creator_id, row_status, visibility, space_id FROM memo WHERE id = ?", delete.MemoID).Scan(
-		&creatorID, &rowStatus, &visibility, &space,
+	if err := tx.QueryRowContext(ctx, "SELECT creator_id, row_status, visibility FROM memo WHERE id = ?", delete.MemoID).Scan(
+		&creatorID, &rowStatus, &visibility,
 	); errors.Is(err, sql.ErrNoRows) {
 		return nil, store.ErrMemoMutationConflict
 	} else if err != nil {
@@ -33,24 +32,7 @@ func (d *DB) DeleteMemoWithPolicy(ctx context.Context, delete *store.DeleteMemoW
 	} else if creatorID != delete.ActorUserID && !actor.Admin {
 		return nil, store.ErrMemoPermissionDenied
 	}
-	spaceID := store.NullInt32Pointer(space)
-	spaceExists := false
-	actorMember := false
-	if spaceID != nil {
-		var existingSpaceID int32
-		if err := tx.QueryRowContext(ctx, "SELECT id FROM space WHERE id = ?", *spaceID).Scan(&existingSpaceID); err == nil {
-			spaceExists = true
-		} else if !errors.Is(err, sql.ErrNoRows) {
-			return nil, errors.Wrap(err, "failed to read memo space")
-		}
-		if spaceExists && !actor.Admin {
-			actorMember, err = sqliteSpaceMemberActive(ctx, tx, *spaceID, delete.ActorUserID)
-			if err != nil {
-				return nil, errors.Wrap(err, "failed to read memo membership")
-			}
-		}
-	}
-	actorCanRead := store.MemoDeleteActorCanRead(rowStatus, visibility, spaceID, spaceExists, actorMember || actor.Admin)
+	actorCanRead := creatorID == delete.ActorUserID && store.MemoDeleteActorCanRead(rowStatus, visibility)
 
 	deleteIDs, err := listSQLiteCommentSubtreeMemoIDs(ctx, tx, delete.MemoID)
 	if err != nil {

@@ -86,17 +86,6 @@ describe("the initial draft and useMemoInit", () => {
     expect(setSelection).not.toHaveBeenCalled();
   });
 
-  it("restores an old draft without reusing its Space assignment", () => {
-    cacheService.saveNow(draftKey, {
-      content: "Draft",
-      attachments: [],
-      space: "spaces/work",
-    });
-    mountSession({});
-    expect(getEditorState().content).toBe("Draft");
-    expect(getEditorState().metadata.space).toBeUndefined();
-  });
-
   it("restores uploaded attachment bindings with a new memo draft", () => {
     const attachment = create(AttachmentSchema, { name: "attachments/image-one", filename: "image.png", type: "image/png" });
     cacheService.saveNow(draftKey, { content: "![image](/file/attachments/image-one)", attachments: [attachment] });
@@ -114,7 +103,6 @@ describe("the initial draft and useMemoInit", () => {
     const state = initialEditorState({ memo, draftKey });
 
     expect(state.content).toBe("The memo");
-    expect(state.metadata.space).toBe("spaces/work");
     expect(state.ui.isFocusMode).toBe(false);
     expect(cacheService.loadDraft(draftKey).content).toBe("");
   });

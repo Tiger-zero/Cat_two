@@ -26,8 +26,6 @@ func TestPublicMethodsArePublic(t *testing.T) {
 		"/memos.api.UserService/CreateUser",
 		"/memos.api.UserService/GetUser",
 		"/memos.api.UserService/BatchGetUsers",
-		// Identity Provider Service
-		"/memos.api.IdentityProviderService/ListIdentityProviders",
 		// Link previews are independent of notes.
 		"/memos.api.MemoService/GetLinkMetadata",
 		"/memos.api.MemoService/BatchGetLinkMetadata",
@@ -129,7 +127,7 @@ func TestAuthBootstrapMethodsAreSubsetOfPublic(t *testing.T) {
 // TestAuthBootstrapClassification verifies which endpoints remain reachable by
 // anonymous callers when the instance access mode is PRIVATE.
 func TestAuthBootstrapClassification(t *testing.T) {
-	// Reachable while private: sign-in flow, registration, instance metadata, SSO, share links.
+	// Reachable while private: sign-in flow, registration, instance metadata, and retired share links.
 	bootstrap := []string{
 		"/memos.api.AuthService/SignIn",
 		"/memos.api.AuthService/RefreshToken",
@@ -137,7 +135,6 @@ func TestAuthBootstrapClassification(t *testing.T) {
 		"/memos.api.InstanceService/GetInstanceProfile",
 		"/memos.api.InstanceService/GetInstanceSetting",
 		"/memos.api.InstanceService/BatchGetInstanceSettings",
-		"/memos.api.IdentityProviderService/ListIdentityProviders",
 		"/memos.api.MemoService/GetSharedMemo",
 	}
 	for _, method := range bootstrap {

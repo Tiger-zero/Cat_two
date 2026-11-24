@@ -2,6 +2,8 @@ package test
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"sync"
 	"testing"
 	"time"
@@ -20,7 +22,7 @@ type pausedSessionDriver struct {
 	pause          sync.Once
 }
 
-func (driver *pausedSessionDriver) CompareAndSetUserSetting(ctx context.Context, setting *store.UserSetting, previous *string) (bool, error) {
+func (driver *pausedSessionDriver) CompareAndSetUserSetting(ctx context.Context, tx *sql.Tx, setting *store.UserSetting, previous *string) (bool, error) {
 	first := false
 	driver.pause.Do(func() {
 		first = true
@@ -33,10 +35,69 @@ func (driver *pausedSessionDriver) CompareAndSetUserSetting(ctx context.Context,
 		case <-driver.proceed:
 		}
 	}
-	return driver.Driver.CompareAndSetUserSetting(ctx, setting, previous)
+	return driver.Driver.CompareAndSetUserSetting(ctx, tx, setting, previous)
 }
 
 func (*pausedSessionDriver) Close() error { return nil }
+
+type failingSessionDriver struct {
+	store.Driver
+	err error
+}
+
+func (d *failingSessionDriver) CompareAndSetUserSetting(context.Context, *sql.Tx, *store.UserSetting, *string) (bool, error) {
+	return false, d.err
+}
+
+func (*failingSessionDriver) Close() error { return nil }
+
+func TestPasswordChangeRollsBackWhenSessionRevocationFails(t *testing.T) {
+	ctx := t.Context()
+	ts := NewTestingStore(ctx, t)
+	t.Cleanup(func() { require.NoError(t, ts.Close()) })
+	user, err := createTestingHostUser(ctx, ts)
+	require.NoError(t, err)
+	require.NoError(t, ts.AddUserRefreshToken(ctx, user.ID, &storepb.RefreshTokensUserSetting_RefreshToken{TokenId: "other-browser"}))
+
+	revokeErr := errors.New("failed to save refresh sessions")
+	failedStore := store.New(&failingSessionDriver{Driver: ts.GetDriver(), err: revokeErr}, &profile.Profile{Data: ts.GetDataDir()})
+	t.Cleanup(func() { require.NoError(t, failedStore.Close()) })
+	_, err = failedStore.UpdateUser(ctx, &store.UpdateUser{ID: user.ID, PasswordHash: new("replacement")})
+	require.ErrorIs(t, err, revokeErr)
+
+	users, err := ts.GetDriver().ListUsers(ctx, &store.FindUser{ID: &user.ID})
+	require.NoError(t, err)
+	require.Len(t, users, 1)
+	require.Equal(t, user.PasswordHash, users[0].PasswordHash)
+	sessions, err := ts.GetUserRefreshTokens(ctx, user.ID)
+	require.NoError(t, err)
+	require.Len(t, sessions, 1)
+	require.Equal(t, "other-browser", sessions[0].GetTokenId())
+}
+
+func TestSignInSessionChecksCurrentCredentials(t *testing.T) {
+	ctx := t.Context()
+	ts := NewTestingStore(ctx, t)
+	t.Cleanup(func() { require.NoError(t, ts.Close()) })
+	user, err := createTestingHostUser(ctx, ts)
+	require.NoError(t, err)
+	state, err := ts.GetUserTwoFactor(ctx, user.ID)
+	require.NoError(t, err)
+
+	current, err := ts.UpdateUser(ctx, &store.UpdateUser{ID: user.ID, PasswordHash: new("replacement")})
+	require.NoError(t, err)
+	token := &storepb.RefreshTokensUserSetting_RefreshToken{TokenId: "new-browser"}
+	require.ErrorIs(t, ts.AddUserRefreshTokenForSignIn(ctx, user, state.SessionRevision, token), store.ErrSignInCredentialsChanged)
+	require.NoError(t, ts.ResetUserTwoFactor(ctx, user.ID))
+	require.ErrorIs(t, ts.AddUserRefreshTokenForSignIn(ctx, current, state.SessionRevision, token), store.ErrSignInCredentialsChanged)
+	sessions, err := ts.GetUserRefreshTokens(ctx, user.ID)
+	require.NoError(t, err)
+	require.Empty(t, sessions)
+
+	state, err = ts.GetUserTwoFactor(ctx, user.ID)
+	require.NoError(t, err)
+	require.NoError(t, ts.AddUserRefreshTokenForSignIn(ctx, current, state.SessionRevision, token))
+}
 
 func TestUserSettingRefreshCannotRestoreSessionRevokedByAnotherStore(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)

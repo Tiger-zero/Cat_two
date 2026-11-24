@@ -32,30 +32,31 @@ const writeDismissed = (userName: string) => {
  */
 export function useWelcomeGuide(onOwnHome: boolean) {
   const { currentUser, isUserSettingsInitialized } = useAuth();
-  const { data: stats } = useUserStats(currentUser?.name, { enabled: Boolean(currentUser) && onOwnHome });
+  const userName = currentUser?.name;
   const [open, setOpen] = useState(false);
-  const [dismissed, setDismissed] = useState(false);
+  const [dismissedUser, setDismissedUser] = useState<string>();
 
   const createdAt = currentUser?.createTime ? timestampDate(currentUser.createTime).getTime() : undefined;
-  const eligible =
+  const canOpenAutomatically =
     onOwnHome &&
     isUserSettingsInitialized &&
-    currentUser !== undefined &&
+    !!userName &&
     createdAt !== undefined &&
     Date.now() - createdAt < WELCOME_WINDOW_MS &&
-    stats !== undefined &&
-    stats.totalMemoCount === 0 &&
-    !readDismissed(currentUser.name);
+    userName !== dismissedUser &&
+    !readDismissed(userName);
+  const { data: stats } = useUserStats(userName, { enabled: canOpenAutomatically });
+  const eligible = canOpenAutomatically && stats?.totalMemoCount === 0;
 
   useEffect(() => {
-    if (eligible && !dismissed) setOpen(true);
-  }, [eligible, dismissed]);
+    if (eligible) setOpen(true);
+  }, [eligible]);
 
   const onOpenChange = (nextOpen: boolean) => {
     setOpen(nextOpen);
-    if (nextOpen || !currentUser) return;
-    setDismissed(true);
-    writeDismissed(currentUser.name);
+    if (nextOpen || !userName) return;
+    setDismissedUser(userName);
+    writeDismissed(userName);
   };
 
   /** Opens the guide regardless of the rule, for the empty timeline's link. */

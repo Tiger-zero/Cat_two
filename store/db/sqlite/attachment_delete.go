@@ -33,7 +33,7 @@ func (d *DB) DeleteAttachmentsWithPolicy(ctx context.Context, policy *store.Atta
 	if err := store.ValidateAttachmentDeletionMemoSnapshots(memoIDs, policy.ExpectedMemoContents); err != nil {
 		return err
 	}
-	if err := authorizeSQLiteAttachmentMutation(ctx, tx, policy.ActorUserID, actor.Admin, memoIDs, policy.ExpectedMemoContents, d.profile != nil && d.profile.Personal); err != nil {
+	if err := authorizeSQLiteAttachmentMutation(ctx, tx, policy.ActorUserID, actor.Admin, memoIDs, policy.ExpectedMemoContents); err != nil {
 		return err
 	}
 
@@ -52,6 +52,9 @@ func (d *DB) DeleteAttachmentsWithPolicy(ctx context.Context, policy *store.Atta
 		if err := bumpMemoRevision(ctx, tx, memoID); err != nil {
 			return err
 		}
+	}
+	if err := store.EnqueueAttachmentStorageCleanup(ctx, tx, attachments, enqueueAttachmentStorageCleanupSQL); err != nil {
+		return errors.Wrap(err, "failed to queue deleted attachment storage cleanup")
 	}
 	if err := tx.Commit(); err != nil {
 		return errors.Wrap(err, "failed to commit attachment deletion")
@@ -79,40 +82,23 @@ func authorizeSQLiteAttachmentMutation(
 	actorIsAdmin bool,
 	memoIDs []int32,
 	expectedMemoContents map[int32]string,
-	personal bool,
 ) error {
 	for _, memoID := range memoIDs {
 		snapshot := &store.MemoWriteSnapshot{ActorIsAdmin: actorIsAdmin}
-		var currentSpace sql.NullInt64
 		var content string
-		if err := tx.QueryRowContext(ctx, `SELECT creator_id, row_status, space_id, visibility, content
+		if err := tx.QueryRowContext(ctx, `SELECT creator_id, row_status, visibility, content
 			FROM memo WHERE id = ? AND deleted_ts IS NULL`, memoID).Scan(
-			&snapshot.CreatorID, &snapshot.RowStatus, &currentSpace, &snapshot.Visibility, &content,
+			&snapshot.CreatorID, &snapshot.RowStatus, &snapshot.Visibility, &content,
 		); err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
 				return store.ErrMemoMutationConflict
 			}
 			return errors.Wrap(err, "failed to read attachment memo")
 		}
-		snapshot.SpaceID = store.NullInt32Pointer(currentSpace)
 		if expectedMemoContents != nil && content != expectedMemoContents[memoID] {
 			return store.ErrMemoMutationConflict
 		}
-		if snapshot.SpaceID != nil {
-			var exists bool
-			if err := tx.QueryRowContext(ctx, "SELECT EXISTS(SELECT 1 FROM space WHERE id = ?)", *snapshot.SpaceID).Scan(&exists); err != nil {
-				return errors.Wrap(err, "failed to read attachment memo space")
-			}
-			snapshot.SourceSpaceExists = exists
-			if exists && !actorIsAdmin {
-				active, err := sqliteSpaceMemberActive(ctx, tx, *snapshot.SpaceID, actorUserID)
-				if err != nil {
-					return errors.Wrap(err, "failed to read attachment memo membership")
-				}
-				snapshot.SourceMemberActive = active
-			}
-		}
-		if err := store.ValidateMemoWriteSnapshot(&store.MemoWritePolicy{ActorUserID: actorUserID, Personal: personal}, nil, snapshot); err != nil {
+		if err := store.ValidateMemoWriteSnapshot(&store.MemoWritePolicy{ActorUserID: actorUserID}, nil, snapshot); err != nil {
 			return err
 		}
 	}

@@ -28,7 +28,7 @@ func TestConfigValidate(t *testing.T) {
 
 	var stdout, stderr bytes.Buffer
 	require.NoError(t, runConfigValidate(dir, configuration.OSResolver(), &stdout, &stderr))
-	require.Contains(t, stdout.String(), "is valid: 0 identity providers, 0 instance settings, 1 users")
+	require.Contains(t, stdout.String(), "is valid: 0 instance settings, 1 administrator declarations")
 	require.Empty(t, stderr.String())
 
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "bad.json"), []byte(`{"users":[{"name":"users/root"}]}`), 0o600))
@@ -51,7 +51,7 @@ func TestConfigCommandsDoNotInheritServerFlags(t *testing.T) {
 		require.NotNil(t, cmd.InheritedFlags().Lookup("config-dir"), cmd.Name())
 		// The database flags are the config command's own, so binding them
 		// does not unbind the server's.
-		require.Equal(t, "database source name of the instance", cmd.InheritedFlags().Lookup("dsn").Usage, cmd.Name())
+		require.Equal(t, "SQLite database path or file URI", cmd.InheritedFlags().Lookup("dsn").Usage, cmd.Name())
 	}
 }
 

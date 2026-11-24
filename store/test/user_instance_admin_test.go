@@ -55,11 +55,6 @@ func TestUserMutationsRetainAnInstanceAdmin(t *testing.T) {
 // another admin's demotion is still uncommitted. The check must wait for that
 // transaction and then refuse, so the instance keeps exactly one active admin.
 func TestLastAdminCheckWaitsForConcurrentAdminRemoval(t *testing.T) {
-	driver := getDriverFromEnv()
-	if driver == "sqlite" {
-		t.Skip("SQLite transactions begin IMMEDIATE and serialize competing writes without row locks")
-	}
-
 	setupCtx := context.Background()
 	ts := NewTestingStore(setupCtx, t)
 	t.Cleanup(func() { require.NoError(t, ts.Close()) })
@@ -80,9 +75,6 @@ func TestLastAdminCheckWaitsForConcurrentAdminRemoval(t *testing.T) {
 		}
 	}()
 	demoteFirst := "UPDATE user SET role = 'USER' WHERE id = ?"
-	if driver == "postgres" {
-		demoteFirst = `UPDATE "user" SET role = 'USER' WHERE id = $1`
-	}
 	_, err = blocker.ExecContext(ctx, demoteFirst, first.ID)
 	require.NoError(t, err)
 

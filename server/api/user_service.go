@@ -6,7 +6,6 @@ import (
 	"log/slog"
 	"regexp"
 	"slices"
-	"strconv"
 	"strings"
 	"time"
 
@@ -418,7 +417,6 @@ func (s *APIService) UpdateUser(ctx context.Context, request *apipb.UpdateUserRe
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to get instance general setting: %v", err)
 	}
-	passwordChanged := false
 	for _, field := range request.UpdateMask.Paths {
 		switch field {
 		case "username":
@@ -485,7 +483,6 @@ func (s *APIService) UpdateUser(ctx context.Context, request *apipb.UpdateUserRe
 			}
 			passwordHashStr := string(passwordHash)
 			update.PasswordHash = &passwordHashStr
-			passwordChanged = true
 		case "state":
 			if currentUser.Role != store.RoleAdmin {
 				return nil, status.Errorf(codes.PermissionDenied, "permission denied")
@@ -497,29 +494,16 @@ func (s *APIService) UpdateUser(ctx context.Context, request *apipb.UpdateUserRe
 		}
 	}
 
+	if update.PasswordHash != nil && currentUser.ID == user.ID {
+		update.KeepSessionID = currentSessionID(ctx, s.Secret, user.ID)
+	}
 	updatedUser, err := s.Store.UpdateUser(ctx, update)
 	if err != nil {
-		if stderrors.Is(err, store.ErrLastSpaceAdmin) {
-			return nil, status.Error(codes.FailedPrecondition, "an active space must retain an active administrator")
-		}
 		if stderrors.Is(err, store.ErrLastInstanceAdmin) {
 			return nil, status.Error(codes.FailedPrecondition, lastInstanceAdminMessage)
 		}
 		return nil, convertUserWriteError(err, "failed to update user")
 	}
-	if passwordChanged {
-		// A new password ends every other session. The caller's own browser
-		// session survives when they changed their own password; an admin
-		// resetting another account revokes all of that account's sessions.
-		keepSessionID := ""
-		if currentUser.ID == user.ID {
-			keepSessionID = currentSessionID(ctx, s.Secret, user.ID)
-		}
-		if err := s.Store.RemoveUserRefreshTokensExcept(ctx, user.ID, keepSessionID); err != nil {
-			slog.Warn("failed to revoke sessions after password change", "user_id", user.ID, "error", err)
-		}
-	}
-
 	return convertUserFromStore(updatedUser, currentUser), nil
 }
 
@@ -554,9 +538,6 @@ func (s *APIService) DeleteUser(ctx context.Context, request *apipb.DeleteUserRe
 		ID: user.ID,
 	})
 	if err != nil {
-		if stderrors.Is(err, store.ErrUserHasSpaceMembership) {
-			return nil, status.Error(codes.FailedPrecondition, "leave all spaces before deleting this account")
-		}
 		if stderrors.Is(err, store.ErrLastInstanceAdmin) {
 			return nil, status.Error(codes.FailedPrecondition, lastInstanceAdminMessage)
 		}
@@ -656,63 +637,4 @@ func (s *APIService) resolveUserAndSettingKeyFromName(ctx context.Context, name 
 		return nil, "", err
 	}
 	return user, parts[3], nil
-}
-
-func (s *APIService) resolveUserAndWebhookIDFromName(ctx context.Context, name string) (*store.User, string, error) {
-	parts := strings.Split(name, "/")
-	if len(parts) != 4 || parts[0] != "users" || parts[2] != "webhooks" {
-		return nil, "", errors.New("invalid webhook name format")
-	}
-
-	user, err := s.resolveUserFromName(ctx, BuildUserName(parts[1]))
-	if err != nil {
-		return nil, "", err
-	}
-	return user, parts[3], nil
-}
-
-func (s *APIService) resolveUserAndLinkedIdentityProviderFromName(ctx context.Context, name string) (*store.User, string, error) {
-	parts := strings.Split(name, "/")
-	if len(parts) != 4 || parts[0] != "users" || parts[2] != "linkedIdentities" {
-		return nil, "", errors.Errorf("invalid linked identity name: %s", name)
-	}
-
-	user, err := s.resolveUserFromName(ctx, BuildUserName(parts[1]))
-	if err != nil {
-		return nil, "", err
-	}
-	return user, parts[3], nil
-}
-
-// linkedIdentityName is the resource name of user's link to the identity
-// provider with uid provider: users/{user}/linkedIdentities/{idp}.
-func linkedIdentityName(user *store.User, provider string) string {
-	return coreuser.LinkedIdentityName(user.Username, provider)
-}
-
-func convertLinkedIdentityFromStore(user *store.User, identity *store.UserIdentity) *apipb.LinkedIdentity {
-	return &apipb.LinkedIdentity{
-		Name:             linkedIdentityName(user, identity.Provider),
-		IdentityProvider: IdentityProviderNamePrefix + identity.Provider,
-		ExternalUid:      identity.ExternUID,
-	}
-}
-
-func (s *APIService) resolveUserAndNotificationIDFromName(ctx context.Context, name string) (*store.User, int32, error) {
-	parts := strings.Split(name, "/")
-	if len(parts) != 4 || parts[0] != "users" || parts[2] != "notifications" {
-		return nil, 0, errors.Errorf("invalid notification name: %s", name)
-	}
-
-	user, err := s.resolveUserFromName(ctx, BuildUserName(parts[1]))
-	if err != nil {
-		return nil, 0, err
-	}
-
-	id, err := strconv.Atoi(parts[3])
-	if err != nil {
-		return nil, 0, errors.Errorf("invalid notification id: %s", parts[3])
-	}
-
-	return user, int32(id), nil
 }

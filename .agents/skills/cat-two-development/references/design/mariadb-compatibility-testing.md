@@ -291,3 +291,10 @@ The aggregate selector was also exercised with an inherited MariaDB variant and 
 suites were run separately after simplifying the index scripts. Local parallel runs of `store/test` took approximately 39 seconds
 for SQLite, 259 seconds for MySQL, 221 seconds for MariaDB, and 149 seconds for PostgreSQL; these are not CI timing measurements.
 GitHub Actions execution remains to be verified after pushing the change.
+
+## Amendments
+
+### 2026-11-24: Cat_two adopts SQLite as its sole database
+
+The compatibility decisions and test results above document the former multi-database implementation. Cat_two's current deployment,
+schema migrations, compatibility testing, and release verification use SQLite. [Current verification policy](../../SKILL.md#验证)

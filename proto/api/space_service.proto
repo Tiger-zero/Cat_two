@@ -11,7 +11,8 @@ import "google/protobuf/field_mask.proto";
 
 option go_package = "gen/api";
 
-// SpaceService manages collaborative spaces, their members and their invitations.
+// SpaceService is a legacy API retained for protocol compatibility.
+// The collaborative space, membership and invitation methods are retired in Cat_two.
 service SpaceService {
   // ListSpaces lists the spaces of which the authenticated caller is a member.
   rpc ListSpaces(ListSpacesRequest) returns (ListSpacesResponse) {

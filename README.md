@@ -4,13 +4,13 @@ Cat_two 是面向个人的自托管笔记应用。用网页记录 Markdown 笔�
 
 ## 部署服务端
 
-将 `compose.yaml` 保存到装有 Docker Compose 的机器上，在文件所在目录运行以下命令。默认从 Docker Hub 使用 `tiger2896/cat_two:latest`。 [部署配置](compose.yaml)
+将本仓库根目录的 `compose.yaml` 保存到装有 Docker Compose 的机器上，在文件所在目录运行以下命令。默认从 Docker Hub 使用 `tiger2896/cat_two:latest`。 [部署配置](compose.yaml) · [镜像版本](https://hub.docker.com/r/tiger2896/cat_two/tags)
 
 ```sh
 docker compose up -d
 ```
 
-打开 `http://服务器地址:5230`，按提示创建管理员账号。默认用 SQLite，数据库、笔记和附件保存在 `cat_two_data` 命名卷。
+先在受限网络打开 `http://服务器地址:5230`，按提示创建管理员账号。Cat_two 使用 SQLite 作为唯一数据库。数据库、笔记和附件保存在 `cat_two_data` 命名卷。 [升级与备份](.agents/skills/cat-two-product-development/references/deployment.md#备份和升级) · [公网部署](.agents/skills/cat-two-product-development/references/deployment.md#在公网部署) · [安全说明](SECURITY.md)
 
 ## 在 NAS 上部署
 

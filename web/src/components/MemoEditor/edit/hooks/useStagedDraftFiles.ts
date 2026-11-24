@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef } from "react";
 import { v4 as uuidv4 } from "uuid";
+import { cacheService } from "../services/cacheService";
 import { mediaMetadataService } from "../services/mediaMetadataService";
-import { loadStagedDraftFiles, writeStagedDraftFiles } from "../services/stagedDraftFiles";
+import { loadStagedDraftFiles, type StagedDraftFiles, snapshotDraftFiles, writeStagedDraftFiles } from "../services/stagedDraftFiles";
 import { useEditorStore } from "../state";
 import type { LocalFile } from "../types/attachment";
 
@@ -12,9 +13,18 @@ interface Options {
   createBlobUrl: (file: File) => string;
   onStorageError: () => void;
   onStaleDraft: (baseRevision?: string) => void;
+  preserveDraft: () => void;
 }
 
-export function useStagedDraftFiles({ key, enabled, getBaseRevision, createBlobUrl, onStorageError, onStaleDraft }: Options) {
+export function useStagedDraftFiles({
+  key,
+  enabled,
+  getBaseRevision,
+  createBlobUrl,
+  onStorageError,
+  onStaleDraft,
+  preserveDraft,
+}: Options) {
   const store = useEditorStore();
   const onDiscard = useRef<(() => Promise<void>) | undefined>(undefined);
 
@@ -33,6 +43,7 @@ export function useStagedDraftFiles({ key, enabled, getBaseRevision, createBlobU
     let lastFiles: LocalFile[] = [];
     let lastOrder: string[] = [];
     let lastRevision = getBaseRevision();
+    let navigationSnapshot: StagedDraftFiles | undefined;
 
     const preventLoss = (event: BeforeUnloadEvent) => {
       event.preventDefault();
@@ -48,18 +59,23 @@ export function useStagedDraftFiles({ key, enabled, getBaseRevision, createBlobU
     };
 
     const write = (files: LocalFile[], order: string[], baseRevision?: string) => {
+      if (cacheService.recoveredFiles(key)) {
+        if (!discarded) preserveDraft();
+        return tail;
+      }
       const id = ++operation;
-      const draft = files.length
-        ? {
-            files: files.map(({ mediaMetadata, ...file }) => ({ ...file, extractMetadata: mediaMetadata !== undefined })),
-            order,
-            baseRevision,
-            writeId: uuidv4(),
-          }
-        : undefined;
+      const draft = files.length ? { ...snapshotDraftFiles(files, order, baseRevision), writeId: uuidv4() } : undefined;
       pending = true;
       syncWarning();
       tail = tail.then(async () => {
+        const recovery = cacheService.recoveredFiles(key);
+        if (recovery && recovery !== navigationSnapshot) {
+          if (id === operation && mounted) {
+            pending = false;
+            syncWarning();
+          }
+          return;
+        }
         let committed = false;
         try {
           if (draft || hasDraft) committed = await writeStagedDraftFiles(key, expected, draft);
@@ -70,10 +86,14 @@ export function useStagedDraftFiles({ key, enabled, getBaseRevision, createBlobU
         if (committed) {
           hasDraft = Boolean(draft);
           expected = draft?.writeId ?? null;
+          if (id === operation && navigationSnapshot) cacheService.discardCommittedRecovery(key, navigationSnapshot);
         }
         if (id !== operation || !mounted) return;
         pending = !committed;
-        if (pending && !warned && !discarded) onStorageError();
+        if (pending && !discarded) {
+          preserveDraft();
+          if (!warned) onStorageError();
+        }
         warned = pending;
         syncWarning();
       });
@@ -101,8 +121,34 @@ export function useStagedDraftFiles({ key, enabled, getBaseRevision, createBlobU
     };
     const unsubscribe = store.subscribe(persist);
 
+    const restore = (saved: StagedDraftFiles) => {
+      if (saved.baseRevision !== getBaseRevision()) {
+        onStaleDraft(saved.baseRevision);
+        return;
+      }
+      if (discarded) return;
+      const state = getState();
+      const rebuiltURLs = new Map<string, string>();
+      const restored = saved.files.map(({ previewUrl, extractMetadata, ...row }) => {
+        const rebuilt = createBlobUrl(row.file);
+        rebuiltURLs.set(previewUrl, rebuilt);
+        return {
+          ...row,
+          previewUrl: rebuilt,
+          mediaMetadata: extractMetadata ? mediaMetadataService.extract(row.file) : undefined,
+        };
+      });
+      lastFiles = restored;
+      lastOrder = saved.order.map((entry) => rebuiltURLs.get(entry) ?? entry);
+      dispatch(actions.setLocalFiles(state.localFiles.length > 0 ? [...restored, ...state.localFiles] : restored));
+      dispatch(actions.setAttachmentOrder(lastOrder));
+    };
     let loading = Promise.resolve();
-    if (typeof indexedDB === "undefined") {
+    const recovered = cacheService.recoveredFiles(key);
+    if (recovered) {
+      restore(recovered);
+      ready = true;
+    } else if (typeof indexedDB === "undefined") {
       ready = true;
     } else {
       dispatch(actions.setLoading("loading", true));
@@ -112,26 +158,7 @@ export function useStagedDraftFiles({ key, enabled, getBaseRevision, createBlobU
           if (!mounted || !saved) return;
           expected = saved.writeId ?? null;
           hasDraft = saved.baseRevision === openedRevision;
-          if (!hasDraft) {
-            onStaleDraft(saved.baseRevision);
-            return;
-          }
-          if (discarded) return;
-          const state = getState();
-          const rebuiltURLs = new Map<string, string>();
-          const restored = saved.files.map(({ previewUrl, extractMetadata, ...row }) => {
-            const rebuilt = createBlobUrl(row.file);
-            rebuiltURLs.set(previewUrl, rebuilt);
-            return {
-              ...row,
-              previewUrl: rebuilt,
-              mediaMetadata: extractMetadata ? mediaMetadataService.extract(row.file) : undefined,
-            };
-          });
-          lastFiles = restored;
-          lastOrder = saved.order.map((entry) => rebuiltURLs.get(entry) ?? entry);
-          dispatch(actions.setLocalFiles(state.localFiles.length > 0 ? [...restored, ...state.localFiles] : restored));
-          dispatch(actions.setAttachmentOrder(lastOrder));
+          restore(saved);
         })
         .catch(() => {
           if (mounted && getState().localFiles.length > 0) onStorageError();
@@ -153,9 +180,13 @@ export function useStagedDraftFiles({ key, enabled, getBaseRevision, createBlobU
       mounted = false;
       unsubscribe();
       onDiscard.current = undefined;
+      if (!discarded && (pending || (!ready && getState().localFiles.length > 0)) && !cacheService.recoveredFiles(key)) {
+        preserveDraft();
+        navigationSnapshot = cacheService.recoveredFiles(key);
+      }
       window.removeEventListener("beforeunload", preventLoss);
     };
-  }, [store, key, enabled, getBaseRevision, createBlobUrl, onStorageError, onStaleDraft]);
+  }, [store, key, enabled, getBaseRevision, createBlobUrl, onStorageError, onStaleDraft, preserveDraft]);
 
   return useCallback(() => onDiscard.current?.(), []);
 }

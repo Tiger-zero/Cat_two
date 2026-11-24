@@ -22,11 +22,6 @@ func placeholderResolver() Resolver {
 	}
 }
 
-// validIDP is an identity provider that meets every rule.
-const validIDP = `{"name":"identity-providers/sso","type":"OAUTH2","title":"SSO","config":{"oauth2Config":{"clientId":"memos",
-	"authUrl":"https://idp.example.com/authorize","tokenUrl":"https://idp.example.com/token","userInfoUrl":"https://idp.example.com/userinfo",
-	"fieldMapping":{"identifier":"sub"}}}}`
-
 func writeFiles(t *testing.T, files map[string]string) string {
 	t.Helper()
 	dir := t.TempDir()
@@ -58,16 +53,16 @@ func TestCompatibilityFixtures(t *testing.T) {
 			desired, err := Load(filepath.Join("testdata/compat", release.Name()), placeholderResolver())
 			require.NoError(t, err)
 			require.NotEmpty(t, desired.Sources)
-			require.Empty(t, desired.Warnings)
+			require.NotEmpty(t, desired.Warnings, "the historical file still names retired features")
 		})
 	}
 }
 
 func TestLoadMergesFilesAndRecordsSources(t *testing.T) {
 	dir := writeFiles(t, map[string]string{
-		"a-idp.json":     `{"identityProviders":[` + validIDP + `]}`,
-		"b-access.json":  `{"instanceSettings":[{"name":"instance/settings/ACCESS","accessSetting":{"accessMode":"INSTANCE_ACCESS_MODE_PUBLIC"}}]}`,
-		"c-users.json":   `{"users":[{"name":"users/admin","username":"admin","role":"ADMIN"}],"lifecycle":[{"resource":"identity-providers/sso","preventDestroy":true}]}`,
+		"a-storage.json": `{"instanceSettings":[{"name":"instance/settings/STORAGE","storageSetting":{"storageType":"LOCAL"}}]}`,
+		"b-general.json": generalDocument("Personal notes"),
+		"c-users.json":   `{"users":[{"name":"users/admin","username":"admin","role":"ADMIN"}],"lifecycle":[{"resource":"instance/settings/STORAGE","preventDestroy":true}]}`,
 		"notes.txt":      `not configuration`,
 		"README.md.json": `{}`,
 	})
@@ -75,17 +70,16 @@ func TestLoadMergesFilesAndRecordsSources(t *testing.T) {
 
 	desired, err := Load(dir, placeholderResolver())
 	require.NoError(t, err)
-	require.Len(t, desired.Configuration.IdentityProviders, 1)
-	require.Len(t, desired.Configuration.InstanceSettings, 1)
+	require.Len(t, desired.Configuration.InstanceSettings, 2)
 	require.Len(t, desired.Configuration.Users, 1)
 	require.Len(t, desired.Configuration.Lifecycle, 1)
 	require.Equal(t, map[string]string{
-		"identity-providers/sso":   "a-idp.json",
-		"instance/settings/ACCESS": "b-access.json",
-		"users/admin":              "c-users.json",
+		"instance/settings/STORAGE": "a-storage.json",
+		"instance/settings/GENERAL": "b-general.json",
+		"users/admin":               "c-users.json",
 	}, desired.Sources)
-	require.Equal(t, apipb.InstanceAccessMode_INSTANCE_ACCESS_MODE_PUBLIC,
-		desired.Configuration.InstanceSettings[0].GetAccessSetting().GetAccessMode())
+	require.Equal(t, apipb.InstanceSetting_StorageSetting_LOCAL,
+		desired.Configuration.InstanceSettings[0].GetStorageSetting().GetStorageType())
 }
 
 func TestLoadDirectoryEdgeCases(t *testing.T) {
@@ -133,6 +127,24 @@ func TestLoadIgnoresRetiredAdditionalScriptReferences(t *testing.T) {
 	}
 }
 
+func TestLoadIgnoresRetiredSettingsAndLegacyStorage(t *testing.T) {
+	doc := `{"instance_settings":[
+		{"name":"instance/settings/ACCESS","accessSetting":{"accessMode":"${env:RETIRED_ACCESS}"}},
+		{"name":"instance/settings/AI","aiSetting":{"providers":[{"apiKey":"${env:RETIRED_AI}"}]}},
+		{"name":"instance/settings/NOTIFICATION","notificationSetting":{"email":{"smtpPassword":"${file:/missing/smtp}"}}},
+		{"name":"instance/settings/USAGE_LIMITS","usageLimitsSetting":{"limits":[{"users":["${env:RETIRED_USER}"]}]}},
+		{"name":"instance/settings/MEMO_RELATED","memoRelatedSetting":{}},
+		{"name":"instance/settings/STORAGE","storageSetting":{"storages":[{"type":"STORAGE_TYPE_S3","s3Config":{"accessKeySecret":"${env:RETIRED_S3}"}}]}},
+		{"name":"instance/settings/GENERAL","general_setting":{"disallow_password_auth":"${env:RETIRED_SSO_POLICY}","week_start_day_offset":1}}
+	]}`
+	desired, err := Load(writeFiles(t, map[string]string{"legacy.json": doc}), Resolver{})
+	require.NoError(t, err)
+	require.Len(t, desired.Warnings, 7)
+	require.Len(t, desired.Configuration.InstanceSettings, 1)
+	require.Equal(t, int32(1), desired.Configuration.InstanceSettings[0].GetGeneralSetting().GetWeekStartDayOffset())
+	require.Contains(t, desired.preserved, "instance/settings/STORAGE")
+}
+
 func TestLoadDecodesStrictly(t *testing.T) {
 	tests := map[string]struct {
 		document string
@@ -142,13 +154,13 @@ func TestLoadDecodesStrictly(t *testing.T) {
 		"not an object":   {`[]`, "must be a JSON object"},
 		"trailing data":   {`{} {}`, "unexpected data"},
 		"duplicate key":   {`{"users":[],"users":[]}`, "users: duplicate key"},
-		"unknown field":   {`{"identityProviders":[{"name":"identity-providers/sso","titel":"SSO"}]}`, `unknown field "titel"`},
+		"unknown field":   {`{"users":[{"name":"users/admin","titel":"SSO"}]}`, `unknown field "titel"`},
 		"numeric enum":    {`{"users":[{"name":"users/admin","username":"admin","role":1}]}`, "users[0].role: use the enum value name"},
 		"output only":     {`{"users":[{"name":"users/admin","username":"admin","role":"ADMIN","createTime":"2026-01-01T00:00:00Z"}]}`, "users[0].createTime is output only"},
-		"nested output":   {`{"instanceSettings":[{"name":"instance/settings/AI","aiSetting":{"providers":[{"id":"a","apiKeySet":true}]}}]}`, "aiSetting.providers[0].apiKeySet is output only"},
+		"nested output":   {`{"users":[{"name":"users/admin","updateTime":"2026-01-01T00:00:00Z"}]}`, "updateTime is output only"},
 		"wrong value":     {`{"lifecycle":[{"resource":"users/admin","preventDestroy":"yes"}]}`, "invalid value for bool field preventDestroy"},
-		"oneof conflict":  {`{"instanceSettings":[{"name":"instance/settings/ACCESS","accessSetting":{},"generalSetting":{}}]}`, "is already set"},
-		"proto name keys": {`{"identity_providers":[` + validIDP + `]}`, ""},
+		"oneof conflict":  {`{"instanceSettings":[{"name":"instance/settings/GENERAL","accessSetting":{},"generalSetting":{}}]}`, "is already set"},
+		"proto name keys": {`{"instance_settings":[{"name":"instance/settings/GENERAL","general_setting":{}}]}`, ""},
 	}
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -167,18 +179,14 @@ func TestLoadSubstitutesReferences(t *testing.T) {
 	require.NoError(t, os.WriteFile(secretFile, []byte("file-secret\n"), 0o600))
 	t.Setenv("MEMOS_TEST_SECRET", "env-secret")
 
-	dir := writeFiles(t, map[string]string{"config.json": `{
-		"identityProviders": [{"name":"identity-providers/sso","type":"OAUTH2","title":"$${not a reference}",
-			"config":{"oauth2Config":{"clientId":"${env:MEMOS_TEST_SECRET}","clientSecret":"${file:` + secretFile + `}",
-				"authUrl":"https://idp.example.com/authorize","tokenUrl":"https://idp.example.com/token",
-				"userInfoUrl":"https://idp.example.com/userinfo","fieldMapping":{"identifier":"sub"}}}}]
-	}`})
+	dir := writeFiles(t, map[string]string{"config.json": `{"users":[
+		{"name":"users/admin","username":"admin","role":"ADMIN","displayName":"${env:MEMOS_TEST_SECRET}","password":"${file:` + secretFile + `}"}
+	],"instanceSettings":[{"name":"instance/settings/GENERAL","generalSetting":{"customProfile":{"description":"$${not a reference}"}}}]}`})
 	desired, err := Load(dir, OSResolver())
 	require.NoError(t, err)
-	provider := desired.Configuration.IdentityProviders[0]
-	require.Equal(t, "env-secret", provider.GetConfig().GetOauth2Config().GetClientId())
-	require.Equal(t, "file-secret", provider.GetConfig().GetOauth2Config().GetClientSecret(), "trailing line breaks are removed")
-	require.Equal(t, "${not a reference}", provider.GetTitle(), "$${ is a literal ${")
+	require.Equal(t, "env-secret", desired.Configuration.Users[0].GetDisplayName())
+	require.Equal(t, "file-secret", desired.Configuration.Users[0].GetPassword(), "trailing line breaks are removed")
+	require.Equal(t, "${not a reference}", desired.Configuration.InstanceSettings[0].GetGeneralSetting().GetCustomProfile().GetDescription())
 
 	for name, test := range map[string]struct {
 		value string
@@ -207,10 +215,10 @@ func TestLoadSubstitutesReferences(t *testing.T) {
 
 func TestLoadNeverPrintsSubstitutedValues(t *testing.T) {
 	t.Setenv("MEMOS_TEST_PORT", "hunter2-not-a-port")
-	dir := writeFiles(t, map[string]string{"config.json": `{"instanceSettings":[{"name":"instance/settings/NOTIFICATION",
-		"notificationSetting":{"email":{"enabled":true,"smtpPort":"${env:MEMOS_TEST_PORT}"}}}]}`})
+	dir := writeFiles(t, map[string]string{"config.json": `{"instanceSettings":[{"name":"instance/settings/GENERAL",
+		"generalSetting":{"weekStartDayOffset":"${env:MEMOS_TEST_PORT}"}}]}`})
 	_, err := Load(dir, OSResolver())
-	requireProblems(t, err, "invalid value for int32 field smtpPort")
+	requireProblems(t, err, "invalid value for int32 field weekStartDayOffset")
 	require.NotContains(t, err.Error(), "hunter2")
 }
 
@@ -219,35 +227,19 @@ func TestLoadChecksSchema(t *testing.T) {
 		document string
 		want     string
 	}{
-		"missing name":       {`{"identityProviders":[{"title":"SSO"}]}`, "identityProviders[0].name is required"},
-		"wrong kind":         {`{"identityProviders":[{"name":"users/admin"}]}`, "is not a IdentityProvider name"},
-		"invalid uid":        {`{"identityProviders":[{"name":"identity-providers/-sso"}]}`, "invalid identity provider name"},
-		"basic":              {`{"instanceSettings":[{"name":"instance/settings/BASIC"}]}`, "BASIC holds the instance secret"},
-		"tags":               {`{"instanceSettings":[{"name":"instance/settings/TAGS","tagsSetting":{}}]}`, "TAGS is kept only for compatibility"},
-		"unknown key":        {`{"instanceSettings":[{"name":"instance/settings/THEME"}]}`, "unknown instance setting"},
-		"retired reactions":  {`{"instanceSettings":[{"name":"instance/settings/MEMO_RELATED"}]}`, "unknown instance setting"},
-		"state record":       {`{"instanceSettings":[{"name":"instance/settings/CONFIGURATION_STATE"}]}`, "is the configuration state record"},
-		"missing value":      {`{"instanceSettings":[{"name":"instance/settings/GENERAL"}]}`, "generalSetting is required for GENERAL"},
-		"mismatched value":   {`{"instanceSettings":[{"name":"instance/settings/GENERAL","accessSetting":{}}]}`, "accessSetting does not match GENERAL; use generalSetting"},
-		"username mismatch":  {`{"users":[{"name":"users/admin","username":"root","role":"ADMIN"}]}`, `users[0].username must equal "admin"`},
-		"missing role":       {`{"users":[{"name":"users/admin","username":"admin"}]}`, "users[0].role is required"},
-		"profile field":      {`{"users":[{"name":"users/admin","username":"admin","role":"ADMIN","description":"hi"}]}`, "users[0].description cannot be configured"},
-		"lifecycle no name":  {`{"lifecycle":[{"preventDestroy":true}]}`, "lifecycle[0].resource is required"},
-		"write-only on idp":  {`{"identityProviders":[{"name":"identity-providers/sso"}],"lifecycle":[{"resource":"identity-providers/sso","writeOnlyVersion":1}]}`, "writeOnlyVersion applies only to users"},
-		"negative version":   {`{"users":[{"name":"users/admin","username":"admin","role":"ADMIN"}],"lifecycle":[{"resource":"users/admin","writeOnlyVersion":-1}]}`, "must not be negative"},
-		"unknown path":       {`{"identityProviders":[{"name":"identity-providers/sso"}],"lifecycle":[{"resource":"identity-providers/sso","ignoreChanges":["config.oauth2Config.scope"]}]}`, `has no field "scope"`},
-		"ignore name":        {`{"identityProviders":[{"name":"identity-providers/sso"}],"lifecycle":[{"resource":"identity-providers/sso","ignoreChanges":["name"]}]}`, "cannot be ignored"},
-		"path through list":  {`{"identityProviders":[{"name":"identity-providers/sso"}],"lifecycle":[{"resource":"identity-providers/sso","ignoreChanges":["config.oauth2Config.scopes.x"]}]}`, "is not a message field"},
-		"removed bad name":   {`{"removed":[{"resource":"memos/123"}]}`, "removed[0].resource"},
-		"lifecycle dangling": {`{"lifecycle":[{"resource":"users/admin"}]}`, "names users/admin, which no file declares"},
-		"identity no uid":    {`{"linkedIdentities":[{"name":"users/admin/linkedIdentities/sso"}]}`, "linkedIdentities[0].externalUid is required"},
-		"identity bad name":  {`{"linkedIdentities":[{"name":"users/admin/linkedIdentities/-sso","externalUid":"s"}]}`, "invalid linked identity name"},
-		"identity provider":  {`{"linkedIdentities":[{"name":"users/admin/linkedIdentities/sso","externalUid":"s","identityProvider":"identity-providers/sso"}]}`, "linkedIdentities[0].identityProvider is output only"},
-		"identity no user":   {`{"linkedIdentities":[{"name":"users/admin/linkedIdentities/sso","externalUid":"s"}]}`, "users/admin/linkedIdentities/sso is declared for users/admin, which no file declares"},
-		"identity ignore":    {`{"users":[{"name":"users/admin","username":"admin","role":"ADMIN"}],"linkedIdentities":[{"name":"users/admin/linkedIdentities/sso","externalUid":"s"}],"lifecycle":[{"resource":"users/admin/linkedIdentities/sso","ignoreChanges":["externalUid"]}]}`, "ignoreChanges does not apply to linked identities"},
-		"identity twice": {`{"users":[{"name":"users/admin","username":"admin","role":"ADMIN"},{"name":"users/root","username":"root","role":"ADMIN"}],
-			"linkedIdentities":[{"name":"users/admin/linkedIdentities/sso","externalUid":"s"},{"name":"users/root/linkedIdentities/sso","externalUid":"s"}]}`, "users/root/linkedIdentities/sso declares the same identity-providers/sso subject as users/admin/linkedIdentities/sso"},
-		"removed declared": {`{"users":[{"name":"users/admin","username":"admin","role":"ADMIN"}],"removed":[{"resource":"users/admin"}]}`, "is removed but still declared"},
+		"basic":             {`{"instanceSettings":[{"name":"instance/settings/BASIC"}]}`, "BASIC holds the instance secret"},
+		"tags":              {`{"instanceSettings":[{"name":"instance/settings/TAGS","tagsSetting":{}}]}`, "TAGS is kept only for compatibility"},
+		"unknown key":       {`{"instanceSettings":[{"name":"instance/settings/THEME"}]}`, "unknown instance setting"},
+		"state record":      {`{"instanceSettings":[{"name":"instance/settings/CONFIGURATION_STATE"}]}`, "is the configuration state record"},
+		"missing value":     {`{"instanceSettings":[{"name":"instance/settings/GENERAL"}]}`, "generalSetting is required for GENERAL"},
+		"mismatched value":  {`{"instanceSettings":[{"name":"instance/settings/GENERAL","accessSetting":{}}]}`, "accessSetting does not match GENERAL; use generalSetting"},
+		"username mismatch": {`{"users":[{"name":"users/admin","username":"root","role":"ADMIN"}]}`, `users[0].username must equal "admin"`},
+		"missing role":      {`{"users":[{"name":"users/admin","username":"admin"}]}`, "users[0].role is required"},
+		"profile field":     {`{"users":[{"name":"users/admin","username":"admin","role":"ADMIN","description":"hi"}]}`, "users[0].description cannot be configured"},
+		"lifecycle no name": {`{"lifecycle":[{"preventDestroy":true}]}`, "lifecycle[0].resource is required"},
+		"negative version":  {`{"users":[{"name":"users/admin","username":"admin","role":"ADMIN"}],"lifecycle":[{"resource":"users/admin","writeOnlyVersion":-1}]}`, "must not be negative"},
+		"removed bad name":  {`{"removed":[{"resource":"memos/123"}]}`, "removed[0].resource"},
+		"removed declared":  {`{"users":[{"name":"users/admin","username":"admin","role":"ADMIN"}],"removed":[{"resource":"users/admin"}]}`, "is removed but still declared"},
 	}
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -256,10 +248,6 @@ func TestLoadChecksSchema(t *testing.T) {
 		})
 	}
 
-	_, err := Load(writeFiles(t, map[string]string{
-		"config.json": `{"identityProviders":[` + validIDP + `],"lifecycle":[{"resource":"identity-providers/sso","ignoreChanges":["config.oauth2Config.scopes","title"]}]}`,
-	}), placeholderResolver())
-	require.NoError(t, err, "ignoreChanges may name nested and top-level fields")
 }
 
 func TestLoadChecksResourceRules(t *testing.T) {
@@ -267,22 +255,8 @@ func TestLoadChecksResourceRules(t *testing.T) {
 		document string
 		want     string
 	}{
-		"incomplete provider": {`{"identityProviders":[{"name":"identity-providers/sso","type":"OAUTH2","title":"SSO"}]}`,
-			"config.json: identity-providers/sso: config.oauth2_config is required"},
 		"storage default typo": {`{"instanceSettings":[{"name":"instance/settings/STORAGE","storageSetting":{"defaultStorageId":"mian",
 			"storages":[{"id":"main","type":"LOCAL"}]}}]}`, `instance/settings/STORAGE: default storage "mian" is not configured`},
-		"incomplete s3": {`{"instanceSettings":[{"name":"instance/settings/STORAGE","storageSetting":{"defaultStorageId":"s3",
-			"storages":[{"id":"s3","type":"S3","s3Config":{"endpoint":"https://s3.example.com","bucket":"memos"}}]}}]}`, "storage s3 region is required"},
-		"ai without key": {`{"instanceSettings":[{"name":"instance/settings/AI","aiSetting":{"providers":[{"id":"openai","title":"OpenAI","type":"OPENAI"}]}}]}`,
-			`provider "openai" API key is required`},
-		"ai without id": {`{"instanceSettings":[{"name":"instance/settings/AI","aiSetting":{"providers":[{"title":"OpenAI","type":"OPENAI","apiKey":"k"}]}}]}`,
-			"providers[0].id is required"},
-		"email without host": {`{"instanceSettings":[{"name":"instance/settings/NOTIFICATION","notificationSetting":{"email":{"enabled":true}}}]}`,
-			"requires smtp_host"},
-		"usage limits order": {`{"instanceSettings":[{"name":"instance/settings/USAGE_LIMITS","usageLimitsSetting":{"limits":[
-			{"allUsers":true},{"users":["users/alice"],"memoCount":"10"}]}}]}`, "instance/settings/USAGE_LIMITS:"},
-		"usage limits bad user": {`{"instanceSettings":[{"name":"instance/settings/USAGE_LIMITS","usageLimitsSetting":{"limits":[
-			{"users":["memos/1"]},{"allUsers":true}]}}]}`, `names "memos/1", which is not a user name`},
 		"invalid email": {`{"users":[{"name":"users/admin","username":"admin","role":"ADMIN","email":"not an email"}]}`, "users/admin:"},
 		"week start": {`{"instanceSettings":[{"name":"instance/settings/GENERAL","generalSetting":{"weekStartDayOffset":9}}]}`,
 			"week_start_day_offset"},
@@ -294,12 +268,6 @@ func TestLoadChecksResourceRules(t *testing.T) {
 		})
 	}
 
-	_, err := Load(writeFiles(t, map[string]string{"config.json": `{"instanceSettings":[
-		{"name":"instance/settings/USAGE_LIMITS","usageLimitsSetting":{"limits":[{"users":["users/alice","users/bob"],"memoCount":"100"},{"allUsers":true,"memoCount":"10"}]}},
-		{"name":"instance/settings/AI","aiSetting":{"providers":[{"id":"openai","title":"OpenAI","type":"OPENAI","apiKey":"k"}],"transcription":{"providerId":"openai"}}},
-		{"name":"instance/settings/STORAGE","storageSetting":{"storageType":"LOCAL"}}
-	]}`}), placeholderResolver())
-	require.NoError(t, err, "valid usage limits, AI, and legacy storage settings load")
 }
 
 func TestLoadRejectsDeclarationsInTwoFiles(t *testing.T) {

@@ -392,18 +392,15 @@ func TestStartupRetiredTranscriptionAcceptsLegacyConfiguration(t *testing.T) {
 		"instanceSettings": [{
 			"name": "instance/settings/AI",
 			"aiSetting": {
-				"providers": [{"id": "legacy", "title": "Legacy", "type": "OPENAI", "endpoint": "http://127.0.0.1:1", "apiKey": "${env:MEMOS_TEST_AI_KEY}"}],
+				"providers": [{"id": "legacy", "title": "Legacy", "type": "OPENAI", "endpoint": "http://127.0.0.1:1", "apiKey": "${file:/missing/legacy-ai-key}"}],
 				"transcription": {"providerId": "legacy"}
 			}
 		}]
 	}`), 0o600))
-	t.Setenv("MEMOS_TEST_AI_KEY", "legacy-test-key")
-	inst := bootInstance(ctx, t, instanceOptions{configDir: configDir})
-	legacySetting, err := inst.server.Store.GetInstanceAISetting(ctx)
+	inst := bootInstance(ctx, t, instanceOptions{configDir: configDir, personal: true})
+	legacySetting, err := inst.server.Store.GetUncachedInstanceSetting(ctx, &store.FindInstanceSetting{Name: "AI"})
 	require.NoError(t, err)
-	require.Equal(t, "legacy", legacySetting.GetTranscription().GetProviderId())
-	require.Len(t, legacySetting.GetProviders(), 1)
-	require.Equal(t, "legacy-test-key", legacySetting.GetProviders()[0].GetApiKey())
+	require.Nil(t, legacySetting, "startup ignores retired AI declarations before reading their secrets")
 
 	inst.createAdmin(t)
 	token := inst.signIn(t)
@@ -625,22 +622,19 @@ func TestStartupAppliesConfiguration(t *testing.T) {
 		"users": [{"name": "users/`+testAdminUsername+`", "username": "`+testAdminUsername+`", "role": "ADMIN", "password": "${env:MEMOS_TEST_ADMIN_PASSWORD}"}]
 	}`), 0o600))
 	t.Setenv("MEMOS_TEST_ADMIN_PASSWORD", testAdminPassword)
-	inst := bootInstance(ctx, t, instanceOptions{configDir: configDir})
+	inst := bootInstance(ctx, t, instanceOptions{configDir: configDir, personal: true})
 
 	token := inst.signIn(t)
-	status, body := inst.do(t, http.MethodGet, "/api/instance/settings/GENERAL", "", nil)
-	require.Equal(t, http.StatusOK, status, "a public instance serves GENERAL anonymously: %s", body)
+	status, body := inst.do(t, http.MethodGet, "/api/instance/settings/GENERAL", token, nil)
+	require.Equal(t, http.StatusOK, status, "%s", body)
 	require.Contains(t, string(body), "Configured Memos")
 
 	status, body = inst.do(t, http.MethodGet, "/api/instance/configuration", token, nil)
-	require.Equal(t, http.StatusOK, status, "%s", body)
-	var configurationStatus struct {
-		Serial           string `json:"serial"`
-		ManagedResources []struct {
-			Resource string `json:"resource"`
-		} `json:"managedResources"`
-	}
-	require.NoError(t, json.Unmarshal(body, &configurationStatus))
-	require.Equal(t, "1", configurationStatus.Serial)
-	require.Len(t, configurationStatus.ManagedResources, 3)
+	require.Equal(t, http.StatusNotImplemented, status, "%s", body)
+	state, err := inst.server.Store.GetConfigurationState(ctx)
+	require.NoError(t, err)
+	require.Equal(t, int64(1), state.Serial)
+	require.Len(t, state.Resources, 2)
+	require.Equal(t, "instance/settings/GENERAL", state.Resources[0].Name)
+	require.Equal(t, "users/"+testAdminUsername, state.Resources[1].Name)
 }

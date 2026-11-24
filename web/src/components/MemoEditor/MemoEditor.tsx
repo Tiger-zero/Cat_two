@@ -8,33 +8,14 @@ import { showErrorToast, toast } from "@/lib/toast";
 import { cn } from "@/lib/utils";
 import type { Memo } from "@/types/proto/api/memo_service_pb";
 import { useTranslate } from "@/utils/i18n";
-import { lazyWithReload } from "@/utils/lazy";
 import { canManageMemo } from "@/utils/user";
 import { COMPOSER_PANEL_CLASSES } from "./edit/constants";
 import { draftKeyFor, type MemoEditIdentity, migrateLegacyDraft, resolveHomeDraftKey } from "./edit/draftKey";
 import { initialEditorState } from "./edit/initialState";
+import { getEditSession } from "./edit/loadEditSession";
 import { cacheService } from "./edit/services/cacheService";
 import { EditorProvider } from "./edit/state";
 import { MemoContentView } from "./view/MemoContentView";
-
-// The editing session is the composer's chrome, uploads, audio and menus: loaded when a
-// memo is first edited or composed, so a page of memos does not carry it. Once loaded it
-// renders at once, with no suspense, so a host that preloaded it opens without a gap.
-type EditSessionComponent = typeof import("./edit/EditSession").EditSession;
-let loadedEditSession: EditSessionComponent | undefined;
-const loadEditSession = () =>
-  import("./edit/EditSession").then((module) => {
-    loadedEditSession = module.EditSession;
-    return { default: module.EditSession };
-  });
-const LazyEditSession = lazyWithReload(loadEditSession);
-
-/** Loads the editing session's code ahead of time, for a host that is about to open an editor. */
-export const preloadMemoEditing = (): Promise<void> =>
-  loadEditSession().then(
-    () => undefined,
-    () => undefined,
-  );
 
 export interface MemoEditorViewProps {
   mode?: "view";
@@ -117,14 +98,20 @@ export const MemoEditor = (props: MemoEditorProps) => {
 };
 
 const MemoEditorView = ({ name, compact, parentPage, className, contentClassName, onClick, onDoubleClick }: MemoEditorViewProps) => {
+  const t = useTranslate();
   const { data: memo } = useMemoByName(name);
   const currentUser = useCurrentUser();
-  const { mutate: updateMemo } = useUpdateMemo(name);
+  const { mutateAsync: updateMemo } = useUpdateMemo(name);
   if (!memo) return null;
 
-  const handleTaskToggle = (content: string) => {
+  const handleTaskToggle = (content: string, taskBaseContent: string) => {
     recordMemoEditingActivity();
-    updateMemo({ update: { name, content }, updateMask: ["content", "update_time"], expectedRevision: memo.revision });
+    void updateMemo({
+      update: { name, content },
+      updateMask: ["content", "update_time"],
+      expectedRevision: memo.revision,
+      taskBaseContent,
+    }).catch(() => showErrorToast(t("editor.task-update-failed")));
   };
 
   return (
@@ -193,7 +180,7 @@ interface EditingSessionProps extends MemoEditingProps {
   defaultCreateTime?: Date;
 }
 
-const isHomeDraft = (identity: MemoEditIdentity) => identity.kind === "new" && identity.scope === "home" && !identity.space;
+const isHomeDraft = (identity: MemoEditIdentity) => identity.kind === "new" && identity.scope === "home";
 
 /** Remount the draft store if either its subject or its account changes. */
 const EditingSession = ({ fallback, ...props }: EditingSessionProps & { fallback?: ReactNode }) => {
@@ -210,7 +197,7 @@ type DraftEditingSessionProps = EditingSessionProps & { draftKey: string; userna
 
 const HomeDraftSession = ({ fallback, ...props }: DraftEditingSessionProps & { fallback?: ReactNode }) => {
   const { draftKey, username } = props;
-  const [selectedKey, setSelectedKey] = useState(() => (cacheService.readRaw(draftKey) === null ? undefined : draftKey));
+  const [selectedKey, setSelectedKey] = useState(() => (cacheService.readForEditor(draftKey) === null ? undefined : draftKey));
   useEffect(() => {
     if (selectedKey !== undefined) return;
     let active = true;
@@ -238,7 +225,7 @@ const DraftEditingSession = ({
   const t = useTranslate();
   const [seed, setSeed] = useState(() => {
     if (!isHomeDraft(identity)) migrateLegacyDraft(username, identity);
-    const rawDraft = cacheService.readRaw(draftKey);
+    const rawDraft = cacheService.readForEditor(draftKey);
     const initialState = initialEditorState({
       memo,
       draftKey,
@@ -248,7 +235,7 @@ const DraftEditingSession = ({
     // Initialization can remove a legacy edit draft that cannot be restored.
     return {
       initialState,
-      initialDraftRaw: rawDraft && !cacheService.readRaw(draftKey) ? null : rawDraft,
+      initialDraftRaw: rawDraft && !cacheService.readForEditor(draftKey) ? null : rawDraft,
       key: 0,
       reviewed: undefined as { memo: Memo; filesRevision: string } | undefined,
     };
@@ -259,7 +246,7 @@ const DraftEditingSession = ({
       if (!memoName) return;
       try {
         const current = await queryClient.fetchQuery({ ...memoDetailQueryOptions(memoName), staleTime: 0 });
-        const rawDraft = cacheService.readRaw(draftKey);
+        const rawDraft = cacheService.readForEditor(draftKey);
         if (!current) {
           showErrorToast(t("editor.draft.review-failed"));
           return;
@@ -277,7 +264,7 @@ const DraftEditingSession = ({
     },
     [draftKey, memoName, queryClient, t],
   );
-  const EditSession = loadedEditSession ?? LazyEditSession;
+  const EditSession = getEditSession();
   return (
     <EditorProvider key={seed.key} initialEditorState={seed.initialState}>
       <EditSession

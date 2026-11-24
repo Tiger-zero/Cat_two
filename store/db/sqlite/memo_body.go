@@ -46,6 +46,29 @@ func (d *DB) ListLegacyMemoBodies(ctx context.Context, afterID int32, limit int)
 	return bodies, rows.Err()
 }
 
+func (d *DB) ListMemoBodyReferences(ctx context.Context, afterID int32, limit int) ([]store.MemoBodyReference, error) {
+	rows, err := d.db.QueryContext(ctx, `SELECT id, body_digest FROM memo WHERE id > ? AND body_digest != '' ORDER BY id LIMIT ?`, afterID, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var bodies []store.MemoBodyReference
+	for rows.Next() {
+		var body store.MemoBodyReference
+		if err := rows.Scan(&body.ID, &body.Digest); err != nil {
+			return nil, err
+		}
+		bodies = append(bodies, body)
+	}
+	return bodies, rows.Err()
+}
+
+func (d *DB) GetMemoBodyProjection(ctx context.Context, id int32, digest string) (string, error) {
+	var content string
+	err := d.db.QueryRowContext(ctx, `SELECT content FROM memo WHERE id = ? AND body_digest = ?`, id, digest).Scan(&content)
+	return content, err
+}
+
 func (d *DB) SetMemoBodyDigest(ctx context.Context, id int32, content, digest string) (bool, error) {
 	result, err := d.db.ExecContext(ctx, `UPDATE memo SET body_digest = ? WHERE id = ? AND body_digest = '' AND content = ?`, digest, id, content)
 	if err != nil {

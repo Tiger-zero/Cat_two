@@ -18,7 +18,7 @@
 
     [data-theme="light"] {
       --mu-canvas: #f3f5f0;
-      --memos-home-canvas: #efeeec;
+      --memos-home-canvas: #fff;
       --mu-surface: #fefefa;
       --mu-well: #e9eee6;
       --mu-hover: #e5ece4;

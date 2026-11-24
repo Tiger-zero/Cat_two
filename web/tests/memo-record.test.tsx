@@ -1,8 +1,11 @@
 import { create } from "@bufbuild/protobuf";
+import { Code, ConnectError } from "@connectrpc/connect";
 import { focusManager, QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
+import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { useMemoActionHandlers } from "@/components/MemoActionMenu/hooks";
 import { attachmentKeys } from "@/hooks/useAttachmentQueries";
 import {
   findMemoInCollectionQueries,
@@ -15,6 +18,7 @@ import {
   useUpdateMemo,
 } from "@/hooks/useMemoQueries";
 import { userKeys } from "@/hooks/useUserQueries";
+import { showErrorToast, toast } from "@/lib/toast";
 import { ListMemoCommentsResponseSchema, ListMemosResponseSchema, type Memo, MemoSchema } from "@/types/proto/api/memo_service_pb";
 
 const api = vi.hoisted(() => ({
@@ -25,6 +29,9 @@ const api = vi.hoisted(() => ({
   createMemoComment: vi.fn(),
 }));
 vi.mock("@/connect", () => ({ memoServiceClient: api }));
+vi.mock("@/contexts/InstanceContext", () => ({ useInstance: () => ({ profile: { instanceUrl: "" } }) }));
+vi.mock("@/lib/toast", () => ({ showErrorToast: vi.fn(), toast: { add: vi.fn() } }));
+vi.mock("@/utils/i18n", () => ({ useTranslate: () => (key: string) => key }));
 
 const setup = () => {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, retryDelay: 0 }, mutations: { retry: false } } });
@@ -33,6 +40,53 @@ const setup = () => {
 };
 
 const memo = (name: string, content = name): Memo => create(MemoSchema, { name, content });
+
+describe("bulk task changes", () => {
+  beforeEach(() => vi.resetAllMocks());
+
+  const renderActions = (rendered: Memo, cached: Memo = rendered) => {
+    const { client, wrapper: QueryProvider } = setup();
+    client.setQueryData(memoKeys.detail(cached.name), cached);
+    const { result } = renderHook(() => useMemoActionHandlers({ memo: rendered, setDeleteDialogOpen: vi.fn() }), {
+      wrapper: ({ children }) => (
+        <MemoryRouter>
+          <QueryProvider>{children}</QueryProvider>
+        </MemoryRouter>
+      ),
+    });
+    return { client, actions: result.current };
+  };
+
+  it("preserves a newer body that was cached after the task menu rendered", async () => {
+    const rendered = create(MemoSchema, { name: "memos/tasks", content: "- [ ] plan", revision: "r1" });
+    const cached = create(MemoSchema, { ...rendered, content: "New paragraph\n\n- [ ] plan", revision: "r2" });
+    const { client, actions } = renderActions(rendered, cached);
+
+    await act(() => actions.handleCheckAllTaskListItemsClick());
+
+    expect(api.updateMemo).not.toHaveBeenCalled();
+    expect(client.getQueryData(memoKeys.detail(cached.name))).toEqual(cached);
+    expect(showErrorToast).toHaveBeenCalledWith("editor.task-update-failed");
+    expect(toast.add).not.toHaveBeenCalled();
+  });
+
+  it("sends the rendered revision so the server can reject an unseen edit", async () => {
+    const rendered = create(MemoSchema, { name: "memos/tasks", content: "- [x] plan\n- [x] review", revision: "r1" });
+    const { client, actions } = renderActions(rendered);
+    api.updateMemo.mockRejectedValueOnce(new ConnectError("memo changed", Code.Aborted));
+
+    await act(() => actions.handleUncheckAllTaskListItemsClick());
+
+    expect(api.updateMemo).toHaveBeenCalledWith(
+      expect.objectContaining({
+        memo: expect.objectContaining({ name: rendered.name, content: "- [ ] plan\n- [ ] review" }),
+        expectedRevision: "r1",
+      }),
+    );
+    expect(client.getQueryData(memoKeys.detail(rendered.name))).toEqual(rendered);
+    expect(showErrorToast).toHaveBeenCalledWith("editor.task-update-failed");
+  });
+});
 
 describe("useMemoRecord", () => {
   beforeEach(() => vi.resetAllMocks());
@@ -74,6 +128,22 @@ describe("useMemoRecord", () => {
     expect(result.current).toBe(fresh);
   });
 
+  it("keeps a newer memo revision when an unrelated next page updates the list's timestamp", () => {
+    const { client, wrapper } = setup();
+    const stale = create(MemoSchema, { name: "memos/x", content: "old", revision: "106:9" });
+    const fresh = create(MemoSchema, { name: stale.name, content: "new", revision: "106:10" });
+    const listKey = memoKeys.list({});
+    const firstPage = create(ListMemosResponseSchema, { memos: [stale] });
+    client.setQueryData(listKey, { pages: [firstPage], pageParams: [""] }, { updatedAt: 1_000 });
+    client.setQueryData(memoKeys.detail(stale.name), fresh, { updatedAt: 2_000 });
+    const { result } = renderHook(() => useMemoRecord(stale.name), { wrapper });
+    expect(result.current).toBe(fresh);
+
+    const nextPage = create(ListMemosResponseSchema, { memos: [memo("memos/y")] });
+    act(() => client.setQueryData(listKey, { pages: [firstPage, nextPage], pageParams: ["", "second"] }, { updatedAt: 3_000 }));
+    expect(result.current).toBe(fresh);
+  });
+
   it("follows the list's refetch and a mutation's optimistic patch", async () => {
     const { client, wrapper } = setup();
     const before = memo("memos/x", "before");
@@ -92,7 +162,7 @@ describe("useMemoRecord", () => {
     act(() => {
       client.setQueryData(memoKeys.list({}), create(ListMemosResponseSchema, { memos: [memo("memos/x", "refetched")] }));
     });
-    expect(result.current.record?.content).toBe("refetched");
+    await waitFor(() => expect(result.current.record?.content).toBe("refetched"));
 
     act(() => result.current.update.mutate({ update: { name: before.name, content: "edited" }, updateMask: ["content"] }));
     // The optimistic patch, before the server answers.
@@ -273,31 +343,6 @@ describe("useUpdateMemo", () => {
     expect(result.current.record?.pinned).toBe(false);
   });
 
-  it("sends a memo's updates in the order they were made, whatever each does before it is sent", async () => {
-    const { client, wrapper } = setup();
-    const target = memo("memos/x");
-    client.setQueryData(memoKeys.detail(target.name), target);
-    const replies: Array<() => void> = [];
-    api.updateMemo.mockImplementation(
-      ({ memo: update }: { memo: Memo }) =>
-        new Promise<Memo>((done) => replies.push(() => done(create(MemoSchema, { ...target, ...update })))),
-    );
-    const { result } = renderHook(() => useUpdateMemo(target.name), { wrapper });
-
-    // A move patches nothing before it is sent, so it is ready to send before the pin made ahead of it.
-    act(() => {
-      result.current.mutate({ update: { name: target.name, pinned: true }, updateMask: ["pinned"] });
-      result.current.mutate({ update: { name: target.name, space: "spaces/b" }, updateMask: ["space"] });
-    });
-    await waitFor(() => expect(api.updateMemo).toHaveBeenCalledTimes(1));
-    await act(async () => replies[0]());
-    await waitFor(() => expect(api.updateMemo).toHaveBeenCalledTimes(2));
-    await act(async () => replies[1]());
-    await waitFor(() => expect(client.isMutating()).toBe(0));
-
-    expect(api.updateMemo.mock.calls.map(([request]) => request.updateMask.paths)).toEqual([["pinned"], ["space"]]);
-  });
-
   // A detail page and a list on screen, and a fake server that answers both from what it has saved.
   const onScreen = async (before: Memo) => {
     const { client, wrapper } = setup();
@@ -311,81 +356,6 @@ describe("useUpdateMemo", () => {
     await waitFor(() => expect(rendered.result.current.list.data?.memos).toHaveLength(1));
     return { client, server, result: rendered.result };
   };
-
-  it.each(["succeeds", "fails"])("defers a Space refresh until the last queued update %s", async (outcome) => {
-    const before = create(MemoSchema, { name: "memos/x", content: "before", space: "spaces/a" });
-    const moved = create(MemoSchema, { ...before, space: "spaces/b" });
-    const edited = create(MemoSchema, { ...moved, content: "edited" });
-    const { client, server, result } = await onScreen(before);
-    const commentsKey = memoKeys.comments(before.name);
-    client.setQueryData(commentsKey, create(ListMemoCommentsResponseSchema, { comments: [] }));
-    const invalidate = vi.spyOn(client, "invalidateQueries");
-    const replies: Array<{ resolve: (memo: Memo) => void; reject: (error: Error) => void }> = [];
-    api.updateMemo.mockImplementation(() => new Promise<Memo>((resolve, reject) => replies.push({ resolve, reject })));
-
-    act(() => {
-      result.current.update.mutate({ update: { name: before.name, space: moved.space }, updateMask: ["space"] });
-      result.current.update.mutate({ update: { name: before.name, content: edited.content }, updateMask: ["content"] });
-      result.current.update.mutate({ update: { name: before.name, pinned: true }, updateMask: ["pinned"] });
-    });
-    await waitFor(() => expect(api.updateMemo).toHaveBeenCalledTimes(1));
-    await waitFor(() => expect(result.current.detail.data).toMatchObject({ content: edited.content, pinned: true }));
-
-    await act(async () => {
-      server.memo = moved;
-      replies[0].resolve(moved);
-    });
-    await waitFor(() => expect(api.updateMemo).toHaveBeenCalledTimes(2));
-    await waitFor(() => expect(client.isFetching()).toBe(0));
-    expect(result.current.detail.data).toMatchObject({ content: edited.content, pinned: true });
-    expect(invalidate.mock.calls.map(([filters]) => filters?.queryKey)).not.toContainEqual(memoKeys.all);
-
-    await act(async () => {
-      server.memo = edited;
-      replies[1].resolve(edited);
-    });
-    await waitFor(() => expect(api.updateMemo).toHaveBeenCalledTimes(3));
-    expect(invalidate.mock.calls.map(([filters]) => filters?.queryKey)).not.toContainEqual(memoKeys.all);
-    expect(client.getQueryState(commentsKey)?.isInvalidated).toBe(false);
-
-    await act(async () => {
-      if (outcome === "succeeds") {
-        server.memo = create(MemoSchema, { ...edited, pinned: true });
-        replies[2].resolve(server.memo);
-      } else {
-        replies[2].reject(new Error("pin failed"));
-      }
-    });
-    await waitFor(() => expect(client.isMutating()).toBe(0));
-    await waitFor(() => expect(client.isFetching()).toBe(0));
-    expect(result.current.detail.data).toMatchObject({ space: moved.space, content: edited.content, pinned: outcome === "succeeds" });
-    expect(result.current.list.data?.memos[0]).toMatchObject({ content: edited.content, pinned: outcome === "succeeds" });
-    expect(invalidate.mock.calls.map(([filters]) => filters?.queryKey)).toContainEqual(memoKeys.all);
-    expect(client.getQueryState(commentsKey)?.isInvalidated).toBe(true);
-  });
-
-  it("refreshes a Space change without waiting for an unrelated memo's update", async () => {
-    const before = create(MemoSchema, { name: "memos/x", space: "spaces/a" });
-    const { client, server, result } = await onScreen(before);
-    // Both hooks must use the same client, as they do on a page with multiple memos.
-    const { result: other } = renderHook(() => useUpdateMemo("memos/other"), {
-      wrapper: ({ children }: { children: ReactNode }) => <QueryClientProvider client={client}>{children}</QueryClientProvider>,
-    });
-    const invalidate = vi.spyOn(client, "invalidateQueries");
-    api.updateMemo.mockImplementation(({ memo: update }: { memo: Memo }) => {
-      if (update.name !== before.name) return new Promise<Memo>(() => {});
-      server.memo = create(MemoSchema, { ...before, space: "spaces/b" });
-      return Promise.resolve(server.memo);
-    });
-    act(() => {
-      other.current.mutate({ update: { name: "memos/other", pinned: true }, updateMask: ["pinned"] });
-      result.current.update.mutate({ update: { name: before.name, space: "spaces/b" }, updateMask: ["space"] });
-    });
-    await waitFor(() => expect(api.updateMemo).toHaveBeenCalledTimes(2));
-    await waitFor(() => expect(result.current.update.isPending).toBe(false));
-    expect(client.isMutating()).toBe(1);
-    expect(invalidate.mock.calls.map(([filters]) => filters?.queryKey)).toContainEqual(memoKeys.all);
-  });
 
   it("ends on the server's state when the queued update fails after the older one saved", async () => {
     const before = create(MemoSchema, { name: "memos/x", content: "- [ ] a", snippet: "[ ] a", property: { hasIncompleteTasks: true } });

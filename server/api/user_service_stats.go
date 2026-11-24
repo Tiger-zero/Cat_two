@@ -83,10 +83,11 @@ func (s *APIService) ListUserStats(ctx context.Context, request *apipb.ListUserS
 	}
 
 	if request.Filter != "" {
-		if err := s.validateMemoFilterForUser(ctx, request.Filter, currentUser); err != nil {
+		prepared, err := prepareMemoFilter(ctx, request.Filter)
+		if err != nil {
 			return nil, err
 		}
-		memoFind.Filters = append(memoFind.Filters, request.Filter)
+		memoFind.PreparedFilter = prepared
 	}
 
 	if request.State == apipb.State_ARCHIVED {
@@ -220,16 +221,29 @@ func (s *APIService) GetUserStats(ctx context.Context, request *apipb.GetUserSta
 	}
 
 	if request.Filter != "" {
-		if err := s.validateMemoFilterForUser(ctx, request.Filter, currentUser); err != nil {
+		prepared, err := prepareMemoFilter(ctx, request.Filter)
+		if err != nil {
 			return nil, err
 		}
-		memoFind.Filters = append(memoFind.Filters, request.Filter)
+		memoFind.PreparedFilter = prepared
 	}
 
 	memoFind.Access = accessScope
 
 	createdTimestamps := []*timestamppb.Timestamp{}
 	updatedTimestamps := []*timestamppb.Timestamp{}
+	var dailyActivity *apipb.UserStats_DailyActivity
+	var calendarLocation *time.Location
+	if request.ActivityByDay {
+		calendarLocation, err = time.LoadLocation("Asia/Shanghai")
+		if err != nil {
+			return nil, status.Errorf(codes.Internal, "failed to load calendar time zone: %v", err)
+		}
+		dailyActivity = &apipb.UserStats_DailyActivity{
+			CreatedCounts: make(map[string]int32),
+			UpdatedCounts: make(map[string]int32),
+		}
+	}
 	tagCount := make(map[string]int32)
 	linkCount := int32(0)
 	codeCount := int32(0)
@@ -255,8 +269,14 @@ func (s *APIService) GetUserStats(ctx context.Context, request *apipb.GetUserSta
 		totalMemoCount += int32(len(memos))
 
 		for _, memo := range memos {
-			createdTimestamps = append(createdTimestamps, timestamppb.New(time.Unix(memo.CreatedTs, 0)))
-			updatedTimestamps = append(updatedTimestamps, timestamppb.New(time.Unix(memo.UpdatedTs, 0)))
+			createdAt, updatedAt := time.Unix(memo.CreatedTs, 0), time.Unix(memo.UpdatedTs, 0)
+			if dailyActivity != nil {
+				dailyActivity.CreatedCounts[createdAt.In(calendarLocation).Format(time.DateOnly)]++
+				dailyActivity.UpdatedCounts[updatedAt.In(calendarLocation).Format(time.DateOnly)]++
+			} else {
+				createdTimestamps = append(createdTimestamps, timestamppb.New(createdAt))
+				updatedTimestamps = append(updatedTimestamps, timestamppb.New(updatedAt))
+			}
 			// Count different memo types based on content.
 			if memo.Payload != nil {
 				memopayload.CountTagBranches(tagCount, memo.Payload.Tags)
@@ -287,6 +307,7 @@ func (s *APIService) GetUserStats(ctx context.Context, request *apipb.GetUserSta
 		Name:                  fmt.Sprintf("%s/stats", BuildUserName(user.Username)),
 		MemoCreatedTimestamps: createdTimestamps,
 		MemoUpdatedTimestamps: updatedTimestamps,
+		DailyActivity:         dailyActivity,
 		TagCounts:             tagCount,
 		PinnedMemos:           pinnedMemos,
 		TotalMemoCount:        totalMemoCount,

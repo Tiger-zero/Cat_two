@@ -2,17 +2,14 @@ package api
 
 import (
 	"context"
-	"strings"
 
 	"github.com/pkg/errors"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
-	"google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/usememos/memos/core/configuration"
 	"github.com/usememos/memos/core/instancesetting"
-	"github.com/usememos/memos/core/notification"
 	apipb "github.com/usememos/memos/proto/gen/api"
 	storepb "github.com/usememos/memos/proto/gen/store"
 	"github.com/usememos/memos/store"
@@ -106,7 +103,7 @@ func (s *APIService) getInstanceSettingByName(ctx context.Context, name string, 
 	}
 
 	instanceSettingKey := storepb.InstanceSettingKey(storepb.InstanceSettingKey_value[instanceSettingKeyString])
-	if s.personalMode() && instanceSettingKey == storepb.InstanceSettingKey_NOTIFICATION {
+	if instanceSettingKey == storepb.InstanceSettingKey_NOTIFICATION {
 		return nil, retiredModuleError()
 	}
 	// Get instance setting from store with default value.
@@ -121,8 +118,7 @@ func (s *APIService) getInstanceSettingByName(ctx context.Context, name string, 
 		setting, err = s.Store.GetInstanceGeneralSetting(ctx)
 		instanceSetting = &storepb.InstanceSetting{Key: instanceSettingKey, Value: &storepb.InstanceSetting_GeneralSetting{GeneralSetting: setting}}
 	case storepb.InstanceSettingKey_STORAGE:
-		// Only startup migration needs the old provider registry. Report the
-		// storage actually used for new files, independently of that registry.
+		// Report the managed storage used for new files.
 		setting := &storepb.InstanceStorageSetting{
 			StorageType:      storepb.InstanceStorageSetting_LOCAL,
 			FilepathTemplate: store.DefaultAttachmentPathTemplate,
@@ -133,10 +129,6 @@ func (s *APIService) getInstanceSettingByName(ctx context.Context, name string, 
 		var setting *storepb.InstanceTagsSetting
 		setting, err = s.Store.GetInstanceTagsSetting(ctx)
 		instanceSetting = &storepb.InstanceSetting{Key: instanceSettingKey, Value: &storepb.InstanceSetting_TagsSetting{TagsSetting: setting}}
-	case storepb.InstanceSettingKey_NOTIFICATION:
-		var setting *storepb.InstanceNotificationSetting
-		setting, err = s.Store.GetInstanceNotificationSetting(ctx)
-		instanceSetting = &storepb.InstanceSetting{Key: instanceSettingKey, Value: &storepb.InstanceSetting_NotificationSetting{NotificationSetting: setting}}
 	case storepb.InstanceSettingKey_AI:
 		var setting *storepb.InstanceAISetting
 		setting, err = s.Store.GetInstanceAISetting(ctx)
@@ -156,7 +148,7 @@ func (s *APIService) getInstanceSettingByName(ctx context.Context, name string, 
 		return nil, status.Errorf(codes.Internal, "failed to get instance setting: %v", err)
 	}
 
-	// Storage and notification settings contain credentials, and usage limits
+	// Storage and AI settings contain credentials, and legacy usage limits
 	// name users; restrict them to admins.
 	if instanceSetting.Key == storepb.InstanceSettingKey_STORAGE ||
 		instanceSetting.Key == storepb.InstanceSettingKey_NOTIFICATION ||
@@ -224,36 +216,19 @@ func (s *APIService) UpdateInstanceSetting(ctx context.Context, request *apipb.U
 	_ = request.UpdateMask
 
 	updateSetting := instancesetting.ToStore(request.InstanceSetting)
-	if s.personalMode() && (updateSetting.Key == storepb.InstanceSettingKey_NOTIFICATION || updateSetting.Key == storepb.InstanceSettingKey_ACCESS) {
+	switch updateSetting.Key {
+	case storepb.InstanceSettingKey_NOTIFICATION, storepb.InstanceSettingKey_ACCESS, storepb.InstanceSettingKey_USAGE_LIMITS:
 		return nil, retiredModuleError()
 	}
 	if updateSetting.Key == storepb.InstanceSettingKey_STORAGE {
 		return nil, status.Error(codes.FailedPrecondition, "attachment storage is managed by Cat_two")
 	}
-	if updateSetting.Key == storepb.InstanceSettingKey_USAGE_LIMITS {
-		usageLimits, err := s.convertUsageLimitsSettingToStore(ctx, request.InstanceSetting.GetUsageLimitsSetting())
-		if err != nil {
-			return nil, err
-		}
-		updateSetting.Value = &storepb.InstanceSetting_UsageLimitsSetting{UsageLimitsSetting: usageLimits}
-	}
-
 	// Preserve write-only credential fields when the caller sends an empty value.
 	// An empty string means "no change", not "clear the credential".
 	switch updateSetting.Key {
 	case storepb.InstanceSettingKey_TAGS:
 		if err := validateInstanceTagsSetting(request.InstanceSetting.GetTagsSetting()); err != nil {
 			return nil, status.Errorf(codes.InvalidArgument, "invalid instance setting: %v", err)
-		}
-	case storepb.InstanceSettingKey_NOTIFICATION:
-		if notif := updateSetting.GetNotificationSetting(); notif != nil && notif.Email != nil && notif.Email.SmtpPassword == "" {
-			existing, err := s.Store.GetInstanceNotificationSetting(ctx)
-			if err == nil && existing != nil && existing.Email != nil {
-				if existing.Email.SmtpPassword != "" && !sameSMTPConnectionIdentity(notif.Email, existing.Email) {
-					return nil, status.Errorf(codes.InvalidArgument, "smtp password is required when changing SMTP host, port, username, or encryption settings")
-				}
-				notif.Email.SmtpPassword = existing.Email.SmtpPassword
-			}
 		}
 	case storepb.InstanceSettingKey_AI:
 		if err := s.prepareInstanceAISettingForUpdate(ctx, updateSetting.GetAiSetting()); err != nil {
@@ -269,19 +244,11 @@ func (s *APIService) UpdateInstanceSetting(ctx context.Context, request *apipb.U
 		return nil, err
 	}
 
-	var instanceSetting *storepb.InstanceSetting
-	if updateSetting.Key == storepb.InstanceSettingKey_GENERAL {
-		instanceSetting, err = s.Store.UpsertInstanceGeneralSettingSafely(ctx, updateSetting)
-	} else {
-		instanceSetting, err = s.Store.UpsertInstanceSetting(ctx, updateSetting)
+	if updateSetting.GetGeneralSetting().GetDisallowPasswordAuth() {
+		return nil, status.Error(codes.FailedPrecondition, "Cat_two requires password sign-in")
 	}
+	instanceSetting, err := s.Store.UpsertInstanceSetting(ctx, updateSetting)
 	if err != nil {
-		if errors.Is(err, store.ErrUnsafeAuthenticationConfiguration) {
-			return nil, status.Error(codes.FailedPrecondition, err.Error())
-		}
-		if errors.Is(err, store.ErrInvalidUsageLimits) {
-			return nil, status.Error(codes.InvalidArgument, err.Error())
-		}
 		return nil, status.Errorf(codes.Internal, "failed to upsert instance setting: %v", err)
 	}
 
@@ -305,19 +272,11 @@ func (s *APIService) checkManagedSettingChange(ctx context.Context, update *stor
 	if err != nil {
 		return status.Errorf(codes.Internal, "failed to read instance setting: %v", err)
 	}
-	var changed []string
-	if update.Key == storepb.InstanceSettingKey_USAGE_LIMITS {
-		// Usage limits name users only in the API form, so compare stored values.
-		if !proto.Equal(stored.GetUsageLimitsSetting(), update.GetUsageLimitsSetting()) {
-			changed = []string{"usageLimitsSetting"}
-		}
-	} else {
-		var before proto.Message
-		if stored != nil {
-			before = instancesetting.FromStore(stored)
-		}
-		changed = configuration.ChangedPaths(before, instancesetting.FromStore(update))
+	var before proto.Message
+	if stored != nil {
+		before = instancesetting.FromStore(stored)
 	}
+	changed := configuration.ChangedPaths(before, instancesetting.FromStore(update))
 	return managedStatus(configuration.CheckChange(state, name, changed))
 }
 
@@ -331,82 +290,6 @@ func (s *APIService) challengeProfile() *apipb.InstanceProfile_Challenge {
 		Provider: s.Challenge.Provider(),
 		SiteKey:  s.Challenge.SiteKey(),
 	}
-}
-
-func (s *APIService) TestInstanceEmailSetting(ctx context.Context, request *apipb.TestInstanceEmailSettingRequest) (*emptypb.Empty, error) {
-	user, err := s.fetchCurrentUser(ctx)
-	if err != nil {
-		return nil, status.Errorf(codes.Internal, "failed to get current user: %v", err)
-	}
-	if user == nil {
-		return nil, status.Errorf(codes.Unauthenticated, "user not authenticated")
-	}
-	if user.Role != store.RoleAdmin {
-		return nil, status.Errorf(codes.PermissionDenied, "permission denied")
-	}
-
-	emailSetting, err := s.resolveTestEmailSetting(ctx, request.Email)
-	if err != nil {
-		return nil, err
-	}
-
-	recipientEmail := strings.TrimSpace(request.RecipientEmail)
-	if recipientEmail == "" {
-		recipientEmail = strings.TrimSpace(user.Email)
-	}
-	if recipientEmail == "" {
-		return nil, status.Errorf(codes.InvalidArgument, "recipient email is required")
-	}
-
-	if err := notification.ValidateEmailSetting(emailSetting); err != nil {
-		return nil, status.Errorf(codes.InvalidArgument, "invalid notification email setting: %v", err)
-	}
-
-	if err := notification.SendTestEmail(emailSetting, recipientEmail); err != nil {
-		return nil, status.Errorf(codes.Internal, "failed to send test email: %v. Check that the SMTP port matches encryption: Gmail uses port 587 with STARTTLS on and SSL/TLS off; port 465 requires SSL/TLS on", err)
-	}
-
-	return &emptypb.Empty{}, nil
-}
-
-func (s *APIService) resolveTestEmailSetting(ctx context.Context, requestEmail *apipb.InstanceSetting_NotificationSetting_EmailSetting) (*storepb.InstanceNotificationSetting_EmailSetting, error) {
-	if requestEmail == nil {
-		existing, err := s.Store.GetInstanceNotificationSetting(ctx)
-		if err != nil {
-			return nil, status.Errorf(codes.Internal, "failed to get notification setting: %v", err)
-		}
-		return existing.GetEmail(), nil
-	}
-
-	emailSetting := instancesetting.NotificationSettingToStore(&apipb.InstanceSetting_NotificationSetting{Email: requestEmail}).GetEmail()
-	if emailSetting.SmtpPassword != "" {
-		return emailSetting, nil
-	}
-
-	existing, err := s.Store.GetInstanceNotificationSetting(ctx)
-	if err != nil {
-		return nil, status.Errorf(codes.Internal, "failed to get notification setting: %v", err)
-	}
-	existingEmail := existing.GetEmail()
-	if existingEmail == nil || existingEmail.SmtpPassword == "" {
-		return emailSetting, nil
-	}
-	if sameSMTPConnectionIdentity(emailSetting, existingEmail) {
-		emailSetting.SmtpPassword = existingEmail.SmtpPassword
-		return emailSetting, nil
-	}
-	return nil, status.Errorf(codes.InvalidArgument, "smtp password is required when changing SMTP host, port, username, or encryption settings")
-}
-
-func sameSMTPConnectionIdentity(setting, existing *storepb.InstanceNotificationSetting_EmailSetting) bool {
-	if setting == nil || existing == nil {
-		return false
-	}
-	return strings.TrimSpace(setting.SmtpHost) == strings.TrimSpace(existing.SmtpHost) &&
-		setting.SmtpPort == existing.SmtpPort &&
-		strings.TrimSpace(setting.SmtpUsername) == strings.TrimSpace(existing.SmtpUsername) &&
-		setting.UseTls == existing.UseTls &&
-		setting.UseSsl == existing.UseSsl
 }
 
 // getInstanceAdmin returns the first admin of the instance as seen by viewer,

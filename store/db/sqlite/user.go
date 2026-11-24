@@ -21,7 +21,24 @@ func (*DB) CreateUserTx(ctx context.Context, tx *sql.Tx, create *store.User) (*s
 }
 
 func createUser(ctx context.Context, q dbExecutor, create *store.User) (*store.User, error) {
-	if err := insertUser(ctx, q, create); err != nil {
+	stmt := "INSERT INTO user (`username`, `role`, `email`, `nickname`, `password_hash`, `avatar_url`) VALUES (?, ?, ?, ?, ?, ?) RETURNING id, description, created_ts, updated_ts, row_status"
+	err := q.QueryRowContext(
+		ctx,
+		stmt,
+		create.Username,
+		create.Role,
+		nullableEmail(create.Email),
+		create.Nickname,
+		create.PasswordHash,
+		create.AvatarURL,
+	).Scan(
+		&create.ID,
+		&create.Description,
+		&create.CreatedTs,
+		&create.UpdatedTs,
+		&create.RowStatus,
+	)
+	if err != nil {
 		return nil, err
 	}
 	return create, nil
@@ -51,11 +68,6 @@ func (*DB) UpdateUserTx(ctx context.Context, tx *sql.Tx, update *store.UpdateUse
 func updateUser(ctx context.Context, tx *sql.Tx, update *store.UpdateUser) (*store.User, error) {
 	if update.RemovesInstanceAdmin() {
 		if err := ensureInstanceAdminRetained(ctx, tx, update.ID); err != nil {
-			return nil, err
-		}
-	}
-	if update.RowStatus != nil && *update.RowStatus == store.Archived {
-		if err := validateSQLiteUserArchive(ctx, tx, update.ID); err != nil {
 			return nil, err
 		}
 	}
@@ -114,32 +126,6 @@ func updateUser(ctx context.Context, tx *sql.Tx, update *store.UpdateUser) (*sto
 	}
 	user.Email = email.String
 	return user, nil
-}
-
-func validateSQLiteUserArchive(ctx context.Context, tx dbExecutor, userID int32) error {
-	var current store.RowStatus
-	if err := tx.QueryRowContext(ctx, "SELECT row_status FROM user WHERE id = ?", userID).Scan(&current); err != nil {
-		return err
-	}
-	if current != store.Normal {
-		return nil
-	}
-	var wouldLoseAdmin bool
-	err := tx.QueryRowContext(ctx, `SELECT EXISTS(
-		SELECT 1 FROM space_member target
-		WHERE target.user_id = ? AND target.status = 'ACTIVE' AND target.role = 'ADMIN'
-		AND NOT EXISTS (
-			SELECT 1 FROM space_member other JOIN user u ON u.id = other.user_id
-			WHERE other.space_id = target.space_id AND other.user_id <> ?
-				AND other.status = 'ACTIVE' AND other.role = 'ADMIN' AND u.row_status = 'NORMAL'
-		))`, userID, userID).Scan(&wouldLoseAdmin)
-	if err != nil {
-		return err
-	}
-	if wouldLoseAdmin {
-		return store.ErrLastSpaceAdmin
-	}
-	return nil
 }
 
 // ensureInstanceAdminRetained refuses a mutation that would remove the last

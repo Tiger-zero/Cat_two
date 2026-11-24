@@ -17,8 +17,7 @@ type AttachmentDeletionPolicy struct {
 }
 
 // DeleteAttachmentsWithPolicy atomically authorizes and removes the selected
-// attachment rows. External object cleanup remains the caller's responsibility
-// after the transaction commits.
+// attachment rows and queues their storage cleanup in the same transaction.
 func (s *Store) DeleteAttachmentsWithPolicy(ctx context.Context, policy *AttachmentDeletionPolicy, attachmentIDs []int32) error {
 	normalizedPolicy, normalizedIDs, err := normalizeAttachmentDelete(policy, attachmentIDs)
 	if err != nil {

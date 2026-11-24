@@ -166,7 +166,7 @@ const UserMenu = ({ onClose, onOpenSettings }: { onClose: () => void; onOpenSett
     } catch {
       // Ignore errors from localStorage operations.
     }
-    window.location.replace(buildAuthRoute({ autoSignIn: false }));
+    window.location.replace(buildAuthRoute());
   };
 
   return (

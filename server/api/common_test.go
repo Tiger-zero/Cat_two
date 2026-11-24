@@ -1,9 +1,12 @@
 package api
 
 import (
+	"context"
 	"testing"
 
 	"github.com/stretchr/testify/require"
+
+	"github.com/usememos/memos/store"
 )
 
 func TestNormalizePageSize(t *testing.T) {
@@ -43,4 +46,15 @@ func TestNormalizePageSize(t *testing.T) {
 			require.Equal(t, tt.want, normalizePageSize(tt.pageSize))
 		})
 	}
+}
+
+func createSpaceTestUser(ctx context.Context, t *testing.T, service *APIService, username string, role store.Role) *store.User {
+	t.Helper()
+	user, err := service.Store.CreateUser(ctx, &store.User{
+		Username: username,
+		Role:     role,
+		Email:    username + "@example.com",
+	})
+	require.NoError(t, err)
+	return user
 }

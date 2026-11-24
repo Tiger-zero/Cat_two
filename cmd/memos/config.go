@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"net/url"
 	"os"
+	"runtime"
 	"strings"
 	"time"
 
@@ -33,7 +34,7 @@ const (
 var (
 	configCmd = &cobra.Command{
 		Use:   "config",
-		Short: "Work with declarative configuration files",
+		Short: "Manage instance settings and the administrator through configuration files",
 	}
 	configValidateCmd = &cobra.Command{
 		Use:   "validate",
@@ -98,8 +99,8 @@ func init() {
 	flags := configCmd.PersistentFlags()
 	flags.String("config-dir", configuration.DefaultDir, "directory of declarative configuration files")
 	flags.String("data", "", "data directory of the instance")
-	flags.String("driver", "sqlite", "database driver of the instance (sqlite, mysql, postgres)")
-	flags.String("dsn", "", "database source name of the instance")
+	flags.String("driver", profile.SQLiteDriver, "database driver (sqlite)")
+	flags.String("dsn", "", "SQLite database path or file URI")
 
 	configPlanCmd.Flags().Bool("json", false, "print the plan as JSON")
 	configPlanCmd.Flags().Bool("detailed-exitcode", false, "exit 0 for no changes, 1 for an error, 2 for changes")
@@ -170,8 +171,8 @@ func runConfigValidate(dir string, resolver configuration.Resolver, stdout, stde
 		return err
 	}
 	config := desired.Configuration
-	fmt.Fprintf(stdout, "Configuration in %s is valid: %d identity providers, %d instance settings, %d users, %d linked identities.\n",
-		dir, len(config.IdentityProviders), len(config.InstanceSettings), len(config.Users), len(config.LinkedIdentities))
+	fmt.Fprintf(stdout, "Configuration in %s is valid: %d instance settings, %d administrator declarations.\n",
+		dir, len(config.InstanceSettings), len(config.Users))
 	return nil
 }
 
@@ -228,7 +229,7 @@ func openInstanceStore(ctx context.Context, instanceProfile *profile.Profile, mi
 	if err := instanceProfile.Validate(); err != nil {
 		return nil, errors.Wrap(err, "failed to validate profile")
 	}
-	if instanceProfile.Driver == "sqlite" && !migrate {
+	if !migrate {
 		path, err := sqliteDatabasePath(instanceProfile.DSN)
 		if err != nil {
 			return nil, err
@@ -257,16 +258,26 @@ func openInstanceStore(ctx context.Context, instanceProfile *profile.Profile, mi
 
 func sqliteDatabasePath(dsn string) (string, error) {
 	if !strings.HasPrefix(dsn, "file:") {
+		if query := strings.IndexByte(dsn, '?'); query > 0 {
+			return dsn[:query], nil
+		}
 		return dsn, nil
 	}
 	uri, err := url.Parse(dsn)
 	if err != nil {
 		return "", errors.Wrap(err, "invalid SQLite file URI")
 	}
+	if uri.Query().Get("mode") == "memory" {
+		return ":memory:", nil
+	}
 	if uri.Opaque != "" {
 		return url.PathUnescape(uri.Opaque)
 	}
-	return uri.Path, nil
+	path := uri.Path
+	if runtime.GOOS == "windows" && len(path) > 2 && path[0] == '/' && path[2] == ':' {
+		path = path[1:]
+	}
+	return path, nil
 }
 
 func runConfigApply(ctx context.Context, dir string, resolver configuration.Resolver, s *store.Store, metadata configuration.ApplyMetadata, jsonOutput bool, stdout, stderr io.Writer) error {

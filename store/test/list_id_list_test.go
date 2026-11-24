@@ -18,8 +18,6 @@ func TestListsAcceptLongIDLists(t *testing.T) {
 	ts := NewTestingStore(ctx, t)
 	user, err := createTestingHostUser(ctx, ts)
 	require.NoError(t, err)
-	space, err := ts.CreateSpace(ctx, &store.Space{UID: "long-lists", Title: "Long lists"}, user.ID)
-	require.NoError(t, err)
 	memo, err := ts.CreateMemo(ctx, &store.Memo{UID: "long-lists-memo", CreatorID: user.ID, Content: "listed", Visibility: store.Private})
 	require.NoError(t, err)
 	attachment, err := ts.CreateAttachment(ctx, &store.Attachment{UID: "long-lists-attachment", CreatorID: user.ID, Filename: "listed.png", Type: "image/png", MemoID: &memo.ID})
@@ -61,11 +59,6 @@ func TestListsAcceptLongIDLists(t *testing.T) {
 	users, err = ts.ListUsers(ctx, &store.FindUser{UsernameList: usernames})
 	require.NoError(t, err)
 	require.Len(t, users, 1)
-
-	spaces, err := ts.ListSpaces(ctx, &store.FindSpace{IDList: ids})
-	require.NoError(t, err)
-	require.Len(t, spaces, 1)
-	require.Equal(t, space.ID, spaces[0].ID)
 
 	reactions, err := ts.ListReactions(ctx, &store.FindReaction{MemoIDList: ids})
 	require.NoError(t, err)

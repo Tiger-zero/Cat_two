@@ -394,7 +394,6 @@ type ListMemosRequest struct {
 	// Examples:
 	//
 	//	pinned == true && visibility == "PUBLIC"
-	//	space == "spaces/team" or space == null
 	//	tags.exists(t, t == "urgent")
 	//	content.contains("roadmap") && created_ts > now - duration("168h")
 	Filter string `protobuf:"bytes,3,opt,name=filter,proto3" json:"filter,omitempty"`

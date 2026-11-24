@@ -23,9 +23,6 @@ var PublicMethods = map[string]struct{}{
 	"/memos.api.UserService/GetUser":       {},
 	"/memos.api.UserService/BatchGetUsers": {},
 
-	// Identity Provider Service - SSO buttons on login page
-	"/memos.api.IdentityProviderService/ListIdentityProviders": {},
-
 	// Link previews do not read stored notes.
 	"/memos.api.MemoService/GetLinkMetadata":      {},
 	"/memos.api.MemoService/BatchGetLinkMetadata": {},
@@ -56,9 +53,6 @@ var AuthBootstrapMethods = map[string]struct{}{
 	"/memos.api.InstanceService/GetInstanceProfile":       {},
 	"/memos.api.InstanceService/GetInstanceSetting":       {},
 	"/memos.api.InstanceService/BatchGetInstanceSettings": {},
-
-	// Identity Provider Service - SSO buttons on the sign-in page.
-	"/memos.api.IdentityProviderService/ListIdentityProviders": {},
 
 	// User Service - CreateUser applies registration and password-auth settings.
 	"/memos.api.UserService/CreateUser": {},

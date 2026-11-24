@@ -77,6 +77,11 @@ func TestMemoMutationRejectsInvalidInputBeforeWriting(t *testing.T) {
 			m.MemoCreate.Visibility = store.SpaceAudience
 			return m
 		}, "SPACE visibility requires a space"},
+		{"retired placement", func() *store.MemoMutation {
+			m := creation()
+			m.MemoCreate.SpaceID = new(int32(7))
+			return m
+		}, "memo space is not writable"},
 		{"invalid comment context", func() *store.MemoMutation {
 			m := creation()
 			m.CommentContextMemoID = new(int32(0))
@@ -88,14 +93,6 @@ func TestMemoMutationRejectsInvalidInputBeforeWriting(t *testing.T) {
 		{"missing fallback policy actor", func() *store.MemoMutation {
 			return &store.MemoMutation{MemoUpdate: &store.UpdateMemo{ID: 1, Policy: &store.MemoWritePolicy{}}}
 		}, "write policy requires actor"},
-		{"conflicting policy actions", func() *store.MemoMutation {
-			return &store.MemoMutation{Policy: &store.MemoWritePolicy{ActorUserID: 1, LifecycleOnly: true, CreatingShare: true}}
-		}, "conflicting actions"},
-		{"conflicting fallback policy actions", func() *store.MemoMutation {
-			return &store.MemoMutation{MemoUpdate: &store.UpdateMemo{ID: 1, Policy: &store.MemoWritePolicy{
-				ActorUserID: 1, LifecycleOnly: true, CreatingShare: true,
-			}}}
-		}, "conflicting actions"},
 		{"zero removed ID", func() *store.MemoMutation {
 			return &store.MemoMutation{RemovedAttachmentIDs: []int32{0}}
 		}, "IDs must be positive"},
@@ -144,37 +141,6 @@ func TestMemoMutationRejectsInvalidInputBeforeWriting(t *testing.T) {
 			// No driver is installed: invalid input must fail before database access.
 			s := &store.Store{}
 			require.ErrorContains(t, s.ApplyMemoMutation(context.Background(), tc.mutation()), tc.message)
-		})
-	}
-}
-
-func TestMemoLifecycleMutationRejectsDependentWrites(t *testing.T) {
-	for _, tc := range []struct {
-		name   string
-		change func(*store.MemoMutation)
-	}{
-		{"bindings", func(m *store.MemoMutation) { m.Bindings = []*store.MemoAttachmentBinding{{ID: 1}} }},
-		{"removals", func(m *store.MemoMutation) { m.RemovedAttachmentIDs = []int32{1} }},
-		{"required attachments", func(m *store.MemoMutation) { m.RequiredAttachmentIDs = []int32{1} }},
-		{"reference replacement", func(m *store.MemoMutation) { m.ReplaceReferenceRelations = true }},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			for _, source := range []string{"mutation policy", "update policy fallback"} {
-				t.Run(source, func(t *testing.T) {
-					mutation := &store.MemoMutation{
-						MemoID: 1, MemoCreatorID: 1,
-						MemoUpdate: &store.UpdateMemo{ID: 1, ClearSpace: true},
-					}
-					policy := &store.MemoWritePolicy{ActorUserID: 1, LifecycleOnly: true}
-					if source == "mutation policy" {
-						mutation.Policy = policy
-					} else {
-						mutation.MemoUpdate.Policy = policy
-					}
-					tc.change(mutation)
-					require.ErrorIs(t, (&store.Store{}).ApplyMemoMutation(context.Background(), mutation), store.ErrMemoSpaceMembershipRequired)
-				})
-			}
 		})
 	}
 }

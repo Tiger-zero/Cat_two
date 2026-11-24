@@ -31,14 +31,20 @@ on:
       - ".golangci.yaml"
       - ".github/actions/setup-go/**"
       - ".github/workflows/backend-tests.yml"
+  workflow_call:
+    inputs:
+      release-verification:
+        type: boolean
+        default: false
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: backend-tests-${{ inputs.release-verification && github.run_id || github.ref }}
   cancel-in-progress: true
 
 jobs:
   static-checks:
     name: Static Checks
+    if: inputs.release-verification || github.event_name != 'push' || !contains(github.event.head_commit.message, '[publish dockerhub]')
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -63,6 +69,7 @@ jobs:
 
   tests:
     name: Tests (${{ matrix.test-group }})
+    if: inputs.release-verification || github.event_name != 'push' || !contains(github.event.head_commit.message, '[publish dockerhub]')
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -91,9 +98,7 @@ jobs:
               ;;
             other)
               go test -v -race \
-                ./cmd/... ./core/... ./markdown/... ./filter/... ./provider/... ./proto/...
-              go test -v -run '^(TestDevelopmentVersion|TestEntrypointDoesNotLoopWhenTargetUIDIsRoot)$' ./scripts/...
+                ./cmd/... ./core/... ./markdown/... ./filter/... ./proto/...
+              go test -v ./scripts/...
               ;;
           esac
-        env:
-          DRIVER: sqlite

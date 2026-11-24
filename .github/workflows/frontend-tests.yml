@@ -13,14 +13,20 @@ on:
       - "web/**"
       - ".github/actions/setup-web/**"
       - ".github/workflows/frontend-tests.yml"
+  workflow_call:
+    inputs:
+      release-verification:
+        type: boolean
+        default: false
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: frontend-tests-${{ inputs.release-verification && github.run_id || github.ref }}
   cancel-in-progress: true
 
 jobs:
   lint:
     name: Lint
+    if: inputs.release-verification || github.event_name != 'push' || !contains(github.event.head_commit.message, '[publish dockerhub]')
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -36,3 +42,28 @@ jobs:
       - name: Run unit tests
         working-directory: web
         run: pnpm test
+
+      - uses: ./.github/actions/setup-go
+        if: inputs.release-verification
+
+      - name: Verify the application in Chromium
+        if: inputs.release-verification
+        working-directory: web
+        run: |
+          pnpm exec playwright install --with-deps chromium
+          pnpm exec playwright test --config tests/browser/app-smoke.config.ts
+
+      - name: Build the embedded web app
+        if: inputs.release-verification
+        working-directory: web
+        run: pnpm release
+
+      - name: Save the tested web build
+        if: inputs.release-verification
+        uses: actions/upload-artifact@v6
+        with:
+          name: cat-two-frontend
+          path: server/frontend/dist
+          if-no-files-found: error
+          overwrite: true
+          retention-days: 7

@@ -14,6 +14,7 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
+	"github.com/usememos/memos/internal/profile"
 	apipb "github.com/usememos/memos/proto/gen/api"
 	"github.com/usememos/memos/store"
 )
@@ -74,7 +75,7 @@ func (s *APIService) GetInstanceStats(ctx context.Context, _ *apipb.GetInstanceS
 func (s *APIService) computeInstanceStats(ctx context.Context) (*apipb.InstanceStats, error) {
 	stats := &apipb.InstanceStats{
 		Database: &apipb.InstanceStats_DatabaseStats{
-			Driver:    s.Profile.Driver,
+			Driver:    profile.SQLiteDriver,
 			SizeBytes: -1,
 		},
 		LocalStorageBytes: -1,

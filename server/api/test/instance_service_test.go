@@ -265,40 +265,6 @@ func TestGetInstanceSetting(t *testing.T) {
 		require.Equal(t, apipb.InstanceAccessMode_INSTANCE_ACCESS_MODE_PUBLIC, resp.GetAccessSetting().GetAccessMode())
 	})
 
-	t.Run("GetInstanceSetting - notification setting requires admin", func(t *testing.T) {
-		ts := NewTestService(t)
-		defer ts.Cleanup()
-
-		admin, err := ts.CreateHostUser(ctx, "admin")
-		require.NoError(t, err)
-		adminCtx := ts.CreateUserContext(ctx, admin.ID)
-
-		regularUser, err := ts.CreateRegularUser(ctx, "user")
-		require.NoError(t, err)
-		userCtx := ts.CreateUserContext(ctx, regularUser.ID)
-
-		req := &apipb.GetInstanceSettingRequest{Name: "instance/settings/NOTIFICATION"}
-
-		// Unauthenticated request must be rejected.
-		_, err = ts.Service.GetInstanceSetting(ctx, req)
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "not authenticated")
-
-		// Non-admin request must be rejected.
-		_, err = ts.Service.GetInstanceSetting(userCtx, req)
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "permission denied")
-
-		// Admin request succeeds and does NOT expose SmtpPassword.
-		resp, err := ts.Service.GetInstanceSetting(adminCtx, req)
-		require.NoError(t, err)
-		require.NotNil(t, resp)
-		require.Equal(t, "instance/settings/NOTIFICATION", resp.Name)
-		require.NotNil(t, resp.GetNotificationSetting())
-		require.Empty(t, resp.GetNotificationSetting().GetEmail().GetSmtpPassword(),
-			"SmtpPassword must never be returned in responses")
-	})
-
 	t.Run("GetInstanceSetting - AI setting requires authenticated user", func(t *testing.T) {
 		ts := NewTestService(t)
 		defer ts.Cleanup()
@@ -380,7 +346,7 @@ func TestBatchGetInstanceSettings(t *testing.T) {
 		userCtx := ts.CreateUserContext(ctx, regularUser.ID)
 
 		_, err = ts.Service.BatchGetInstanceSettings(userCtx, &apipb.BatchGetInstanceSettingsRequest{
-			Names: []string{"instance/settings/GENERAL", "instance/settings/NOTIFICATION"},
+			Names: []string{"instance/settings/GENERAL", "instance/settings/USAGE_LIMITS"},
 		})
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "permission denied")
@@ -390,11 +356,11 @@ func TestBatchGetInstanceSettings(t *testing.T) {
 		adminCtx := ts.CreateUserContext(ctx, admin.ID)
 
 		resp, err := ts.Service.BatchGetInstanceSettings(adminCtx, &apipb.BatchGetInstanceSettingsRequest{
-			Names: []string{"instance/settings/GENERAL", "instance/settings/NOTIFICATION"},
+			Names: []string{"instance/settings/GENERAL", "instance/settings/USAGE_LIMITS"},
 		})
 		require.NoError(t, err)
 		require.Len(t, resp.InstanceSettings, 2)
-		require.NotNil(t, resp.InstanceSettings[1].GetNotificationSetting())
+		require.NotNil(t, resp.InstanceSettings[1].GetUsageLimitsSetting())
 	})
 
 	t.Run("BatchGetInstanceSettings - invalid setting name", func(t *testing.T) {
@@ -410,179 +376,8 @@ func TestBatchGetInstanceSettings(t *testing.T) {
 	})
 }
 
-func TestTestInstanceEmailSettingAuthorization(t *testing.T) {
-	ctx := context.Background()
-	ts := NewTestService(t)
-	defer ts.Cleanup()
-
-	admin, err := ts.CreateHostUser(ctx, "email-test-admin")
-	require.NoError(t, err)
-	adminCtx := ts.CreateUserContext(ctx, admin.ID)
-
-	regularUser, err := ts.CreateRegularUser(ctx, "email-test-user")
-	require.NoError(t, err)
-	userCtx := ts.CreateUserContext(ctx, regularUser.ID)
-
-	req := &apipb.TestInstanceEmailSettingRequest{}
-
-	_, err = ts.Service.TestInstanceEmailSetting(ctx, req)
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "not authenticated")
-
-	_, err = ts.Service.TestInstanceEmailSetting(userCtx, req)
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "permission denied")
-
-	_, err = ts.Service.TestInstanceEmailSetting(adminCtx, req)
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "invalid notification email setting")
-}
-
-func TestTestInstanceEmailSettingRequiresPasswordWhenSMTPIdentityChanges(t *testing.T) {
-	ctx := context.Background()
-	ts := NewTestService(t)
-	defer ts.Cleanup()
-
-	admin, err := ts.CreateHostUser(ctx, "email-test-identity-admin")
-	require.NoError(t, err)
-	adminCtx := ts.CreateUserContext(ctx, admin.ID)
-
-	_, err = ts.Store.UpsertInstanceSetting(ctx, &storepb.InstanceSetting{
-		Key: storepb.InstanceSettingKey_NOTIFICATION,
-		Value: &storepb.InstanceSetting_NotificationSetting{
-			NotificationSetting: &storepb.InstanceNotificationSetting{
-				Email: &storepb.InstanceNotificationSetting_EmailSetting{
-					Enabled:      true,
-					SmtpHost:     "smtp.example.com",
-					SmtpPort:     587,
-					SmtpUsername: "bot@example.com",
-					SmtpPassword: "stored-password",
-					FromEmail:    "bot@example.com",
-					UseTls:       true,
-				},
-			},
-		},
-	})
-	require.NoError(t, err)
-
-	_, err = ts.Service.TestInstanceEmailSetting(adminCtx, &apipb.TestInstanceEmailSettingRequest{
-		Email: &apipb.InstanceSetting_NotificationSetting_EmailSetting{
-			Enabled:      true,
-			SmtpHost:     "attacker.example.com",
-			SmtpPort:     587,
-			SmtpUsername: "bot@example.com",
-			SmtpPassword: "",
-			FromEmail:    "bot@example.com",
-			UseTls:       true,
-		},
-		RecipientEmail: admin.Email,
-	})
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "smtp password is required")
-}
-
 func TestUpdateInstanceSetting(t *testing.T) {
 	ctx := context.Background()
-
-	t.Run("UpdateInstanceSetting - notification email validation", func(t *testing.T) {
-		ts := NewTestService(t)
-		defer ts.Cleanup()
-
-		admin, err := ts.CreateHostUser(ctx, "notification-admin")
-		require.NoError(t, err)
-		adminCtx := ts.CreateUserContext(ctx, admin.ID)
-		update := func(email *apipb.InstanceSetting_NotificationSetting_EmailSetting) error {
-			_, err := ts.Service.UpdateInstanceSetting(adminCtx, &apipb.UpdateInstanceSettingRequest{
-				InstanceSetting: &apipb.InstanceSetting{
-					Name: "instance/settings/NOTIFICATION",
-					Value: &apipb.InstanceSetting_NotificationSetting_{
-						NotificationSetting: &apipb.InstanceSetting_NotificationSetting{Email: email},
-					},
-				},
-			})
-			return err
-		}
-		valid := func() *apipb.InstanceSetting_NotificationSetting_EmailSetting {
-			return &apipb.InstanceSetting_NotificationSetting_EmailSetting{
-				Enabled:      true,
-				SmtpHost:     "smtp.example.com",
-				SmtpPort:     587,
-				SmtpPassword: "password",
-				FromEmail:    "bot@example.com",
-				UseTls:       true,
-			}
-		}
-
-		bothEncryptions := valid()
-		bothEncryptions.UseSsl = true
-		err = update(bothEncryptions)
-		require.Equal(t, codes.InvalidArgument, status.Code(err))
-		require.Contains(t, err.Error(), "cannot enable both use_tls and use_ssl")
-
-		for name, mutate := range map[string]func(*apipb.InstanceSetting_NotificationSetting_EmailSetting){
-			"host": func(e *apipb.InstanceSetting_NotificationSetting_EmailSetting) { e.SmtpHost = " " },
-			"port": func(e *apipb.InstanceSetting_NotificationSetting_EmailSetting) { e.SmtpPort = 0 },
-			"from": func(e *apipb.InstanceSetting_NotificationSetting_EmailSetting) { e.FromEmail = "" },
-		} {
-			email := valid()
-			mutate(email)
-			err := update(email)
-			require.Equal(t, codes.InvalidArgument, status.Code(err), "missing %s", name)
-			require.Contains(t, err.Error(), "requires smtp_host", "missing %s", name)
-		}
-
-		require.NoError(t, update(valid()))
-		// Disabled email may be saved incomplete.
-		require.NoError(t, update(&apipb.InstanceSetting_NotificationSetting_EmailSetting{Enabled: false, SmtpPassword: "password"}))
-	})
-
-	t.Run("UpdateInstanceSetting - access setting", func(t *testing.T) {
-		ts := NewTestService(t)
-		defer ts.Cleanup()
-
-		admin, err := ts.CreateHostUser(ctx, "access-admin")
-		require.NoError(t, err)
-		adminCtx := ts.CreateUserContext(ctx, admin.ID)
-
-		resp, err := ts.Service.UpdateInstanceSetting(adminCtx, &apipb.UpdateInstanceSettingRequest{
-			InstanceSetting: &apipb.InstanceSetting{
-				Name: "instance/settings/ACCESS",
-				Value: &apipb.InstanceSetting_AccessSetting_{
-					AccessSetting: &apipb.InstanceSetting_AccessSetting{
-						AccessMode: apipb.InstanceAccessMode_INSTANCE_ACCESS_MODE_PRIVATE,
-					},
-				},
-			},
-		})
-		require.NoError(t, err)
-		require.Equal(t, apipb.InstanceAccessMode_INSTANCE_ACCESS_MODE_PRIVATE, resp.GetAccessSetting().GetAccessMode())
-
-		profile, err := ts.Service.GetInstanceProfile(ctx, &apipb.GetInstanceProfileRequest{})
-		require.NoError(t, err)
-		require.Equal(t, apipb.InstanceAccessMode_INSTANCE_ACCESS_MODE_PRIVATE, profile.AccessMode)
-
-		_, err = ts.Service.UpdateInstanceSetting(adminCtx, &apipb.UpdateInstanceSettingRequest{
-			InstanceSetting: &apipb.InstanceSetting{
-				Name: "instance/settings/ACCESS",
-				Value: &apipb.InstanceSetting_AccessSetting_{
-					AccessSetting: &apipb.InstanceSetting_AccessSetting{},
-				},
-			},
-		})
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "access_mode must be PRIVATE or PUBLIC")
-
-		_, err = ts.Service.UpdateInstanceSetting(adminCtx, &apipb.UpdateInstanceSettingRequest{
-			InstanceSetting: &apipb.InstanceSetting{
-				Name: "instance/settings/ACCESS",
-				Value: &apipb.InstanceSetting_GeneralSetting_{
-					GeneralSetting: &apipb.InstanceSetting_GeneralSetting{},
-				},
-			},
-		})
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "access setting is required")
-	})
 
 	t.Run("UpdateInstanceSetting - AI setting requires admin", func(t *testing.T) {
 		ts := NewTestService(t)
@@ -703,129 +498,6 @@ func TestUpdateInstanceSetting(t *testing.T) {
 		require.Contains(t, resp.GetTagsSetting().GetTags(), "spoiler")
 		require.Nil(t, resp.GetTagsSetting().GetTags()["spoiler"].GetBackgroundColor())
 		require.True(t, resp.GetTagsSetting().GetTags()["spoiler"].GetBlurContent())
-	})
-
-	t.Run("UpdateInstanceSetting - notification setting password is write-only", func(t *testing.T) {
-		ts := NewTestService(t)
-		defer ts.Cleanup()
-
-		hostUser, err := ts.CreateHostUser(ctx, "admin")
-		require.NoError(t, err)
-		adminCtx := ts.CreateUserContext(ctx, hostUser.ID)
-
-		// Save notification setting with a password.
-		resp, err := ts.Service.UpdateInstanceSetting(adminCtx, &apipb.UpdateInstanceSettingRequest{
-			InstanceSetting: &apipb.InstanceSetting{
-				Name: "instance/settings/NOTIFICATION",
-				Value: &apipb.InstanceSetting_NotificationSetting_{
-					NotificationSetting: &apipb.InstanceSetting_NotificationSetting{
-						Email: &apipb.InstanceSetting_NotificationSetting_EmailSetting{
-							Enabled:      true,
-							SmtpHost:     "smtp.example.com",
-							SmtpPort:     587,
-							SmtpUsername: "bot@example.com",
-							SmtpPassword: "secret",
-							FromEmail:    "bot@example.com",
-							FromName:     "Memos Bot",
-							ReplyTo:      "support@example.com",
-							UseTls:       true,
-						},
-					},
-				},
-			},
-			UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"notification_setting"}},
-		})
-		require.NoError(t, err)
-		require.True(t, resp.GetNotificationSetting().GetEmail().GetEnabled())
-		require.Equal(t, "smtp.example.com", resp.GetNotificationSetting().GetEmail().GetSmtpHost())
-		// Password must not be returned even in the update response.
-		require.Empty(t, resp.GetNotificationSetting().GetEmail().GetSmtpPassword(),
-			"SmtpPassword must never be returned in responses")
-	})
-
-	t.Run("UpdateInstanceSetting - empty password preserves existing credential", func(t *testing.T) {
-		ts := NewTestService(t)
-		defer ts.Cleanup()
-
-		hostUser, err := ts.CreateHostUser(ctx, "admin")
-		require.NoError(t, err)
-		adminCtx := ts.CreateUserContext(ctx, hostUser.ID)
-
-		notificationSetting := &apipb.InstanceSetting{
-			Name: "instance/settings/NOTIFICATION",
-			Value: &apipb.InstanceSetting_NotificationSetting_{
-				NotificationSetting: &apipb.InstanceSetting_NotificationSetting{
-					Email: &apipb.InstanceSetting_NotificationSetting_EmailSetting{
-						Enabled:      true,
-						SmtpHost:     "smtp.example.com",
-						SmtpPort:     587,
-						SmtpUsername: "bot@example.com",
-						SmtpPassword: "original-password",
-						FromEmail:    "bot@example.com",
-					},
-				},
-			},
-		}
-
-		// First save with a real password.
-		_, err = ts.Service.UpdateInstanceSetting(adminCtx, &apipb.UpdateInstanceSettingRequest{
-			InstanceSetting: notificationSetting,
-		})
-		require.NoError(t, err)
-
-		// Second update with an empty password (simulating a UI that doesn't re-send the secret).
-		notificationSetting.GetNotificationSetting().GetEmail().SmtpPassword = ""
-		notificationSetting.GetNotificationSetting().GetEmail().FromName = "Updated Bot"
-		_, err = ts.Service.UpdateInstanceSetting(adminCtx, &apipb.UpdateInstanceSettingRequest{
-			InstanceSetting: notificationSetting,
-		})
-		require.NoError(t, err)
-
-		// The stored setting should have preserved the original password.
-		stored, err := ts.Store.GetInstanceNotificationSetting(ctx)
-		require.NoError(t, err)
-		require.Equal(t, "original-password", stored.GetEmail().GetSmtpPassword(),
-			"existing SmtpPassword must be preserved when an empty value is sent")
-		require.Equal(t, "Updated Bot", stored.GetEmail().GetFromName())
-	})
-
-	t.Run("UpdateInstanceSetting - empty password rejected when SMTP identity changes", func(t *testing.T) {
-		ts := NewTestService(t)
-		defer ts.Cleanup()
-
-		hostUser, err := ts.CreateHostUser(ctx, "admin")
-		require.NoError(t, err)
-		adminCtx := ts.CreateUserContext(ctx, hostUser.ID)
-
-		notificationSetting := &apipb.InstanceSetting{
-			Name: "instance/settings/NOTIFICATION",
-			Value: &apipb.InstanceSetting_NotificationSetting_{
-				NotificationSetting: &apipb.InstanceSetting_NotificationSetting{
-					Email: &apipb.InstanceSetting_NotificationSetting_EmailSetting{
-						Enabled:      true,
-						SmtpHost:     "smtp.example.com",
-						SmtpPort:     587,
-						SmtpUsername: "bot@example.com",
-						SmtpPassword: "original-password",
-						FromEmail:    "bot@example.com",
-						UseTls:       true,
-					},
-				},
-			},
-		}
-
-		_, err = ts.Service.UpdateInstanceSetting(adminCtx, &apipb.UpdateInstanceSettingRequest{
-			InstanceSetting: notificationSetting,
-		})
-		require.NoError(t, err)
-
-		notificationSetting.GetNotificationSetting().GetEmail().SmtpPassword = ""
-		notificationSetting.GetNotificationSetting().GetEmail().SmtpHost = "smtp2.example.com"
-		_, err = ts.Service.UpdateInstanceSetting(adminCtx, &apipb.UpdateInstanceSettingRequest{
-			InstanceSetting: notificationSetting,
-		})
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "smtp password is required")
 	})
 
 	t.Run("UpdateInstanceSetting rejects legacy storage changes", func(t *testing.T) {

@@ -62,7 +62,7 @@ func (s *Store) UpsertUserSetting(ctx context.Context, upsert *storepb.UserSetti
 }
 
 func (s *Store) ListUserSettings(ctx context.Context, find *FindUserSetting) ([]*storepb.UserSetting, error) {
-	userSettingRawList, err := s.driver.ListUserSettings(ctx, find)
+	userSettingRawList, err := s.driver.ListUserSettings(ctx, nil, find)
 	if err != nil {
 		return nil, err
 	}
@@ -164,7 +164,7 @@ func (s *Store) GetUserPersonalAccessTokens(ctx context.Context, userID int32) (
 // Credential reads and mutations use the database row so that a cached snapshot
 // cannot hide a revocation or restore a credential that has already been revoked.
 func (s *Store) getUserCredentialSetting(ctx context.Context, userID int32, key storepb.UserSetting_Key) (*storepb.UserSetting, error) {
-	settings, err := s.driver.ListUserSettings(ctx, &FindUserSetting{UserID: &userID, Key: key})
+	settings, err := s.driver.ListUserSettings(ctx, nil, &FindUserSetting{UserID: &userID, Key: key})
 	if err != nil || len(settings) == 0 {
 		return nil, err
 	}

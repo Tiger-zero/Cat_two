@@ -14,13 +14,14 @@ func TestDeleteAttachmentsWithPolicyUsesCurrentBinding(t *testing.T) {
 	ts := NewTestingStore(ctx, t)
 	defer ts.Close()
 
-	_, actor, space := createAttachmentDeleteSpace(ctx, t, ts, "current")
+	actor, err := createTestingUserWithRole(ctx, ts, "attachment-delete-current-actor", store.RoleUser)
+	require.NoError(t, err)
 	firstMemo, err := ts.CreateMemo(ctx, &store.Memo{
-		UID: "attachment-delete-current-first", CreatorID: actor.ID, Content: "first", Visibility: store.SpaceAudience, SpaceID: &space.ID,
+		UID: "attachment-delete-current-first", CreatorID: actor.ID, Content: "first", Visibility: store.Public,
 	})
 	require.NoError(t, err)
 	secondMemo, err := ts.CreateMemo(ctx, &store.Memo{
-		UID: "attachment-delete-current-second", CreatorID: actor.ID, Content: "second", Visibility: store.SpaceAudience, SpaceID: &space.ID,
+		UID: "attachment-delete-current-second", CreatorID: actor.ID, Content: "second", Visibility: store.Public,
 	})
 	require.NoError(t, err)
 	attachment, err := ts.CreateAttachment(ctx, &store.Attachment{
@@ -38,37 +39,17 @@ func TestDeleteAttachmentsWithPolicyUsesCurrentBinding(t *testing.T) {
 	require.Nil(t, stored)
 }
 
-func TestDeleteAttachmentsWithPolicyRevalidatesCurrentMemoMembership(t *testing.T) {
-	ctx := context.Background()
-	ts := NewTestingStore(ctx, t)
-	defer ts.Close()
-
-	owner, actor, space := createAttachmentDeleteSpace(ctx, t, ts, "membership")
-	memo, err := ts.CreateMemo(ctx, &store.Memo{
-		UID: "attachment-delete-membership-memo", CreatorID: actor.ID, Content: "memo", Visibility: store.SpaceAudience, SpaceID: &space.ID,
-	})
-	require.NoError(t, err)
-	attachment, err := ts.CreateAttachment(ctx, &store.Attachment{
-		UID: "attachment-delete-membership-target", CreatorID: actor.ID, Filename: "member.txt", Type: "text/plain", MemoID: &memo.ID,
-	})
-	require.NoError(t, err)
-	require.NoError(t, ts.DeleteSpaceMember(ctx, &store.DeleteSpaceMember{SpaceID: space.ID, UserID: actor.ID}, owner.ID))
-
-	err = ts.DeleteAttachmentsWithPolicy(ctx, attachmentDeletionPolicy(actor.ID, memo), []int32{attachment.ID})
-	require.ErrorIs(t, err, store.ErrMemoSpaceMembershipRequired)
-	stored, err := ts.GetAttachment(ctx, &store.FindAttachment{ID: &attachment.ID})
-	require.NoError(t, err)
-	require.NotNil(t, stored)
-}
-
 func TestDeleteAttachmentsWithPolicyRequiresCurrentMemoAuthor(t *testing.T) {
 	ctx := context.Background()
 	ts := NewTestingStore(ctx, t)
 	defer ts.Close()
 
-	owner, actor, space := createAttachmentDeleteSpace(ctx, t, ts, "memo-author")
+	owner, err := createTestingUserWithRole(ctx, ts, "attachment-delete-memo-owner", store.RoleUser)
+	require.NoError(t, err)
+	actor, err := createTestingUserWithRole(ctx, ts, "attachment-delete-memo-actor", store.RoleUser)
+	require.NoError(t, err)
 	ownerMemo, err := ts.CreateMemo(ctx, &store.Memo{
-		UID: "attachment-delete-owner-memo", CreatorID: owner.ID, Content: "owner", Visibility: store.SpaceAudience, SpaceID: &space.ID,
+		UID: "attachment-delete-owner-memo", CreatorID: owner.ID, Content: "owner", Visibility: store.Public,
 	})
 	require.NoError(t, err)
 	attachment, err := ts.CreateAttachment(ctx, &store.Attachment{
@@ -165,17 +146,4 @@ func attachmentDeletionPolicy(actorUserID int32, memos ...*store.Memo) *store.At
 		}
 	}
 	return &store.AttachmentDeletionPolicy{ActorUserID: actorUserID, ExpectedMemoContents: expectedMemoContents}
-}
-
-func createAttachmentDeleteSpace(ctx context.Context, t *testing.T, ts *store.Store, suffix string) (*store.User, *store.User, *store.Space) {
-	t.Helper()
-	owner, err := ts.CreateUser(ctx, &store.User{Username: "attachment-delete-" + suffix + "-owner", Role: store.RoleUser, PasswordHash: "hash"})
-	require.NoError(t, err)
-	actor, err := ts.CreateUser(ctx, &store.User{Username: "attachment-delete-" + suffix + "-actor", Role: store.RoleUser, PasswordHash: "hash"})
-	require.NoError(t, err)
-	space, err := ts.CreateSpace(ctx, &store.Space{UID: "attachment-delete-" + suffix + "-space", Title: suffix}, owner.ID)
-	require.NoError(t, err)
-	_, err = createSpaceMemberForTest(ctx, ts, &store.SpaceMember{SpaceID: space.ID, UserID: actor.ID, Role: store.SpaceMemberRoleUser}, owner.ID)
-	require.NoError(t, err)
-	return owner, actor, space
 }

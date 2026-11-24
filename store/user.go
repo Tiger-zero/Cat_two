@@ -4,16 +4,11 @@ import (
 	"context"
 	"database/sql"
 	stderrors "errors"
-	"log/slog"
 	"strconv"
 	"strings"
 
 	"github.com/pkg/errors"
 )
-
-// ErrUserHasSpaceMembership blocks account deletion until its Space lifecycle
-// has been resolved explicitly.
-var ErrUserHasSpaceMembership = stderrors.New("user still has space memberships")
 
 // ErrLastInstanceAdmin indicates that a user mutation would leave the instance
 // without an active administrator.
@@ -75,6 +70,10 @@ type UpdateUser struct {
 	AvatarURL    *string
 	PasswordHash *string
 	Description  *string
+
+	// KeepSessionID identifies the session to preserve when changing a password.
+	// An empty ID revokes all of the user's browser sessions.
+	KeepSessionID string
 }
 
 type FindUser struct {
@@ -180,7 +179,17 @@ func (s *Store) UpdateUser(ctx context.Context, update *UpdateUser) (*User, erro
 		}
 		update.Email = &email
 	}
-	user, err := s.driver.UpdateUser(ctx, update)
+	var user *User
+	var err error
+	if update.PasswordHash == nil {
+		user, err = s.driver.UpdateUser(ctx, update)
+	} else {
+		err = s.runSerializable(ctx, func(tx *sql.Tx) error {
+			var err error
+			user, err = s.updateUserAndRevokeSessions(ctx, tx, update)
+			return err
+		})
+	}
 	if err != nil {
 		if uniqueErr := classifyUserUniqueViolation(err); uniqueErr != nil {
 			return nil, uniqueErr
@@ -189,6 +198,20 @@ func (s *Store) UpdateUser(ctx context.Context, update *UpdateUser) (*User, erro
 	}
 
 	s.userCache.Set(ctx, userCacheKey(user.ID), user)
+	if update.PasswordHash != nil {
+		s.deleteRefreshTokenCache(ctx, user.ID)
+	}
+	return user, nil
+}
+
+func (s *Store) updateUserAndRevokeSessions(ctx context.Context, tx *sql.Tx, update *UpdateUser) (*User, error) {
+	user, err := s.driver.UpdateUserTx(ctx, tx, update)
+	if err != nil || update.PasswordHash == nil {
+		return user, err
+	}
+	if _, err := s.compareAndSetUserRefreshTokens(ctx, tx, user.ID, retainUserRefreshSession(update.KeepSessionID)); err != nil {
+		return nil, errors.Wrap(err, "revoke sessions after password change")
+	}
 	return user, nil
 }
 
@@ -248,10 +271,5 @@ func (s *Store) DeleteUser(ctx context.Context, delete *DeleteUser) (*DeleteUser
 		return nil, errors.New("unexpected nil delete user result")
 	}
 	s.deleteUserCache(ctx, delete.ID, result)
-	// The user is already gone, so a failure here only leaves an ID that
-	// never matches anyone.
-	if err := s.RemoveUserFromUsageLimits(ctx, delete.ID); err != nil {
-		slog.Warn("failed to remove deleted user from usage limits", slog.Int("userID", int(delete.ID)), slog.String("error", err.Error()))
-	}
 	return result, nil
 }

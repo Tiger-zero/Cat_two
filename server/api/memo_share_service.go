@@ -45,9 +45,6 @@ func (s *APIService) ListMemoShares(ctx context.Context, request *apipb.ListMemo
 	if !access.CanManageMemo(user, memo) {
 		return nil, status.Errorf(codes.PermissionDenied, "permission denied")
 	}
-	if err := s.requireAssignedMemoWritable(ctx, memo, user); err != nil {
-		return nil, err
-	}
 
 	shares, err := s.Store.ListMemoShares(ctx, &store.FindMemoShare{MemoID: &memo.ID})
 	if err != nil {
@@ -100,7 +97,7 @@ func (s *APIService) DeleteMemoShare(ctx context.Context, request *apipb.DeleteM
 	if err := s.Store.DeleteMemoShare(ctx, &store.DeleteMemoShare{
 		UID:    &shareToken,
 		MemoID: &memo.ID,
-		Policy: s.memoWritePolicy(user.ID, false),
+		Policy: &store.MemoWritePolicy{ActorUserID: user.ID},
 	}); err != nil {
 		return nil, mapMemoWriteError(err, "failed to delete memo share")
 	}

@@ -25,7 +25,7 @@ func TestUpgradeFromCalendarRelease(t *testing.T) {
 		t.Run(tc.previous+"-to-"+tc.candidate, func(t *testing.T) {
 			t.Parallel()
 			ctx := context.Background()
-			previousProfile := getTestingProfileForDriver(t, getDriverFromEnv())
+			previousProfile := getTestingProfile(t)
 			previousProfile.Version = tc.previous
 			previousDriver, err := storedb.NewDBDriver(previousProfile)
 			require.NoError(t, err)
@@ -63,10 +63,6 @@ func requireUpgradePreservesData(ctx context.Context, t *testing.T, previous *st
 	const legacyView = `{"memoViews":[{"id":"upgrade","title":"Upgrade sentinel","filter":"has_incomplete_tasks"}]}`
 	insertView := "INSERT INTO user_setting (user_id, `key`, `value`) VALUES (?, 'MEMO_VIEWS', ?)"
 	readView := "SELECT `value` FROM user_setting WHERE user_id = ? AND `key` = 'MEMO_VIEWS'"
-	if candidateProfile.Driver == "postgres" {
-		insertView = "INSERT INTO user_setting (user_id, key, value) VALUES ($1, 'MEMO_VIEWS', $2)"
-		readView = "SELECT value FROM user_setting WHERE user_id = $1 AND key = 'MEMO_VIEWS'"
-	}
 	_, err = previous.GetDriver().GetDB().ExecContext(ctx, insertView, user.ID, legacyView)
 	require.NoError(t, err)
 	editor, err := previous.UpsertUserSetting(ctx, &storepb.UserSetting{
@@ -107,7 +103,7 @@ func requireUpgradePreservesData(ctx context.Context, t *testing.T, previous *st
 		preservedAccess, err := candidate.GetInstanceAccessSetting(ctx)
 		require.NoError(t, err)
 		require.True(t, proto.Equal(access.GetAccessSetting(), preservedAccess), "explicit access mode must not be reset")
-		requireLookupIndexes(ctx, t, candidate, candidateProfile.Driver)
+		requireLookupIndexes(ctx, t, candidate)
 	}
 
 	driver, err := storedb.NewDBDriver(candidateProfile)

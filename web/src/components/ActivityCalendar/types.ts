@@ -21,6 +21,8 @@ export interface MonthCalendarProps {
   data: CalendarData;
   /** ISO date of the day currently used as a filter, if any. */
   selectedDate?: string;
+  /** Show weekday initials, day numbers, and today's dot. Defaults to true. */
+  showDateLabels?: boolean;
   onClick?: (date: string) => void;
   timeBasis?: MemoTimeBasis;
 }

@@ -37,6 +37,20 @@ describe("useSidebarWidth", () => {
     expect(result.current.maxWidth).toBe(SIDEBAR_MAX_WIDTH);
   });
 
+  it("uses the light home default until the user chooses a width", () => {
+    const { result, rerender } = renderHook(({ lightHome }) => useSidebarWidth(lightHome), { initialProps: { lightHome: false } });
+
+    rerender({ lightHome: true });
+    expect(result.current.width).toBe(360);
+    expect(result.current.defaultWidth).toBe(360);
+    expect(localStorage.getItem(STORAGE_KEY)).toBeNull();
+
+    act(() => result.current.setWidth(295));
+    rerender({ lightHome: false });
+    expect(result.current.width).toBe(295);
+    expect(result.current.defaultWidth).toBe(SIDEBAR_DEFAULT_WIDTH);
+  });
+
   it("restores a persisted width from before the wider default on the first render", () => {
     localStorage.setItem(STORAGE_KEY, "280");
 

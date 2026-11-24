@@ -2,11 +2,19 @@ import type { LocalFile } from "../types/attachment";
 
 export type PersistedDraftFile = Omit<LocalFile, "mediaMetadata"> & { extractMetadata?: boolean };
 
-interface StagedDraftFiles {
+export interface StagedDraftFiles {
   files: PersistedDraftFile[];
   order: string[];
   baseRevision?: string;
   writeId?: string;
+}
+
+export function snapshotDraftFiles(files: LocalFile[], order: string[], baseRevision?: string): StagedDraftFiles {
+  return {
+    files: files.map(({ mediaMetadata, ...file }) => ({ ...file, extractMetadata: mediaMetadata !== undefined })),
+    order,
+    baseRevision,
+  };
 }
 
 const DATABASE = "memos.editor-drafts";

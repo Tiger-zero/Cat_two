@@ -101,11 +101,6 @@ func TestDemoSeed(t *testing.T) {
 	reactions, err := stores.ListReactions(ctx, &store.FindReaction{})
 	require.NoError(t, err)
 	require.NotEmpty(t, reactions, "demo should include reactions")
-	for _, reaction := range reactions {
-		reaction.Policy = &store.ReactionWritePolicy{ActorUserID: reaction.CreatorID}
-		_, err := stores.UpsertReaction(ctx, reaction)
-		require.NoError(t, err, "seed reactor can participate in memo %d", reaction.MemoID)
-	}
 
 	attachments, err := stores.ListAttachments(ctx, &store.FindAttachment{HasRelatedMemo: true})
 	require.NoError(t, err)
@@ -122,29 +117,6 @@ func TestDemoSeed(t *testing.T) {
 	require.Empty(t, userSettings, "the seed does not set user settings or access tokens")
 }
 
-func TestDemoSeedVisitorParticipation(t *testing.T) {
-	ctx := context.Background()
-	stores := newDemoStore(t)
-	require.NoError(t, stores.Seed(ctx))
-	visitor, err := stores.CreateUser(ctx, &store.User{Username: "demo-visitor", Role: store.RoleUser, PasswordHash: "hash"})
-	require.NoError(t, err)
-
-	for _, uid := range []string{"welcome0000001", "goldenhour0001", "johnnygitcheat1", "protectedintro"} {
-		memo, err := stores.GetMemo(ctx, &store.FindMemo{UID: &uid})
-		require.NoError(t, err)
-		require.NotNil(t, memo)
-		require.Nil(t, memo.SpaceID, "visitors can participate without sample Space membership")
-		_, err = stores.UpsertReaction(ctx, &store.Reaction{
-			CreatorID: visitor.ID, MemoID: memo.ID, ReactionType: "👍",
-			Policy: &store.ReactionWritePolicy{ActorUserID: visitor.ID},
-		})
-		require.NoError(t, err, "new visitors can react to %s", uid)
-	}
-}
-
-// The server seeds after the declarative configuration is applied, so the
-// administrator may already exist: the seed keeps that row, fills only the
-// profile fields left empty, and attaches its content to it.
 func TestDemoSeedAttachesToDeclaredAdmin(t *testing.T) {
 	ctx := context.Background()
 	stores := newDemoStore(t)

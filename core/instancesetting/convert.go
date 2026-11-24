@@ -129,6 +129,9 @@ func UsageLimitsFromStore(setting *storepb.InstanceUsageLimitsSetting, userNames
 				entry.Users = append(entry.Users, name)
 			}
 		}
+		if !entry.GetAllUsers() && len(entry.Users) == 0 {
+			continue
+		}
 		result.Limits = append(result.Limits, entry)
 	}
 	return result

@@ -52,7 +52,10 @@ func (s *APIService) doSignIn(ctx context.Context, user *store.User, revision st
 	if s.personalMode() {
 		refreshTokenRecord.LastEditAt = refreshTokenRecord.CreatedAt
 	}
-	if err := s.Store.AddUserRefreshToken(ctx, user.ID, refreshTokenRecord); err != nil {
+	if err := s.Store.AddUserRefreshTokenForSignIn(ctx, user, revision, refreshTokenRecord); err != nil {
+		if errors.Is(err, store.ErrSignInCredentialsChanged) {
+			return "", time.Time{}, status.Error(codes.Unauthenticated, "sign-in credentials changed, try again")
+		}
 		slog.Error("failed to store refresh token", "error", err)
 		return "", time.Time{}, status.Error(codes.Internal, "failed to store refresh token")
 	}
@@ -123,7 +126,11 @@ func (s *APIService) RefreshToken(ctx context.Context, _ *apipb.RefreshTokenRequ
 		if errors.Is(err, auth.ErrSessionIdleExpired) {
 			return nil, status.Error(codes.Unauthenticated, auth.ErrSessionIdleExpired.Error())
 		}
-		return nil, status.Errorf(codes.Unauthenticated, "invalid refresh token: %v", err)
+		if errors.Is(err, auth.ErrInvalidRefreshToken) {
+			return nil, status.Error(codes.Unauthenticated, auth.ErrInvalidRefreshToken.Error())
+		}
+		slog.Error("failed to read refresh session", "error", err)
+		return nil, status.Error(codes.Internal, "failed to read refresh session")
 	}
 	sessionID := oldSession.StableSessionID()
 	if expected := metadata.ValueFromIncomingContext(ctx, refreshSessionIDHeader); len(expected) != 0 && expected[0] != sessionID {

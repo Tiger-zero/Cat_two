@@ -91,8 +91,6 @@ func convertSettingKeyFromStore(key storepb.UserSetting_Key) string {
 	switch key {
 	case storepb.UserSetting_GENERAL:
 		return apipb.UserSetting_Key_name[int32(apipb.UserSetting_GENERAL)]
-	case storepb.UserSetting_WEBHOOKS:
-		return apipb.UserSetting_Key_name[int32(apipb.UserSetting_WEBHOOKS)]
 	case storepb.UserSetting_TAGS:
 		return apipb.UserSetting_Key_name[int32(apipb.UserSetting_TAGS)]
 	case storepb.UserSetting_EDITOR:
@@ -152,12 +150,6 @@ func convertUserSettingFromStore(storeSetting *storepb.UserSetting, user *store.
 			setting.Value = &apipb.UserSetting_GeneralSetting_{
 				GeneralSetting: getDefaultUserGeneralSetting(),
 			}
-		case storepb.UserSetting_WEBHOOKS:
-			setting.Value = &apipb.UserSetting_WebhooksSetting_{
-				WebhooksSetting: &apipb.UserSetting_WebhooksSetting{
-					Webhooks: []*apipb.UserWebhook{},
-				},
-			}
 		case storepb.UserSetting_TAGS:
 			setting.Value = &apipb.UserSetting_TagsSetting_{
 				TagsSetting: &apipb.UserSetting_TagsSetting{Tags: map[string]*apipb.UserSetting_TagMetadata{}},
@@ -192,26 +184,6 @@ func convertUserSettingFromStore(storeSetting *storepb.UserSetting, user *store.
 			setting.Value = &apipb.UserSetting_GeneralSetting_{
 				GeneralSetting: getDefaultUserGeneralSetting(),
 			}
-		}
-	case storepb.UserSetting_WEBHOOKS:
-		webhooks := storeSetting.GetWebhooks()
-		apiWebhooks := make([]*apipb.UserWebhook, 0)
-		if webhooks != nil {
-			apiWebhooks = make([]*apipb.UserWebhook, 0, len(webhooks.Webhooks))
-			for _, webhook := range webhooks.Webhooks {
-				apiWebhook := &apipb.UserWebhook{
-					Name:             fmt.Sprintf("%s/webhooks/%s", BuildUserName(user.Username), webhook.Id),
-					Url:              webhook.Url,
-					DisplayName:      webhook.Title,
-					SigningSecretSet: webhook.SigningSecret != "",
-				}
-				apiWebhooks = append(apiWebhooks, apiWebhook)
-			}
-		}
-		setting.Value = &apipb.UserSetting_WebhooksSetting_{
-			WebhooksSetting: &apipb.UserSetting_WebhooksSetting{
-				Webhooks: apiWebhooks,
-			},
 		}
 	case storepb.UserSetting_TAGS:
 		setting.Value = &apipb.UserSetting_TagsSetting_{
@@ -251,25 +223,6 @@ func convertUserSettingToStore(apiSetting *apipb.UserSetting, userID int32, key 
 		} else {
 			return nil, errors.Errorf("general setting is required")
 		}
-	case storepb.UserSetting_WEBHOOKS:
-		if webhooks := apiSetting.GetWebhooksSetting(); webhooks != nil {
-			storeWebhooks := make([]*storepb.WebhooksUserSetting_Webhook, 0, len(webhooks.Webhooks))
-			for _, webhook := range webhooks.Webhooks {
-				storeWebhook := &storepb.WebhooksUserSetting_Webhook{
-					Id:    extractWebhookIDFromName(webhook.Name),
-					Title: webhook.DisplayName,
-					Url:   webhook.Url,
-				}
-				storeWebhooks = append(storeWebhooks, storeWebhook)
-			}
-			storeSetting.Value = &storepb.UserSetting_Webhooks{
-				Webhooks: &storepb.WebhooksUserSetting{
-					Webhooks: storeWebhooks,
-				},
-			}
-		} else {
-			return nil, errors.Errorf("webhooks setting is required")
-		}
 	case storepb.UserSetting_TAGS:
 		if tags := apiSetting.GetTagsSetting(); tags != nil {
 			storeSetting.Value = &storepb.UserSetting_Tags{
@@ -294,6 +247,3 @@ func convertUserSettingToStore(apiSetting *apipb.UserSetting, userID int32, key 
 
 	return storeSetting, nil
 }
-
-// extractWebhookIDFromName extracts webhook ID from resource name.
-// e.g., "users/123/webhooks/webhook-id" -> "webhook-id".

@@ -9,8 +9,8 @@ import {
   parseManagedAttachmentImageURL,
   removeManagedAttachmentReferences,
   resolveManagedAttachmentImageSource,
-  setManagedAttachmentInstanceUrl,
 } from "@/utils/managed-attachment";
+import { setManagedAttachmentInstanceUrl } from "@/utils/managed-attachment-origin";
 
 const attachment = (name: string, filename = "photo.png", externalLink = "") =>
   create(AttachmentSchema, { name, filename, type: "image/png", externalLink });
@@ -63,6 +63,19 @@ describe("managed attachment Markdown", () => {
     ].join("\n\n");
 
     expect(Array.from(extractManagedAttachmentUIDs(content))).toEqual(["image-one"]);
+    expect(findInvalidManagedAttachmentReferences(content)).toEqual([]);
+  });
+
+  it("reclassifies cached Markdown when the configured origin changes", () => {
+    const url = "https://notes.example.com/file/attachments/photo";
+    const content = `![photo](${url})`;
+    expect(findInvalidManagedAttachmentReferences(content)).toEqual([url]);
+
+    setManagedAttachmentInstanceUrl("https://notes.example.com");
+    expect(extractManagedAttachmentUIDs(content)).toEqual(new Set(["photo"]));
+
+    setManagedAttachmentInstanceUrl("https://new.example.com");
+    expect(extractManagedAttachmentUIDs(content)).toEqual(new Set());
     expect(findInvalidManagedAttachmentReferences(content)).toEqual([]);
   });
 

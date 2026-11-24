@@ -9,7 +9,7 @@ Cat_two is a self-hosted personal note-taking app based on Memos.
 
 - Backend: Go 1.27.4, net/http, Connect RPC, gRPC-Gateway, Protocol Buffers.
 - Frontend: React 19, TypeScript 7, Vite 8, Tailwind CSS v4, `@usememos/ui` on Base UI, React Query v5.
-- Storage: SQLite for Cat_two deployment and routine verification. MySQL, MariaDB and PostgreSQL compatibility suites are opt-in.
+- Storage: SQLite is the only supported database for Cat_two deployments, migrations, compatibility checks, and tests.
 - Generated API outputs: `proto/gen/` for Go/OpenAPI, `web/src/types/proto/` for TypeScript.
 
 ## Working Rules
@@ -17,7 +17,7 @@ Cat_two is a self-hosted personal note-taking app based on Memos.
 - Read relevant code before editing; prefer local patterns over new abstractions.
 - Keep diffs scoped. Do not do repo-wide cleanup, dependency churn, or generated-file rewrites unless the task requires it.
 - Do not hand-edit generated proto outputs. Change `.proto` files, then run `buf generate`.
-- Add migrations for all database drivers when schema changes, and update each driver's `LATEST.sql`.
+- For a schema change, add a SQLite migration and update `store/migration/sqlite/LATEST.sql`.
 - Add public API endpoints to `server/api/acl_config.go`.
 - Ask before adding heavy dependencies, changing auth/token behavior, or altering Docker/release workflows.
 - Start repository work with the [project development skill](.agents/skills/cat-two-development/SKILL.md).
@@ -43,7 +43,9 @@ Run from the repository root unless a command starts with `cd`.
 # Backend
 go run -buildvcs=true ./cmd/memos --port 8081 # Start backend with commit-derived CalVer
 go run -buildvcs=true ./cmd/memos config plan --data DIR --config-dir DIR # Declarative configuration: also validate, apply, state
-go test ./...                      # Run all Go packages with SQLite as the default database target
+go test ./store/test -run '^TestMemoStore$' # Example of a focused SQLite test run
+go build ./...                     # Compile all Go packages
+go test ./...                      # Run the full Go suite
 go test -v ./store/...             # SQLite store and migration tests
 go test -v -race ./server/...      # Server tests with race detector
 go test -v -race ./internal/...    # Internal package tests with race detector
@@ -55,7 +57,7 @@ golangci-lint run                  # Go lint, config: .golangci.yaml (includes d
 golangci-lint run --fix            # Auto-fix lint, including goimports
 
 # Frontend
-cd web && pnpm install             # Install dependencies
+cd web && pnpm install --frozen-lockfile # Use Node >=24.22.3 <25 and pnpm from web/package.json
 cd web && pnpm dev                 # Dev server on :3001, proxying API to :8081 (or $DEV_PROXY_SERVER)
 cd web && pnpm lint                # Type check + Biome lint
 cd web && pnpm test                # Vitest unit tests
@@ -75,43 +77,41 @@ Every root folder is named for what it holds. Read the folder's `doc.go` or `REA
 | Path | Holds | May import |
 | --- | --- | --- |
 | `cmd/memos/` | Cobra/Viper CLI setup and server startup | anything |
-| `server/` | The HTTP process: net/http bootstrap, graceful shutdown, every transport | core, store, provider, markdown, filter, internal |
+| `server/` | The HTTP process: net/http bootstrap, graceful shutdown, every transport | core, store, markdown, filter, internal |
 | `server/api/` | Connect/gRPC-Gateway services, ACL config, SSE hub. Thin handlers; rules go to `core/` | |
 | `server/fileserver/` | Native HTTP file serving, thumbnails, range requests | |
 | `server/frontend/` | Static SPA serving; `dist/` is the built SPA baked in by `go:embed` | |
 | `server/mcp/` | Model Context Protocol server | |
 | `server/auth/` | JWT access tokens, refresh tokens, PAT handling | |
-| `core/` | Business rules with no HTTP and no SQL: `access`, `notification`, `memopayload`, `memoexport`, `identityprovider`, `instancesetting`, `user`, `configuration` | store, provider, markdown, filter, internal |
-| `store/` | Store facade, cache, migrations, `Driver` interface; `store/db/{sqlite,mysql,postgres}/` implement it | provider, markdown, filter, internal |
+| `core/` | Business rules for author access, memo payloads and exports, instance settings, message capture, MCP connections, users and declarative configuration | store, markdown, filter, internal |
+| `store/` | Store facade, cache, SQLite migrations, and the `Driver` implemented in `store/db/sqlite/` | markdown, filter, internal |
 | `markdown/` | Markdown engine: parser, AST, memos syntax extensions, renderer, memo payload | proto/gen, internal |
-| `filter/` | CEL filter compiler: parse to IR, render to SQL per driver, filterable field schema | internal |
-| `provider/` | Backends configured by instance settings: `ai`, `idp`, `storage` | proto/gen, internal |
-| `internal/` | Private plumbing with no memos vocabulary (`identifier`, `email`, `webhook`, `ratelimit`, …) | third party only |
+| `filter/` | CEL filter compiler, SQLite rendering, and filterable field schema | internal |
+| `internal/` | Private plumbing for identifiers, trusted proxies, rate limits and HTTP helpers | third party only |
 | `proto/api/`, `proto/store/` | Public API and internal storage proto sources; `proto/gen/` is generated | |
 | `web/src/` | React SPA: `connect.ts` clients, `auth-state.ts`, `hooks/`, `contexts/`, `components/`, `lib/`, `locales/`, `themes/` | |
 
 Layering rules, enforced by `depguard` in `.golangci.yaml`:
 
-- Imports point downward only: `cmd` → `server` → `core` → `store` → {`provider`, `markdown`, `filter`} → `internal`.
+- Imports point downward only: `cmd` → `server` → `core` → `store` → {`markdown`, `filter`} → `internal`.
 - `internal/` packages import nothing from this module (except `internal/testutil`, which may import `proto/gen`).
-- A package goes in `internal/` only if it could be published as a standalone module unchanged. If it knows what a Memo, Space, or instance setting is, it is a root package.
+- A package goes in `internal/` only if it could be published as a standalone module unchanged. If it knows what a memo or instance setting is, it is a root package.
 - Never create `util`, `common`, `base`, `helpers`, `misc`, or `pkg` packages. Name a package for the one thing it does, or put the code next to its only caller.
 - New business rules extracted from `server/api` go to `core/<resource>/`, one package per resource.
 
 File convention inside `server/api/`: `<resource>_service.go` holds the RPC handlers, `<resource>_service_converters.go` the
 store↔proto conversion, and `<resource>_service_<topic>.go` further splits. Extend the matching file; do not add `*_helpers2.go`.
-Identity providers and instance settings are the exception: declarative configuration files use their API messages, so their
-conversion lives in `core/identityprovider` and `core/instancesetting`, and `server/api` keeps only response redaction.
+Declarative instance settings use API messages. Their store conversion lives in `core/instancesetting`; API response redaction lives in `server/api`.
 Black-box service tests live in `server/api/test/`, unit tests next to the code.
 
 ## Change Routing
 
 | Change | Update | Verify |
 | --- | --- | --- |
-| Go service or router behavior | Handlers under `server/`, rules under `core/`, tests near package | `go test -v -race ./server/... ./core/...` |
-| Store or migration behavior | `store/`, all three DB driver migrations, `LATEST.sql` | `go test -v ./store/...` |
-| Markdown, filter, or provider logic | `markdown/`, `filter/`, `provider/` | `go test -v -race ./markdown/... ./filter/... ./provider/...` |
-| Internal package logic | Relevant `internal/` package tests | `go test -v -race ./internal/...` |
+| Go service or router behavior | Handlers under `server/`, rules under `core/`, tests near package | Go tests for affected packages and the affected HTTP, Connect, or MCP path |
+| Store or migration behavior | `store/` and the SQLite migration or schema as applicable | Focused SQLite tests, then `go test ./store/...` for shared storage or schema changes |
+| Markdown or filter logic | `markdown/`, `filter/` | Go tests for affected packages and integration paths |
+| Internal package logic | Relevant `internal/` package tests | Go tests for affected packages |
 | Frontend behavior | Components/hooks/contexts under `web/src/` | `cd web && pnpm lint && pnpm test` |
 | Frontend production output | Vite config or release-sensitive UI | `cd web && pnpm build` or `pnpm release` |
 | Proto API | `.proto` source, generated outputs, `proto/api/CHANGELOG.md` for breaks | `cd proto && buf generate && buf lint` |
@@ -132,19 +132,16 @@ localization, accessibility, and desktop verification. Read it before editing fr
 
 ## Database And Proto Rules
 
-- Prefer shared MySQL and MariaDB SQL when it preserves correctness, performance and maintainability. See the
-  [opt-in compatibility commands](store/test/README.md) when a task calls for verification on those drivers.
-- Schema changes require SQLite, MySQL, and PostgreSQL migrations plus `LATEST.sql` updates.
-- Fresh-install SQL and incremental migrations must stay equivalent.
+- Keep SQLite fresh-install SQL and incremental migrations equivalent. Match both paths in storage tests. [Storage tests](store/test/README.md)
 - Proto field changes must preserve compatibility unless the task explicitly allows a breaking API change. Record every
   allowed break in `proto/api/CHANGELOG.md`; compatibility is checked during review.
 - Regenerate after proto edits and include both Go/OpenAPI and TypeScript generated outputs.
 
 ## Verification Policy
 
-- Run the narrowest relevant checks while iterating.
-- Routine database verification uses SQLite. Run other database suites when the task explicitly calls for compatibility checks.
-- Before finishing, run the checks that match the changed surface from "Change Routing".
+- Start with affected packages or named tests. Use SQLite for database checks and include race checks for concurrency and lifecycle changes.
+- Before finishing, run the checks that match the changed surface from "Change Routing". Changes to shared behavior merit the broader Go suite and a full build.
+- Before publishing, verify the release commit through the full CI gate and the SQLite container smoke checks.
 - For docs-only changes, `git diff --check` is sufficient unless the docs include runnable examples that should be tested.
 - If a required check cannot run locally, report the reason and the exact command that remains.
 
@@ -161,7 +158,7 @@ localization, accessibility, and desktop verification. Read it before editing fr
 - Workflows install toolchains through `.github/actions/setup-go` (Go version from `go.mod`) and `.github/actions/setup-web`
   (pnpm from `web/package.json`, Node 24, `pnpm install`); change versions there, not per workflow.
 - Backend CI: Go 1.27.4, `go mod tidy`, `go fix -diff ./...`, golangci-lint v2.14.0 (including goimports), test groups
-  `store`, `server`, `internal`, `other` (`cmd`, `core`, `markdown`, `filter`, `provider`, `proto` and Cat_two script tests).
+  `store`, `server`, `internal`, `other` (`cmd`, `core`, `markdown`, `filter`, `proto` and Cat_two script tests).
 - Backend, frontend and Proto workflows use changed-path filters. The container workflow checks its input paths on ordinary
   pushes and always builds for manual or explicit publish requests.
 - Backend store tests use SQLite, including fresh install and CalVer upgrade fixtures. To test a Cat_two image upgrade, pass

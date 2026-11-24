@@ -1,12 +1,12 @@
-// Package configuration reads declarative configuration: the identity
-// providers, instance settings, and users an instance should have, declared in
+// Package configuration reads declarative configuration: the supported
+// instance settings and one administrator, declared in
 // JSON files as public API resources.
 //
 // Load reads every *.json file in a directory, substitutes ${env:NAME} and
 // ${file:PATH} references, decodes each file strictly as one
 // memos.api.Configuration, checks the schema rules that need no database,
 // merges the files into one desired state, and runs each resource's own rules
-// from core/identityprovider and core/instancesetting. See
+// from core/instancesetting. See
 // .agents/skills/cat-two-development/references/design/declarative-configuration.md.
 package configuration
 
@@ -42,6 +42,8 @@ type Desired struct {
 	UserFields map[string][]string
 	// Warnings are diagnostics that do not stop the load, such as deprecated fields.
 	Warnings []string
+	// preserved contains retired declarations whose previously managed state stays intact.
+	preserved map[string]bool
 }
 
 // Resolver supplies the values ${env:NAME} and ${file:PATH} references name.
@@ -78,6 +80,7 @@ func Load(dir string, resolver Resolver) (*Desired, error) {
 		Configuration: &apipb.Configuration{},
 		Sources:       map[string]string{},
 		UserFields:    map[string][]string{},
+		preserved:     map[string]bool{},
 	}
 	entries, err := os.ReadDir(dir)
 	if errors.Is(err, fs.ErrNotExist) {
@@ -105,7 +108,7 @@ func Load(dir string, resolver Resolver) (*Desired, error) {
 		if err != nil {
 			return nil, errors.Wrapf(err, "failed to read %s", name)
 		}
-		document, userFields, warnings, problems := decodeDocument(content, resolver)
+		document, userFields, warnings, problems := decodeDocument(content, resolver, desired.preserved)
 		for _, warning := range warnings {
 			desired.Warnings = append(desired.Warnings, name+": "+warning)
 		}

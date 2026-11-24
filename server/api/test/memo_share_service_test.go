@@ -10,6 +10,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	"github.com/usememos/memos/internal/testutil/legacyspace"
 	apipb "github.com/usememos/memos/proto/gen/api"
 	"github.com/usememos/memos/store"
 )
@@ -57,7 +58,7 @@ func TestDeleteMemoShare_VerifiesShareBelongsToMemo(t *testing.T) {
 	requireSharePresent(ctx, t, ts, shareToken)
 }
 
-func TestDeleteMemoShare_RevalidatesSpaceWriteAuthority(t *testing.T) {
+func TestDeleteMemoShare_DoesNotRequireHistoricalSpaceMembership(t *testing.T) {
 	ctx := context.Background()
 	ts := NewTestService(t)
 	defer ts.Cleanup()
@@ -67,28 +68,19 @@ func TestDeleteMemoShare_RevalidatesSpaceWriteAuthority(t *testing.T) {
 	admin, err := ts.CreateRegularUser(ctx, "share-space-admin")
 	require.NoError(t, err)
 	ownerCtx := ts.CreateUserContext(ctx, owner.ID)
-	space, err := ts.Store.CreateSpace(ctx, &store.Space{UID: "share-space", Title: "Share Space"}, owner.ID)
+	db := ts.Store.GetDriver().GetDB()
+	spaceID, err := legacyspace.Seed(ctx, db, "share-space", "Share Space", owner.ID)
 	require.NoError(t, err)
-	_, err = ts.InviteAndAcceptSpaceMember(ctx, &store.SpaceMember{
-		SpaceID: space.ID, UserID: admin.ID, Role: store.SpaceMemberRoleAdmin,
-	}, owner.ID)
-	require.NoError(t, err)
+	require.NoError(t, legacyspace.AddMember(ctx, db, spaceID, admin.ID, "ADMIN"))
 	memo, err := ts.Service.CreateMemo(ownerCtx, &apipb.CreateMemoRequest{Memo: &apipb.Memo{
-		Content: "assigned share", Space: new("spaces/" + space.UID),
+		Content: "assigned share",
 	}})
 	require.NoError(t, err)
+	require.NoError(t, legacyspace.PlaceMemo(ctx, db, parseMemoIDFromNameForTest(t, ts, memo.Name), spaceID, "PRIVATE"))
 	const shareToken = "legacy-assigned-share"
 	shareName := seedLegacyMemoShare(ctx, t, ts, memo.Name, owner.ID, shareToken, nil)
 
-	require.NoError(t, ts.Store.DeleteSpaceMember(ctx, &store.DeleteSpaceMember{SpaceID: space.ID, UserID: owner.ID}, admin.ID))
-	_, err = ts.Service.DeleteMemoShare(ownerCtx, &apipb.DeleteMemoShareRequest{Name: shareName})
-	require.Equal(t, codes.PermissionDenied, status.Code(err))
-	requireSharePresent(ctx, t, ts, shareToken)
-
-	_, err = ts.InviteAndAcceptSpaceMember(ctx, &store.SpaceMember{
-		SpaceID: space.ID, UserID: owner.ID, Role: store.SpaceMemberRoleUser,
-	}, admin.ID)
-	require.NoError(t, err)
+	require.NoError(t, legacyspace.RemoveMember(ctx, db, spaceID, owner.ID))
 	_, err = ts.Service.DeleteMemoShare(ownerCtx, &apipb.DeleteMemoShareRequest{Name: shareName})
 	require.NoError(t, err)
 	storedShare, err := ts.Store.GetMemoShare(ctx, &store.FindMemoShare{UID: new(shareToken)})

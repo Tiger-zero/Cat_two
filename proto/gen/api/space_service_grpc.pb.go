@@ -42,7 +42,8 @@ const (
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 //
-// SpaceService manages collaborative spaces, their members and their invitations.
+// SpaceService is a legacy API retained for protocol compatibility.
+// The collaborative space, membership and invitation methods are retired in Cat_two.
 type SpaceServiceClient interface {
 	// ListSpaces lists the spaces of which the authenticated caller is a member.
 	ListSpaces(ctx context.Context, in *ListSpacesRequest, opts ...grpc.CallOption) (*ListSpacesResponse, error)
@@ -268,7 +269,8 @@ func (c *spaceServiceClient) DeclineSpaceInvitation(ctx context.Context, in *Dec
 // All implementations must embed UnimplementedSpaceServiceServer
 // for forward compatibility.
 //
-// SpaceService manages collaborative spaces, their members and their invitations.
+// SpaceService is a legacy API retained for protocol compatibility.
+// The collaborative space, membership and invitation methods are retired in Cat_two.
 type SpaceServiceServer interface {
 	// ListSpaces lists the spaces of which the authenticated caller is a member.
 	ListSpaces(context.Context, *ListSpacesRequest) (*ListSpacesResponse, error)

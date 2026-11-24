@@ -134,7 +134,7 @@ func TestLoginIPBlockedListUsesCanonicalIPCursor(t *testing.T) {
 func TestLoginIPBlocksSurviveSQLiteMigrationAndRestart(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()
-	p := getTestingProfileForDriver(t, "sqlite")
+	p := getTestingProfile(t)
 	openStore := func() *store.Store {
 		t.Helper()
 		driver, err := storedb.NewDBDriver(p)
@@ -150,7 +150,7 @@ func TestLoginIPBlocksSurviveSQLiteMigrationAndRestart(t *testing.T) {
 	st := openStore()
 	_, err := st.GetDriver().GetDB().ExecContext(ctx, "DROP TABLE login_ip_attempt")
 	require.NoError(t, err)
-	removeMemoBodySchema(ctx, t, st, "sqlite")
+	removeMemoBodySchema(ctx, t, st)
 	basic, err := st.GetInstanceBasicSetting(ctx)
 	require.NoError(t, err)
 	_, err = st.UpsertInstanceSetting(ctx, &storepb.InstanceSetting{

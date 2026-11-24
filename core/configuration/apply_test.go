@@ -2,6 +2,9 @@ package configuration
 
 import (
 	"context"
+	"database/sql"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -43,11 +46,8 @@ func requirePassword(t *testing.T, s *store.Store, username, password string) {
 }
 
 func instanceFiles(title, password string, version string) map[string]string {
-	withSecret := `{"name":"identity-providers/sso","type":"OAUTH2","title":"SSO","config":{"oauth2Config":{"clientId":"memos","clientSecret":"file-secret",
-	"authUrl":"https://idp.example.com/authorize","tokenUrl":"https://idp.example.com/token","userInfoUrl":"https://idp.example.com/userinfo",
-	"fieldMapping":{"identifier":"sub"}}}}`
+
 	return map[string]string{
-		"idp.json":     `{"identityProviders":[` + withSecret + `]}`,
 		"general.json": generalDocument(title),
 		"users.json": `{"users":[{"name":"users/admin","username":"admin","role":"ADMIN","password":"` + password + `"}],
 			"lifecycle":[{"resource":"users/admin","writeOnlyVersion":` + version + `}]}`,
@@ -63,14 +63,11 @@ func TestApplyLifecycle(t *testing.T) {
 	require.True(t, plan.HasChanges())
 	require.Equal(t, int64(1), state.Serial)
 	require.Equal(t, "test host", state.AppliedBy)
-	require.Len(t, state.Resources, 3)
+	require.Len(t, state.Resources, 2)
 	for _, resource := range state.Resources {
 		require.Equal(t, int64(1_800_000_000), resource.AppliedTs, resource.Name)
 	}
 
-	provider, err := s.GetIdentityProvider(ctx, &store.FindIdentityProvider{UID: new("sso")})
-	require.NoError(t, err)
-	require.Equal(t, "file-secret", provider.Config.GetOauth2Config().ClientSecret)
 	general, err := s.GetInstanceGeneralSetting(ctx)
 	require.NoError(t, err)
 	require.Equal(t, "Company", general.GetCustomProfile().GetTitle())
@@ -107,14 +104,15 @@ func TestApplyInvalidPlanWritesNothing(t *testing.T) {
 	ctx := context.Background()
 	s := newTestStore(t)
 	desired := loadDesired(t, map[string]string{
-		"general.json": `{"instanceSettings":[{"name":"instance/settings/GENERAL","generalSetting":{"disallowPasswordAuth":true}}]}`,
+		"general.json": generalDocument("Should not be written"),
+		"admin.json":   `{"users":[{"name":"users/admin","username":"admin","role":"ADMIN"}]}`,
 	})
 	plan, state := applyFor(t, desired, s)
 	require.False(t, plan.Valid())
 	require.Nil(t, state)
 	general, err := s.GetInstanceGeneralSetting(ctx)
 	require.NoError(t, err)
-	require.False(t, general.DisallowPasswordAuth)
+	require.NotEqual(t, "Should not be written", general.GetCustomProfile().GetTitle())
 	record, err := s.GetConfigurationState(ctx)
 	require.NoError(t, err)
 	require.Zero(t, record.Serial)
@@ -127,106 +125,109 @@ func TestApplyKeepsIgnoredFields(t *testing.T) {
 	require.NoError(t, err)
 
 	desired := loadDesired(t, map[string]string{"general.json": `{"instanceSettings":[{"name":"instance/settings/GENERAL","generalSetting":{
-		"disallowUserRegistration":true,"customProfile":{"title":"From the file"}}}],
+		"weekStartDayOffset":1,"customProfile":{"title":"From the file"}}}],
 		"lifecycle":[{"resource":"instance/settings/GENERAL","ignoreChanges":["generalSetting.customProfile"]}]}`})
 	_, state := applyFor(t, desired, s)
 	require.Equal(t, int64(1), state.Serial)
 	general, err := s.GetInstanceGeneralSetting(ctx)
 	require.NoError(t, err)
-	require.True(t, general.DisallowUserRegistration, "managed fields are written")
+	require.Equal(t, int32(1), general.WeekStartDayOffset, "managed fields are written")
 	require.Equal(t, "Chosen in the UI", general.GetCustomProfile().GetTitle(), "ignored fields keep their stored value")
 }
 
 func TestApplyRemovals(t *testing.T) {
 	ctx := context.Background()
 	s := newTestStore(t)
-	declared := map[string]string{
-		"idp.json": `{"identityProviders":[` + validIDP + `]}`,
-		"settings.json": `{"instanceSettings":[
-			{"name":"instance/settings/ACCESS","accessSetting":{"accessMode":"INSTANCE_ACCESS_MODE_PUBLIC"}},
-			{"name":"instance/settings/NOTIFICATION","notificationSetting":{"email":{"fromName":"Memos"}}}]}`,
-	}
-	_, state := applyFor(t, loadDesired(t, declared), s)
-	require.Len(t, state.Resources, 3)
+	_, state := applyFor(t, loadDesired(t, map[string]string{"general.json": generalDocument("Company")}), s)
+	require.Len(t, state.Resources, 1)
 
 	_, state = applyFor(t, loadDesired(t, map[string]string{"removed.json": `{"removed":[
-		{"resource":"identity-providers/sso","destroy":true},
-		{"resource":"instance/settings/ACCESS","destroy":true},
-		{"resource":"instance/settings/NOTIFICATION"}]}`}), s)
+		{"resource":"instance/settings/GENERAL","destroy":true}]}`}), s)
 	require.Empty(t, state.Resources)
-
-	providers, err := s.ListIdentityProviders(ctx, &store.FindIdentityProvider{})
+	general, err := s.GetUncachedInstanceSetting(ctx, &store.FindInstanceSetting{Name: "GENERAL"})
 	require.NoError(t, err)
-	require.Empty(t, providers, "a destroyed provider is deleted")
-	access, err := s.GetInstanceAccessSetting(ctx)
-	require.NoError(t, err)
-	require.Equal(t, storepb.InstanceAccessMode_INSTANCE_ACCESS_MODE_PRIVATE, access.AccessMode, "a reset ACCESS is private")
-	notification, err := s.GetUncachedInstanceSetting(ctx, &store.FindInstanceSetting{Name: "NOTIFICATION"})
-	require.NoError(t, err)
-	require.Equal(t, "Memos", notification.GetNotificationSetting().GetEmail().GetFromName(), "a released setting is left as it is")
+	require.Nil(t, general, "an explicitly removed active setting is reset")
 }
 
-func TestApplyLinkedIdentities(t *testing.T) {
+func TestApplyLegacyConfigurationPreservesData(t *testing.T) {
 	ctx := context.Background()
 	s := newTestStore(t)
-	files := func(subject string) map[string]string {
-		return map[string]string{"all.json": `{
-			"identityProviders":[` + validIDP + `],
-			"users":[{"name":"users/admin","username":"admin","role":"ADMIN"}],
-			"linkedIdentities":[{"name":"users/admin/linkedIdentities/sso","externalUid":"` + subject + `"}]}`}
-	}
-	linked := func() *store.UserIdentity {
-		username := "admin"
-		user, err := s.GetUser(ctx, &store.FindUser{Username: &username})
-		require.NoError(t, err)
-		require.NotNil(t, user)
-		identity, err := s.GetUserIdentity(ctx, &store.FindUserIdentity{UserID: &user.ID, Provider: new("sso")})
-		require.NoError(t, err)
-		return identity
-	}
-
-	// The user and its link are created in one apply; without a declared
-	// password the user gets one nobody knows, as SSO provisioning does.
-	plan, state := applyFor(t, loadDesired(t, files("subject-1")), s)
-	require.True(t, plan.Valid(), plan.Message.Errors)
-	require.Len(t, state.Resources, 3)
-	require.Equal(t, "subject-1", linked().ExternUID)
-	username := "admin"
-	admin, err := s.GetUser(ctx, &store.FindUser{Username: &username})
+	admin, err := s.CreateUser(ctx, &store.User{Username: "admin", Role: store.RoleAdmin, PasswordHash: "old-hash"})
 	require.NoError(t, err)
-	require.NotEmpty(t, admin.PasswordHash)
-	require.Error(t, bcrypt.CompareHashAndPassword([]byte(admin.PasswordHash), []byte("")))
+	legacy, err := s.CreateUser(ctx, &store.User{Username: "legacy", Role: store.RoleUser, PasswordHash: "legacy-hash"})
+	require.NoError(t, err)
+	legacyMemo, err := s.CreateMemo(ctx, &store.Memo{UID: "legacy-note", CreatorID: legacy.ID, Content: "old private note", Visibility: store.Private})
+	require.NoError(t, err)
+	db, err := sql.Open("sqlite", filepath.Join(s.GetDataDir(), "memos_prod.db"))
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, db.Close()) })
+	const providerConfig = `{"clientId":"old-client","clientSecret":"old-secret"}`
+	_, err = db.ExecContext(ctx, `INSERT INTO idp (uid, name, type, config) VALUES ('sso', 'Legacy SSO', 'OAUTH2', ?)`, providerConfig)
+	require.NoError(t, err)
+	_, err = db.ExecContext(ctx, `INSERT INTO user_identity (user_id, provider, extern_uid) VALUES (?, 'sso', 'legacy-subject')`, legacy.ID)
+	require.NoError(t, err)
+	legacySetting := &storepb.InstanceSetting{Key: storepb.InstanceSettingKey_AI,
+		Value: &storepb.InstanceSetting_AiSetting{AiSetting: &storepb.InstanceAISetting{Providers: []*storepb.AIProviderConfig{{Id: "old-ai", ApiKey: "old-key"}}}}}
+	_, err = s.UpsertInstanceSetting(ctx, legacySetting)
+	require.NoError(t, err)
+	_, err = s.RunConfigurationTransaction(ctx, func(context.Context, *store.ConfigurationTransaction) (*storepb.InstanceConfigurationState, error) {
+		return &storepb.InstanceConfigurationState{Resources: []*storepb.InstanceConfigurationState_ManagedResource{
+			{Name: "identity-providers/sso", Kind: "IdentityProvider", AppliedTs: 123},
+			{Name: "users/legacy/linkedIdentities/sso", Kind: "LinkedIdentity", AppliedTs: 123},
+			{Name: "users/legacy", Kind: "User", AppliedTs: 123},
+			{Name: "instance/settings/AI", Kind: "InstanceSetting", AppliedTs: 123},
+		}}, nil
+	})
+	require.NoError(t, err)
 
-	again, _ := applyFor(t, loadDesired(t, files("subject-1")), s)
-	require.False(t, again.HasChanges(), "a second apply changes nothing")
-
-	_, _ = applyFor(t, loadDesired(t, files("subject-2")), s)
-	require.Equal(t, "subject-2", linked().ExternUID, "a changed subject replaces the link")
-
-	_, state = applyFor(t, loadDesired(t, map[string]string{"all.json": `{
-		"identityProviders":[` + validIDP + `],
-		"users":[{"name":"users/admin","username":"admin","role":"ADMIN"}],
-		"removed":[{"resource":"users/admin/linkedIdentities/sso","destroy":true}]}`}), s)
-	require.Len(t, state.Resources, 2)
-	require.Nil(t, linked(), "a destroyed link is deleted")
+	files := map[string]string{"legacy.json": `{
+		"identityProviders":[{"name":"identity-providers/sso","config":"${env:RETIRED_SECRET}"}],
+		"linkedIdentities":[{"name":"users/legacy/linkedIdentities/sso","externalUid":"${file:/missing/legacy}"}],
+		"instanceSettings":[{"name":"instance/settings/AI","aiSetting":{"providers":[{"apiKey":"${env:RETIRED_AI_KEY}"}]}}],
+		"users":[{"name":"users/admin","username":"admin","role":"ADMIN","password":"new-password"},
+			{"name":"users/legacy","username":"legacy","role":"USER","password":"${env:RETIRED_USER_PASSWORD}"},
+			{"name":"users/extra","username":"extra","role":"ADMIN","password":"ignored"}],
+		"lifecycle":[{"resource":"users/admin","writeOnlyVersion":1},{"resource":"users/legacy"}],
+		"removed":[{"resource":"users/legacy","destroy":true},{"resource":"instance/settings/AI","destroy":true},
+			{"resource":"identity-providers/sso","destroy":true},{"resource":"users/legacy/linkedIdentities/sso","destroy":true}]
+	}`}
+	desired, err := Load(writeFiles(t, files), Resolver{})
+	require.NoError(t, err, "retired declarations must not resolve their secrets")
+	plan, state := applyFor(t, desired, s)
+	require.True(t, plan.Valid(), plan.Message.Errors)
+	require.Len(t, plan.Message.ResourceChanges, 1)
+	require.Len(t, state.Resources, 5)
+	users, err := s.ListUsers(ctx, &store.FindUser{})
+	require.NoError(t, err)
+	require.Len(t, users, 2)
+	requirePassword(t, s, admin.Username, "new-password")
+	unchangedUser, err := s.GetUser(ctx, &store.FindUser{ID: &legacy.ID})
+	require.NoError(t, err)
+	require.Equal(t, legacy.PasswordHash, unchangedUser.PasswordHash)
+	unchangedMemo, err := s.GetMemo(ctx, &store.FindMemo{ID: &legacyMemo.ID})
+	require.NoError(t, err)
+	require.Equal(t, legacyMemo.Content, unchangedMemo.Content)
+	var unchangedConfig, unchangedSubject string
+	require.NoError(t, db.QueryRowContext(ctx, `SELECT config FROM idp WHERE uid = 'sso'`).Scan(&unchangedConfig))
+	require.Equal(t, providerConfig, unchangedConfig)
+	require.NoError(t, db.QueryRowContext(ctx, `SELECT extern_uid FROM user_identity WHERE user_id = ? AND provider = 'sso'`, legacy.ID).Scan(&unchangedSubject))
+	require.Equal(t, "legacy-subject", unchangedSubject)
+	unchangedSetting, err := s.GetUncachedInstanceSetting(ctx, &store.FindInstanceSetting{Name: "AI"})
+	require.NoError(t, err)
+	require.Equal(t, "old-key", unchangedSetting.GetAiSetting().Providers[0].ApiKey)
+	again, _ := applyFor(t, desired, s)
+	require.False(t, again.HasChanges())
 }
 
 func TestApplyFailureRollsBack(t *testing.T) {
 	ctx := context.Background()
 	s := newTestStore(t)
-	_, err := s.CreateUser(ctx, &store.User{Username: "root", Role: store.RoleAdmin, PasswordHash: "hash"})
+	desired := loadDesired(t, instanceFiles("Should roll back", strings.Repeat("a", 73), "1"))
+	_, _, err := Apply(ctx, desired, s, ApplyMetadata{Now: time.Now()})
+	require.ErrorIs(t, err, bcrypt.ErrPasswordTooLong)
+	general, err := s.GetUncachedInstanceSetting(ctx, &store.FindInstanceSetting{Name: "GENERAL"})
 	require.NoError(t, err)
-
-	desired := loadDesired(t, map[string]string{
-		"idp.json":   `{"identityProviders":[` + validIDP + `]}`,
-		"users.json": `{"users":[{"name":"users/root","username":"root","role":"USER","password":"pw"}]}`,
-	})
-	_, _, err = Apply(ctx, desired, s, ApplyMetadata{Now: time.Now()})
-	require.ErrorIs(t, err, store.ErrLastInstanceAdmin)
-
-	providers, err := s.ListIdentityProviders(ctx, &store.FindIdentityProvider{})
-	require.NoError(t, err)
-	require.Empty(t, providers, "the provider written before the failure rolled back")
+	require.Nil(t, general, "the setting written before the failure rolled back")
 	record, err := s.GetConfigurationState(ctx)
 	require.NoError(t, err)
 	require.Zero(t, record.Serial)

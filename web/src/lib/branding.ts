@@ -1,5 +1,7 @@
+export const DEFAULT_APP_NAME = "Cat_two";
 export const DEFAULT_FAVICON = "/favicon.png?v=cat-two";
 export const DEFAULT_LOGO = "/logo.webp?v=cat-two";
+export const DEFAULT_AVATAR = "/android-chrome-192x192.png?v=cat-two";
 
 // Older profiles can contain a built-in asset URL instead of inheriting the default.
 export const getCustomLogoUrl = (logoUrl?: string): string | undefined =>
