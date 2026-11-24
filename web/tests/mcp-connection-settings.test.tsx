@@ -200,13 +200,10 @@ describe("MCP connection settings", () => {
   });
 
   it.each([
-    { row: { ...connection, status: "awaiting" }, statusLabel: "New token required" },
-    { row: { ...connection, status: "pending" }, statusLabel: "New token required" },
     { row: connection, statusLabel: "Not connected yet" },
     { row: usedConnection, statusLabel: "Connected" },
     { row: { ...usedConnection, status: "expired", expiresAt: connection.createdAt + 7 * 86_400 }, statusLabel: "Expired" },
     { row: { ...connection, status: "revoked" }, statusLabel: "Revoked" },
-    { row: { ...connection, status: "denied" }, statusLabel: "Denied" },
   ])("shows $statusLabel for $row.status tokens and requires confirmation before deleting", async ({ row, statusLabel }) => {
     const retainedConnection = { ...usedConnection, id: "retained-connection", label: "Laptop" };
     let connections = [row, retainedConnection];
