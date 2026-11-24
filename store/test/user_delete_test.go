@@ -378,5 +378,4 @@ func TestDeleteUserCleansRelatedData(t *testing.T) {
 	keptInboxes, err := ts.ListInboxes(ctx, &store.FindInbox{ID: &inboxToKeep.ID})
 	require.NoError(t, err)
 	require.Len(t, keptInboxes, 1)
-
 }
