@@ -1,5 +1,15 @@
 # Cat_two 开发记录
 
+## 2026-11-25（上海时间）
+
+### 镜像 0.17
+
+00:25 发布 Docker Hub `0.17`。已从镜像仓库核对编号、`latest` 和 `sha-51e80b2c5b88f47aea24f706560b4bd5c26f4980` 均指向 `sha256:c423335e624239a1a12172fe2a5978abf205e1afde851b91ca24e11f014c417d`。Linux AMD64 和 ARM64 的 OCI 标签均对应提交 `51e80b2c5`。 [发布工作流](https://github.com/Tiger-zero/Cat_two/actions/runs/45435539026) · [Docker Hub](https://hub.docker.com/r/tiger2896/cat_two/tags?name=0.17)
+
+本版使用单管理员 SQLite 结构和 MCP 专用令牌。新装使用空数据卷，当前版本可用原卷重建。用实际 `0.16` 镜像建库后验证启动保护，误挂旧卷时文件校验值、权限及所有者均保持一致。Go 静态检查、服务端竞态测试、1,410 项前端测试和 Chromium 操作验证通过。两个原生平台分别验证正式镜像的新装、刷新会话、读写笔记、附件字节、回收站恢复和同卷重建。 [部署说明](../../cat-two-product-development/references/deployment.md#备份和升级) · [接口说明](../../cat-two-product-development/references/external-api.md)
+
+发布流程在每个任务内读取公开仓库名，避免 GitHub 对跨任务输出的脱敏造成镜像地址缺失。构建缓存服务暂时无法写入时，发布流程可继续验证实际镜像。 [构建工作流](../../../../.github/workflows/cat-two-container.yml)
+
 ## 2026-11-23（上海时间）
 
 ### 镜像 0.16
