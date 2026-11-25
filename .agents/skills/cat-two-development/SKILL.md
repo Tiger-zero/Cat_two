@@ -86,3 +86,4 @@ Cat_two 是单账户、自托管的个人笔记应用。新实例首次设置时
 - **2026-11-24 23:57**　外部笔记工具统一使用 MCP 专用令牌，退役通用 REST 和 PAT。网页通过登录会话与 MCP 共用笔记服务和修订检查。首次安装创建唯一管理员，启动时检查 SQLite 结构，误挂不兼容旧库会停止启动。 [连接和权限](../cat-two-product-development/references/external-api.md) · [部署与数据目录](../cat-two-product-development/references/deployment.md#备份和升级)
 - **2026-11-25 00:25**　发布 Docker Hub `0.17`，验证 AMD64、ARM64 新装和同卷重建，核对编号、`latest` 和提交标签的镜像摘要。 [发布记录](references/development-log.md#镜像-017)
 - **2026-11-25 22:08**　浅色主题的页面画布统一使用纯白色。Chromium 验证首页和回收站在桌面、窄屏与跟随系统浅色时均为 `RGB(255, 255, 255)`，并核对了深色和纸张主题。 [配色表](../cat-two-ui-development/references/desktop-visual-design.md#cat_two-主题)
+- **2026-11-25 22:12**　浅色回收站的空状态、加载失败提示框和已删除笔记卡片复用首页的纯白画布色。主题、页面布局和回收站的 85 项定向测试、前端静态检查及生产构建通过。 [配色表](../cat-two-ui-development/references/desktop-visual-design.md#cat_two-主题)

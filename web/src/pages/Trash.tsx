@@ -84,7 +84,7 @@ export default function Trash() {
         </p>
       )}
       {isUserSettingsInitialized && query.isError && (
-        <div role="alert" className="memos-panel flex items-center justify-between gap-2 p-3">
+        <div role="alert" className="memos-panel flex items-center justify-between gap-2 p-3 light:bg-mu-canvas">
           <p>{t("trash.load-error")}</p>
           <Button variant="neutral" onClick={() => void query.refetch()}>
             {t("common.retry")}
@@ -92,10 +92,10 @@ export default function Trash() {
         </div>
       )}
       {isUserSettingsInitialized && query.isSuccess && !entries.length && (
-        <p className="memos-panel p-6 text-center text-mu-text-secondary">{t("trash.empty")}</p>
+        <p className="memos-panel p-6 text-center text-mu-text-secondary light:bg-mu-canvas">{t("trash.empty")}</p>
       )}
       {entries.map(({ memo, deletedTime }) => (
-        <article key={memo.name} className="memos-panel flex min-w-0 flex-col gap-3 p-4">
+        <article key={memo.name} className="memos-panel flex min-w-0 flex-col gap-3 p-4 light:bg-mu-canvas">
           <time className="mu-caption text-mu-text-secondary" dateTime={deletedTime}>
             {t("trash.deleted-at", { time: inAppTimeZone(new Date(deletedTime)).format(APP_DATE_TIME_FORMAT) })}
           </time>
