@@ -1,4 +1,4 @@
-import { Field, List, Textarea } from "@usememos/ui";
+import { Field, List } from "@usememos/ui";
 import { createContext, type ReactNode, useContext } from "react";
 import { cn } from "@/lib/utils";
 
@@ -84,31 +84,5 @@ export const SettingPanel = ({ children, header, footer }: SettingPanelProps) =>
       <div className="px-4 py-3">{children}</div>
       {footer && <div className="border-t border-mu-line px-4 py-2">{footer}</div>}
     </div>
-  );
-};
-
-interface SettingCodeEditorProps {
-  label: string;
-  description: string;
-  value: string;
-  placeholder: string;
-  onChange: (value: string) => void;
-  disabled?: boolean;
-}
-
-export const SettingCodeEditor = ({ label, description, value, placeholder, onChange, disabled }: SettingCodeEditorProps) => {
-  return (
-    <Field.Root>
-      <Field.Label>{label}</Field.Label>
-      <Field.Description>{description}</Field.Description>
-      <Textarea
-        className="font-mono"
-        rows={4}
-        placeholder={placeholder}
-        value={value}
-        disabled={disabled}
-        onChange={(event) => onChange(event.target.value)}
-      />
-    </Field.Root>
   );
 };

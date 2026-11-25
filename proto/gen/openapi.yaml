@@ -2584,9 +2584,6 @@ components:
                          0: Sunday, 1: Monday, 2: Tuesday, 3: Wednesday, 4: Thursday, 5: Friday, 6: Saturday.
                          Default is Sunday.
                     format: int32
-                additionalStyle:
-                    type: string
-                    description: Custom CSS injected into the web app.
                 additionalScript:
                     type: string
                     description: Legacy compatibility field. Cat_two rejects nonempty updates and omits stored values from responses.

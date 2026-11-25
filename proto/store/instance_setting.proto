@@ -66,8 +66,8 @@ message InstanceGeneralSetting {
   bool disallow_password_auth = 2;
   // additional_script is the additional script.
   string additional_script = 3;
-  // additional_style is the additional style.
-  string additional_style = 4;
+  reserved 4;
+  reserved "additional_style";
   // custom_profile is the custom profile.
   InstanceCustomProfile custom_profile = 5;
   // week_start_day_offset is the week start day offset from Sunday.

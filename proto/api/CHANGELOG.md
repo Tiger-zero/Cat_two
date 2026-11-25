@@ -34,7 +34,8 @@ Add entries under a `## Unreleased` heading. After the release ships, rename it 
 - MCP connections are created in **Settings → MCP**, with read-only or read-write permissions and a duration of 7 days, 14 days, one calendar year, or permanent. Deleting a connection invalidates the token on the next request. [MCP tools](../../server/mcp/README.md#tool-surface)
 - When an account enables two-step verification, password sign-in requires `password_credentials.otp_code`. `ErrorInfo.reason` is `TOTP_REQUIRED` for a missing code and `TOTP_INVALID` for an invalid or reused code. Changing or resetting the factor revokes interactive sessions.
 - Cat_two binds browser access and refresh credentials to the same revocable session. `SignOut` invalidates both credentials for the current session.
-- Cat_two removes `GENERAL.additionalScript`. Branding and styling remain configurable.
+- Cat_two removes instance-wide custom CSS (`GENERAL.additionalStyle`). Remove this field from declarative configuration files. The built-in themes and instance branding remain available.
+- Cat_two disables `GENERAL.additionalScript`.
 - Create memo and comment requests accept optional `idempotent` with an explicit `memoId` or `commentId`. An exact
   retry returns the committed note. A conflicting payload returns `ALREADY_EXISTS`. Memo responses include
   `revision`. Updates can pass `expectedRevision` for a transactional precondition, with `ABORTED` on stale edits.

@@ -727,9 +727,6 @@
       "load-error": "Could not load storage statistics."
     },
     "system": {
-      "additional-style": "Additional style",
-      "additional-style-description": "Inject CSS into the web app to adjust instance-wide presentation.",
-      "additional-style-placeholder": "Additional CSS code",
       "basic-description": "Configure the public identity and calendar defaults for this instance.",
       "customize-server": {
         "description": "Description",
@@ -737,8 +734,6 @@
         "title": "Customize Server",
         "dialog-description": "Customize your instance appearance and settings."
       },
-      "custom-code-description": "Optional styles applied across the web app.",
-      "custom-code-title": "Custom styles",
       "label": "System",
       "server-name": "Server Name"
     },

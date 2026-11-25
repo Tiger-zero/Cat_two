@@ -136,8 +136,8 @@ func TestInstanceSettingGeneralSetting(t *testing.T) {
 		Key: storepb.InstanceSettingKey_GENERAL,
 		Value: &storepb.InstanceSetting_GeneralSetting{
 			GeneralSetting: &storepb.InstanceGeneralSetting{
-				AdditionalScript: "console.log('test')",
-				AdditionalStyle:  "body { color: red; }",
+				AdditionalScript:   "console.log('test')",
+				WeekStartDayOffset: 1,
 			},
 		},
 	})
@@ -147,7 +147,7 @@ func TestInstanceSettingGeneralSetting(t *testing.T) {
 	generalSetting, err = ts.GetInstanceGeneralSetting(ctx)
 	require.NoError(t, err)
 	require.Equal(t, "console.log('test')", generalSetting.AdditionalScript)
-	require.Equal(t, "body { color: red; }", generalSetting.AdditionalStyle)
+	require.EqualValues(t, 1, generalSetting.WeekStartDayOffset)
 
 	ts.Close()
 }
@@ -458,13 +458,11 @@ func TestInstanceSettingEdgeCases(t *testing.T) {
 
 	// Case 1: General Setting with special characters and Unicode
 	specialScript := `<script>alert("你好"); var x = 'test\'s';</script>`
-	specialStyle := `body { font-family: "Noto Sans SC", sans-serif; content: "\u2764"; }`
 	_, err := ts.UpsertInstanceSetting(ctx, &storepb.InstanceSetting{
 		Key: storepb.InstanceSettingKey_GENERAL,
 		Value: &storepb.InstanceSetting_GeneralSetting{
 			GeneralSetting: &storepb.InstanceGeneralSetting{
 				AdditionalScript: specialScript,
-				AdditionalStyle:  specialStyle,
 			},
 		},
 	})
@@ -473,7 +471,6 @@ func TestInstanceSettingEdgeCases(t *testing.T) {
 	generalSetting, err := ts.GetInstanceGeneralSetting(ctx)
 	require.NoError(t, err)
 	require.Equal(t, specialScript, generalSetting.AdditionalScript)
-	require.Equal(t, specialStyle, generalSetting.AdditionalStyle)
 
 	ts.Close()
 }

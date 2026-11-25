@@ -219,8 +219,8 @@ message InstanceSetting {
     // Default is Sunday.
     int32 week_start_day_offset = 6;
 
-    // Custom CSS injected into the web app.
-    string additional_style = 7;
+    reserved 7;
+    reserved "additional_style";
 
     // Legacy compatibility field. Cat_two rejects nonempty updates and omits stored values from responses.
     string additional_script = 8;

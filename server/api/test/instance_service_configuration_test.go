@@ -56,25 +56,26 @@ func TestConfigurationGuard(t *testing.T) {
 	adminCtx := ts.CreateUserContext(ctx, admin.ID)
 	applyConfiguration(ctx, t, ts, map[string]string{
 		"general.json": `{"instanceSettings":[{"name":"instance/settings/GENERAL","generalSetting":{"customProfile":{"title":"Company"}}}],
-			"lifecycle":[{"resource":"instance/settings/GENERAL","ignoreChanges":["generalSetting.additionalStyle"]}]}`,
+			"lifecycle":[{"resource":"instance/settings/GENERAL","ignoreChanges":["generalSetting.weekStartDayOffset"]}]}`,
 		"users.json": `{"users":[{"name":"users/admin","username":"admin","role":"ADMIN","password":"pw"}]}`,
 	})
 
 	// Instance settings: a managed change is refused, with the file and the field.
-	general := func(title, style string) error {
+	general := func(title string, weekStart int32) error {
 		_, err := ts.Service.UpdateInstanceSetting(adminCtx, &apipb.UpdateInstanceSettingRequest{InstanceSetting: &apipb.InstanceSetting{
 			Name: "instance/settings/GENERAL",
 			Value: &apipb.InstanceSetting_GeneralSetting_{GeneralSetting: &apipb.InstanceSetting_GeneralSetting{
-				CustomProfile: &apipb.InstanceSetting_GeneralSetting_CustomProfile{Title: title}, AdditionalStyle: style,
+				CustomProfile:      &apipb.InstanceSetting_GeneralSetting_CustomProfile{Title: title},
+				WeekStartDayOffset: weekStart,
 			}},
 		}})
 		return err
 	}
-	metadata := requireManaged(t, general("Renamed", ""), "instance/settings/GENERAL")
+	metadata := requireManaged(t, general("Renamed", 0), "instance/settings/GENERAL")
 	require.Equal(t, "general.json", metadata["source"])
 	require.Equal(t, "generalSetting.customProfile.title", metadata["fields"])
-	require.NoError(t, general("Company", ""), "resending the managed values passes")
-	require.NoError(t, general("Company", "body{}"), "an ignored field is the API's to change")
+	require.NoError(t, general("Company", 0), "resending the managed values passes")
+	require.NoError(t, general("Company", 1), "an ignored field is the API's to change")
 
 	// Users: username and role are managed; the profile and the password are not.
 	update := func(user *apipb.User, paths ...string) error {

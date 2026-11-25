@@ -571,8 +571,6 @@ type InstanceGeneralSetting struct {
 	DisallowPasswordAuth bool `protobuf:"varint,2,opt,name=disallow_password_auth,json=disallowPasswordAuth,proto3" json:"disallow_password_auth,omitempty"`
 	// additional_script is the additional script.
 	AdditionalScript string `protobuf:"bytes,3,opt,name=additional_script,json=additionalScript,proto3" json:"additional_script,omitempty"`
-	// additional_style is the additional style.
-	AdditionalStyle string `protobuf:"bytes,4,opt,name=additional_style,json=additionalStyle,proto3" json:"additional_style,omitempty"`
 	// custom_profile is the custom profile.
 	CustomProfile *InstanceCustomProfile `protobuf:"bytes,5,opt,name=custom_profile,json=customProfile,proto3" json:"custom_profile,omitempty"`
 	// week_start_day_offset is the week start day offset from Sunday.
@@ -634,13 +632,6 @@ func (x *InstanceGeneralSetting) GetDisallowPasswordAuth() bool {
 func (x *InstanceGeneralSetting) GetAdditionalScript() string {
 	if x != nil {
 		return x.AdditionalScript
-	}
-	return ""
-}
-
-func (x *InstanceGeneralSetting) GetAdditionalStyle() string {
-	if x != nil {
-		return x.AdditionalStyle
 	}
 	return ""
 }
@@ -1922,16 +1913,15 @@ const file_store_instance_setting_proto_rawDesc = "" +
 	"\n" +
 	"secret_key\x18\x01 \x01(\tR\tsecretKey\x12%\n" +
 	"\x0eschema_version\x18\x02 \x01(\tR\rschemaVersion\x12'\n" +
-	"\x0fpayload_version\x18\x03 \x01(\x05R\x0epayloadVersion\"\xd6\x03\n" +
+	"\x0fpayload_version\x18\x03 \x01(\x05R\x0epayloadVersion\"\xc3\x03\n" +
 	"\x16InstanceGeneralSetting\x12<\n" +
 	"\x1adisallow_user_registration\x18\x01 \x01(\bR\x18disallowUserRegistration\x124\n" +
 	"\x16disallow_password_auth\x18\x02 \x01(\bR\x14disallowPasswordAuth\x12+\n" +
-	"\x11additional_script\x18\x03 \x01(\tR\x10additionalScript\x12)\n" +
-	"\x10additional_style\x18\x04 \x01(\tR\x0fadditionalStyle\x12I\n" +
+	"\x11additional_script\x18\x03 \x01(\tR\x10additionalScript\x12I\n" +
 	"\x0ecustom_profile\x18\x05 \x01(\v2\".memos.store.InstanceCustomProfileR\rcustomProfile\x121\n" +
 	"\x15week_start_day_offset\x18\x06 \x01(\x05R\x12weekStartDayOffset\x128\n" +
 	"\x18disallow_change_username\x18\a \x01(\bR\x16disallowChangeUsername\x128\n" +
-	"\x18disallow_change_nickname\x18\b \x01(\bR\x16disallowChangeNickname\"j\n" +
+	"\x18disallow_change_nickname\x18\b \x01(\bR\x16disallowChangeNicknameJ\x04\b\x04\x10\x05R\x10additional_style\"j\n" +
 	"\x15InstanceCustomProfile\x12\x14\n" +
 	"\x05title\x18\x01 \x01(\tR\x05title\x12 \n" +
 	"\vdescription\x18\x02 \x01(\tR\vdescription\x12\x19\n" +

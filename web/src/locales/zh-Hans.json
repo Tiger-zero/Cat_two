@@ -564,9 +564,6 @@
       "load-error": "无法加载存储统计。"
     },
     "system": {
-      "additional-style": "自定义样式",
-      "additional-style-description": "向前端应用注入 CSS，用于调整实例范围内的显示效果。",
-      "additional-style-placeholder": "自定义 CSS 代码",
       "basic-description": "配置该实例对外展示的身份信息和日历默认行为。",
       "customize-server": {
         "description": "描述",
@@ -574,8 +571,6 @@
         "title": "自定义服务器",
         "dialog-description": "自定义实例的外观和设置。"
       },
-      "custom-code-description": "可为整个网页应用添加自定义样式。",
-      "custom-code-title": "自定义样式",
       "server-name": "服务器名称",
       "label": "系统"
     },

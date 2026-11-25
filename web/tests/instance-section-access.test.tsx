@@ -8,7 +8,6 @@ import { type User, User_Role, UserSchema } from "@/types/proto/api/user_service
 const instance = vi.hoisted(() => ({
   generalSetting: {
     additionalScript: "legacy script source",
-    additionalStyle: "",
     customProfile: undefined,
     disallowChangeNickname: true,
     disallowChangeUsername: false,
@@ -72,10 +71,14 @@ describe("<InstanceSection> access setting", () => {
   it("leaves general settings editable without altering the retired access fields", async () => {
     render(<InstanceSection />);
 
-    fireEvent.change(screen.getByPlaceholderText("setting.system.additional-style-placeholder"), {
-      target: { value: "body { margin: 0; }" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: "common.save" }));
+    const save = screen.getByRole("button", { name: "common.save" });
+    expect(save).toBeDisabled();
+    fireEvent.click(screen.getByRole("combobox"));
+    const monday = await screen.findByRole("option", { name: "setting.instance.monday" });
+    fireEvent.pointerDown(monday, { pointerType: "mouse" });
+    fireEvent.click(monday);
+    expect(save).toBeEnabled();
+    fireEvent.click(save);
 
     await waitFor(() => expect(instance.updateSetting).toHaveBeenCalledTimes(1));
     const setting = instance.updateSetting.mock.calls[0][0];
@@ -83,7 +86,7 @@ describe("<InstanceSection> access setting", () => {
     expect(setting.value.case).toBe("generalSetting");
     expect(setting.value.value).toMatchObject({
       additionalScript: "",
-      additionalStyle: "body { margin: 0; }",
+      weekStartDayOffset: 1,
       disallowUserRegistration: true,
       disallowPasswordAuth: false,
       disallowChangeUsername: false,
@@ -92,19 +95,16 @@ describe("<InstanceSection> access setting", () => {
     expect(instance.fetchSetting).toHaveBeenCalledWith(InstanceSetting_Key.GENERAL);
   });
 
-  it("orders general settings before administrator access and custom styles", () => {
+  it("groups calendar settings and their save button before administrator access", () => {
     render(<InstanceSection />);
 
     const groupHeadings = screen.getAllByRole("heading", { level: 2 });
-    expect(groupHeadings.map((heading) => heading.textContent)).toEqual([
-      "common.basic",
-      "setting.instance.access-title",
-      "setting.system.custom-code-title",
-    ]);
+    expect(groupHeadings.map((heading) => heading.textContent)).toEqual(["common.basic", "setting.instance.access-title"]);
 
     const weekStartDay = screen.getByText("setting.instance.week-start-day");
     const accessHeading = screen.getByRole("heading", { level: 2, name: "setting.instance.access-title" });
     expect(weekStartDay.compareDocumentPosition(accessHeading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(screen.queryByPlaceholderText("setting.system.additional-script-placeholder")).not.toBeInTheDocument();
+    const save = screen.getByRole("button", { name: "common.save" });
+    expect(save.compareDocumentPosition(accessHeading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 });

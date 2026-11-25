@@ -26,14 +26,6 @@ const App = () => {
     }
   }, [profileLoaded, instanceProfile.needsSetup, navigateTo]);
 
-  useEffect(() => {
-    if (!instanceGeneralSetting.additionalStyle) return;
-    const style = document.createElement("style");
-    style.textContent = instanceGeneralSetting.additionalStyle;
-    document.body.appendChild(style);
-    return () => style.remove();
-  }, [instanceGeneralSetting.additionalStyle]);
-
   // Dynamic update metadata with customized profile
   useEffect(() => {
     const customProfile = instanceGeneralSetting.customProfile;

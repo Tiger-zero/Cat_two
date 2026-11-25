@@ -1228,8 +1228,6 @@ type InstanceSetting_GeneralSetting struct {
 	// 0: Sunday, 1: Monday, 2: Tuesday, 3: Wednesday, 4: Thursday, 5: Friday, 6: Saturday.
 	// Default is Sunday.
 	WeekStartDayOffset int32 `protobuf:"varint,6,opt,name=week_start_day_offset,json=weekStartDayOffset,proto3" json:"week_start_day_offset,omitempty"`
-	// Custom CSS injected into the web app.
-	AdditionalStyle string `protobuf:"bytes,7,opt,name=additional_style,json=additionalStyle,proto3" json:"additional_style,omitempty"`
 	// Legacy compatibility field. Cat_two rejects nonempty updates and omits stored values from responses.
 	AdditionalScript string `protobuf:"bytes,8,opt,name=additional_script,json=additionalScript,proto3" json:"additional_script,omitempty"`
 	unknownFields    protoimpl.UnknownFields
@@ -1306,13 +1304,6 @@ func (x *InstanceSetting_GeneralSetting) GetWeekStartDayOffset() int32 {
 		return x.WeekStartDayOffset
 	}
 	return 0
-}
-
-func (x *InstanceSetting_GeneralSetting) GetAdditionalStyle() string {
-	if x != nil {
-		return x.AdditionalStyle
-	}
-	return ""
 }
 
 func (x *InstanceSetting_GeneralSetting) GetAdditionalScript() string {
@@ -2623,7 +2614,7 @@ const file_api_instance_service_proto_rawDesc = "" +
 	"\tChallenge\x12\x1a\n" +
 	"\bprovider\x18\x01 \x01(\tR\bprovider\x12\x19\n" +
 	"\bsite_key\x18\x02 \x01(\tR\asiteKey\"\x1b\n" +
-	"\x19GetInstanceProfileRequest\"\x83$\n" +
+	"\x19GetInstanceProfileRequest\"\xf0#\n" +
 	"\x0fInstanceSetting\x12\x17\n" +
 	"\x04name\x18\x01 \x01(\tB\x03\xe0A\bR\x04name\x12T\n" +
 	"\x0fgeneral_setting\x18\x02 \x01(\v2).memos.api.InstanceSetting.GeneralSettingH\x00R\x0egeneralSetting\x12T\n" +
@@ -2633,20 +2624,19 @@ const file_api_instance_service_proto_rawDesc = "" +
 	"\n" +
 	"ai_setting\x18\a \x01(\v2$.memos.api.InstanceSetting.AISettingH\x00R\taiSetting\x12Q\n" +
 	"\x0eaccess_setting\x18\b \x01(\v2(.memos.api.InstanceSetting.AccessSettingH\x00R\raccessSetting\x12a\n" +
-	"\x14usage_limits_setting\x18\t \x01(\v2-.memos.api.InstanceSetting.UsageLimitsSettingH\x00R\x12usageLimitsSetting\x1a\xc7\x04\n" +
+	"\x14usage_limits_setting\x18\t \x01(\v2-.memos.api.InstanceSetting.UsageLimitsSettingH\x00R\x12usageLimitsSetting\x1a\xb4\x04\n" +
 	"\x0eGeneralSetting\x12^\n" +
 	"\x0ecustom_profile\x18\x01 \x01(\v27.memos.api.InstanceSetting.GeneralSetting.CustomProfileR\rcustomProfile\x12<\n" +
 	"\x1adisallow_user_registration\x18\x02 \x01(\bR\x18disallowUserRegistration\x124\n" +
 	"\x16disallow_password_auth\x18\x03 \x01(\bR\x14disallowPasswordAuth\x128\n" +
 	"\x18disallow_change_username\x18\x04 \x01(\bR\x16disallowChangeUsername\x128\n" +
 	"\x18disallow_change_nickname\x18\x05 \x01(\bR\x16disallowChangeNickname\x121\n" +
-	"\x15week_start_day_offset\x18\x06 \x01(\x05R\x12weekStartDayOffset\x12)\n" +
-	"\x10additional_style\x18\a \x01(\tR\x0fadditionalStyle\x12+\n" +
+	"\x15week_start_day_offset\x18\x06 \x01(\x05R\x12weekStartDayOffset\x12+\n" +
 	"\x11additional_script\x18\b \x01(\tR\x10additionalScript\x1ab\n" +
 	"\rCustomProfile\x12\x14\n" +
 	"\x05title\x18\x01 \x01(\tR\x05title\x12 \n" +
 	"\vdescription\x18\x02 \x01(\tR\vdescription\x12\x19\n" +
-	"\blogo_url\x18\x03 \x01(\tR\alogoUrl\x1a\xb1\x05\n" +
+	"\blogo_url\x18\x03 \x01(\tR\alogoUrlJ\x04\b\a\x10\bR\x10additional_style\x1a\xb1\x05\n" +
 	"\x0eStorageSetting\x12>\n" +
 	"\bstorages\x18\x01 \x03(\v2\".memos.api.InstanceSetting.StorageR\bstorages\x12,\n" +
 	"\x12default_storage_id\x18\x02 \x01(\tR\x10defaultStorageId\x12+\n" +

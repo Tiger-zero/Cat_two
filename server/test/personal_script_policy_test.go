@@ -21,7 +21,6 @@ func TestPersonalGeneralSettingsRejectAndHideCustomJavaScript(t *testing.T) {
 		Key: storepb.InstanceSettingKey_GENERAL,
 		Value: &storepb.InstanceSetting_GeneralSetting{GeneralSetting: &storepb.InstanceGeneralSetting{
 			AdditionalScript: legacyScript,
-			AdditionalStyle:  "body { color: black; }",
 			CustomProfile:    &storepb.InstanceCustomProfile{Title: brand},
 		}},
 	})
@@ -38,7 +37,6 @@ func TestPersonalGeneralSettingsRejectAndHideCustomJavaScript(t *testing.T) {
 		code, body := inst.connect(t, request.procedure, "", request.body)
 		require.Equal(t, http.StatusOK, code, "%s", body)
 		require.Contains(t, string(body), brand)
-		require.Contains(t, string(body), "body { color: black; }")
 		require.NotContains(t, string(body), legacyScript)
 	}
 
@@ -51,11 +49,11 @@ func TestPersonalGeneralSettingsRejectAndHideCustomJavaScript(t *testing.T) {
 	require.NotContains(t, string(body), attemptedScript)
 
 	code, body = inst.connect(t, apiconnect.InstanceServiceUpdateInstanceSettingProcedure, browserToken, map[string]any{
-		"instanceSetting": map[string]any{"name": name, "generalSetting": map[string]string{"additionalStyle": "body { color: blue; }"}},
+		"instanceSetting": map[string]any{"name": name, "generalSetting": map[string]int{"weekStartDayOffset": 1}},
 	})
 	require.Equal(t, http.StatusOK, code, "%s", body)
 	updated, err := inst.server.Store.GetInstanceGeneralSetting(ctx)
 	require.NoError(t, err)
 	require.Empty(t, updated.GetAdditionalScript())
-	require.Equal(t, "body { color: blue; }", updated.GetAdditionalStyle())
+	require.EqualValues(t, 1, updated.GetWeekStartDayOffset())
 }
