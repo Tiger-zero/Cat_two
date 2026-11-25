@@ -2,6 +2,12 @@
 
 ## 2026-11-25（上海时间）
 
+### 镜像 0.18
+
+22:35 核对 Docker Hub `0.18`、`latest` 和 `sha-37f5677f4ff90475fb60b6f532c8514b97ee02c9` 均指向 `sha256:0b5d913ceb78bed8645e6741dab320db73491aba6848bf9d0b977381f01383bb`。Linux AMD64 与 ARM64 镜像均对应提交 `37f5677f4`，两个平台的新装及同卷重建验证通过。 [发布工作流](https://github.com/Tiger-zero/Cat_two/actions/runs/45634186756) · [Docker Hub](https://hub.docker.com/r/tiger2896/cat_two/tags?name=0.18)
+
+本版将浅色首页及回收站画布设为纯白，首页已保存笔记使用 1px 纯黑边框。深色桌面首页和回收站侧栏同步浅色版的间距与无边框布局，日历以灰色与绿色方块区分空日期和有笔记的日期。 [桌面配色](../../cat-two-ui-development/references/desktop-visual-design.md)
+
 ### 镜像 0.17
 
 00:25 发布 Docker Hub `0.17`。已从镜像仓库核对编号、`latest` 和 `sha-51e80b2c5b88f47aea24f706560b4bd5c26f4980` 均指向 `sha256:c423335e624239a1a12172fe2a5978abf205e1afde851b91ca24e11f014c417d`。Linux AMD64 和 ARM64 的 OCI 标签均对应提交 `51e80b2c5`。 [发布工作流](https://github.com/Tiger-zero/Cat_two/actions/runs/45435539026) · [Docker Hub](https://hub.docker.com/r/tiger2896/cat_two/tags?name=0.17)
