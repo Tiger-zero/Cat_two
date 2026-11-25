@@ -5,9 +5,11 @@ then its color.md). Every token is a CSS variable named `--mu-<name>`; the Tailw
 carry an `mu-` prefix (`bg-mu-surface`, `text-mu-text-secondary`).
 
 - **Light** uses `#FFFFFF` for the page canvas (including the trash) and the desktop home sidebar, account panel,
-  calendar, composer, and note cards. The desktop home calendar uses unlabeled date blocks,
-  `#C2E8D1` with notes and `#EFEFEF` without notes.
+  calendar, composer, and note cards. Saved home notes have a 1px black outline. The desktop home
+  calendar uses `#C2E8D1` for dates with notes and `#EFEFEF` for empty dates.
   **Dark** uses `#121212` for the canvas, sidebar and shared surfaces, with lighter green actions.
+  Its desktop home calendar uses green activity levels and `#3D3D3D` for empty dates. Both themes
+  use a borderless desktop home sidebar with unlabeled date blocks.
   Both use the same component roles and are selected by `data-theme="light" | "dark"` on `<html>`.
   `utils/theme.ts` sets the attribute from the saved preference (`default`, `default-dark`, `paper` or
   `system`, kept as they are in the account setting and in localStorage) and the OS scheme.

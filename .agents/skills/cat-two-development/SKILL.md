@@ -88,3 +88,4 @@ Cat_two 是单账户、自托管的个人笔记应用。新实例首次设置时
 - **2026-11-25 22:08**　浅色主题的页面画布统一使用纯白色。Chromium 验证首页和回收站在桌面、窄屏与跟随系统浅色时均为 `RGB(255, 255, 255)`，并核对了深色和纸张主题。 [配色表](../cat-two-ui-development/references/desktop-visual-design.md#cat_two-主题)
 - **2026-11-25 22:12**　浅色回收站的空状态、加载失败提示框和已删除笔记卡片复用首页的纯白画布色。主题、页面布局和回收站的 85 项定向测试、前端静态检查及生产构建通过。 [配色表](../cat-two-ui-development/references/desktop-visual-design.md#cat_two-主题)
 - **2026-11-25 22:15**　浅色首页已保存笔记卡片的默认外边框改为 1px 纯黑色，单列和多列共用此样式。119 项定向测试、前端静态检查及生产构建通过。 [桌面配色](../cat-two-ui-development/references/desktop-visual-design.md#cat_two-主题)
+- **2026-11-25 22:22**　深色桌面首页及其回收站沿用浅色侧栏的间距、默认宽度和无边框布局。日历用 `#3D3D3D` 标出无笔记日期，有记录的日期按数量显示绿色。191 项定向测试、前端静态检查与生产构建通过。 [桌面布局与配色](../cat-two-ui-development/references/desktop-visual-design.md)

@@ -78,11 +78,11 @@ const RootLayoutContent = () => {
   const { pathname } = location;
   const home = pathname === ROUTES.HOME;
   const homeCollection = home || (matchPath(ROUTES.TRASH, pathname) !== null && location.state?.trashFrom !== ROUTES.ARCHIVED);
-  const lightHome = useResolvedTheme() === "default" && homeCollection;
+  const wideHomeSidebar = useResolvedTheme() !== "paper" && homeCollection;
   const limitShell = !fullWidth && maxColumns !== 0;
   const prevPathnameRef = useRef<string | undefined>(undefined);
   const shellRef = useRef<HTMLDivElement>(null);
-  const { width: sidebarWidth, minWidth, maxWidth, defaultWidth, setWidth: setSidebarWidth } = useSidebarWidth(lightHome);
+  const { width: sidebarWidth, minWidth, maxWidth, defaultWidth, setWidth: setSidebarWidth } = useSidebarWidth(wideHomeSidebar);
 
   useEffect(() => {
     const prevPathname = prevPathnameRef.current;
@@ -112,7 +112,7 @@ const RootLayoutContent = () => {
       className={cn(
         "mx-auto flex min-h-full w-full bg-mu-canvas md:gap-6 md:px-4 lg:gap-8 lg:px-6",
         limitShell && (maxColumns === 1 ? "max-w-[66.5rem]" : "max-w-7xl"),
-        limitShell && maxColumns === 1 && homeCollection && "light:lg:max-w-[69rem]",
+        limitShell && maxColumns === 1 && wideHomeSidebar && "lg:max-w-[69rem]",
       )}
       style={{ [SIDEBAR_WIDTH_VAR]: `${sidebarWidth}px` } as CSSProperties}
     >

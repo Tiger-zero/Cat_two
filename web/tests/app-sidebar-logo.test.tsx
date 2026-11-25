@@ -1,9 +1,10 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, screen, render as testingLibraryRender, within } from "@testing-library/react";
+import { act, fireEvent, screen, render as testingLibraryRender, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import AppSidebar, { MobileAppHeader, MobileAppSidebar } from "@/components/AppSidebar";
 import { User_Role } from "@/types/proto/api/user_service_pb";
+import { loadTheme } from "@/utils/theme";
 
 const authState = vi.hoisted(() => ({
   currentUser: undefined as { name: string; username: string; displayName?: string; avatarUrl?: string; role?: User_Role } | undefined,
@@ -33,7 +34,7 @@ vi.mock("@/components/UserMenu", () => ({
 }));
 
 vi.mock("@/components/StatisticsView", () => ({
-  default: () => <div>Calendar</div>,
+  default: ({ showDateLabels = true }: { showDateLabels?: boolean }) => <div data-date-labels={showDateLabels}>Calendar</div>,
 }));
 
 vi.mock("@/components/AppSidebar/TagsSection", () => ({
@@ -137,6 +138,23 @@ describe("App sidebar", () => {
     );
     expect(screen.getByRole("link", { name: "common.calendar" })).toHaveAttribute("href", `/${search}`);
     expect(screen.getByRole("link", { name: "common.calendar" }).querySelector(".lucide-calendar-days")).not.toBeNull();
+  });
+
+  it("uses unnumbered days on the dark home sidebar and its trash, including after a theme switch", () => {
+    loadTheme("paper");
+    render(
+      <MemoryRouter initialEntries={["/"]}>
+        <AppSidebar />
+      </MemoryRouter>,
+    );
+    const calendar = screen.getByText("Calendar");
+    expect(calendar).toHaveAttribute("data-date-labels", "true");
+    act(() => loadTheme("default-dark"));
+    expect(calendar).toHaveAttribute("data-date-labels", "false");
+    fireEvent.click(screen.getByRole("link", { name: "trash.title" }));
+    expect(screen.getByText("Calendar")).toHaveAttribute("data-date-labels", "false");
+    act(() => loadTheme("default"));
+    expect(calendar).toHaveAttribute("data-date-labels", "false");
   });
 
   it("shows the account and theme controls and opens search from navigation", () => {
@@ -278,7 +296,7 @@ describe("App sidebar", () => {
     expect(sidebar).toContainElement(trash);
     expect(tags.compareDocumentPosition(trash) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(trash.parentElement).not.toHaveClass("border-t");
-    expect(statistics.parentElement).toHaveClass("gap-7");
+    expect(statistics.parentElement).toHaveClass("gap-9");
     expect(tags.closest("[data-sidebar-collection-list]")).not.toBeNull();
     expect(calendar.closest("[data-sidebar-collection-list]")).toBeNull();
     const counts = within(statistics).getAllByRole("definition");

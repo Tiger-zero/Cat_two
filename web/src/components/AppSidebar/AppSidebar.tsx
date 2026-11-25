@@ -30,12 +30,17 @@ import {
 import TagsSection from "./TagsSection";
 import ThemeToggle from "./ThemeToggle";
 
-const CollectionSidebarContent = ({ context, desktop, destination }: { context: MemoScope; desktop: boolean; destination?: string }) => {
+interface CollectionSidebarProps {
+  context: MemoScope;
+  desktop: boolean;
+  unframedHome: boolean;
+  destination?: string;
+}
+
+const CollectionSidebarContent = ({ context, desktop, unframedHome, destination }: CollectionSidebarProps) => {
   const t = useTranslate();
   const currentUser = useCurrentUser();
   const md = useMediaQuery("md");
-  const theme = useResolvedTheme();
-  const desktopHome = desktop && context === "home";
   const { mobileOpen, setMobileOpen } = useAppSidebar();
   const { isInitialized: authInitialized } = useAuth();
   const { isInitialized: instanceInitialized } = useInstance();
@@ -46,15 +51,17 @@ const CollectionSidebarContent = ({ context, desktop, destination }: { context: 
   });
 
   return (
-    <div className={cn(SIDEBAR_SECTION_STACK_CLASSES, desktop && "gap-7", desktopHome && "light:gap-9")}>
+    <div className={cn(SIDEBAR_SECTION_STACK_CLASSES, desktop && "gap-7", unframedHome && "gap-9")}>
       {context === "home" && currentUser && <CollectionStats summary={summary} loading={loading} desktop={desktop} />}
       <SidebarSection
         ariaLabel={t("common.calendar")}
         className={
           desktop
             ? cn(
-                "[&_.memos-panel]:bg-mu-surface/75 [&_.memos-panel]:py-3 [&_.memos-panel]:shadow-none",
-                "dark:[&_.memos-panel]:bg-mu-surface @min-[284px]/sidebar:[&_.memos-panel]:px-3",
+                "[&_.memos-panel]:py-3 [&_.memos-panel]:shadow-none @min-[284px]/sidebar:[&_.memos-panel]:px-3",
+                unframedHome
+                  ? "[&_.memos-panel]:border-transparent [&_.memos-panel]:bg-mu-canvas"
+                  : "[&_.memos-panel]:bg-mu-surface/75 dark:[&_.memos-panel]:bg-mu-surface",
               )
             : undefined
         }
@@ -62,11 +69,14 @@ const CollectionSidebarContent = ({ context, desktop, destination }: { context: 
         <StatisticsView
           statisticsData={statistics}
           destination={destination}
-          showDateLabels={!desktopHome || theme !== "default"}
+          showDateLabels={!unframedHome}
           onDateSelect={() => setMobileOpen(false)}
         />
       </SidebarSection>
-      <div className="contents" data-sidebar-collection-list={desktop || undefined}>
+      <div
+        className={cn("contents", desktop && !unframedHome && "[--sidebar-list-gap:0.375rem]")}
+        data-sidebar-collection-list={desktop || undefined}
+      >
         <TagsSection
           tagCount={tags}
           scope={`${currentUser?.name ?? "anonymous"}:${context}`}
@@ -200,38 +210,35 @@ const AppSidebar = ({ className, mobile = false }: { className?: string; mobile?
   const t = useTranslate();
   const currentUser = useCurrentUser();
   const { pathname, state } = useLocation();
+  const theme = useResolvedTheme();
   const routeKind = getSidebarRouteKind(pathname);
   const inTrash = routeKind === "trash";
   const showArchived = routeKind === "archived" || (inTrash && state?.trashFrom === ROUTES.ARCHIVED);
   const hasCollection = showArchived || routeKind === "home" || inTrash;
   const collectionScope = showArchived ? "archived" : "home";
   const desktopCollection = !mobile && hasCollection;
-  const desktopHomeCollection = desktopCollection && !showArchived;
+  const unframedHome = desktopCollection && !showArchived && theme !== "paper";
   const collectionDestination = inTrash ? (showArchived ? ROUTES.ARCHIVED : ROUTES.HOME) : undefined;
   const trashState = inTrash ? "checked" : "idle";
   const { setMobileOpen } = useAppSidebar();
   return (
     <aside
-      data-home-collection={desktopHomeCollection || undefined}
+      data-home-collection={unframedHome || undefined}
       className={cn(
         "memos-sidebar mu-compact flex h-full w-full select-none flex-col text-mu-text-secondary",
         mobile
           ? "bg-mu-canvas"
           : "@container/sidebar overflow-x-hidden overflow-y-auto overscroll-y-contain bg-(--memos-sidebar) [scrollbar-gutter:stable]",
-        desktopHomeCollection &&
-          "light:border-transparent light:bg-mu-canvas light:[&_.memos-panel]:border-transparent light:[&_.memos-panel]:bg-mu-canvas",
         className,
+        unframedHome && "border-transparent bg-mu-canvas [--sidebar-list-gap:0.5rem]",
       )}
     >
-      <div
-        data-sidebar-header
-        className={cn("shrink-0", mobile ? "py-2" : "pt-5 pb-4", desktopHomeCollection && "light:py-6", SIDEBAR_RAIL_CLASSES)}
-      >
+      <div data-sidebar-header className={cn("shrink-0", mobile ? "py-2" : "pt-5 pb-4", unframedHome && "py-6", SIDEBAR_RAIL_CLASSES)}>
         <div
           className={cn(
             "flex min-w-0 items-center justify-between gap-2",
-            !mobile && "rounded-mu-lg border border-mu-line/75 bg-mu-surface/65 p-1.5 dark:bg-mu-surface",
-            desktopHomeCollection && "light:border-transparent light:bg-mu-canvas",
+            !mobile && "rounded-mu-lg border p-1.5",
+            !mobile && (unframedHome ? "border-transparent bg-mu-canvas" : "border-mu-line/75 bg-mu-surface/65 dark:bg-mu-surface"),
           )}
         >
           <AccountMenu className={cn("min-w-0", !mobile && "flex-1")} size="header" />
@@ -244,12 +251,17 @@ const AppSidebar = ({ className, mobile = false }: { className?: string; mobile?
         className={cn(
           mobile ? "min-h-0 flex-1 overflow-y-auto overflow-x-hidden pb-3" : "shrink-0",
           desktopCollection ? "pt-5" : "pt-2",
-          desktopHomeCollection && "light:pt-7",
+          unframedHome && "pt-7",
           SIDEBAR_RAIL_CLASSES,
         )}
       >
         {hasCollection ? (
-          <CollectionSidebarContent context={collectionScope} desktop={desktopCollection} destination={collectionDestination} />
+          <CollectionSidebarContent
+            context={collectionScope}
+            desktop={desktopCollection}
+            unframedHome={unframedHome}
+            destination={collectionDestination}
+          />
         ) : routeKind === "memo" ? (
           <MemoDetailSidebarContent />
         ) : null}
@@ -259,7 +271,7 @@ const AppSidebar = ({ className, mobile = false }: { className?: string; mobile?
           className={cn(
             "shrink-0",
             mobile ? "border-t border-mu-line/70 py-2" : "pt-1.5 pb-5",
-            desktopHomeCollection && "light:pt-2",
+            unframedHome && "pt-2",
             SIDEBAR_RAIL_CLASSES,
           )}
         >

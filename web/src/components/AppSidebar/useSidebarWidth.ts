@@ -11,7 +11,6 @@ export const SIDEBAR_MIN_WIDTH = 224;
 /** Wider than this only starves the feed: its columns need 260px each and the rail holds short labels. */
 export const SIDEBAR_MAX_WIDTH = 400;
 export const SIDEBAR_DEFAULT_WIDTH = 320;
-const LIGHT_HOME_SIDEBAR_DEFAULT_WIDTH = 360;
 
 /** The rail may never take more than this share of the window. */
 const MAX_VIEWPORT_SHARE = 0.4;
@@ -81,9 +80,9 @@ const SIDEBAR_WIDTH_CONFIG: PersistedWidthConfig = {
   maxWidthFor: (viewportWidth) => Math.min(SIDEBAR_MAX_WIDTH, viewportWidth * MAX_VIEWPORT_SHARE),
 };
 
-const LIGHT_HOME_SIDEBAR_WIDTH_CONFIG = { ...SIDEBAR_WIDTH_CONFIG, defaultWidth: LIGHT_HOME_SIDEBAR_DEFAULT_WIDTH };
+const HOME_SIDEBAR_WIDTH_CONFIG = { ...SIDEBAR_WIDTH_CONFIG, defaultWidth: 360 };
 
 /** Desktop rail width. */
-const useSidebarWidth = (lightHome = false) => usePersistedWidth(lightHome ? LIGHT_HOME_SIDEBAR_WIDTH_CONFIG : SIDEBAR_WIDTH_CONFIG);
+const useSidebarWidth = (wideHomeSidebar = false) => usePersistedWidth(wideHomeSidebar ? HOME_SIDEBAR_WIDTH_CONFIG : SIDEBAR_WIDTH_CONFIG);
 
 export default useSidebarWidth;
