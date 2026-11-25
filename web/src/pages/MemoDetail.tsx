@@ -15,7 +15,6 @@ import { useInfiniteMemoComments, useMemo } from "@/hooks/useMemoQueries";
 import { LEGACY_MEMO_COMMENTS_ANCHOR_ID, MEMO_COMMENTS_ANCHOR_ID } from "@/lib/memo-comments";
 import { memoNamePrefix } from "@/lib/resource-names";
 import { isMemoBlurred } from "@/lib/tag";
-import { State } from "@/types/proto/api/common_pb";
 import type { Memo } from "@/types/proto/api/memo_service_pb";
 import { useTranslate } from "@/utils/i18n";
 import { decodeMemoAnchor, findMemoAnchorTarget } from "@/utils/markdown-manipulation";
@@ -96,7 +95,7 @@ const MemoDetail = () => {
 
   const memoNameFromParams = params.uid ? `${memoNamePrefix}${params.uid}` : "";
   const { data: memo, error, isLoading, isUnavailable, fetchStatus } = useMemo(memoNameFromParams, { enabled: !!memoNameFromParams });
-  const parentPage = resolveMemoDetailOrigin(locationState, { memoArchived: memo?.state === State.ARCHIVED });
+  const parentPage = resolveMemoDetailOrigin(locationState);
   const memoName = memo?.name ?? memoNameFromParams;
   // Keyed by memo so another memo never renders revealed; cleared on leave so returning blurs again.
   const [blurRevealedMemoName, setBlurRevealedMemoName] = useState<string>();

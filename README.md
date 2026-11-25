@@ -14,7 +14,7 @@ docker compose up -d
 
 先在受限网络打开 `http://服务器地址:5230`，按提示创建管理员账号。Cat_two 使用 SQLite 作为唯一数据库。数据库、笔记和附件保存在 `cat_two_data` 命名卷。 [公网部署](.agents/skills/cat-two-product-development/references/deployment.md#在公网部署) · [安全说明](SECURITY.md)
 
-当前版本启动时会拒绝不兼容的旧库。请保留旧卷和对应镜像，新建 Compose 项目并使用空数据卷。同时运行两套时，请为新实例选另一个宿主机端口。可在旧实例导出 ZIP，再在新实例导入并核对结果。 [备份与恢复](.agents/skills/cat-two-product-development/references/deployment.md#备份和升级)
+从 `0.17` 或 `0.18` 更新时，先备份数据目录并沿用原卷，首次启动会自动升级。更早的不兼容数据库请保留旧卷和对应镜像，为新实例另建空卷。同时运行两套时，请为新实例选另一个宿主机端口。可在旧实例导出 ZIP，再在新实例导入并核对结果。 [备份与恢复](.agents/skills/cat-two-product-development/references/deployment.md#备份和升级)
 
 ## 在 NAS 上部署
 

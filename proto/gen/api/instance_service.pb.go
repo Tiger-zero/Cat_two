@@ -2390,8 +2390,7 @@ type InstanceSetting_UsageLimitsSetting_UsageLimit struct {
 	// Whether the entry applies to every user. Exactly one entry has it, and
 	// it is the last entry. An entry has users or all_users, never both.
 	AllUsers bool `protobuf:"varint,3,opt,name=all_users,json=allUsers,proto3" json:"all_users,omitempty"`
-	// The number of memos the user may have created, comments and archived
-	// memos included.
+	// The number of memos the user may have created, including comments.
 	MemoCount *int64 `protobuf:"varint,4,opt,name=memo_count,json=memoCount,proto3,oneof" json:"memo_count,omitempty"`
 	// The UTF-8 size in bytes of one memo's content.
 	MemoContentBytes *int64 `protobuf:"varint,5,opt,name=memo_content_bytes,json=memoContentBytes,proto3,oneof" json:"memo_content_bytes,omitempty"`

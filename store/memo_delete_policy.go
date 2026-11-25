@@ -23,8 +23,8 @@ type DeleteMemoWithPolicyResult struct {
 }
 
 // MemoDeleteActorCanRead checks the memo state for an authorized author.
-func MemoDeleteActorCanRead(rowStatus RowStatus, visibility Visibility) bool {
-	return (rowStatus == Normal || rowStatus == Archived) && isValidVisibility(visibility)
+func MemoDeleteActorCanRead(visibility Visibility) bool {
+	return isValidVisibility(visibility)
 }
 
 // DeleteMemoWithPolicy atomically deletes one memo, its whole comment

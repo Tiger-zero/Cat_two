@@ -3,14 +3,12 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, useLocation } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import MemoActionMenu from "@/components/MemoActionMenu";
-import { State } from "@/types/proto/api/common_pb";
 import { type Memo, MemoSchema } from "@/types/proto/api/memo_service_pb";
 
 const handlers = vi.hoisted(() => ({
   isInMemoDetailPage: false,
   handleTogglePinMemoBtnClick: vi.fn(),
   handleEditMemoClick: vi.fn(),
-  handleToggleMemoStatusClick: vi.fn(),
   handleCopyLink: vi.fn(),
   handleCopyContent: vi.fn(),
   handleCheckAllTaskListItemsClick: vi.fn(),
@@ -53,8 +51,7 @@ const openMenu = async (memo: Memo, props: { readonly?: boolean; parentPage?: st
 
 const menuItemLabels = () => screen.getAllByRole("menuitem").map((item) => item.textContent);
 
-const memoOf = (fields: Parameters<typeof create<typeof MemoSchema>>[1] = {}) =>
-  create(MemoSchema, { name: "memos/1", state: State.NORMAL, ...fields });
+const memoOf = (fields: Parameters<typeof create<typeof MemoSchema>>[1] = {}) => create(MemoSchema, { name: "memos/1", ...fields });
 
 describe("MemoActionMenu", () => {
   beforeEach(() => {
@@ -64,7 +61,7 @@ describe("MemoActionMenu", () => {
 
   it("groups an owner's memo actions by what they do to the card and puts Delete last, with no Move entry", async () => {
     await openMenu(memoOf());
-    expect(menuItemLabels()).toEqual(["common.edit", "common.pin", "common.archive", "common.open", "common.copy", "common.delete"]);
+    expect(menuItemLabels()).toEqual(["common.edit", "common.pin", "common.open", "common.copy", "common.delete"]);
     const separators = screen.getAllByRole("separator");
     expect(separators[separators.length - 1].nextElementSibling).toBe(screen.getByRole("menuitem", { name: "common.delete" }));
   });
@@ -88,7 +85,7 @@ describe("MemoActionMenu", () => {
   it("hides Open on the memo's own page", async () => {
     handlers.isInMemoDetailPage = true;
     await openMenu(memoOf());
-    expect(menuItemLabels()).toEqual(["common.edit", "common.pin", "common.archive", "common.copy", "common.delete"]);
+    expect(menuItemLabels()).toEqual(["common.edit", "common.pin", "common.copy", "common.delete"]);
   });
 
   it.each([
@@ -111,17 +108,6 @@ describe("MemoActionMenu", () => {
     expect(handlers[handler]).toHaveBeenCalledOnce();
   });
 
-  it("offers only Restore and Delete on an archived memo", async () => {
-    render(
-      <MemoryRouter>
-        <MemoActionMenu memo={memoOf({ state: State.ARCHIVED, property: { hasTaskList: true } })} />
-      </MemoryRouter>,
-    );
-    fireEvent.click(screen.getByRole("button", { name: "common.more" }));
-    await screen.findByRole("menuitem", { name: "common.restore" });
-    expect(menuItemLabels()).toEqual(["common.restore", "common.delete"]);
-  });
-
   it("gives a viewer Open and Copy only", async () => {
     await openMenu(memoOf(), { readonly: true });
     expect(menuItemLabels()).toEqual(["common.open", "common.copy"]);
@@ -130,7 +116,7 @@ describe("MemoActionMenu", () => {
   it.each([
     [false, ["common.edit", "common.copy", "common.delete"]],
     [true, ["common.edit", "memo.task-actions.check-all", "common.copy", "common.delete"]],
-  ] as const)("shows comment actions without Open, Pin, Archive or More (tasks: %s)", async (hasTaskList, labels) => {
+  ] as const)("shows comment actions without Open, Pin or More (tasks: %s)", async (hasTaskList, labels) => {
     await openMenu(memoOf({ name: "memos/2", parent: "memos/1", property: { hasTaskList, hasIncompleteTasks: hasTaskList } }));
     expect(menuItemLabels()).toEqual(labels);
 
@@ -145,7 +131,7 @@ describe("MemoActionMenu", () => {
   });
 
   it("is a quiet compact control that takes the accent fill while open", async () => {
-    const memo = create(MemoSchema, { name: "memos/1", state: State.NORMAL, pinned: false });
+    const memo = create(MemoSchema, { name: "memos/1", pinned: false });
     render(
       <MemoryRouter>
         <MemoActionMenu memo={memo} />

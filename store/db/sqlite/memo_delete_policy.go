@@ -21,10 +21,9 @@ func (d *DB) DeleteMemoWithPolicy(ctx context.Context, delete *store.DeleteMemoW
 		return nil, err
 	}
 	var creatorID int32
-	var rowStatus store.RowStatus
 	var visibility store.Visibility
-	if err := tx.QueryRowContext(ctx, "SELECT creator_id, row_status, visibility FROM memo WHERE id = ?", delete.MemoID).Scan(
-		&creatorID, &rowStatus, &visibility,
+	if err := tx.QueryRowContext(ctx, "SELECT creator_id, visibility FROM memo WHERE id = ?", delete.MemoID).Scan(
+		&creatorID, &visibility,
 	); errors.Is(err, sql.ErrNoRows) {
 		return nil, store.ErrMemoMutationConflict
 	} else if err != nil {
@@ -32,7 +31,7 @@ func (d *DB) DeleteMemoWithPolicy(ctx context.Context, delete *store.DeleteMemoW
 	} else if creatorID != delete.ActorUserID && !actor.Admin {
 		return nil, store.ErrMemoPermissionDenied
 	}
-	actorCanRead := creatorID == delete.ActorUserID && store.MemoDeleteActorCanRead(rowStatus, visibility)
+	actorCanRead := creatorID == delete.ActorUserID && store.MemoDeleteActorCanRead(visibility)
 
 	deleteIDs, err := listSQLiteCommentSubtreeMemoIDs(ctx, tx, delete.MemoID)
 	if err != nil {

@@ -68,16 +68,14 @@ func (s *APIService) ListUserStats(ctx context.Context, request *apipb.ListUserS
 		creatorID = &user.ID
 	}
 
-	rowStatus := convertStateToStore(request.State)
 	memoFind := &store.FindMemo{
 		CreatorID: creatorID,
 		// Exclude comments by default.
 		ExcludeComments: true,
 		ExcludeContent:  true,
-		RowStatus:       &rowStatus,
 	}
 
-	accessScope, currentUser, err := s.resolveMemoAccessScope(ctx)
+	accessScope, _, err := s.resolveMemoAccessScope(ctx)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "%v", err)
 	}
@@ -90,13 +88,6 @@ func (s *APIService) ListUserStats(ctx context.Context, request *apipb.ListUserS
 		memoFind.PreparedFilter = prepared
 	}
 
-	if request.State == apipb.State_ARCHIVED {
-		// Archived memos are only visible to their creator.
-		if currentUser == nil || (creatorID != nil && *creatorID != currentUser.ID) {
-			return &apipb.ListUserStatsResponse{}, nil
-		}
-		memoFind.CreatorID = &currentUser.ID
-	}
 	memoFind.Access = accessScope
 
 	userMemoStatMap := make(map[int32]*apipb.UserStats)
@@ -211,13 +202,11 @@ func (s *APIService) GetUserStats(ctx context.Context, request *apipb.GetUserSta
 		return nil, status.Errorf(codes.Internal, "%v", err)
 	}
 
-	normalStatus := store.Normal
 	memoFind := &store.FindMemo{
 		CreatorID: &userID,
 		// Exclude comments by default.
 		ExcludeComments: true,
 		ExcludeContent:  true,
-		RowStatus:       &normalStatus,
 	}
 
 	if request.Filter != "" {

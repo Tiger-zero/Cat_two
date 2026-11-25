@@ -318,8 +318,8 @@ func TestAttachmentMetadataIsOnlyVisibleToTheMemoAuthor(t *testing.T) {
 		})
 	}
 
-	archived := store.Archived
-	require.NoError(t, ts.Store.UpdateMemo(ctx, &store.UpdateMemo{ID: memoID, RowStatus: &archived}))
+	_, err = ts.Service.DeleteMemo(ownerCtx, &apipb.DeleteMemoRequest{Name: memo.Name})
+	require.NoError(t, err)
 	_, err = ts.Service.GetAttachment(ctx, &apipb.GetAttachmentRequest{Name: attachment.Name})
 	require.Equal(t, codes.NotFound, status.Code(err))
 }

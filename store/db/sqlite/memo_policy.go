@@ -44,8 +44,8 @@ func validateSQLiteMemoWritePolicy(ctx context.Context, executor dbExecutor, mem
 		return nil, err
 	}
 	snapshot := &store.MemoWriteSnapshot{ActorIsAdmin: actor.Admin}
-	if err := executor.QueryRowContext(ctx, `SELECT creator_id, row_status, visibility FROM memo WHERE id = ? AND deleted_ts IS NULL`, memoID).Scan(
-		&snapshot.CreatorID, &snapshot.RowStatus, &snapshot.Visibility,
+	if err := executor.QueryRowContext(ctx, `SELECT creator_id, visibility FROM memo WHERE id = ? AND deleted_ts IS NULL`, memoID).Scan(
+		&snapshot.CreatorID, &snapshot.Visibility,
 	); err != nil {
 		if stderrors.Is(err, sql.ErrNoRows) {
 			return nil, store.ErrMemoMutationConflict

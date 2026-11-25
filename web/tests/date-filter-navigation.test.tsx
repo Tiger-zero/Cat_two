@@ -39,7 +39,8 @@ describe("useDateFilterNavigation", () => {
     });
   });
 
-  it.each(["/", "/archived"])("opens %s with the selected date from the trash", (destination) => {
+  it("opens Home with the selected date from the trash", () => {
+    const destination = "/";
     render(
       <MemoryRouter initialEntries={["/trash"]}>
         <MemoFilterProvider>

@@ -127,11 +127,11 @@ describe("RootLayout shell", () => {
 
   it("opens and closes Settings while keeping the active feed and its filter", async () => {
     render(
-      <MemoryRouter initialEntries={["/archived?filter=tagSearch%3Awork"]}>
+      <MemoryRouter initialEntries={["/?filter=tagSearch%3Awork"]}>
         <TimelineViewProvider>
           <Routes>
             <Route element={<RootLayout />}>
-              <Route path="archived" element={<RouteState />} />
+              <Route index element={<RouteState />} />
             </Route>
           </Routes>
         </TimelineViewProvider>
@@ -144,7 +144,7 @@ describe("RootLayout shell", () => {
     const dialog = await screen.findByRole("dialog", { name: "common.settings" });
     expect(await within(dialog).findByText("Active settings section")).toBeVisible();
     expect(screen.getByTestId("route")).toBe(route);
-    expect(route).toHaveTextContent("/archived?filter=tagSearch%3Awork");
+    expect(route).toHaveTextContent("/?filter=tagSearch%3Awork");
     fireEvent.click(within(dialog).getByRole("button", { name: "common.close" }));
     await waitFor(() => expect(dialog).not.toBeInTheDocument());
     expect(route).toBeInTheDocument();

@@ -4,10 +4,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import QuickFindDialog from "@/components/AppSidebar/QuickFindDialog";
 import MemoFilters from "@/components/MemoFilters";
 import { AppSidebarProvider, useAppSidebar } from "@/contexts/AppSidebarContext";
-import { getFilterSearch, type MemoFilter, parseFilterQuery } from "@/contexts/MemoFilterContext";
+import { type MemoFilter } from "@/contexts/MemoFilterContext";
 
 const state = vi.hoisted(() => ({
-  currentUser: { name: "users/alice" } as { name: string } | undefined,
   filters: [] as MemoFilter[],
   setFilters: vi.fn(),
   removeFilter: vi.fn(),
@@ -24,10 +23,6 @@ vi.mock("@/contexts/MemoFilterContext", async (importOriginal) => {
     }),
   };
 });
-
-vi.mock("@/hooks/useCurrentUser", () => ({
-  default: () => state.currentUser,
-}));
 
 vi.mock("@/utils/i18n", () => ({
   useTranslate: () => (key: string) => key,
@@ -52,7 +47,6 @@ const Harness = () => {
 describe("Quick Find navigation", () => {
   beforeEach(() => {
     sessionStorage.clear();
-    state.currentUser = { name: "users/alice" };
     state.filters = [];
     state.setFilters.mockClear();
     state.removeFilter.mockClear();
@@ -101,15 +95,15 @@ describe("Quick Find navigation", () => {
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
   });
 
-  it.each(["/", "/archived"])("applies untagged in %s while preserving the date and typed search", async (pathname) => {
+  it("applies untagged in the feed while preserving the date and typed search", async () => {
     const date = { factor: "displayTime", value: "2026-11-21" } as const;
     state.filters = [date, { factor: "tagSearch", value: "work" }, { factor: "contentSearch", value: "old" }];
-    const router = renderSearch(pathname);
+    const router = renderSearch();
     openQuickFind();
     fireEvent.change(await screen.findByRole("textbox"), { target: { value: "roadmap" } });
     fireEvent.click(screen.getByRole("button", { name: "memo.filters.untagged" }));
 
-    expect(router.state.location.pathname).toBe(pathname);
+    expect(router.state.location.pathname).toBe("/");
     expect(state.setFilters).toHaveBeenCalledWith([date, { factor: "contentSearch", value: "roadmap" }, { factor: "untagged", value: "" }]);
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
   });
@@ -117,7 +111,7 @@ describe("Quick Find navigation", () => {
   it("renders untagged as a removable facet", () => {
     const date = { factor: "displayTime", value: "2026-11-21" } as const;
     state.filters = [{ factor: "untagged", value: "" }, date];
-    renderSearch("/archived");
+    renderSearch();
     expect(screen.getByText("memo.filters.untagged")).toBeInTheDocument();
     fireEvent.click(screen.getAllByRole("button", { name: "memo.filters.remove" })[0]);
     const predicate = state.removeFilter.mock.calls[0][0];
@@ -209,74 +203,25 @@ describe("Quick Find navigation", () => {
     expect(state.filters.filter((filter) => !predicate(filter))).toEqual([{ factor: "tagSearch", value: "work" }]);
   });
 
-  it("searches from Settings into the personal feed in one history step", async () => {
-    const router = renderSearch("/setting");
-    openQuickFind();
-    const input = await screen.findByRole("textbox");
-    fireEvent.change(input, { target: { value: "roadmap" } });
-    fireEvent.submit(input.closest("form")!);
-
-    await waitFor(() => expect(screen.getByTestId("path")).toHaveTextContent("/?filter=contentSearch%3Aroadmap"));
-    expect(state.setFilters).not.toHaveBeenCalled();
-
-    await act(async () => {
-      await router.navigate(-1);
-    });
-
-    expect(screen.getByTestId("path")).toHaveTextContent("/setting");
-  });
-
-  it.each([
-    ["/", "/archived", "search.unarchived", "common.archived"],
-    ["/archived", "/", "common.archived", "search.unarchived"],
-  ])("can switch the search scope from %s to %s", async (from, to, defaultLabel, targetLabel) => {
-    const facets: MemoFilter[] = [
-      { factor: "tagSearch", value: "work/2026" },
-      { factor: "displayTime", value: "2026-11-21" },
+  it.each(["/setting", "/trash", "/memos/abc"])("searches from %s into the personal feed in one history step", async (from) => {
+    state.filters = [
+      { factor: "tagSearch", value: "old" },
+      { factor: "contentSearch", value: "stale" },
     ];
-    state.filters = [...facets, { factor: "contentSearch", value: "previous" }];
-    const initialEntry = `${from}${getFilterSearch(state.filters)}`;
-    const router = renderSearch(initialEntry);
-
+    const router = renderSearch(from);
     openQuickFind();
-    const group = within(await screen.findByRole("group", { name: "search.scope" }));
-    expect(group.getByRole("button", { name: defaultLabel })).toHaveAttribute("aria-pressed", "true");
-    const input = screen.getByRole("textbox");
+    const input = await screen.findByRole("textbox");
+    expect(input).toHaveValue("");
     fireEvent.change(input, { target: { value: "roadmap" } });
-    fireEvent.click(group.getByRole("button", { name: targetLabel }));
-    expect(input).toHaveValue("roadmap");
-    fireEvent.keyDown(input, { key: "Enter" });
+    fireEvent.submit(input.closest("form")!);
 
-    expect(router.state.location.pathname).toBe(to);
-    expect(parseFilterQuery(new URLSearchParams(router.state.location.search).get("filter"))).toEqual([
-      ...facets,
-      { factor: "contentSearch", value: "roadmap" },
-    ]);
+    await waitFor(() => expect(screen.getByTestId("path")).toHaveTextContent("/?filter=contentSearch%3Aroadmap"));
     expect(state.setFilters).not.toHaveBeenCalled();
 
     await act(async () => {
       await router.navigate(-1);
     });
-    expect(screen.getByTestId("path")).toHaveTextContent(initialEntry);
-  });
 
-  it("preserves an anonymous global page in history", async () => {
-    state.currentUser = undefined;
-
-    const router = renderSearch("/about");
-
-    openQuickFind();
-    const input = await screen.findByRole("textbox");
-    expect(screen.queryByRole("group", { name: "search.scope" })).not.toBeInTheDocument();
-    fireEvent.change(input, { target: { value: "roadmap" } });
-    fireEvent.submit(input.closest("form")!);
-
-    await waitFor(() => expect(screen.getByTestId("path")).toHaveTextContent("/?filter=contentSearch%3Aroadmap"));
-
-    await act(async () => {
-      await router.navigate(-1);
-    });
-
-    expect(screen.getByTestId("path")).toHaveTextContent("/about");
+    expect(screen.getByTestId("path")).toHaveTextContent(from);
   });
 });

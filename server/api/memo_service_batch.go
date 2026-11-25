@@ -10,7 +10,7 @@ import (
 )
 
 // ListMCPMemoBatch uses the ordinary memo access scope for batched reads by
-// known IDs, including archived notes. Results are formatted by the transport.
+// known IDs. Results are formatted by the transport.
 func (s *APIService) ListMCPMemoBatch(ctx context.Context, uids []string, maxTotalContentBytes int) ([]*store.Memo, error) {
 	scope, user, err := s.resolveMemoAccessScope(ctx)
 	if err != nil {

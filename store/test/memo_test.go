@@ -85,9 +85,7 @@ func TestVisitActiveMemoTags(t *testing.T) {
 	root := createMemo("tag-query-root", owner.ID, "项目/Cat", "项目/Cat", "项目/cat")
 	createMemo("tag-query-untagged", owner.ID)
 	createMemo("tag-query-foreign", other.ID, "foreign")
-	archived := createMemo("tag-query-archived", owner.ID, "archived")
 	archivedState := store.Archived
-	require.NoError(t, ts.UpdateMemo(ctx, &store.UpdateMemo{ID: archived.ID, RowStatus: &archivedState}))
 	trashed := createMemo("tag-query-trashed", owner.ID, "trashed")
 	_, err = ts.ApplyMemoTrash(ctx, &store.MemoTrashMutation{
 		MemoID: trashed.ID, ActorUserID: owner.ID, Action: store.MemoTrashMove, NowTs: time.Now().Unix(),

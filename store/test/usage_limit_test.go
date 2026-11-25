@@ -56,10 +56,8 @@ func TestCountUserMemos(t *testing.T) {
 
 	root, err := ts.CreateMemo(ctx, &store.Memo{UID: "count-root", CreatorID: owner.ID, Content: "root", Visibility: store.Public})
 	require.NoError(t, err)
-	archived, err := ts.CreateMemo(ctx, &store.Memo{UID: "count-archived", CreatorID: owner.ID, Content: "archived", Visibility: store.Private})
+	second, err := ts.CreateMemo(ctx, &store.Memo{UID: "count-second", CreatorID: owner.ID, Content: "second", Visibility: store.Private})
 	require.NoError(t, err)
-	archivedStatus := store.Archived
-	require.NoError(t, ts.UpdateMemo(ctx, &store.UpdateMemo{ID: archived.ID, RowStatus: &archivedStatus}))
 	_, err = ts.CreateMemoComment(ctx, &store.Memo{UID: "count-comment", CreatorID: owner.ID, Content: "comment", Visibility: store.Public}, root.ID, owner.ID)
 	require.NoError(t, err)
 	_, err = ts.CreateMemo(ctx, &store.Memo{UID: "count-other-memo", CreatorID: other.ID, Content: "other", Visibility: store.Public})
@@ -67,9 +65,9 @@ func TestCountUserMemos(t *testing.T) {
 
 	count, err = ts.CountUserMemos(ctx, owner.ID)
 	require.NoError(t, err)
-	require.Equal(t, int64(3), count, "counts archived notes and comments for the owner")
+	require.Equal(t, int64(3), count, "counts notes and comments for the owner")
 
-	require.NoError(t, ts.DeleteMemo(ctx, &store.DeleteMemo{ID: archived.ID}))
+	require.NoError(t, ts.DeleteMemo(ctx, &store.DeleteMemo{ID: second.ID}))
 	count, err = ts.CountUserMemos(ctx, owner.ID)
 	require.NoError(t, err)
 	require.Equal(t, int64(2), count, "deleting a memo frees a slot")

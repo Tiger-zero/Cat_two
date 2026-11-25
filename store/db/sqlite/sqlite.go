@@ -95,7 +95,7 @@ func checkSQLiteFileVersion(path string) error {
 		return errors.Wrap(err, "read SQLite database header")
 	}
 	if n < len(header) || string(header[:16]) != "SQLite format 3\x00" ||
-		binary.BigEndian.Uint32(header[60:64]) != store.SQLiteFileVersion ||
+		!store.SupportsSQLiteFileVersion(binary.BigEndian.Uint32(header[60:64])) ||
 		binary.BigEndian.Uint32(header[68:72]) != store.SQLiteApplicationID {
 		return store.ErrUnsupportedSchema
 	}

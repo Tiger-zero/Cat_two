@@ -561,25 +561,6 @@ paths:
                      expression uses created_ts / updated_ts for the same timestamps.
                   schema:
                     type: string
-                - name: showDeleted
-                  in: query
-                  description: |-
-                    Optional. Whether to include deleted memos. Currently ignored by the
-                     server.
-                  schema:
-                    type: boolean
-                - name: state
-                  in: query
-                  description: |-
-                    Optional. The state of the memos to list. Defaults to NORMAL. Set to
-                     ARCHIVED to list the caller's own archived memos.
-                  schema:
-                    enum:
-                        - STATE_UNSPECIFIED
-                        - NORMAL
-                        - ARCHIVED
-                    type: string
-                    format: enum
             responses:
                 "200":
                     description: OK
@@ -763,8 +744,7 @@ paths:
                   in: query
                   description: |-
                     Required. The fields to update. Supported paths: content, visibility,
-                     pinned, state, create_time, update_time, location, attachments,
-                     relations.
+                     pinned, create_time, update_time, location, attachments, relations.
                   schema:
                     type: string
                     format: field-mask
@@ -924,7 +904,7 @@ paths:
                 CreateMemoComment atomically creates an independent memo plus one immutable
                  COMMENT context relation to the named memo. The new memo keeps its own
                  placement, visibility, authorship, and lifecycle. The named memo must be
-                 readable by the caller and not archived.
+                 readable by the caller.
             operationId: MemoService_CreateMemoComment
             parameters:
                 - name: memo
@@ -1744,18 +1724,6 @@ paths:
                      filter syntax as ListMemos.
                   schema:
                     type: string
-                - name: state
-                  in: query
-                  description: |-
-                    Optional. The state of the memos to count. Defaults to NORMAL. ARCHIVED
-                     counts only the caller's own memos.
-                  schema:
-                    enum:
-                        - STATE_UNSPECIFIED
-                        - NORMAL
-                        - ARCHIVED
-                    type: string
-                    format: enum
             responses:
                 "200":
                     description: OK
@@ -2990,7 +2958,6 @@ components:
             required:
                 - content
                 - visibility
-                - state
             type: object
             properties:
                 name:
@@ -3024,16 +2991,6 @@ components:
                     description: |-
                         Required. The visibility of the memo. Defaults to PRIVATE on creation when
                          unspecified.
-                    format: enum
-                state:
-                    enum:
-                        - STATE_UNSPECIFIED
-                        - NORMAL
-                        - ARCHIVED
-                    type: string
-                    description: |-
-                        Required. The state of the memo. New memos are always NORMAL; change it
-                         with UpdateMemo.
                     format: enum
                 pinned:
                     type: boolean
@@ -3629,9 +3586,7 @@ components:
                          it is the last entry. An entry has users or all_users, never both.
                 memoCount:
                     type: string
-                    description: |-
-                        The number of memos the user may have created, comments and archived
-                         memos included.
+                    description: The number of memos the user may have created, including comments.
                 memoContentBytes:
                     type: string
                     description: The UTF-8 size in bytes of one memo's content.
@@ -3985,9 +3940,7 @@ components:
                          Format: users/{user}/usage
                 memoCount:
                     type: string
-                    description: |-
-                        The number of memos the user created, including comments, archived
-                         memos, and memos in Spaces.
+                    description: The number of memos the user created, including comments.
                 storageBytes:
                     type: string
                     description: |-

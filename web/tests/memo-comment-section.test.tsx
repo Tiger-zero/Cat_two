@@ -3,7 +3,6 @@ import { render, screen } from "@testing-library/react";
 import { act, createRef } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import MemoCommentSection, { type MemoCommentSectionHandle } from "@/components/MemoCommentSection";
-import { State } from "@/types/proto/api/common_pb";
 import { MemoSchema } from "@/types/proto/api/memo_service_pb";
 
 const mocks = vi.hoisted(() => ({
@@ -27,11 +26,11 @@ describe("MemoCommentSection", () => {
     mocks.currentUser = { name: "users/alice" };
   });
 
-  it("does not offer or imperatively open a comment editor for archived memos", async () => {
+  it("does not offer or imperatively open a comment editor when signed out", async () => {
+    mocks.currentUser = undefined;
     const memo = create(MemoSchema, {
-      name: "memos/archived",
+      name: "memos/detail",
       creator: "users/alice",
-      state: State.ARCHIVED,
     });
 
     const ref = createRef<MemoCommentSectionHandle>();
@@ -51,7 +50,6 @@ describe("MemoCommentSection", () => {
     const memo = create(MemoSchema, {
       name: "memos/detail",
       creator: "users/alice",
-      state: State.NORMAL,
     });
     const ref = createRef<MemoCommentSectionHandle>();
 
@@ -79,7 +77,6 @@ describe("MemoCommentSection", () => {
     const memo = create(MemoSchema, {
       name: "memos/detail",
       creator: "users/alice",
-      state: State.NORMAL,
     });
     const comment = create(MemoSchema, { name: "memos/comment" });
 

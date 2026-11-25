@@ -1,8 +1,6 @@
 import { Menu as MenuPrimitive } from "@base-ui/react/menu";
 import { Button, Menu, menuClasses, Tooltip } from "@usememos/ui";
 import {
-  ArchiveIcon,
-  ArchiveRestoreIcon,
   ArrowUpRightIcon,
   BookmarkMinusIcon,
   BookmarkPlusIcon,
@@ -18,19 +16,11 @@ import {
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import ConfirmDialog from "@/components/ConfirmDialog";
-import { State } from "@/types/proto/api/common_pb";
 import { useTranslate } from "@/utils/i18n";
 import { createMemoNavigationState } from "../MemoView/navigation";
 import { useMemoActionHandlers } from "./hooks";
 import type { MemoActionMenuProps } from "./types";
 
-/**
- * The memo's action menu, grouped by what each action does to the card:
- * write on it (Edit, the task action), place it (Pin, Archive), reach it beyond
- * the feed (Open its page, Copy its link or content), then Delete last.
- * A memo's Space is changed in the editor, not here. An archived memo offers
- * only Restore and Delete, and a viewer only Open and Copy.
- */
 /** The open link is a real link, so its row takes the package's menu row classes. */
 const MENU_ROW_CLASSES = menuClasses();
 
@@ -43,7 +33,6 @@ const MemoActionMenu = (props: MemoActionMenuProps) => {
 
   // Derived state
   const isComment = Boolean(memo.parent);
-  const isArchived = memo.state === State.ARCHIVED;
   const hasTaskList = Boolean(memo.property?.hasTaskList);
   const hasOpenTasks = Boolean(memo.property?.hasIncompleteTasks);
 
@@ -52,7 +41,6 @@ const MemoActionMenu = (props: MemoActionMenuProps) => {
     isInMemoDetailPage,
     handleTogglePinMemoBtnClick,
     handleEditMemoClick,
-    handleToggleMemoStatusClick,
     handleCopyLink,
     handleCopyContent,
     handleCheckAllTaskListItemsClick,
@@ -110,18 +98,6 @@ const MemoActionMenu = (props: MemoActionMenuProps) => {
       );
     }
 
-    if (isArchived) {
-      return (
-        <>
-          <Menu.Item onClick={handleToggleMemoStatusClick} icon={<ArchiveRestoreIcon />}>
-            {t("common.restore")}
-          </Menu.Item>
-          <Menu.Separator />
-          {deleteItem}
-        </>
-      );
-    }
-
     return (
       <>
         <Menu.Item onClick={handleEditMemoClick} icon={<Edit3Icon />}>
@@ -139,15 +115,12 @@ const MemoActionMenu = (props: MemoActionMenuProps) => {
             </Menu.Item>
           ))}
 
-        {/* A comment has no place of its own to pin or archive; it lives under its parent. */}
+        {/* A comment has no place of its own to pin; it lives under its parent. */}
         {!isComment && (
           <>
             <Menu.Separator />
             <Menu.Item onClick={handleTogglePinMemoBtnClick} icon={memo.pinned ? <BookmarkMinusIcon /> : <BookmarkPlusIcon />}>
               {memo.pinned ? t("common.unpin") : t("common.pin")}
-            </Menu.Item>
-            <Menu.Item onClick={handleToggleMemoStatusClick} icon={<ArchiveIcon />}>
-              {t("common.archive")}
             </Menu.Item>
           </>
         )}

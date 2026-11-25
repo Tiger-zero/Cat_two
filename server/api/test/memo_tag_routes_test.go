@@ -133,15 +133,11 @@ func TestMemoTagEditsThroughWeb(t *testing.T) {
 	require.Equal(t, http.StatusUnauthorized, request(http.MethodPost, "/internal/tags/delete", "", remove).Code)
 	require.Equal(t, http.StatusBadRequest, request(http.MethodPost, "/internal/tags/delete", ownerToken, map[string]string{"tagName": "2027/09", "mode": "purge"}).Code)
 	require.Equal(t, http.StatusBadRequest, request(http.MethodPost, "/internal/tags/delete", ownerToken, map[string]string{"tagName": "not a tag", "mode": "remove"}).Code)
-	archivedChild := requireMemoResponse(request(http.MethodPost, "/memos.api.MemoService/UpdateMemo", ownerToken, map[string]any{
-		"memo": map[string]string{"name": mergedChild.GetName(), "state": "ARCHIVED"}, "updateMask": "state",
-	}))
 	requireCount(request(http.MethodPost, "/internal/tags/delete", ownerToken, remove), 3)
 	removed := requireMemo(ownerToken, merged, "Keep this note.\n\n`#2027/08` is code.")
 	require.Empty(t, removed.GetTags())
 	require.NotEqual(t, merged.GetRevision(), removed.GetRevision())
-	removedChild := requireMemo(ownerToken, archivedChild, "Child ")
-	require.Equal(t, apipb.State_ARCHIVED, removedChild.GetState())
+	removedChild := requireMemo(ownerToken, mergedChild, "Child ")
 	require.Empty(t, removedChild.GetTags())
 	requireMemo(ownerToken, unrelated, unrelated.GetContent())
 	requireMemo(otherOwnerToken, otherMemo, otherMemo.GetContent())
@@ -160,9 +156,6 @@ func TestMemoTagEditsThroughWeb(t *testing.T) {
 	nested := requireMemoResponse(request(http.MethodPost, "/memos.api.MemoService/CreateMemoComment", ownerToken, map[string]any{
 		"parent": reply.GetName(), "comment": map[string]string{"content": "Nested reply"},
 	}))
-	root = requireMemoResponse(request(http.MethodPost, "/memos.api.MemoService/UpdateMemo", ownerToken, map[string]any{
-		"memo": map[string]string{"name": root.GetName(), "state": "ARCHIVED"}, "updateMask": "state",
-	}))
 	stillOutside := createMemo(owner, "Different #recycle-bin")
 	otherOwnerMatching := createMemo(otherOwner, "Different owner #recycle/project")
 	trash := map[string]string{"tagName": "recycle", "mode": "trash"}
@@ -176,7 +169,6 @@ func TestMemoTagEditsThroughWeb(t *testing.T) {
 	restorePath := "/internal/trash/" + strings.TrimPrefix(root.GetName(), "memos/") + "/restore"
 	require.Equal(t, http.StatusNoContent, request(http.MethodPost, restorePath, ownerToken, nil).Code)
 	restored := requireMemo(ownerToken, root, root.GetContent())
-	require.Equal(t, apipb.State_ARCHIVED, restored.GetState())
 	require.ElementsMatch(t, []string{"recycle", "recycle/project"}, restored.GetTags())
 	require.Len(t, restored.GetAttachments(), 1)
 	require.Equal(t, attachment.GetName(), restored.GetAttachments()[0].GetName())
@@ -185,7 +177,6 @@ func TestMemoTagEditsThroughWeb(t *testing.T) {
 	removeRestored := map[string]string{"tagName": "recycle", "mode": "remove"}
 	requireCount(request(http.MethodPost, "/internal/tags/delete", ownerToken, removeRestored), 1)
 	untagged := requireMemo(ownerToken, restored, "Parent ")
-	require.Equal(t, apipb.State_ARCHIVED, untagged.GetState())
 	require.Empty(t, untagged.GetTags())
 	require.Len(t, untagged.GetAttachments(), 1)
 	require.Equal(t, attachment.GetName(), untagged.GetAttachments()[0].GetName())

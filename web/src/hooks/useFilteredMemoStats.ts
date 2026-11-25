@@ -1,12 +1,10 @@
 import { type Timestamp, timestampDate } from "@bufbuild/protobuf/wkt";
 import { useMemo } from "react";
 import { type MemoTimeBasis, useView } from "@/contexts/ViewContext";
-import useCurrentUser from "@/hooks/useCurrentUser";
 import { useAllUserStats, useUserStats } from "@/hooks/useUserQueries";
 import { ISO_DATE_FORMAT } from "@/lib/calendar-utils";
 import { mergeTagCounts } from "@/lib/tag";
 import { inAppTimeZone } from "@/lib/time-zone";
-import { State } from "@/types/proto/api/common_pb";
 import type { UserStats } from "@/types/proto/api/user_service_pb";
 import type { StatisticsData } from "@/types/statistics";
 
@@ -23,7 +21,7 @@ export interface CollectionSummary {
   recordedDays: number;
 }
 
-export type MemoStatsContext = "home" | "collection" | "archived";
+export type MemoStatsContext = "home" | "collection";
 
 export interface UseFilteredMemoStatsOptions {
   userName?: string;
@@ -53,19 +51,12 @@ const timestampsForBasis = (stats: UserStats, basis: MemoTimeBasis) => {
 
 export const useFilteredMemoStats = (options: UseFilteredMemoStatsOptions = {}): FilteredMemoStats => {
   const { userName, context, enabled = true, filter } = options;
-  const currentUser = useCurrentUser();
   const { timeBasis } = useView();
 
-  const grouped = context === "collection" || context === "archived";
+  const grouped = context === "collection";
   // Owner Home shares the active per-user statistics used by the editor.
   const { data: userStats, isLoading: isLoadingUserStats } = useUserStats(userName, { enabled: enabled && !grouped, filter });
-  // Anonymous collections and archives remain scoped through ListUserStats.
-  const allUserStatsRequest =
-    context === "collection" ? { state: State.NORMAL, filter } : context === "archived" ? { state: State.ARCHIVED, filter } : {};
-  const shouldFetchAllUserStats = context === "collection" || (context === "archived" && !!currentUser?.name);
-  const { data: allUserStats, isLoading: isLoadingAllUserStats } = useAllUserStats(allUserStatsRequest, {
-    enabled: enabled && shouldFetchAllUserStats,
-  });
+  const { data: allUserStats, isLoading: isLoadingAllUserStats } = useAllUserStats({ filter }, { enabled: enabled && grouped });
 
   const data = useMemo(() => {
     const loading = isLoadingUserStats || isLoadingAllUserStats;
@@ -73,7 +64,7 @@ export const useFilteredMemoStats = (options: UseFilteredMemoStatsOptions = {}):
     let tagCount: Record<string, number> = mergeTagCounts();
     let summary: CollectionSummary | undefined;
 
-    if (context === "collection" || context === "archived") {
+    if (context === "collection") {
       const groupedStats = allUserStats ?? [];
       tagCount = mergeTagCounts(...groupedStats.map((stats) => stats.tagCounts));
       const createdActivity: Record<string, number> = timeBasis === "create_time" ? activityStats : {};
@@ -81,12 +72,12 @@ export const useFilteredMemoStats = (options: UseFilteredMemoStatsOptions = {}):
       for (const stats of groupedStats) {
         addDailyCounts(activityStats, timestampsForBasis(stats, timeBasis));
         // The summary counts writing days even when the calendar is showing updates.
-        if (context === "collection" && timeBasis === "update_time") {
+        if (timeBasis === "update_time") {
           addDailyCounts(createdActivity, stats.memoCreatedTimestamps ?? []);
         }
         memoCount += stats.totalMemoCount;
       }
-      if (context === "collection" && allUserStats !== undefined) {
+      if (allUserStats !== undefined) {
         summary = { memoCount, tagCount: Object.keys(tagCount).length, recordedDays: Object.keys(createdActivity).length };
       }
     } else if (userName && userStats) {

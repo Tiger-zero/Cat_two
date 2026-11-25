@@ -173,18 +173,10 @@ func TestGetSharedMemo_LegacyTokensNeverGrantAccess(t *testing.T) {
 	require.Len(t, visibleParent.Reactions, 1)
 	require.Equal(t, reaction.Name, visibleParent.Reactions[0].Name)
 
-	archived, err := ts.Service.CreateMemo(ownerCtx, &apipb.CreateMemoRequest{
-		Memo: &apipb.Memo{Content: "archived note is author-only"},
-	})
-	require.NoError(t, err)
-	archivedID := parseMemoIDFromNameForTest(t, ts, archived.Name)
-	require.NoError(t, ts.Store.UpdateMemo(ctx, &store.UpdateMemo{ID: archivedID, RowStatus: new(store.Archived)}))
-
 	seedLegacyMemoShare(ctx, t, ts, parent.Name, owner.ID, "active-legacy-token", nil)
 	seedLegacyMemoShare(ctx, t, ts, parent.Name, owner.ID, "expired-legacy-token", new(time.Now().Add(-time.Hour).Unix()))
 	seedLegacyMemoShare(ctx, t, ts, comment.Name, owner.ID, "comment-legacy-token", nil)
-	seedLegacyMemoShare(ctx, t, ts, archived.Name, owner.ID, "archived-legacy-token", nil)
-	for _, token := range []string{"active-legacy-token", "expired-legacy-token", "comment-legacy-token", "archived-legacy-token", "missing-token"} {
+	for _, token := range []string{"active-legacy-token", "expired-legacy-token", "comment-legacy-token", "missing-token"} {
 		t.Run(token, func(t *testing.T) {
 			for _, actor := range []context.Context{ctx, ownerCtx, ts.CreateUserContext(ctx, other.ID), ts.CreateUserContext(ctx, admin.ID)} {
 				memo, err := ts.Service.GetSharedMemo(actor, &apipb.GetSharedMemoRequest{ShareToken: token})

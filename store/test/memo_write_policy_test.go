@@ -9,7 +9,7 @@ import (
 	"github.com/usememos/memos/store"
 )
 
-func TestMemoWritePolicyRejectsShareOfArchivedNote(t *testing.T) {
+func TestMemoWritePolicyRejectsShareOfTrashedNote(t *testing.T) {
 	ctx := context.Background()
 	ts := NewTestingStore(ctx, t)
 	defer ts.Close()
@@ -21,12 +21,11 @@ func TestMemoWritePolicyRejectsShareOfArchivedNote(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	policy := &store.MemoWritePolicy{ActorUserID: owner.ID, CreatingShare: true}
-	public := store.Public
-	archived := store.Archived
-	require.NoError(t, ts.UpdateMemo(ctx, &store.UpdateMemo{ID: memo.ID, Visibility: &public, RowStatus: &archived}))
+	policy := &store.MemoWritePolicy{ActorUserID: owner.ID}
+	_, err = ts.ApplyMemoTrash(ctx, &store.MemoTrashMutation{MemoID: memo.ID, ActorUserID: owner.ID, Action: store.MemoTrashMove, NowTs: 123})
+	require.NoError(t, err)
 	_, err = ts.CreateMemoShare(ctx, &store.MemoShare{
-		UID: "memo-current-archived-share", MemoID: memo.ID, CreatorID: owner.ID, Policy: policy,
+		UID: "memo-current-trashed-share", MemoID: memo.ID, CreatorID: owner.ID, Policy: policy,
 	})
 	require.ErrorIs(t, err, store.ErrMemoMutationConflict)
 }

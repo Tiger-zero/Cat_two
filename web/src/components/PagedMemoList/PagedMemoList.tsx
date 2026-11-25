@@ -13,7 +13,6 @@ import { hoistMemoToFront } from "@/hooks/useMemoSorting";
 import { combineCELFilters } from "@/lib/cel-filter";
 import { DEFAULT_LIST_MEMOS_PAGE_SIZE, LOADING_INDICATOR_DELAY_MS } from "@/lib/constants";
 import { cn } from "@/lib/utils";
-import { State } from "@/types/proto/api/common_pb";
 import type { Memo } from "@/types/proto/api/memo_service_pb";
 import { useTranslate } from "@/utils/i18n";
 import ColumnGrid, { ColumnGridUntrappedProvider, columnCountForWidth, GRID_GAP } from "../ColumnGrid";
@@ -50,7 +49,6 @@ const Loader = ({ count = 3 }: { count?: number }) => {
 interface Props {
   renderer: (memo: Memo, options: { compact: boolean }) => ReactElement;
   listSort?: (list: Memo[]) => Memo[];
-  state?: State;
   orderBy?: string;
   filter?: string;
   contextFilter?: string;
@@ -164,7 +162,6 @@ const PagedMemoList = (props: Props) => {
   const { data, fetchNextPage, hasNextPage, isFetchingNextPage, isLoading, isError, error, isFetchNextPageError, refetch } =
     useInfiniteMemos(
       {
-        state: props.state || State.NORMAL,
         orderBy: props.orderBy || "create_time desc",
         filter: combineCELFilters(props.contextFilter, props.filter),
         pageSize: props.pageSize || DEFAULT_LIST_MEMOS_PAGE_SIZE,

@@ -54,6 +54,62 @@ func TestInitializeSQLiteSchemaAndRestart(t *testing.T) {
 	require.Equal(t, created.BodyDigest, memo.BodyDigest)
 }
 
+func TestSQLiteRemovesMemoArchiveStateOnUpgrade(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	p := getTestingProfile(t)
+	before := openMemoBodyStore(t, p)
+	owner, err := createTestingHostUser(ctx, before)
+	require.NoError(t, err)
+	create := func(uid string) *store.Memo {
+		t.Helper()
+		memo, err := before.CreateMemo(ctx, &store.Memo{UID: uid, CreatorID: owner.ID, Content: uid, Visibility: store.Private})
+		require.NoError(t, err)
+		return memo
+	}
+	active, archived, trashed := create("active"), create("archived"), create("trashed")
+	require.NoError(t, before.UpdateMemo(ctx, &store.UpdateMemo{ID: archived.ID, Pinned: new(true)}))
+	_, err = before.ApplyMemoTrash(ctx, &store.MemoTrashMutation{MemoID: trashed.ID, ActorUserID: owner.ID, Action: store.MemoTrashMove, NowTs: 123})
+	require.NoError(t, err)
+
+	// Recreate the previous release's memo column, partial index and version stamps.
+	_, err = before.GetDriver().GetDB().ExecContext(ctx, `ALTER TABLE memo ADD COLUMN row_status TEXT NOT NULL
+		CHECK (row_status IN ('NORMAL', 'ARCHIVED')) DEFAULT 'NORMAL';
+		UPDATE memo SET row_status = 'ARCHIVED' WHERE uid IN ('archived', 'trashed');
+		DROP INDEX idx_memo_owner_pinned_created;
+		CREATE INDEX idx_memo_owner_pinned_created ON memo(creator_id, row_status, pinned DESC, created_ts DESC, id DESC)
+			WHERE deleted_ts IS NULL;
+		UPDATE system_setting SET value = '{"schemaVersion":"26.11.12","secretKey":"kept","payloadVersion":1}' WHERE name = 'BASIC';
+		PRAGMA user_version = 261112;`)
+	require.NoError(t, err)
+	require.NoError(t, before.Close())
+
+	after := openMemoBodyStore(t, p)
+	require.NoError(t, after.InitializeSchema(ctx), "subsequent startup must be idempotent")
+	basic, err := after.GetInstanceBasicSetting(ctx)
+	require.NoError(t, err)
+	require.Equal(t, store.CurrentSchemaVersion, basic.SchemaVersion)
+	require.Equal(t, "kept", basic.SecretKey)
+	require.EqualValues(t, 1, basic.PayloadVersion)
+	memos, err := after.ListMemos(ctx, &store.FindMemo{Access: &store.MemoAccessScope{UserID: &owner.ID}, OrderByPinned: true})
+	require.NoError(t, err)
+	require.Equal(t, []int32{archived.ID, active.ID}, memoIDs(memos))
+	require.Equal(t, archived.Content, memos[0].Content)
+	require.Equal(t, archived.BodyDigest, memos[0].BodyDigest)
+	require.Equal(t, archived.Revision+1, memos[0].Revision)
+	require.True(t, memos[0].Pinned)
+	bin, err := after.ListMemos(ctx, &store.FindMemo{CreatorID: &owner.ID, Trash: store.MemoTrashOnly})
+	require.NoError(t, err)
+	require.Equal(t, []int32{trashed.ID}, memoIDs(bin))
+	require.Equal(t, int64(123), *bin[0].DeletedTs)
+	_, err = after.ApplyMemoTrash(ctx, &store.MemoTrashMutation{MemoID: trashed.ID, ActorUserID: owner.ID, Action: store.MemoTrashRestore, NowTs: 124})
+	require.NoError(t, err)
+	restored, err := after.GetMemo(ctx, &store.FindMemo{ID: &trashed.ID})
+	require.NoError(t, err)
+	require.NotNil(t, restored)
+	require.Equal(t, trashed.Content, restored.Content)
+}
+
 func TestSQLiteRejectsOlderDatabaseWithoutWriting(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()

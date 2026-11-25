@@ -94,7 +94,7 @@ describe("MemoFilterProvider", () => {
     ]);
   });
 
-  it("restores and clears untagged from the archived URL alongside the current date", async () => {
+  it("restores and clears untagged from the home URL alongside the current date", async () => {
     const router = createMemoryRouter(
       [
         {
@@ -106,18 +106,18 @@ describe("MemoFilterProvider", () => {
           ),
         },
       ],
-      { initialEntries: ["/archived?filter=displayTime%3A2026-11-21%2Cuntagged%3A"] },
+      { initialEntries: ["/?filter=displayTime%3A2026-11-21%2Cuntagged%3A"] },
     );
     const rendered = render(<RouterProvider router={router} />);
     expect(screen.getByTestId("filters")).toHaveTextContent('"untagged"');
     fireEvent.click(screen.getByRole("button", { name: "Clear untagged" }));
     expect(screen.getByTestId("filters")).not.toHaveTextContent('"untagged"');
-    expect(router.state.location.pathname + router.state.location.search).toBe("/archived?filter=displayTime%3A2026-11-21");
+    expect(router.state.location.pathname + router.state.location.search).toBe("/?filter=displayTime%3A2026-11-21");
 
-    await act(() => router.navigate("/archived?filter=untagged%3A"));
+    await act(() => router.navigate("/?filter=untagged%3A"));
     fireEvent.click(screen.getByRole("button", { name: "Select work" }));
     expect(screen.getByTestId("filters")).not.toHaveTextContent('"untagged"');
-    expect(router.state.location.pathname + router.state.location.search).toBe("/archived?filter=tagSearch%3Awork");
+    expect(router.state.location.pathname + router.state.location.search).toBe("/?filter=tagSearch%3Awork");
     rendered.unmount();
   });
 

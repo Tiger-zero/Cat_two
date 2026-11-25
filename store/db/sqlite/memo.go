@@ -32,7 +32,7 @@ func (d *DB) CreateMemo(ctx context.Context, create *store.Memo) (*store.Memo, e
 	return create, nil
 }
 
-func insertSQLiteMemo(ctx context.Context, tx dbExecutor, create *store.Memo, preserveInitialState bool) error {
+func insertSQLiteMemo(ctx context.Context, tx dbExecutor, create *store.Memo, preservePinned bool) error {
 	fields := []string{"`uid`", "`creator_id`", "`content`", "`body_digest`", "`visibility`", "`payload`", "`creation_request_digest`"}
 	placeholder := []string{"?", "?", "?", "?", "?", "?", "?"}
 	payload := "{}"
@@ -45,10 +45,10 @@ func insertSQLiteMemo(ctx context.Context, tx dbExecutor, create *store.Memo, pr
 	}
 	args := []any{create.UID, create.CreatorID, create.Content, create.BodyDigest, create.Visibility, payload, create.CreationRequestDigest}
 
-	if preserveInitialState {
-		fields = append(fields, "`row_status`", "`pinned`")
-		placeholder = append(placeholder, "?", "?")
-		args = append(args, create.RowStatus, create.Pinned)
+	if preservePinned {
+		fields = append(fields, "`pinned`")
+		placeholder = append(placeholder, "?")
+		args = append(args, create.Pinned)
 	}
 
 	// Add custom timestamps if provided
@@ -63,12 +63,11 @@ func insertSQLiteMemo(ctx context.Context, tx dbExecutor, create *store.Memo, pr
 		args = append(args, create.UpdatedTs)
 	}
 
-	stmt := "INSERT INTO `memo` (" + strings.Join(fields, ", ") + ") VALUES (" + strings.Join(placeholder, ", ") + ") RETURNING `id`, `created_ts`, `updated_ts`, `row_status`, `revision`"
+	stmt := "INSERT INTO `memo` (" + strings.Join(fields, ", ") + ") VALUES (" + strings.Join(placeholder, ", ") + ") RETURNING `id`, `created_ts`, `updated_ts`, `revision`"
 	if err := tx.QueryRowContext(ctx, stmt, args...).Scan(
 		&create.ID,
 		&create.CreatedTs,
 		&create.UpdatedTs,
-		&create.RowStatus,
 		&create.Revision,
 	); err != nil {
 		return err
@@ -139,9 +138,6 @@ func (d *DB) ListMemos(ctx context.Context, find *store.FindMemo) ([]*store.Memo
 	if v := find.DeletedThroughTs; v != nil {
 		where, args = append(where, "memo.deleted_ts <= ?"), append(args, *v)
 	}
-	if v := find.RowStatus; v != nil {
-		where, args = append(where, "`memo`.`row_status` = ?"), append(args, *v)
-	}
 	if v := find.VisibilityList; len(v) != 0 {
 		placeholder := []string{}
 		for _, visibility := range v {
@@ -191,7 +187,6 @@ func (d *DB) ListMemos(ctx context.Context, find *store.FindMemo) ([]*store.Memo
 		"`memo`.`creator_id` AS `creator_id`",
 		"`memo`.`created_ts` AS `created_ts`",
 		"`memo`.`updated_ts` AS `updated_ts`",
-		"`memo`.`row_status` AS `row_status`",
 		"`memo`.`visibility` AS `visibility`",
 		"`memo`.`pinned` AS `pinned`",
 		"`memo`.`payload` AS `payload`",
@@ -248,7 +243,6 @@ func (d *DB) ListMemos(ctx context.Context, find *store.FindMemo) ([]*store.Memo
 			&memo.CreatorID,
 			&memo.CreatedTs,
 			&memo.UpdatedTs,
-			&memo.RowStatus,
 			&memo.Visibility,
 			&memo.Pinned,
 			&payloadBytes,
@@ -291,12 +285,11 @@ func (d *DB) QueryActiveMemoTags(ctx context.Context, creatorID int32) (*sql.Row
 	var args []any
 	owner := sqliteMemoAccessPredicate(&store.MemoAccessScope{UserID: &creatorID}, "memo", &args)
 	return d.db.QueryContext(ctx, `SELECT json_extract(memo.payload, '$.tags') FROM memo
-		WHERE memo.row_status = 'NORMAL' AND memo.deleted_ts IS NULL AND `+owner+`
+		WHERE memo.deleted_ts IS NULL AND `+owner+`
 		AND NOT EXISTS (SELECT 1 FROM memo_relation AS r WHERE r.memo_id = memo.id AND r.type = 'COMMENT')`, args...)
 }
 
-// CountUserMemos counts the memos a user created, comments included, in every
-// row status and Space.
+// CountUserMemos counts all memos owned by the user, including comments and trashed notes.
 func (d *DB) CountUserMemos(ctx context.Context, creatorID int32) (int64, error) {
 	stmt := `SELECT COUNT(*) FROM memo WHERE creator_id = ?`
 	var count int64

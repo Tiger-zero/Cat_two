@@ -34,12 +34,9 @@ type MemoMutation struct {
 	// one immutable COMMENT relation from the new memo to the named context memo.
 	MemoCreate           *Memo
 	CommentContextMemoID *int32
-	// PreserveInitialState allows ZIP import to create archived or pinned memos
+	// PreservePinned allows ZIP import to restore pinned memos
 	// in the transaction that writes the body and binds attachments.
-	PreserveInitialState bool
-	// RestoreArchivedComment allows archive imports to restore a comment
-	// under an archived memo owned by its author.
-	RestoreArchivedComment    bool
+	PreservePinned            bool
 	MemoID                    int32
 	MemoCreatorID             int32
 	ExpectedMemoContent       string
@@ -117,8 +114,8 @@ func (s *Store) ApplyMemoMutation(ctx context.Context, mutation *MemoMutation) e
 	if mutation == nil {
 		return errors.New("memo mutation is required")
 	}
-	if mutation.PreserveInitialState && mutation.MemoCreate == nil {
-		return errors.New("initial lifecycle state requires memo creation")
+	if mutation.PreservePinned && mutation.MemoCreate == nil {
+		return errors.New("restoring a pin requires memo creation")
 	}
 	if mutation.MemoCreate != nil {
 		if mutation.MemoUpdate != nil || mutation.ExpectedRevision != nil || mutation.Policy != nil || len(mutation.RemovedAttachmentIDs) != 0 {
@@ -130,15 +127,6 @@ func (s *Store) ApplyMemoMutation(ctx context.Context, mutation *MemoMutation) e
 		}
 		if err := validateMemoCreate(create); err != nil {
 			return err
-		}
-		if mutation.PreserveInitialState {
-			switch create.RowStatus {
-			case "":
-				create.RowStatus = Normal
-			case Normal, Archived:
-			default:
-				return errors.New("invalid initial memo state")
-			}
 		}
 		if mutation.CommentContextMemoID != nil && *mutation.CommentContextMemoID <= 0 {
 			return errors.New("comment creation mutation requires a valid context memo")

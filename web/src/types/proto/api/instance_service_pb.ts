@@ -971,8 +971,7 @@ export type InstanceSetting_UsageLimitsSetting_UsageLimit = Message<"memos.api.I
   allUsers: boolean;
 
   /**
-   * The number of memos the user may have created, comments and archived
-   * memos included.
+   * The number of memos the user may have created, including comments.
    *
    * @generated from field: optional int64 memo_count = 4;
    */

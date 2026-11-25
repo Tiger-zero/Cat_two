@@ -49,6 +49,7 @@ describe("router configuration", () => {
 
   it.each([
     "/home",
+    "/archived",
     "/explore",
     "/inbox",
     "/views",
@@ -127,7 +128,7 @@ describe("router configuration", () => {
   });
 
   it("wraps authenticated-only pages in RequireAuthRoute", () => {
-    for (const path of [ROUTES.ARCHIVED, ROUTES.TRASH, ROUTES.SETTING, "memos/:uid"]) {
+    for (const path of ["archived", ROUTES.TRASH, ROUTES.SETTING, "memos/:uid"]) {
       expect(hasAncestorOfType(routeConfig, path, RequireAuthRoute)).toBe(true);
     }
   });
@@ -162,9 +163,7 @@ describe("router configuration", () => {
   });
 
   it("leaves memo feeds available for early queries", () => {
-    for (const path of [ROUTES.ARCHIVED, "memos/:uid"]) {
-      expect(hasAncestorOfType(routeConfig, path, RequireFullInitializationRoute)).toBe(false);
-    }
+    expect(hasAncestorOfType(routeConfig, "memos/:uid", RequireFullInitializationRoute)).toBe(false);
   });
 
   it("leaves public pages outside RequireAuthRoute", () => {

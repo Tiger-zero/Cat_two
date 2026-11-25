@@ -329,3 +329,7 @@ When an imported attachment gets a new UID, its relative and same-origin absolut
 use the new UID. When a reference definition also serves an ordinary link, the image switches to an inline
 destination so the link keeps its original target. Other destinations and literal text are preserved. The exported
 archive still stores the original content bytes.
+
+### 2026-11-25 — Note state in v1 ZIPs
+
+Cat_two writes `NORMAL` to the v1 ZIP metadata. Imports restore notes and comments from older ZIPs, including records marked `ARCHIVED`, into the same personal collection.

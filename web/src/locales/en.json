@@ -109,8 +109,6 @@
     "add": "Add",
     "admin": "Admin",
     "all": "All",
-    "archive": "Archive",
-    "archived": "Archived",
     "attachments": "Attachments",
     "avatar": "Avatar",
     "basic": "Basic",
@@ -474,13 +472,11 @@
     "change-error": "Could not update this note in Trash"
   },
   "message": {
-    "archived-successfully": "Archived successfully",
     "copied": "Copied",
     "fill-all": "Please fill in all fields.",
     "new-password-not-match": "New passwords do not match.",
     "no-data": "No data found.",
     "password-changed": "Password Changed",
-    "restored-successfully": "Restored successfully",
     "succeed-copy-content": "Content copied successfully.",
     "succeed-copy-link": "Link copied successfully.",
     "update-succeed": "Update succeeded"
@@ -506,10 +502,8 @@
     "load-error": "Couldn’t load memos",
     "mode": "Search mode",
     "retry": "Retry",
-    "scope": "Search scope",
     "syntax-help": "Search syntax",
-    "text": "Text",
-    "unarchived": "Unarchived"
+    "text": "Text"
   },
   "setting": {
     "notification": {
@@ -648,7 +642,7 @@
     "memo-export": {
       "description": "Move your memos and attachments between Memos instances with a single ZIP file.",
       "export-action": "Export memos",
-      "export-description": "Download every memo you created, including comments, archived memos, and attachment files, in Memos Export Format.",
+      "export-description": "Download your notes, comments, and attachment files in Memos Export Format.",
       "export-detail": "A ZIP file with one Markdown file and one JSON record per memo.",
       "export-failed": "Export failed.",
       "export-label": "Download file",
@@ -773,7 +767,7 @@
       "invalid-name": "Enter a valid tag path outside this tag’s own subtree.",
       "rename-failed": "Could not rename the tag.",
       "delete-title": "Delete {{tag}}?",
-      "delete-description": "This applies to the selected tag and all its subtags, including in archived notes.",
+      "delete-description": "This applies to the selected tag and all its subtags.",
       "delete-how": "What should happen to the notes?",
       "delete-remove": "Remove tags only",
       "delete-remove-description": "Keep the notes and remove the selected tags from them.",

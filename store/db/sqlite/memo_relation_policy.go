@@ -12,7 +12,6 @@ import (
 type sqliteRelationMemoState struct {
 	id         int32
 	creatorID  int32
-	rowStatus  store.RowStatus
 	visibility store.Visibility
 }
 
@@ -41,7 +40,6 @@ func validateSQLiteMemoRelationEndpoints(ctx context.Context, executor dbExecuto
 			Actor:              actor,
 			EndpointID:         state.id,
 			EndpointCreatorID:  state.creatorID,
-			EndpointRowStatus:  state.rowStatus,
 			EndpointVisibility: state.visibility,
 		}
 		if err := store.ValidateMemoRelationEndpointRead(snapshot); err != nil {
@@ -53,9 +51,9 @@ func validateSQLiteMemoRelationEndpoints(ctx context.Context, executor dbExecuto
 
 func getSQLiteRelationMemoState(ctx context.Context, executor dbExecutor, memoID int32) (*sqliteRelationMemoState, error) {
 	state := &sqliteRelationMemoState{}
-	if err := executor.QueryRowContext(ctx, `SELECT id, creator_id, row_status, visibility
+	if err := executor.QueryRowContext(ctx, `SELECT id, creator_id, visibility
 		FROM memo WHERE id = ? AND deleted_ts IS NULL`, memoID).Scan(
-		&state.id, &state.creatorID, &state.rowStatus, &state.visibility,
+		&state.id, &state.creatorID, &state.visibility,
 	); err != nil {
 		return nil, err
 	}

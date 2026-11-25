@@ -249,8 +249,8 @@ func TestGetUserStats_DailyActivity(t *testing.T) {
 		})
 		require.NoError(t, err)
 		if index == 3 {
-			archived := store.Archived
-			require.NoError(t, ts.Store.UpdateMemo(ctx, &store.UpdateMemo{ID: memo.ID, RowStatus: &archived}))
+			_, err := ts.Service.DeleteMemo(userCtx, &apipb.DeleteMemoRequest{Name: "memos/" + memo.UID})
+			require.NoError(t, err)
 		}
 	}
 
@@ -264,11 +264,11 @@ func TestGetUserStats_DailyActivity(t *testing.T) {
 	require.Empty(t, stats.MemoCreatedTimestamps)
 	require.Empty(t, stats.MemoUpdatedTimestamps)
 
-	archives, err := ts.Service.ListUserStats(userCtx, &apipb.ListUserStatsRequest{Parent: request.Name, State: apipb.State_ARCHIVED})
+	listed, err := ts.Service.ListUserStats(userCtx, &apipb.ListUserStatsRequest{Parent: request.Name})
 	require.NoError(t, err)
-	require.Len(t, archives.UserStats, 1)
-	require.Len(t, archives.UserStats[0].MemoCreatedTimestamps, 1)
-	require.Nil(t, archives.UserStats[0].DailyActivity)
+	require.Len(t, listed.UserStats, 1)
+	require.Len(t, listed.UserStats[0].MemoCreatedTimestamps, 3)
+	require.Nil(t, listed.UserStats[0].DailyActivity)
 }
 
 func TestGetUserStats_PinnedMemoUsesCanonicalResourceName(t *testing.T) {

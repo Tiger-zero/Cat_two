@@ -132,7 +132,7 @@ type MemoServiceClient interface {
 	// CreateMemoComment atomically creates an independent memo plus one immutable
 	// COMMENT context relation to the named memo. The new memo keeps its own
 	// placement, visibility, authorship, and lifecycle. The named memo must be
-	// readable by the caller and not archived.
+	// readable by the caller.
 	CreateMemoComment(context.Context, *connect.Request[api.CreateMemoCommentRequest]) (*connect.Response[api.Memo], error)
 	// ListMemoReactions lists the reactions on a memo. Requires read access to
 	// the memo.
@@ -460,7 +460,7 @@ type MemoServiceHandler interface {
 	// CreateMemoComment atomically creates an independent memo plus one immutable
 	// COMMENT context relation to the named memo. The new memo keeps its own
 	// placement, visibility, authorship, and lifecycle. The named memo must be
-	// readable by the caller and not archived.
+	// readable by the caller.
 	CreateMemoComment(context.Context, *connect.Request[api.CreateMemoCommentRequest]) (*connect.Response[api.Memo], error)
 	// ListMemoReactions lists the reactions on a memo. Requires read access to
 	// the memo.

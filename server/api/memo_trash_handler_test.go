@@ -190,7 +190,7 @@ func TestMemoTrashBrowserAndRestore(t *testing.T) {
 	}})
 	require.NoError(t, err)
 	_, err = svc.UpdateMemo(ownerCtx, &apipb.UpdateMemoRequest{
-		Memo: &apipb.Memo{Name: memo.Name, State: apipb.State_ARCHIVED, Pinned: true}, UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"state", "pinned"}},
+		Memo: &apipb.Memo{Name: memo.Name, Pinned: true}, UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"pinned"}},
 	})
 	require.NoError(t, err)
 	_, err = svc.DeleteMemo(ownerCtx, &apipb.DeleteMemoRequest{Name: memo.Name, Force: true})
@@ -207,9 +207,9 @@ func TestMemoTrashBrowserAndRestore(t *testing.T) {
 		return runMemoTrashHTTP(t, fileMux, svc.Secret, owner, http.MethodGet, "/file/"+attachment.Name)
 	}
 	require.Equal(t, http.StatusNotFound, readFile().Code)
-	archived, err := svc.ListMemos(ownerCtx, &apipb.ListMemosRequest{State: apipb.State_ARCHIVED})
+	active, err := svc.ListMemos(ownerCtx, &apipb.ListMemosRequest{})
 	require.NoError(t, err)
-	require.Empty(t, archived.Memos)
+	require.Empty(t, active.Memos)
 
 	uid, err := ExtractMemoUIDFromName(memo.Name)
 	require.NoError(t, err)
@@ -231,14 +231,12 @@ func TestMemoTrashBrowserAndRestore(t *testing.T) {
 	require.NoError(t, protojson.Unmarshal(page.Memos[0].Memo, &deletedMemo))
 	require.Equal(t, memo.Name, deletedMemo.Name)
 	require.Equal(t, memo.Content, deletedMemo.Content)
-	require.Equal(t, apipb.State_ARCHIVED, deletedMemo.State)
 	require.Len(t, deletedMemo.Attachments, 1)
 	require.Equal(t, attachment.Filename, deletedMemo.Attachments[0].Filename)
 	response := runMemoTrashRequest(t, svc, owner, http.MethodPost, path+"/restore")
 	require.Equal(t, http.StatusNoContent, response.Code, response.Body.String())
 	restored, err := svc.GetMemo(ownerCtx, &apipb.GetMemoRequest{Name: memo.Name})
 	require.NoError(t, err)
-	require.Equal(t, apipb.State_ARCHIVED, restored.State)
 	require.True(t, restored.Pinned)
 	_, err = svc.GetMemo(ownerCtx, &apipb.GetMemoRequest{Name: reply.Name})
 	require.NoError(t, err)

@@ -47,7 +47,7 @@ func assertMemoBodyFile(t *testing.T, st *store.Store, id int32, content string)
 	return path
 }
 
-func TestMemoBodiesSweepArchiveAndTrashWithinDatabaseNamespace(t *testing.T) {
+func TestMemoBodiesSweepLiveAndTrashWithinDatabaseNamespace(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()
 	p := getTestingProfile(t)
@@ -55,16 +55,15 @@ func TestMemoBodiesSweepArchiveAndTrashWithinDatabaseNamespace(t *testing.T) {
 	st := openMemoBodyStore(t, p)
 	owner, err := createTestingHostUser(ctx, st)
 	require.NoError(t, err)
-	archived, err := st.CreateMemo(ctx, &store.Memo{UID: "sweep-archived", CreatorID: owner.ID, Visibility: store.Private, Content: "归档\n"})
+	live, err := st.CreateMemo(ctx, &store.Memo{UID: "sweep-live", CreatorID: owner.ID, Visibility: store.Private, Content: "保留\n"})
 	require.NoError(t, err)
-	require.NoError(t, st.UpdateMemo(ctx, &store.UpdateMemo{ID: archived.ID, RowStatus: new(store.Archived)}))
 	trashed, err := st.CreateMemo(ctx, &store.Memo{UID: "sweep-trash", CreatorID: owner.ID, Visibility: store.Private, Content: "回收站\n"})
 	require.NoError(t, err)
 	now := time.Now().Unix()
 	_, err = st.ApplyMemoTrash(ctx, &store.MemoTrashMutation{MemoID: trashed.ID, ActorUserID: owner.ID, Action: store.MemoTrashMove, NowTs: now})
 	require.NoError(t, err)
 	require.NoError(t, st.SweepMemoBodies(ctx))
-	archivedPath := assertMemoBodyFile(t, st, archived.ID, archived.Content)
+	livePath := assertMemoBodyFile(t, st, live.ID, live.Content)
 	trashedPath := assertMemoBodyFile(t, st, trashed.ID, trashed.Content)
 	read, err := st.GetMemo(ctx, &store.FindMemo{ID: &trashed.ID, Trash: store.MemoTrashOnly})
 	require.NoError(t, err)
@@ -87,7 +86,7 @@ func TestMemoBodiesSweepArchiveAndTrashWithinDatabaseNamespace(t *testing.T) {
 
 	orphanStages := make([]string, 150)
 	for i := range orphanStages {
-		path := filepath.Join(filepath.Dir(archivedPath), fmt.Sprintf(".memo-body-orphan-%d", i))
+		path := filepath.Join(filepath.Dir(livePath), fmt.Sprintf(".memo-body-orphan-%d", i))
 		require.NoError(t, os.WriteFile(path, []byte("unfinished body"), 0o600))
 		orphanStages[i] = path
 	}
@@ -98,11 +97,11 @@ func TestMemoBodiesSweepArchiveAndTrashWithinDatabaseNamespace(t *testing.T) {
 		require.NoFileExists(t, path)
 	}
 	require.NoFileExists(t, trashedPath)
-	require.FileExists(t, archivedPath)
+	require.FileExists(t, livePath)
 	require.FileExists(t, otherPath)
-	read, err = st.GetMemo(ctx, &store.FindMemo{ID: &archived.ID})
+	read, err = st.GetMemo(ctx, &store.FindMemo{ID: &live.ID})
 	require.NoError(t, err)
-	require.Equal(t, archived.Content, read.Content)
+	require.Equal(t, live.Content, read.Content)
 }
 
 func TestMemoBodiesWriteThroughMutationAndReadVerifiedFiles(t *testing.T) {

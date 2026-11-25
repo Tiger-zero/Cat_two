@@ -831,16 +831,16 @@ func TestListMemoCommentsPaginates(t *testing.T) {
 	require.Empty(t, secondPage.NextPageToken)
 }
 
-func TestListMemoCommentsFiltersArchivedBeforePagination(t *testing.T) {
+func TestListMemoCommentsExcludesTrashedBeforePagination(t *testing.T) {
 	ctx := context.Background()
 	ts := NewTestService(t)
 	defer ts.Cleanup()
 
-	owner, err := ts.CreateRegularUser(ctx, "comment-archive-page-owner")
+	owner, err := ts.CreateRegularUser(ctx, "comment-trash-page-owner")
 	require.NoError(t, err)
 	ownerCtx := ts.CreateUserContext(ctx, owner.ID)
 	memo, err := ts.Service.CreateMemo(ownerCtx, &apipb.CreateMemoRequest{Memo: &apipb.Memo{
-		Content:    "memo with archived comments",
+		Content:    "memo with deleted comments",
 		Visibility: apipb.Visibility_PUBLIC,
 	}})
 	require.NoError(t, err)
@@ -855,10 +855,7 @@ func TestListMemoCommentsFiltersArchivedBeforePagination(t *testing.T) {
 		comments = append(comments, comment)
 	}
 	for _, comment := range comments[3:] {
-		_, err := ts.Service.UpdateMemo(ownerCtx, &apipb.UpdateMemoRequest{
-			Memo:       &apipb.Memo{Name: comment.Name, State: apipb.State_ARCHIVED},
-			UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"state"}},
-		})
+		_, err := ts.Service.DeleteMemo(ownerCtx, &apipb.DeleteMemoRequest{Name: comment.Name})
 		require.NoError(t, err)
 	}
 
@@ -918,26 +915,23 @@ func TestMemoCommentVisibilityCannotBeBroadened(t *testing.T) {
 	require.Equal(t, apipb.Visibility_PRIVATE, unchangedParent.Visibility)
 }
 
-func TestCreateMemoCommentDoesNotRevealArchivedPrivateMemo(t *testing.T) {
+func TestCreateMemoCommentDoesNotRevealTrashedPrivateMemo(t *testing.T) {
 	ctx := context.Background()
 	ts := NewTestService(t)
 	defer ts.Cleanup()
 
-	owner, err := ts.CreateRegularUser(ctx, "archived-comment-owner")
+	owner, err := ts.CreateRegularUser(ctx, "trashed-comment-owner")
 	require.NoError(t, err)
 	ownerCtx := ts.CreateUserContext(ctx, owner.ID)
-	other, err := ts.CreateRegularUser(ctx, "archived-comment-other")
+	other, err := ts.CreateRegularUser(ctx, "trashed-comment-other")
 	require.NoError(t, err)
 	otherCtx := ts.CreateUserContext(ctx, other.ID)
 	parent, err := ts.Service.CreateMemo(ownerCtx, &apipb.CreateMemoRequest{Memo: &apipb.Memo{
-		Content:    "archived private parent",
+		Content:    "trashed private parent",
 		Visibility: apipb.Visibility_PRIVATE,
 	}})
 	require.NoError(t, err)
-	_, err = ts.Service.UpdateMemo(ownerCtx, &apipb.UpdateMemoRequest{
-		Memo:       &apipb.Memo{Name: parent.Name, State: apipb.State_ARCHIVED},
-		UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"state"}},
-	})
+	_, err = ts.Service.DeleteMemo(ownerCtx, &apipb.DeleteMemoRequest{Name: parent.Name})
 	require.NoError(t, err)
 
 	_, err = ts.Service.CreateMemoComment(otherCtx, &apipb.CreateMemoCommentRequest{
@@ -950,7 +944,7 @@ func TestCreateMemoCommentDoesNotRevealArchivedPrivateMemo(t *testing.T) {
 		Parent:  parent.Name,
 		Comment: &apipb.Memo{Content: "owner still cannot comment"},
 	})
-	require.Equal(t, codes.FailedPrecondition, status.Code(err))
+	require.Equal(t, codes.NotFound, status.Code(err))
 }
 
 func TestGetMemoCommentUsesMemoLocalReadAccessAndConcealsContext(t *testing.T) {

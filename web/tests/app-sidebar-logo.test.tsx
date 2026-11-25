@@ -202,21 +202,10 @@ describe("App sidebar", () => {
     expect(tagsSectionHook).toHaveBeenCalledWith(expect.objectContaining({ scope: "users/test:home" }));
   });
 
-  it("uses archived statistics and separate tag UI state for the same account", () => {
-    render(
-      <MemoryRouter initialEntries={["/archived"]}>
-        <AppSidebar />
-      </MemoryRouter>,
-    );
-
-    expect(filteredStatsHook).toHaveBeenCalledWith(expect.objectContaining({ context: "archived", userName: undefined }));
-    expect(tagsSectionHook).toHaveBeenCalledWith(expect.objectContaining({ scope: "users/test:archived" }));
-  });
-
   it("opens account actions from the signed-in display name and avatar", () => {
     authState.currentUser = { name: "users/test", username: "test", displayName: "Test Account", avatarUrl: "/avatar.png" };
     render(
-      <MemoryRouter initialEntries={["/archived"]}>
+      <MemoryRouter initialEntries={["/"]}>
         <AppSidebar />
       </MemoryRouter>,
     );
@@ -329,7 +318,7 @@ describe("App sidebar", () => {
     ).toBeInTheDocument();
   });
 
-  it.each(["/setting", "/views", "/archived"])("hides Calendar display settings off the personal feed and its trash: %s", (path) => {
+  it.each(["/setting", "/views"])("hides Calendar display settings off the personal feed and its trash: %s", (path) => {
     render(
       <MemoryRouter initialEntries={[path]}>
         <AppSidebar />
@@ -338,10 +327,8 @@ describe("App sidebar", () => {
     expect(screen.queryByRole("button", { name: "memo.view-options" })).not.toBeInTheDocument();
   });
 
-  it.each([
-    ["/", "home"],
-    ["/archived", "archived"],
-  ])("keeps the %s calendar and tag list mounted when opening trash", (path, context) => {
+  it("keeps the calendar and tag list mounted when opening trash", () => {
+    const path = "/";
     render(
       <MemoryRouter initialEntries={[path]}>
         <AppSidebar />
@@ -355,7 +342,7 @@ describe("App sidebar", () => {
     expect(trash).toHaveClass("bg-(--memos-sidebar-selected)", "text-(--memos-on-sidebar-selected)");
     expect(screen.getByText("Calendar")).toBe(calendar);
     expect(screen.getByText("Tags")).toBe(tags);
-    expect(filteredStatsHook).toHaveBeenLastCalledWith(expect.objectContaining({ context }));
+    expect(filteredStatsHook).toHaveBeenLastCalledWith(expect.objectContaining({ context: "home" }));
     expect(tagsSectionHook).toHaveBeenLastCalledWith(expect.objectContaining({ destination: path }));
   });
 
@@ -372,7 +359,8 @@ describe("App sidebar", () => {
     expect(screen.getAllByRole("link").map((link) => link.getAttribute("href"))).not.toContain("/setting#system");
   });
 
-  it.each(["/trash", "/archived"])("links directly to the personal feed from %s", (path) => {
+  it("links directly to the personal feed from trash", () => {
+    const path = "/trash";
     render(
       <MemoryRouter initialEntries={[path]}>
         <AppSidebar />

@@ -17,17 +17,13 @@ func TestCheckMemoReadIsCreatorOnlyForAllStoredAudiences(t *testing.T) {
 
 	for _, visibility := range []store.Visibility{store.Public, store.Protected, store.Private} {
 		t.Run(string(visibility), func(t *testing.T) {
-			memo := &store.Memo{ID: 10, CreatorID: owner.ID, RowStatus: store.Normal, Visibility: visibility, ParentUID: &parentUID}
+			memo := &store.Memo{ID: 10, CreatorID: owner.ID, Visibility: visibility, ParentUID: &parentUID}
 			read := MemoReadContext{Memo: memo, CreatorValid: true}
 			require.True(t, CheckMemoReadContext(withViewer(read, owner)).Allowed())
 			require.Equal(t, MemoReadDenialPermission, CheckMemoReadContext(withViewer(read, other)).Denial)
 			require.Equal(t, MemoReadDenialPermission, CheckMemoReadContext(withViewer(read, admin)).Denial)
 			require.Equal(t, MemoReadDenialUnauthenticated, CheckMemoReadContext(withViewer(read, archived)).Denial)
 			require.Equal(t, MemoReadDenialUnauthenticated, CheckMemoReadContext(withViewer(read, nil)).Denial)
-
-			memo.RowStatus = store.Archived
-			require.True(t, CheckMemoReadContext(withViewer(read, owner)).Allowed())
-			require.Equal(t, MemoReadDenialNotFound, CheckMemoReadContext(withViewer(read, admin)).Denial)
 		})
 	}
 }
@@ -48,16 +44,16 @@ func TestMemoAndAttachmentManagementRequireOwnership(t *testing.T) {
 
 func TestCheckMemoReadInvalidStateFailsClosed(t *testing.T) {
 	owner := &store.User{ID: 1, RowStatus: store.Normal}
-	memo := &store.Memo{ID: 10, CreatorID: owner.ID, RowStatus: store.Normal, Visibility: store.Public}
+	memo := &store.Memo{ID: 10, CreatorID: owner.ID, Visibility: store.Public}
 	read := MemoReadContext{Memo: memo, CreatorValid: true}
 	require.True(t, CheckMemoReadContext(withViewer(read, owner)).Allowed(), "legacy public note remains visible to its owner")
 
 	memo.Visibility = store.Visibility("FUTURE_AUDIENCE")
 	require.Equal(t, MemoReadDenialNotFound, CheckMemoReadContext(withViewer(read, owner)).Denial)
 	memo.Visibility = store.Public
-	memo.RowStatus = store.RowStatus("UNKNOWN")
+	memo.DeletedTs = new(int64(1))
 	require.Equal(t, MemoReadDenialNotFound, CheckMemoReadContext(withViewer(read, owner)).Denial)
-	memo.RowStatus = store.Normal
+	memo.DeletedTs = nil
 	read.CreatorValid = false
 	require.Equal(t, MemoReadDenialNotFound, CheckMemoReadContext(withViewer(read, owner)).Denial)
 }

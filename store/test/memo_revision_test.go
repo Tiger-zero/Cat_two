@@ -23,15 +23,14 @@ func TestMemoRevisionConcurrentWrites(t *testing.T) {
 	idempotencyDigest := hex.EncodeToString(signature[:])
 	created := &store.Memo{
 		UID: "memo-revision", CreatorID: owner.ID, Content: "original", Visibility: store.Private,
-		RowStatus: store.Archived, Pinned: true, CreationRequestDigest: idempotencyDigest,
+		Pinned: true, CreationRequestDigest: idempotencyDigest,
 	}
 	require.NoError(t, ts.ApplyMemoMutation(ctx, &store.MemoMutation{
-		MemoCreate: created, PreserveInitialState: true,
+		MemoCreate: created, PreservePinned: true,
 	}))
 	require.EqualValues(t, 1, created.Revision)
 	read, err := ts.GetMemo(ctx, &store.FindMemo{ID: &created.ID, ExcludeContent: true})
 	require.NoError(t, err)
-	require.Equal(t, store.Archived, read.RowStatus)
 	require.True(t, read.Pinned)
 	require.Equal(t, idempotencyDigest, read.CreationRequestDigest)
 
@@ -110,7 +109,7 @@ func TestMemoRevisionTracksBindingsAndLifecycle(t *testing.T) {
 	require.EqualValues(t, 3, readRevision(store.MemoTrashExclude))
 
 	require.NoError(t, ts.UpdateMemo(ctx, &store.UpdateMemo{
-		ID: memo.ID, ExpectedRevision: new(int64(3)), RowStatus: new(store.Archived),
+		ID: memo.ID, ExpectedRevision: new(int64(3)), Pinned: new(true),
 	}))
 	require.EqualValues(t, 4, readRevision(store.MemoTrashExclude))
 	now := time.Now().Unix()

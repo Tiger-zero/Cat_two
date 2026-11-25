@@ -52,6 +52,5 @@ _Avoid_: Invitation, application role
 The Space-placement dimension applied to Space-aware memo and derived-resource collections. It is either `all`, which adds no Space predicate, or one exact Space. An unassigned Memo remains part of `all`; unassigned is a placement, not a collection scope.
 _Avoid_: Unassigned scope, no-Space collection
 
-**Archived memo collection**:
-The signed-in user's memos in the archived lifecycle state across all placements. It is user-level and independent of the current Space collection scope.
-_Avoid_: Space archive, Space-scoped archive
+**Personal memo list**:
+The signed-in account's notes, excluding comments and notes in the recycle bin. The home feed and search use this list.

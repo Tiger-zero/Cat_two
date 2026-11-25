@@ -11,23 +11,23 @@ Cat_two 的唯一数据库是 SQLite。仓库开发流程、验证和镜像交�
 
 ## 笔记标识与写入
 
-- 已有笔记用稳定的 `memos/<uid>` 资源名引用，详情页为 `/memos/<uid>`。创建可以省略 `memoId` 由服务端生成，或传 1 至 36 位字母、数字及中间的连字符。数据库内部 ID 仅供存储层使用。编辑、归档和恢复延用资源名。 [笔记协议](../../../proto/api/memo_service.proto) · [标识校验](../../../internal/identifier/resource_name.go)
+- 已有笔记用稳定的 `memos/<uid>` 资源名引用，详情页为 `/memos/<uid>`。创建可以省略 `memoId` 由服务端生成，或传 1 至 36 位字母、数字及中间的连字符。数据库内部 ID 仅供存储层使用。编辑和从回收站恢复时沿用资源名。 [笔记协议](../../../proto/api/memo_service.proto) · [标识校验](../../../internal/identifier/resource_name.go)
 - 网页 Connect 和个人 MCP 复用笔记服务的作者权限和写入校验。新建时一并保存正文、附件绑定及引用。创建重试沿用显式 `memoId`、`idempotent: true` 和原请求字段。同一账号以相同请求重试返回成功创建的笔记，已被使用但不匹配的 ID 返回冲突。网断后保留创建快照和已上传文件，避免重复创建或上传。 [新建](../../../server/api/memo_create_helpers.go) · [编辑器保存](../../../web/src/components/MemoEditor/edit/hooks/useMemoSave.ts)
 - 通过个人 MCP 新建笔记时，服务端在 Markdown 正文中添加 `#MCP连接`。正文已包含解析后路径完全匹配的标签时沿用原文。自动添加只在笔记新建时执行。 [令牌创建笔记](references/external-api.md#令牌创建笔记)
 - 更新使用读取时的 `revision` 作为 `expectedRevision`。`updateMask` 明确选中的字段，更新 `content` 时提交完整 Markdown。版本冲突时保留草稿和待上传附件，重新取回服务端内容后核对。局部修改继续尊重其他字段已有状态。 [更新协议](../../../proto/api/memo_service.proto) · [MCP 示例](references/external-api.md#mcp-查找与共同创作)
-- 日期筛选、按日统计与 MCP 日期使用 `Asia/Shanghai`。日历选中的日期参与新建请求，手动设置的时间随原请求重试。标签路径用 `/` 分层，选父标签时纳入子路径。笔记列表支持关键词、CEL、来源筛选、排序和归档范围，使用稳定分页参数。 [日期工具](../../../web/src/lib/calendar-utils.ts) · [统计和标签接口](references/external-api.md#统计和标签) · [CEL](../../../filter/README.md)
+- 日期筛选、按日统计与 MCP 日期使用 `Asia/Shanghai`。日历选中的日期参与新建请求，手动设置的时间随原请求重试。标签路径用 `/` 分层，选父标签时纳入子路径。笔记列表支持关键词、CEL、来源筛选和排序，使用稳定分页参数。 [日期工具](../../../web/src/lib/calendar-utils.ts) · [统计和标签接口](references/external-api.md#统计和标签) · [CEL](../../../filter/README.md)
 
 ## 标签
 
 - `#标签` 可以写在正文任意位置，多个标签用空格分开。斜杠分隔层级，`#读书/散文` 也会出现在「读书」分支。输入框的 `#` 按钮和键入 `#` 共用标签建议。 [多级标签参考](https://help.flomoapp.com/basic/tag.html)
 - 侧栏树形和平铺都按名称排序，数字前缀可用于安排顺序。父标签筛选包含下级路径，统计对同一篇笔记只计一次。网页和 MCP 都可查找无标签笔记，正文的代码和链接内的 `#` 不构成标签。 [接口与计数](references/external-api.md#统计和标签)
-- 标签菜单的重命名接受完整目标路径。删除分支时可移除标签并保留笔记，或将匹配笔记移入可恢复的回收站。操作包含下级标签和当前账户的归档笔记。移动笔记保留原标签和关联内容。 [标签操作](../../../server/api/memo_tag_routes.go)
+- 标签菜单的重命名接受完整目标路径。删除分支时可移除标签并保留笔记，或将匹配笔记移入可恢复的回收站。操作包含下级标签。移动笔记保留原标签和关联内容。 [标签操作](../../../server/api/memo_tag_routes.go)
 
 ## 附件、回收站和 ZIP
 
 - 分块上传或常规上传先生成 `attachments/<uid>` 资源名，再由笔记提交绑定。附件集合更新提交完整列表，正文里的托管附件链接必须与绑定一致。未绑定文件只对上传者开放，绑定后随笔记作者权限。纯附件笔记也可保存。 [上传协议](../../../proto/api/attachment_service.proto) · [绑定](../../../server/api/memo_attachment_service.go) · [文件服务](../../../server/fileserver/README.md)
-- 归档改变笔记状态，移入回收站保留笔记正文、附件及评论子树 30 天。恢复回到删除前的正常或归档状态。彻底删除以数据库提交为准，失败的文件清理由后台任务重试。 [回收站接口](../../../server/api/memo_trash_handler.go) · [存储](../../../store/memo_trash.go)
-- `memos-export` 1.x ZIP 包含 `manifest.json`、每篇笔记的 Markdown 和 JSON 元数据及附件数据或外链。可导出整个账户或最多 100 条指定笔记。导入支持预演、保留现有、覆盖和创建副本，应结合逐条报告核对附件、引用、标签、评论层级及原归档状态。新建导入时将正文、附件、置顶与归档并入保存。 [归档格式](../../../core/memoexport/format.go) · [导入实现](../../../server/api/user_service_memo_import.go) · [恢复与升级](references/product-guide.md#数据备份和升级)
+- 笔记移入回收站后保留正文、附件及评论子树 30 天。恢复后重新出现在笔记列表。彻底删除以数据库提交为准，失败的文件清理由后台任务重试。 [回收站接口](../../../server/api/memo_trash_handler.go) · [存储](../../../store/memo_trash.go)
+- `memos-export` 1.x ZIP 包含 `manifest.json`、每篇笔记的 Markdown 和 JSON 元数据及附件数据或外链。可导出整个账户或最多 100 条指定笔记。导入支持预演、保留现有、覆盖和创建副本，应结合逐条报告核对附件、引用、标签和评论层级。新建导入时一并保存正文、附件和置顶设置。旧版 ZIP 中标为归档的笔记作为普通笔记导入。 [归档格式](../../../core/memoexport/format.go) · [导入实现](../../../server/api/user_service_memo_import.go) · [恢复与升级](references/product-guide.md#数据备份和升级)
 
 ## 本地文件存储
 
@@ -60,6 +60,6 @@ Cat_two 的唯一数据库是 SQLite。仓库开发流程、验证和镜像交�
 
 ## 验证改动
 
-1. 在新建 SQLite 数据库或独立容器卷按实际入口验证新建、编辑、草稿恢复、归档、回收站、附件及当前 ZIP 导出再导入。涉及存储格式时验证重启回读和不兼容数据库拒绝启动。 [SQLite 验证命令](../../../store/test/README.md)
+1. 在新建 SQLite 数据库或独立容器卷按实际入口验证新建、编辑、草稿恢复、搜索、回收站、附件及当前 ZIP 导出再导入。涉及存储格式时验证重启回读和不兼容数据库拒绝启动。 [SQLite 验证命令](../../../store/test/README.md)
 2. 覆盖匿名请求、当前账号、过期与撤销凭据。用实际网页 Connect、原生 HTTP 或 MCP 路径验证写入和可见性。检查 MCP 工具发现、只读拒绝写入、分页和上海日期边界。 [API 用例](../../../server/test/) · [MCP 用例](../../../server/mcp/)
 3. 收件和代理改动验证设置保存、重启后还原、渠道停用、允许和拒绝的发件人、重复投递、成功确认及代理的独立生效。更新对应功能和接口说明，在总体开发 Skill 记录改动与验证结果。 [收件运行时](../../../server/message_capture.go) · [总体开发记录](../cat-two-development/SKILL.md#开发记录)

@@ -16,7 +16,6 @@ import { useMemoSuggestions } from "@/hooks/useMemoSuggestions";
 import { MAX_SELECTED_MEMO_EXPORT } from "@/lib/memo-export";
 import { buildMemoCreatorFilter, extractMemoIdFromName } from "@/lib/resource-names";
 import { cn } from "@/lib/utils";
-import { State } from "@/types/proto/api/common_pb";
 import { Memo } from "@/types/proto/api/memo_service_pb";
 import { useTranslate } from "@/utils/i18n";
 
@@ -37,7 +36,6 @@ const Home = () => {
 
   const { listSort, orderBy } = useMemoSorting({
     pinnedFirst: true,
-    state: State.NORMAL,
   });
 
   const { exportMemos, exporting } = useExportMemos();

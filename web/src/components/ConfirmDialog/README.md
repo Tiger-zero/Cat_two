@@ -112,7 +112,7 @@ const handleConfirm = async () => {
 ## Future Enhancements
 1. Severity icon / header accent
 2. Auto-focus destructive button toggle
-3. Secondary action (e.g. "Archive" vs "Delete")
+3. Secondary action
 4. Built-in retry / error slot
 5. Optional checkbox confirmation ("I understand the consequences")
 6. Motion/animation tokens integration

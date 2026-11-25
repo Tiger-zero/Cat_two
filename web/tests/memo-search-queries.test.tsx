@@ -28,7 +28,7 @@ describe("memo search requests", () => {
     "space == null",
   ])("sends server-supported CEL without interpreting it: %s", async (expression) => {
     listMemos.mockResolvedValue({ memos: [], nextPageToken: "" });
-    const filter = buildMemoFilter({ filters: buildQuickFindFilters(expression, [], true, "cel"), includePinned: false });
+    const filter = buildMemoFilter({ filters: buildQuickFindFilters(expression, [], "cel"), includePinned: false });
     const { result } = renderHook(() => useInfiniteMemos({ filter }), { wrapper: createWrapper() });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(listMemos).toHaveBeenCalledWith(expect.objectContaining({ filter: `(${expression})` }), expect.anything());

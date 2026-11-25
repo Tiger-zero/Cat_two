@@ -6,7 +6,6 @@ import MemoView from "@/components/MemoView";
 import useCurrentUser from "@/hooks/useCurrentUser";
 import { MEMO_COMMENTS_ANCHOR_ID } from "@/lib/memo-comments";
 import { extractMemoIdFromName } from "@/lib/resource-names";
-import { State } from "@/types/proto/api/common_pb";
 import type { Memo } from "@/types/proto/api/memo_service_pb";
 import { useTranslate } from "@/utils/i18n";
 
@@ -32,7 +31,7 @@ const MemoCommentSection = forwardRef<MemoCommentSectionHandle, Props>(
     const [showEditor, setShowEditor] = useState(false);
     const sectionRef = useRef<HTMLDivElement>(null);
 
-    const canCreateComment = !!currentUser && memo.state === State.NORMAL;
+    const canCreateComment = !!currentUser;
     const showCreateButton = canCreateComment && !showEditor;
 
     const handleCommentCreated = async (_memoCommentName: string) => {

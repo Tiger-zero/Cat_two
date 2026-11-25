@@ -24,15 +24,14 @@ type personalMemoBatchInput struct {
 }
 
 type personalMemoBatchEntry struct {
-	Name            string          `json:"name"`
-	Content         string          `json:"content"`
-	Tags            []string        `json:"tags"`
-	CreateTime      time.Time       `json:"createTime"`
-	UpdateTime      time.Time       `json:"updateTime"`
-	Pinned          bool            `json:"pinned"`
-	State           store.RowStatus `json:"state"`
-	CreationChannel string          `json:"creationChannel"`
-	Revision        string          `json:"revision"`
+	Name            string    `json:"name"`
+	Content         string    `json:"content"`
+	Tags            []string  `json:"tags"`
+	CreateTime      time.Time `json:"createTime"`
+	UpdateTime      time.Time `json:"updateTime"`
+	Pinned          bool      `json:"pinned"`
+	CreationChannel string    `json:"creationChannel"`
+	Revision        string    `json:"revision"`
 }
 
 type personalMemoBatchResult struct {
@@ -46,7 +45,7 @@ func registerPersonalMemoBatchGet(server *sdkmcp.Server, apiService *api.APIServ
 	sdkmcp.AddTool(server, &sdkmcp.Tool{
 		Name:        "memo_batch_get",
 		Title:       title,
-		Description: "Read full Markdown and basic metadata for up to 50 of your memos, including archived memos. Total Markdown is limited to 4 MiB per batch. Unreadable names are listed in unavailable. Use memo_get_memo for individual notes and attachment details.",
+		Description: "Read full Markdown and basic metadata for up to 50 of your memos. Total Markdown is limited to 4 MiB per batch. Unreadable names are listed in unavailable. Use memo_get_memo for individual notes and attachment details.",
 		Annotations: annotationsForMethod("GET", title),
 		InputSchema: jsonSchema{
 			"type": "object",
@@ -119,7 +118,6 @@ func registerPersonalMemoBatchGet(server *sdkmcp.Server, apiService *api.APIServ
 				CreateTime:      time.Unix(memo.CreatedTs, 0).UTC(),
 				UpdateTime:      time.Unix(memo.UpdatedTs, 0).UTC(),
 				Pinned:          memo.Pinned,
-				State:           memo.RowStatus,
 				CreationChannel: channel,
 				Revision:        api.MemoRevision(memo),
 			})

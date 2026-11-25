@@ -6,7 +6,6 @@ import { useResolvedUser } from "@/contexts/MentionResolutionContext";
 import useCurrentUser from "@/hooks/useCurrentUser";
 import { isMemoBlurred } from "@/lib/tag";
 import { cn } from "@/lib/utils";
-import { State } from "@/types/proto/api/common_pb";
 import { lazyWithReload } from "@/utils/lazy";
 import { canManageMemo } from "@/utils/user";
 import { MemoBody, MemoCommentListView, MemoHeader } from "./components";
@@ -29,7 +28,6 @@ const MemoView = forwardRef<MemoViewHandle, MemoViewProps>((props, ref) => {
   const currentUser = useCurrentUser();
   const { userTagsSetting } = useAuth();
   const creator = useResolvedUser(memoData.creator, { enabled: Boolean(showCreator || props.shareImageDialogOpen) });
-  const isArchived = memoData.state === State.ARCHIVED;
   const readonly = !canManageMemo(memoData, currentUser);
   const location = useLocation();
   const parentPage = resolveMemoParentPage({
@@ -140,7 +138,6 @@ const MemoView = forwardRef<MemoViewHandle, MemoViewProps>((props, ref) => {
       currentUser,
       parentPage,
       cardWidth,
-      isArchived,
       readonly,
       showBlurredContent,
       blurred,
@@ -157,7 +154,6 @@ const MemoView = forwardRef<MemoViewHandle, MemoViewProps>((props, ref) => {
       currentUser,
       parentPage,
       cardWidth,
-      isArchived,
       readonly,
       showBlurredContent,
       blurred,

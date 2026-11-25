@@ -3,7 +3,6 @@ syntax = "proto3";
 package memos.api;
 
 import "api/attachment_service.proto";
-import "api/common.proto";
 import "google/api/annotations.proto";
 import "google/api/client.proto";
 import "google/api/field_behavior.proto";
@@ -108,7 +107,7 @@ service MemoService {
   // CreateMemoComment atomically creates an independent memo plus one immutable
   // COMMENT context relation to the named memo. The new memo keeps its own
   // placement, visibility, authorship, and lifecycle. The named memo must be
-  // readable by the caller and not archived.
+  // readable by the caller.
   rpc CreateMemoComment(CreateMemoCommentRequest) returns (Memo) {
     option (google.api.http) = {
       post: "/api/{parent=memos/*}/comments"
@@ -234,9 +233,8 @@ message Memo {
   // unspecified.
   Visibility visibility = 6 [(google.api.field_behavior) = REQUIRED];
 
-  // Required. The state of the memo. New memos are always NORMAL; change it
-  // with UpdateMemo.
-  State state = 7 [(google.api.field_behavior) = REQUIRED];
+  reserved 7;
+  reserved "state";
 
   // Optional. Whether the memo is pinned. Ignored on creation; change it with
   // UpdateMemo.
@@ -350,13 +348,8 @@ message ListMemosRequest {
   // expression uses created_ts / updated_ts for the same timestamps.
   string order_by = 4 [(google.api.field_behavior) = OPTIONAL];
 
-  // Optional. Whether to include deleted memos. Currently ignored by the
-  // server.
-  bool show_deleted = 5 [(google.api.field_behavior) = OPTIONAL];
-
-  // Optional. The state of the memos to list. Defaults to NORMAL. Set to
-  // ARCHIVED to list the caller's own archived memos.
-  State state = 6 [(google.api.field_behavior) = OPTIONAL];
+  reserved 5, 6;
+  reserved "show_deleted", "state";
 }
 
 // Response message for MemoService.ListMemos.
@@ -399,8 +392,7 @@ message UpdateMemoRequest {
   Memo memo = 1 [(google.api.field_behavior) = REQUIRED];
 
   // Required. The fields to update. Supported paths: content, visibility,
-  // pinned, state, create_time, update_time, location, attachments,
-  // relations.
+  // pinned, create_time, update_time, location, attachments, relations.
   google.protobuf.FieldMask update_mask = 2 [(google.api.field_behavior) = REQUIRED];
 
   // Optional. The revision returned by the read on which these changes are

@@ -16,9 +16,12 @@ const (
 	// SQLiteApplicationID identifies databases initialized by Cat_two.
 	SQLiteApplicationID = 0x43543230
 	// SQLiteFileVersion matches the current schema's durable SQLite header.
-	SQLiteFileVersion = 261112
+	SQLiteFileVersion = 261113
 	// CurrentSchemaVersion identifies the supported fresh SQLite schema.
-	CurrentSchemaVersion = "26.11.12"
+	CurrentSchemaVersion = "26.11.13"
+	// The preceding single-account schema used a separate archive flag on memos.
+	archiveFileVersion   = 261112
+	archiveSchemaVersion = "26.11.12"
 )
 
 //go:embed migration/sqlite/LATEST.sql
@@ -28,7 +31,7 @@ var sqliteSchema string
 var ErrUnsupportedSchema = errors.New("unsupported Cat_two SQLite schema; use a separate empty data directory")
 
 // InitializeSchema creates the database schema and settings on a fresh install.
-// Existing databases must match this version exactly.
+// The preceding single-account schema is upgraded in place.
 func (s *Store) InitializeSchema(ctx context.Context) error {
 	db := s.driver.GetDB()
 	if err := s.prepareSQLiteSchema(ctx, db); err != nil {
@@ -51,7 +54,26 @@ func (s *Store) prepareSQLiteSchema(ctx context.Context, db *sql.DB) error {
 		return err
 	}
 	if initialized {
-		return checkSchemaCurrent(ctx, tx)
+		fileVersion, err := readSQLiteSchemaVersion(ctx, tx)
+		if err != nil || fileVersion == SQLiteFileVersion {
+			return err
+		}
+		// Only the archive flag is removed. In particular, trashed notes retain
+		// their deleted_ts, and file-backed bodies keep their IDs and digests.
+		if _, err := tx.ExecContext(ctx, `DROP INDEX idx_memo_owner_pinned_created;
+			ALTER TABLE memo DROP COLUMN row_status;
+			CREATE INDEX idx_memo_owner_pinned_created ON memo(creator_id, pinned DESC, created_ts DESC, id DESC)
+				WHERE deleted_ts IS NULL;`); err != nil {
+			return errors.Wrap(err, "remove memo archive state")
+		}
+		if _, err := tx.ExecContext(ctx, `UPDATE system_setting
+			SET value = json_set(json_remove(value, '$.schema_version'), '$.schemaVersion', ?) WHERE name = 'BASIC'`, CurrentSchemaVersion); err != nil {
+			return errors.Wrap(err, "update SQLite schema setting")
+		}
+		if _, err := tx.ExecContext(ctx, fmt.Sprintf("PRAGMA user_version = %d", SQLiteFileVersion)); err != nil {
+			return errors.Wrap(err, "update SQLite header")
+		}
+		return errors.Wrap(tx.Commit(), "commit memo archive removal")
 	}
 
 	if _, err := tx.ExecContext(ctx, sqliteSchema); err != nil {
@@ -98,26 +120,42 @@ func (s *Store) CheckSchemaCurrent(ctx context.Context) error {
 	if !initialized {
 		return errors.New("the database is not initialized; start Cat_two once to create it")
 	}
-	return checkSchemaCurrent(ctx, db)
+	fileVersion, err := readSQLiteSchemaVersion(ctx, db)
+	if err != nil {
+		return err
+	}
+	if fileVersion != SQLiteFileVersion {
+		return errors.New("start Cat_two once to upgrade the SQLite schema")
+	}
+	return nil
 }
 
-func checkSchemaCurrent(ctx context.Context, db schemaQueryer) error {
+// SupportsSQLiteFileVersion is shared with the pre-open SQLite header guard.
+func SupportsSQLiteFileVersion(version uint32) bool {
+	return version == SQLiteFileVersion || version == archiveFileVersion
+}
+
+func readSQLiteSchemaVersion(ctx context.Context, db schemaQueryer) (int, error) {
 	var applicationID, fileVersion int
 	err := db.QueryRowContext(ctx, "SELECT application_id, user_version FROM pragma_application_id(), pragma_user_version()").Scan(&applicationID, &fileVersion)
 	if err != nil {
-		return errors.Wrap(err, "read SQLite schema marker")
+		return 0, errors.Wrap(err, "read SQLite schema marker")
 	}
-	if applicationID != SQLiteApplicationID || fileVersion != SQLiteFileVersion {
-		return ErrUnsupportedSchema
+	if applicationID != SQLiteApplicationID || !SupportsSQLiteFileVersion(uint32(fileVersion)) {
+		return 0, ErrUnsupportedSchema
 	}
 
 	var value string
 	if err := db.QueryRowContext(ctx, "SELECT value FROM system_setting WHERE name = 'BASIC'").Scan(&value); err != nil {
-		return errors.Wrap(ErrUnsupportedSchema, "schema version setting unavailable")
+		return 0, errors.Wrap(ErrUnsupportedSchema, "schema version setting unavailable")
 	}
 	setting := &storepb.InstanceBasicSetting{}
-	if err := protojson.Unmarshal([]byte(value), setting); err != nil || setting.SchemaVersion != CurrentSchemaVersion {
-		return ErrUnsupportedSchema
+	expected := CurrentSchemaVersion
+	if fileVersion == archiveFileVersion {
+		expected = archiveSchemaVersion
 	}
-	return nil
+	if err := protojson.Unmarshal([]byte(value), setting); err != nil || setting.SchemaVersion != expected {
+		return 0, ErrUnsupportedSchema
+	}
+	return fileVersion, nil
 }

@@ -26,7 +26,7 @@ export const useReactionGroups = (reactions: Reaction[]) => {
 export const useReactionActions = ({ memo }: { memo: Memo }) => {
   const currentUser = useCurrentUser();
   const owner = canManageMemo(memo, currentUser);
-  const active = Boolean(currentUser) && currentUser?.state !== State.ARCHIVED && memo.state !== State.ARCHIVED;
+  const active = Boolean(currentUser) && currentUser?.state !== State.ARCHIVED;
   const canReact = owner && active;
   const { toggleReaction, isPending } = useToggleReaction(memo, currentUser?.name);
   const hasReacted = (reactionType: string) =>

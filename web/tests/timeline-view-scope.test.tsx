@@ -41,7 +41,7 @@ describe("Timeline display settings scope", () => {
   });
 
   it.each([
-    "/archived",
+    "/trash",
     "/memos/example",
     "/memos/shares/example",
     "/setting",
@@ -54,7 +54,7 @@ describe("Timeline display settings scope", () => {
   it("restores Timeline preferences after visiting another view without overwriting storage", async () => {
     const router = renderRoute("/?filter=displayTime%3A2026-08-02");
     expect(settings()).toEqual(saved);
-    await act(() => router.navigate("/archived"));
+    await act(() => router.navigate("/trash"));
     expect(settings()).toEqual(defaults);
     await act(() => router.navigate("/?filter=displayTime%3A2026-08-02"));
     expect(settings()).toEqual(saved);

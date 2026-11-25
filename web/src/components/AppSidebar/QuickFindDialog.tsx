@@ -10,32 +10,27 @@ import {
   replaceFiltersByFactor,
   useMemoFilterContext,
 } from "@/contexts/MemoFilterContext";
-import useCurrentUser from "@/hooks/useCurrentUser";
-import { type MemoScope, resolveMemoScope } from "@/lib/memo-collection";
 import { ROUTES } from "@/router/routes";
 import { useTranslate } from "@/utils/i18n";
-import { getRouteActionPolicy } from "./routes";
 
-export type QuickFindMode = "text" | "cel";
+type QuickFindMode = "text" | "cel";
 
-const buildSearchFilters = (query: string, mode: QuickFindMode): MemoFilter[] => {
+export const buildQuickFindFilters = (query: string, currentFilters: MemoFilter[], mode: QuickFindMode, untagged = false): MemoFilter[] => {
+  const filters = currentFilters.filter((filter) => !isSearchFilter(filter));
   const trimmed = query.trim();
-  if (mode === "cel") return trimmed ? [{ factor: "celSearch", value: trimmed }] : [];
-  return Array.from(new Set(trimmed.split(/\s+/).filter(Boolean))).map((value) => ({ factor: "contentSearch", value }));
+  if (trimmed) {
+    if (mode === "cel") {
+      filters.push({ factor: "celSearch", value: trimmed });
+    } else {
+      for (const value of new Set(trimmed.split(/\s+/))) {
+        filters.push({ factor: "contentSearch", value });
+      }
+    }
+  }
+  return untagged ? replaceFiltersByFactor(filters, "untagged", [{ factor: "untagged", value: "" }]) : filters;
 };
 
-export const buildQuickFindFilters = (
-  query: string,
-  currentFilters: MemoFilter[],
-  preserveCurrentScope: boolean,
-  mode: QuickFindMode,
-): MemoFilter[] => {
-  const scopeFilters = preserveCurrentScope ? currentFilters.filter((filter) => !isSearchFilter(filter)) : [];
-  return [...scopeFilters, ...buildSearchFilters(query, mode)];
-};
-
-/** The inverse of buildQuickFindFilters: the query and mode that the active filters were submitted with. */
-export const readQuickFindQuery = (filters: MemoFilter[]): { query: string; mode: QuickFindMode } => {
+const readQuickFindQuery = (filters: MemoFilter[]): { query: string; mode: QuickFindMode } => {
   const celSearch = filters.find((filter) => filter.factor === "celSearch");
   if (celSearch) return { query: celSearch.value, mode: "cel" };
   return {
@@ -47,58 +42,27 @@ export const readQuickFindQuery = (filters: MemoFilter[]): { query: string; mode
   };
 };
 
-export interface QuickFindSubmission {
-  filters: MemoFilter[];
-  destination?: string;
-}
-
-export const resolveQuickFindSubmission = (
-  pathname: string,
-  query: string,
-  currentFilters: MemoFilter[],
-  mode: QuickFindMode,
-  scope = resolveMemoScope(pathname),
-  untagged = false,
-): QuickFindSubmission => {
-  const routePolicy = getRouteActionPolicy(pathname);
-  const searchFilters = buildQuickFindFilters(query, currentFilters, routePolicy.searchScope !== "all", mode);
-  const filters = untagged ? replaceFiltersByFactor(searchFilters, "untagged", [{ factor: "untagged", value: "" }]) : searchFilters;
-  const target =
-    scope === resolveMemoScope(pathname) ? routePolicy.searchDestination : scope === "archived" ? ROUTES.ARCHIVED : ROUTES.HOME;
-  return {
-    filters,
-    destination: target ? `${target}${getFilterSearch(filters)}` : undefined,
-  };
-};
-
 const QuickFindDialog = () => {
   const t = useTranslate();
   const { pathname } = useLocation();
   const navigate = useNavigate();
-  const currentUser = useCurrentUser();
+  const onHome = pathname === ROUTES.HOME;
   const { filters, setFilters } = useMemoFilterContext();
   const { quickFindOpen, setQuickFindOpen } = useAppSidebar();
   const [query, setQuery] = useState("");
   const [mode, setMode] = useState<QuickFindMode>("text");
-  const [scope, setScope] = useState<MemoScope>(() => resolveMemoScope(pathname));
   const [autoFocusField, setAutoFocusField] = useState(true);
   const fieldRef = useRef<HTMLInputElement | HTMLTextAreaElement>(null);
   const previousMode = useRef(mode);
   const hintId = useId();
-  const effectiveScope = currentUser ? scope : "home";
-  const scopeLabel = t(effectiveScope === "archived" ? "common.archived" : "common.memos");
-
-  useEffect(() => {
-    if (quickFindOpen) setScope(resolveMemoScope(pathname));
-  }, [pathname, quickFindOpen]);
 
   useEffect(() => {
     if (!quickFindOpen) return;
     setAutoFocusField(true);
-    const active = readQuickFindQuery(filters);
+    const active = readQuickFindQuery(onHome ? filters : []);
     setMode(active.mode);
     setQuery(active.query);
-  }, [filters, quickFindOpen]);
+  }, [filters, onHome, quickFindOpen]);
 
   useLayoutEffect(() => {
     const changedMode = previousMode.current !== mode;
@@ -107,14 +71,9 @@ const QuickFindDialog = () => {
   }, [autoFocusField, mode, quickFindOpen]);
 
   const submitQuery = (untagged = false) => {
-    const submission = resolveQuickFindSubmission(pathname, query, filters, mode, effectiveScope, untagged);
-
-    if (submission.destination) {
-      navigate(submission.destination);
-    } else {
-      setFilters(submission.filters);
-    }
-
+    const nextFilters = buildQuickFindFilters(query, onHome ? filters : [], mode, untagged);
+    if (onHome) setFilters(nextFilters);
+    else navigate(`${ROUTES.HOME}${getFilterSearch(nextFilters)}`);
     setQuickFindOpen(false);
   };
 
@@ -150,47 +109,28 @@ const QuickFindDialog = () => {
         initialFocus={fieldRef}
         className="w-xl self-start bg-mu-surface mt-[max(0px,calc(12vh-var(--mu-space-6)))] sm:mt-[max(0px,calc(16vh-var(--mu-space-6)))]"
       >
-        <header className="flex items-center justify-between gap-3 px-5 pt-4 pb-3 sm:px-6">
-          <Dialog.Title className="mu-title">{t("common.search")}</Dialog.Title>
+        <header className="flex items-center gap-3 px-5 pt-4 pb-1 sm:px-6">
+          <Dialog.Title className="me-auto mu-title">{t("common.search")}</Dialog.Title>
+          <ToggleGroup
+            size="sm"
+            className="shrink-0"
+            aria-label={t("search.mode")}
+            value={[mode]}
+            onValueChange={([next]: string[]) => next && setMode(next as QuickFindMode)}
+            // Keyboard choices keep focus on the switch; clicking a mode focuses its field.
+            onKeyDownCapture={() => setAutoFocusField(false)}
+            onClickCapture={() => setAutoFocusField(true)}
+          >
+            {(["text", "cel"] as const).map((value) => (
+              <Toggle key={value} value={value}>
+                {value === "cel" ? t("search.expression-mode") : t("search.text")}
+              </Toggle>
+            ))}
+          </ToggleGroup>
           <Dialog.Close render={<Button variant="ghost" size="sm" icon={<XIcon />} aria-label={t("common.close")} />} />
         </header>
-        <Dialog.Description className="mu-visually-hidden">
-          {t("common.search")} {scopeLabel}
-        </Dialog.Description>
+        <Dialog.Description className="mu-visually-hidden">{t("memo-feed.search")}</Dialog.Description>
         <form onSubmit={handleSubmit}>
-          <div className="mx-5 flex flex-wrap items-center justify-between gap-x-3 gap-y-2 rounded-mu-lg border border-mu-line/65 bg-mu-canvas/65 p-1.5 sm:mx-6">
-            {currentUser ? (
-              <ToggleGroup
-                size="sm"
-                aria-label={t("search.scope")}
-                value={[effectiveScope]}
-                onValueChange={([next]: string[]) => {
-                  if (next === "home" || next === "archived") setScope(next);
-                }}
-              >
-                <Toggle value="home">{t("search.unarchived")}</Toggle>
-                <Toggle value="archived">{t("common.archived")}</Toggle>
-              </ToggleGroup>
-            ) : (
-              <span className="px-2 mu-caption text-mu-text-secondary">{scopeLabel}</span>
-            )}
-            <ToggleGroup
-              size="sm"
-              className="shrink-0"
-              aria-label={t("search.mode")}
-              value={[mode]}
-              onValueChange={([next]: string[]) => next && setMode(next as QuickFindMode)}
-              // Keyboard choices keep focus on the switch; clicking a mode focuses its field.
-              onKeyDownCapture={() => setAutoFocusField(false)}
-              onClickCapture={() => setAutoFocusField(true)}
-            >
-              {(["text", "cel"] as const).map((value) => (
-                <Toggle key={value} value={value}>
-                  {value === "cel" ? t("search.expression-mode") : t("search.text")}
-                </Toggle>
-              ))}
-            </ToggleGroup>
-          </div>
           {mode === "cel" ? (
             <div className="space-y-3 px-5 py-4 sm:px-6">
               <Textarea
@@ -223,8 +163,8 @@ const QuickFindDialog = () => {
               <Input
                 {...fieldProps}
                 prefix={<SearchIcon />}
-                placeholder={`${t("common.search")} ${scopeLabel}`}
-                aria-label={`${t("common.search")} ${scopeLabel}`}
+                placeholder={t("memo-feed.search")}
+                aria-label={t("memo-feed.search")}
                 suffix={
                   <Tooltip.Root>
                     <Tooltip.Trigger

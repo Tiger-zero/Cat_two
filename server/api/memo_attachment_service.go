@@ -157,7 +157,6 @@ func (s *APIService) createMemoWithMutation(
 	prepared *preparedMemoAttachments,
 	requiredAttachmentIDs []int32,
 	referenceRelations []*store.MemoRelation,
-	restoringArchive bool,
 ) error {
 	if user == nil || create == nil || create.CreatorID != user.ID {
 		return store.ErrMemoPermissionDenied
@@ -176,8 +175,7 @@ func (s *APIService) createMemoWithMutation(
 	return s.Store.ApplyMemoMutation(ctx, &store.MemoMutation{
 		MemoCreate:                create,
 		CommentContextMemoID:      commentContextMemoID,
-		RestoreArchivedComment:    restoringArchive && commentContextMemoID != nil,
-		PreserveInitialState:      restoringArchive,
+		PreservePinned:            create.Pinned,
 		MemoCreatorID:             create.CreatorID,
 		ExpectedMemoContent:       create.Content,
 		Bindings:                  bindings,

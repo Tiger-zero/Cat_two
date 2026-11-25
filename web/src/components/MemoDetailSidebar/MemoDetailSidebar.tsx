@@ -32,7 +32,6 @@ import { MEMO_COMMENTS_ANCHOR_ID } from "@/lib/memo-comments";
 import { isMemoBlurred } from "@/lib/tag";
 import { toast } from "@/lib/toast";
 import { cn } from "@/lib/utils";
-import { State } from "@/types/proto/api/common_pb";
 import type { Memo, MemoRelation } from "@/types/proto/api/memo_service_pb";
 import { useTranslate } from "@/utils/i18n";
 import { canManageMemo } from "@/utils/user";
@@ -108,8 +107,8 @@ const MemoDetailSidebar = ({
   const currentUser = useCurrentUser();
   const { profile } = useInstance();
   const { userTagsSetting } = useAuth();
-  const canEdit = !!onEdit && canManageMemo(memo, currentUser) && memo.state === State.NORMAL;
-  const canComment = !!onCommentCreate && !!currentUser && memo.state === State.NORMAL;
+  const canEdit = !!onEdit && canManageMemo(memo, currentUser);
+  const canComment = !!onCommentCreate && !!currentUser;
 
   const headings = useMemo(() => (contentHidden ? [] : extractHeadings(memo.content)), [contentHidden, memo.content]);
   const { referenced } = useMemo(() => getRelationBuckets(memo.relations, memo.name), [memo.relations, memo.name]);

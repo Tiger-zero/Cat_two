@@ -7,8 +7,6 @@ import { loadLocale } from "@/utils/i18n";
 import { loadTheme } from "@/utils/theme";
 
 const mocks = vi.hoisted(() => ({
-  setMobileOpen: vi.fn(),
-  onClose: vi.fn(),
   onOpenSettings: vi.fn(),
   logout: vi.fn(),
   updateGeneralSetting: vi.fn(),
@@ -18,7 +16,6 @@ const mocks = vi.hoisted(() => ({
     | undefined,
 }));
 
-vi.mock("@/contexts/AppSidebarContext", () => ({ useAppSidebar: () => ({ setMobileOpen: mocks.setMobileOpen }) }));
 vi.mock("@/contexts/AuthContext", () => ({
   useAuth: () => ({ userGeneralSetting: undefined, refetchSettings: mocks.refetchSettings, logout: mocks.logout }),
 }));
@@ -47,7 +44,7 @@ const MenuLocation = () => {
 const renderMenu = (path = "/") =>
   render(
     <MemoryRouter initialEntries={[path]}>
-      <UserMenu onClose={mocks.onClose} onOpenSettings={mocks.onOpenSettings} />
+      <UserMenu onOpenSettings={mocks.onOpenSettings} />
       <MenuLocation />
     </MemoryRouter>,
   );
@@ -60,8 +57,6 @@ describe("User menu panel", () => {
     localStorage.setItem("memos-theme", "system");
     vi.mocked(loadTheme).mockClear();
     vi.mocked(loadLocale).mockClear();
-    mocks.setMobileOpen.mockReset();
-    mocks.onClose.mockReset();
     mocks.onOpenSettings.mockReset();
     mocks.logout.mockReset();
     mocks.updateGeneralSetting.mockReset();
@@ -87,19 +82,13 @@ describe("User menu panel", () => {
     }
   });
 
-  it("puts the Settings action before the account and links to Archive", () => {
-    renderMenu("/archived");
+  it("puts the Settings action before the account", () => {
+    renderMenu("/");
     const account = screen.getByRole("region", { name: "setting.account.title" });
-    const archived = within(account).getByRole("link", { name: "common.archived" });
     const settings = screen.getByRole("button", { name: "common.settings" });
     expect(within(account).getByText("Steven")).toBeInTheDocument();
     expect(settings.compareDocumentPosition(account) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(screen.getAllByRole("link").map((link) => link.getAttribute("href"))).toEqual(["/archived"]);
-    expect(archived).toHaveAttribute("aria-current", "page");
-    expect(archived).toHaveAttribute("href", "/archived");
-    fireEvent.click(archived);
-    expect(mocks.onClose).toHaveBeenCalledOnce();
-    expect(mocks.setMobileOpen).toHaveBeenCalledWith(false);
+    expect(within(account).queryByRole("link")).not.toBeInTheDocument();
   });
 
   it("draws every row on one panel row grammar so icons share one column", () => {
@@ -107,7 +96,6 @@ describe("User menu panel", () => {
     const rows = [
       screen.getByRole("button", { name: /setting.preference.theme/ }),
       screen.getByRole("button", { name: /common.language/ }),
-      screen.getByRole("link", { name: "common.archived" }),
       screen.getByRole("button", { name: "common.settings" }),
       screen.getByRole("button", { name: "common.sign-out" }),
     ];
@@ -119,7 +107,7 @@ describe("User menu panel", () => {
   });
 
   it("opens Settings while preserving the current collection and its filters", () => {
-    const collection = "/archived?filter=tagSearch%3Awork";
+    const collection = "/?filter=tagSearch%3Awork";
     renderMenu(collection);
     const settings = screen.getByRole("button", { name: "common.settings" });
     expect(settings).toHaveAttribute("aria-haspopup", "dialog");
@@ -133,7 +121,7 @@ describe("User menu panel", () => {
     renderMenu("/404");
     expect(screen.getByRole("button", { name: /setting.preference.theme/ })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /common.language/ })).toBeInTheDocument();
-    for (const name of ["common.inbox", "common.archived", "common.settings", "common.sign-out", "common.sign-in"]) {
+    for (const name of ["common.inbox", "common.settings", "common.sign-out", "common.sign-in"]) {
       expect(screen.queryByRole("button", { name })).not.toBeInTheDocument();
       expect(screen.queryByRole("link", { name })).not.toBeInTheDocument();
     }
@@ -189,7 +177,6 @@ describe("User menu panel", () => {
       expect.objectContaining({ onSuccess: expect.any(Function) }),
     );
     expect(screen.getByRole("button", { name: label })).toBeInTheDocument();
-    expect(mocks.onClose).not.toHaveBeenCalled();
   });
 
   it.each([

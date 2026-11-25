@@ -1,12 +1,10 @@
 import { Menu, menuClasses } from "@usememos/ui";
-import { ArchiveIcon, ChevronRightIcon, GlobeIcon, LogOutIcon, type LucideIcon, PaletteIcon, SettingsIcon } from "lucide-react";
-import { type ReactNode, useState } from "react";
-import { Link, matchPath, useLocation } from "react-router-dom";
+import { ChevronRightIcon, GlobeIcon, LogOutIcon, type LucideIcon, PaletteIcon, SettingsIcon } from "lucide-react";
+import { useState } from "react";
 import { hasStoredToken } from "@/auth-state";
 import { ScopePanelRowIcon } from "@/components/AppSidebar/SidebarRow";
 import { SCOPE_PANEL_ICON_CLASSES, SCOPE_PANEL_ROW_CLASSES, SIDEBAR_LEADING_SLOT_CLASSES } from "@/components/AppSidebar/sidebar-layout";
 import UserAvatar from "@/components/UserAvatar";
-import { useAppSidebar } from "@/contexts/AppSidebarContext";
 import { useAuth } from "@/contexts/AuthContext";
 import useCurrentUser from "@/hooks/useCurrentUser";
 import { useSSEConnectionStatus } from "@/hooks/useLiveMemoRefresh";
@@ -16,7 +14,6 @@ import { locales } from "@/i18n";
 import { handleError } from "@/lib/error";
 import { showErrorToast } from "@/lib/toast";
 import { cn } from "@/lib/utils";
-import { Routes } from "@/router";
 import { buildAuthRoute } from "@/utils/auth-redirect";
 import { getLocaleDisplayName, getLocaleWithFallback, loadLocale, useTranslate } from "@/utils/i18n";
 import { loadTheme, THEME_OPTIONS } from "@/utils/theme";
@@ -110,41 +107,13 @@ const UserPreferenceMenu = () => {
   );
 };
 
-/** A page in the panel: a link on the menu row look, marked when it is the current page. */
-const NavRow = ({
-  to,
-  icon,
-  current,
-  onNavigate,
-  children,
-}: {
-  to: string;
-  icon: LucideIcon;
-  current?: boolean;
-  onNavigate: () => void;
-  children: ReactNode;
-}) => (
-  <Link to={to} viewTransition aria-current={current ? "page" : undefined} className={SCOPE_PANEL_ROW_CLASSES} onClick={onNavigate}>
-    <ScopePanelRowIcon icon={icon} />
-    <span className="min-w-0 flex-1 truncate">{children}</span>
-  </Link>
-);
-
 /** Account settings and personal destinations at the top of the username menu. */
-const UserMenu = ({ onClose, onOpenSettings }: { onClose: () => void; onOpenSettings: () => void }) => {
+const UserMenu = ({ onOpenSettings }: { onOpenSettings: () => void }) => {
   const t = useTranslate();
-  const location = useLocation();
-  const { setMobileOpen } = useAppSidebar();
   const currentUser = useCurrentUser();
   const sseStatus = useSSEConnectionStatus();
   const { logout } = useAuth();
   const accountLabel = currentUser?.displayName || currentUser?.username || t("common.profile");
-  const archivedActive = Boolean(matchPath(Routes.ARCHIVED, location.pathname));
-
-  const closePanel = () => {
-    onClose();
-    setMobileOpen(false);
-  };
 
   const handleSignOut = async () => {
     try {
@@ -198,9 +167,6 @@ const UserMenu = ({ onClose, onOpenSettings }: { onClose: () => void; onOpenSett
               </span>
               <span className="min-w-0 flex-1 truncate mu-label">{accountLabel}</span>
             </div>
-            <NavRow to={Routes.ARCHIVED} current={archivedActive} icon={ArchiveIcon} onNavigate={closePanel}>
-              {t("common.archived")}
-            </NavRow>
             <button type="button" className={cn(SCOPE_PANEL_ROW_CLASSES, "text-mu-text-secondary")} onClick={() => void handleSignOut()}>
               <ScopePanelRowIcon icon={LogOutIcon} />
               <span className="min-w-0 flex-1 truncate">{t("common.sign-out")}</span>

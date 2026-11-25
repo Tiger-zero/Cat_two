@@ -90,16 +90,13 @@ func (s *APIService) saveNewMemo(ctx context.Context, user *store.User, input *a
 	}
 	var parentID *int32
 	if parent != nil {
-		if parent.RowStatus != store.Normal {
-			return nil, nil, status.Error(codes.FailedPrecondition, "cannot comment on an archived memo")
-		}
 		parentID = &parent.ID
 	}
 	addConnectionTag := parent == nil && ctx.Value(mcpMemoCreationContextKey{}) != nil
 	prepared, err := s.prepareMemoCreate(ctx, user, input, uid, addConnectionTag)
 	if err == nil {
 		prepared.memo.CreationRequestDigest = digest
-		err = s.createMemoWithMutation(ctx, user, prepared.memo, parentID, prepared.attachments, prepared.requiredAttachmentIDs, prepared.referenceRelations, false)
+		err = s.createMemoWithMutation(ctx, user, prepared.memo, parentID, prepared.attachments, prepared.requiredAttachmentIDs, prepared.referenceRelations)
 		if err == nil {
 			s.SSEHub.publishMemoChanged()
 			return prepared.memo, nil, nil

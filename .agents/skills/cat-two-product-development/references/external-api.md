@@ -19,11 +19,11 @@ AI 客户端和自动化通过 `/mcp` 查找、整理和写回笔记。Telegram 
 | 工具 | 参数和范围 |
 | --- | --- |
 | `auth_get_current_user` | 空对象 `{}`。 |
-| `memo_search` | 搜索未归档的主笔记。`query` 是忽略大小写的字面子串，`tag` 含下级标签。`hasTags` 按有无标签筛选。可同时传 `startDate`、`endDate`（上海时区创建日期，`YYYY-MM-DD`，含当天）、`hasIncompleteTasks`、`hasAttachments`、`pinned`（布尔值）及 `creationChannel`（`web`、`telegram`、`browser_extension`、`wechat`、`unknown`）。`orderBy` 支持 `create_time` 或 `update_time` 加 `asc` 或 `desc`，默认 `create_time desc`。每页 1 至 50 条，默认 20。 |
-| `memo_list_memos` | 按 `filter`、`state`、`orderBy`、`pageSize`、`pageToken` 查询。`filter` 接受 CEL。可列归档笔记，兼容缺少 `memo_search` 的镜像。 |
-| `memo_batch_get` | `names` 接受 1 至 50 个 `memos/<uid>` 字符串。返回 `memos`（含修订号）和 `unavailable`，支持已归档正文。每批正文合计最多 4 MiB，超出时拆分请求。找不到的、其他人所有的和回收站里的名称都会进入 `unavailable`。 |
+| `memo_search` | 搜索回收站以外的主笔记。`query` 是忽略大小写的字面子串，`tag` 含下级标签。`hasTags` 按有无标签筛选。可同时传 `startDate`、`endDate`（上海时区创建日期，`YYYY-MM-DD`，含当天）、`hasIncompleteTasks`、`hasAttachments`、`pinned`（布尔值）及 `creationChannel`（`web`、`telegram`、`browser_extension`、`wechat`、`unknown`）。`orderBy` 支持 `create_time` 或 `update_time` 加 `asc` 或 `desc`，默认 `create_time desc`。每页 1 至 50 条，默认 20。 |
+| `memo_list_memos` | 按 `filter`、`orderBy`、`pageSize`、`pageToken` 查询。`filter` 接受 CEL。返回当前账户的笔记。 |
+| `memo_batch_get` | `names` 接受 1 至 50 个 `memos/<uid>` 字符串。返回 `memos`（含修订号）和 `unavailable`。每批正文合计最多 4 MiB，超出时拆分请求。找不到的、其他人所有的和回收站里的名称都会进入 `unavailable`。 |
 | `memo_get_memo` | 传 `{"memo":"memos/<uid>"}` 读取正文和附件元数据。也可用于旧镜像逐条读取。 |
-| `tag_tree` / `tag_search` | 读取未归档主笔记里的标签路径与含下级路径的笔记数。用整数 `offset` 和 `pageSize` 翻页，默认 0 和 50，每页最多 200。从 `nextOffset` 继续。`tag_search` 另需非空字符串 `query`。 |
+| `tag_tree` / `tag_search` | 读取回收站以外主笔记的标签路径与含下级路径的笔记数。用整数 `offset` 和 `pageSize` 翻页，默认 0 和 50，每页最多 200。从 `nextOffset` 继续。`tag_search` 另需非空字符串 `query`。 |
 | `memo_create_memo` | 传 `{"body":{"content":"# 标题\n\n- [ ] 待办\n\n#项目/Cat_two"}}`。可用 `body.createTime` 指定 RFC 3339 创建时间。设置顶层 `memoId` 和 `idempotent: true` 后，可重试相同请求。 |
 | `memo_update_memo` | 传 `{"memo":"memos/<uid>","updateMask":"content","expectedRevision":"读取时的修订号","body":{"content":"完整正文"}}`。只更新掩码选定的字段。旧修订号会返回工具冲突错误。 |
 
@@ -43,7 +43,7 @@ AI 客户端和自动化通过 `/mcp` 查找、整理和写回笔记。Telegram 
 
 | 网页操作 | 请求 |
 | --- | --- |
-| 笔记录入、归档和移入回收站 | Connect `MemoService`。正文为 Markdown，更新提交字段掩码和读到的修订号。 |
+| 笔记录入、修改和移入回收站 | Connect `MemoService`。正文为 Markdown，更新提交字段掩码和读到的修订号。 |
 | 查看和管理回收站 | `GET /internal/trash`、`POST /internal/trash/{uid}/restore`、`DELETE /internal/trash/{uid}`。 |
 | 附件上传与绑定 | Connect `AttachmentService` 和 `MemoService`。分块上传用 `UploadAttachment`，绑定提交完整附件集合。 |
 | ZIP 导出与导入 | `GET` 或 `HEAD /file/users/{username}/export`，选导时用重复的 `memo` 参数，最多 100 条。ZIP 分块导入用 Connect `UserService.ImportMemos`，可先预演。 |

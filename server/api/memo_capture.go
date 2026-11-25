@@ -77,10 +77,10 @@ func (s *APIService) CaptureMemo(ctx context.Context, channel, externalID, text 
 	if err != nil {
 		return err
 	}
-	if err := s.createMemoWithMutation(ctx, owner, prepared.memo, nil, prepared.attachments, prepared.requiredAttachmentIDs, prepared.referenceRelations, false); err != nil {
+	if err := s.createMemoWithMutation(ctx, owner, prepared.memo, nil, prepared.attachments, prepared.requiredAttachmentIDs, prepared.referenceRelations); err != nil {
 		err := mapMemoCreateError(err, uid, "failed to create captured memo")
 		if status.Code(err) == codes.AlreadyExists {
-			// The unique memo UID also covers archived and trashed notes.
+			// The unique memo UID also covers trashed notes.
 			return nil
 		}
 		return err

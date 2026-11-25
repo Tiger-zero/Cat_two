@@ -54,7 +54,8 @@ describe("sidebar selected grammar", () => {
     expect(row).toHaveAttribute("aria-pressed", "true");
   });
 
-  it.each(["/", "/archived"])("returns from trash to %s when selecting a tag", (destination) => {
+  it("returns from trash to home when selecting a tag", () => {
+    const destination = "/";
     const LocationProbe = () => {
       const { pathname, search } = useLocation();
       return <output data-testid="tag-location">{`${pathname}${search}`}</output>;

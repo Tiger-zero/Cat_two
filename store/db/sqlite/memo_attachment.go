@@ -40,7 +40,7 @@ func (d *DB) ApplyMemoMutation(ctx context.Context, mutation *store.MemoMutation
 				return err
 			}
 		}
-		if err := insertSQLiteMemo(ctx, conn, create, mutation.PreserveInitialState); err != nil {
+		if err := insertSQLiteMemo(ctx, conn, create, mutation.PreservePinned); err != nil {
 			return err
 		}
 		mutation.MemoID = create.ID
@@ -210,9 +210,6 @@ func applyMemoUpdate(ctx context.Context, executor memoUpdateExecer, update *sto
 	}
 	if v := update.UpdatedTs; v != nil {
 		set, args = append(set, "`updated_ts` = ?"), append(args, *v)
-	}
-	if v := update.RowStatus; v != nil {
-		set, args = append(set, "`row_status` = ?"), append(args, *v)
 	}
 	if v := update.Content; v != nil {
 		set, args = append(set, "`content` = ?", "`body_digest` = ?"), append(args, *v, update.BodyDigest)

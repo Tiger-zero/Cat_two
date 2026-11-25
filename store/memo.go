@@ -58,7 +58,6 @@ type Memo struct {
 	UID string
 
 	// Standard fields
-	RowStatus RowStatus
 	CreatorID int32
 	CreatedTs int64
 	UpdatedTs int64
@@ -88,7 +87,6 @@ type FindMemo struct {
 	UIDList []string
 
 	// Standard fields
-	RowStatus *RowStatus
 	CreatorID *int32
 
 	// Domain specific fields
@@ -162,7 +160,6 @@ type UpdateMemo struct {
 	UID        *string
 	CreatedTs  *int64
 	UpdatedTs  *int64
-	RowStatus  *RowStatus
 	Content    *string
 	BodyDigest string
 	Visibility *Visibility
@@ -180,8 +177,6 @@ type UpdateMemo struct {
 // validates ownership against the memo state inside the write transaction.
 type MemoWritePolicy struct {
 	ActorUserID int32
-	// CreatingShare applies the legacy storage invariant to old share data.
-	CreatingShare bool
 }
 
 // MemoActorState is the actor's user row state as read inside a mutation
@@ -205,7 +200,6 @@ func NewMemoActorState(rowStatus RowStatus, role Role) MemoActorState {
 type MemoWriteSnapshot struct {
 	ActorIsAdmin bool
 	CreatorID    int32
-	RowStatus    RowStatus
 	Visibility   Visibility
 }
 
@@ -371,10 +365,7 @@ func ValidateMemoWriteSnapshot(policy *MemoWritePolicy, update *UpdateMemo, snap
 	if snapshot.CreatorID != policy.ActorUserID {
 		return ErrMemoPermissionDenied
 	}
-	if (snapshot.RowStatus != Normal && snapshot.RowStatus != Archived) || !isValidVisibility(snapshot.Visibility) {
-		return ErrMemoMutationConflict
-	}
-	if policy.CreatingShare && snapshot.RowStatus != Normal {
+	if !isValidVisibility(snapshot.Visibility) {
 		return ErrMemoMutationConflict
 	}
 	if update != nil && update.Visibility != nil && *update.Visibility != Private {

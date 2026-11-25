@@ -124,21 +124,18 @@ func TestDeleteMemoWithPolicyDeletesWholeCommentSubtree(t *testing.T) {
 func TestMemoDeleteActorCanReadAudienceMatrix(t *testing.T) {
 	tests := []struct {
 		name         string
-		rowStatus    store.RowStatus
 		visibility   store.Visibility
 		actorCanRead bool
 	}{
-		{name: "public", rowStatus: store.Normal, visibility: store.Public, actorCanRead: true},
-		{name: "protected", rowStatus: store.Normal, visibility: store.Protected, actorCanRead: true},
-		{name: "private", rowStatus: store.Normal, visibility: store.Private, actorCanRead: true},
-		{name: "unknown audience", rowStatus: store.Normal, visibility: store.Visibility("UNKNOWN")},
-		{name: "invalid lifecycle", rowStatus: store.RowStatus("UNKNOWN"), visibility: store.Public},
-		{name: "archived author", rowStatus: store.Archived, visibility: store.Private, actorCanRead: true},
+		{name: "public", visibility: store.Public, actorCanRead: true},
+		{name: "protected", visibility: store.Protected, actorCanRead: true},
+		{name: "private", visibility: store.Private, actorCanRead: true},
+		{name: "unknown audience", visibility: store.Visibility("UNKNOWN")},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			require.Equal(t, test.actorCanRead, store.MemoDeleteActorCanRead(test.rowStatus, test.visibility))
+			require.Equal(t, test.actorCanRead, store.MemoDeleteActorCanRead(test.visibility))
 		})
 	}
 }

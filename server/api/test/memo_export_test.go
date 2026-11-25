@@ -32,7 +32,7 @@ type archiveFixture struct {
 	userCtx     context.Context
 	photo       []byte
 	parent      *apipb.Memo
-	archived    *apipb.Memo
+	older       *apipb.Memo
 	allMemoUIDs []string
 }
 
@@ -107,25 +107,20 @@ func buildArchiveFixture(t *testing.T, ts *TestService, username string) *archiv
 	})
 	require.NoError(t, err)
 
-	archived, err := ts.Service.CreateMemo(userCtx, &apipb.CreateMemoRequest{
-		MemoId: "archived001",
+	older, err := ts.Service.CreateMemo(userCtx, &apipb.CreateMemoRequest{
+		MemoId: "oldernote01",
 		Memo:   &apipb.Memo{Content: "Old note", Visibility: apipb.Visibility_PRIVATE},
 	})
 	require.NoError(t, err)
-	archived, err = ts.Service.UpdateMemo(userCtx, &apipb.UpdateMemoRequest{
-		Memo:       &apipb.Memo{Name: archived.Name, State: apipb.State_ARCHIVED},
-		UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"state"}},
-	})
-	require.NoError(t, err)
-	archivedUID := "archived001"
-	archivedRecord, err := ts.Store.GetMemo(ctx, &store.FindMemo{UID: &archivedUID})
+	olderUID := "oldernote01"
+	olderRecord, err := ts.Store.GetMemo(ctx, &store.FindMemo{UID: &olderUID})
 	require.NoError(t, err)
 	legacyVisibility := store.Protected
-	require.NoError(t, ts.Store.UpdateMemo(ctx, &store.UpdateMemo{ID: archivedRecord.ID, Visibility: &legacyVisibility}))
+	require.NoError(t, ts.Store.UpdateMemo(ctx, &store.UpdateMemo{ID: olderRecord.ID, Visibility: &legacyVisibility}))
 
 	return &archiveFixture{
-		user: user, userCtx: userCtx, photo: photo, parent: parent, archived: archived,
-		allMemoUIDs: []string{"referenced1", "parent00001", "comment0001", extraUID, archivedUID},
+		user: user, userCtx: userCtx, photo: photo, parent: parent, older: older,
+		allMemoUIDs: []string{"referenced1", "parent00001", "comment0001", extraUID, olderUID},
 	}
 }
 
@@ -229,8 +224,8 @@ func TestWriteMemoExport(t *testing.T) {
 	// The comment is older than its parent but must still follow it.
 	require.Less(t, indexOfMemo(archive, "parent00001"), indexOfMemo(archive, "comment0001"))
 
-	require.Equal(t, "ARCHIVED", byUID["archived001"].State)
-	require.Equal(t, "PRIVATE", byUID["archived001"].Visibility)
+	require.Equal(t, "NORMAL", byUID["oldernote01"].State)
+	require.Equal(t, "PRIVATE", byUID["oldernote01"].Visibility)
 	require.Equal(t, []string{"work"}, byUID["referenced1"].Tags)
 
 	var selected bytes.Buffer
@@ -254,7 +249,7 @@ func TestImportMemoExportIntoAnotherAccount(t *testing.T) {
 	defer ts.Cleanup()
 	fixture := buildArchiveFixture(t, ts, "exporter")
 	_, err := ts.Service.UpdateMemo(fixture.userCtx, &apipb.UpdateMemoRequest{
-		Memo:       &apipb.Memo{Name: fixture.archived.Name, Pinned: true},
+		Memo:       &apipb.Memo{Name: fixture.older.Name, Pinned: true},
 		UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"pinned"}},
 	})
 	require.NoError(t, err)
@@ -314,12 +309,11 @@ func TestImportMemoExportIntoAnotherAccount(t *testing.T) {
 	require.Len(t, references, 1)
 	require.Equal(t, referenced.ID, references[0].RelatedMemoID)
 
-	archived := byContent["Old note"]
-	require.NotNil(t, archived)
-	require.Equal(t, store.Archived, archived.RowStatus)
-	require.True(t, archived.Pinned)
-	require.EqualValues(t, 1, archived.Revision, "archived and pinned state is part of the initial write")
-	require.Equal(t, store.Private, archived.Visibility)
+	older := byContent["Old note"]
+	require.NotNil(t, older)
+	require.True(t, older.Pinned)
+	require.EqualValues(t, 1, older.Revision, "pinning is part of the initial write")
+	require.Equal(t, store.Private, older.Visibility)
 
 	attachments, err := ts.Store.ListAttachments(ctx, &store.FindAttachment{MemoID: &parent.ID})
 	require.NoError(t, err)
@@ -415,11 +409,11 @@ func TestPlanMemoImport(t *testing.T) {
 	ctx := context.Background()
 
 	// Delete one memo so its UID is free, and let another account take one.
-	_, err := ts.Service.DeleteMemo(fixture.userCtx, &apipb.DeleteMemoRequest{Name: fixture.archived.Name})
+	_, err := ts.Service.DeleteMemo(fixture.userCtx, &apipb.DeleteMemoRequest{Name: fixture.older.Name})
 	require.NoError(t, err)
-	archivedUID, err := api.ExtractMemoUIDFromName(fixture.archived.Name)
+	olderUID, err := api.ExtractMemoUIDFromName(fixture.older.Name)
 	require.NoError(t, err)
-	trashed, err := ts.Store.GetMemo(ctx, &store.FindMemo{UID: &archivedUID, Trash: store.MemoTrashOnly})
+	trashed, err := ts.Store.GetMemo(ctx, &store.FindMemo{UID: &olderUID, Trash: store.MemoTrashOnly})
 	require.NoError(t, err)
 	require.NotNil(t, trashed)
 	_, err = ts.Store.ApplyMemoTrash(ctx, &store.MemoTrashMutation{MemoID: trashed.ID, ActorUserID: fixture.user.ID, Action: store.MemoTrashPurge, NowTs: time.Now().Unix()})
@@ -430,7 +424,7 @@ func TestPlanMemoImport(t *testing.T) {
 	stranger, err := ts.CreateRegularUser(ctx, "stranger")
 	require.NoError(t, err)
 	_, err = ts.Service.CreateMemo(ts.CreateUserContext(ctx, stranger.ID), &apipb.CreateMemoRequest{
-		MemoId: "archived001", Memo: &apipb.Memo{Content: "took the uid", Visibility: apipb.Visibility_PRIVATE},
+		MemoId: "oldernote01", Memo: &apipb.Memo{Content: "took the uid", Visibility: apipb.Visibility_PRIVATE},
 	})
 	require.NoError(t, err)
 
@@ -519,7 +513,7 @@ func TestImportMemoExportConflictPolicies(t *testing.T) {
 	})
 }
 
-func TestImportMemoExportRestoresArchivedCommentThread(t *testing.T) {
+func TestImportMemoExportRestoresCommentThread(t *testing.T) {
 	for _, tc := range []struct {
 		name                      string
 		policy                    apipb.ImportMemosRequest_ConflictPolicy
@@ -528,10 +522,10 @@ func TestImportMemoExportRestoresArchivedCommentThread(t *testing.T) {
 		created, updated, skipped int32
 	}{
 		{name: "duplicate", policy: apipb.ImportMemosRequest_DUPLICATE, created: 3},
-		{name: "skip existing archived parent", policy: apipb.ImportMemosRequest_SKIP, created: 2, skipped: 1},
-		{name: "replace existing archived parent", policy: apipb.ImportMemosRequest_REPLACE, created: 2, updated: 1},
-		{name: "link an unselected archived parent", policy: apipb.ImportMemosRequest_SKIP, selected: []string{"thread-comment", "thread-reply"}, created: 2},
-		{name: "do not link another account's archived parent", policy: apipb.ImportMemosRequest_SKIP, selected: []string{"thread-comment", "thread-reply"}, importAsOther: true, created: 2},
+		{name: "skip existing parent note", policy: apipb.ImportMemosRequest_SKIP, created: 2, skipped: 1},
+		{name: "replace existing parent note", policy: apipb.ImportMemosRequest_REPLACE, created: 2, updated: 1},
+		{name: "link an unselected parent note", policy: apipb.ImportMemosRequest_SKIP, selected: []string{"thread-comment", "thread-reply"}, created: 2},
+		{name: "do not link another account's parent note", policy: apipb.ImportMemosRequest_SKIP, selected: []string{"thread-comment", "thread-reply"}, importAsOther: true, created: 2},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			ts := NewTestService(t)
@@ -542,29 +536,17 @@ func TestImportMemoExportRestoresArchivedCommentThread(t *testing.T) {
 			require.NoError(t, err)
 			authorCtx := ts.CreateUserContext(ctx, author.ID)
 			parent, err := ts.Service.CreateMemo(authorCtx, &apipb.CreateMemoRequest{
-				MemoId: "thread-parent", Memo: &apipb.Memo{Content: "archived parent"},
+				MemoId: "thread-parent", Memo: &apipb.Memo{Content: "parent note"},
 			})
 			require.NoError(t, err)
 			comment, err := ts.Service.CreateMemoComment(authorCtx, &apipb.CreateMemoCommentRequest{
-				Parent: parent.Name, CommentId: "thread-comment", Comment: &apipb.Memo{Content: "archived comment"},
+				Parent: parent.Name, CommentId: "thread-comment", Comment: &apipb.Memo{Content: "thread comment"},
 			})
 			require.NoError(t, err)
 			_, err = ts.Service.CreateMemoComment(authorCtx, &apipb.CreateMemoCommentRequest{
 				Parent: comment.Name, CommentId: "thread-reply", Comment: &apipb.Memo{Content: "nested reply"},
 			})
 			require.NoError(t, err)
-			for _, memo := range []*apipb.Memo{parent, comment} {
-				_, err := ts.Service.UpdateMemo(authorCtx, &apipb.UpdateMemoRequest{
-					Memo:       &apipb.Memo{Name: memo.Name, State: apipb.State_ARCHIVED},
-					UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"state"}},
-				})
-				require.NoError(t, err)
-			}
-			_, err = ts.Service.CreateMemoComment(authorCtx, &apipb.CreateMemoCommentRequest{
-				Parent: parent.Name, Comment: &apipb.Memo{Content: "new comment"},
-			})
-			require.Equal(t, codes.FailedPrecondition, status.Code(err))
-
 			var data bytes.Buffer
 			require.NoError(t, ts.Service.WriteMemoExport(ctx, author, &data, time.Now(), tc.selected...))
 			archive := readArchive(t, data.Bytes())
@@ -574,8 +556,7 @@ func TestImportMemoExportRestoresArchivedCommentThread(t *testing.T) {
 				importer, err = ts.CreateRegularUser(ctx, "other-importer")
 				require.NoError(t, err)
 			} else if tc.policy != apipb.ImportMemosRequest_DUPLICATE {
-				// Leave the original parent archived so these cases exercise
-				// restoration into a thread that already exists.
+				// Keep the original parent to exercise restoration into an existing thread.
 				for _, uid := range []string{"thread-reply", "thread-comment"} {
 					old, err := ts.Store.GetMemo(ctx, &store.FindMemo{UID: &uid})
 					require.NoError(t, err)
@@ -599,19 +580,16 @@ func TestImportMemoExportRestoresArchivedCommentThread(t *testing.T) {
 				}
 				byContent[memo.Content] = memo
 			}
-			restoredComment, restoredReply := byContent["archived comment"], byContent["nested reply"]
+			restoredComment, restoredReply := byContent["thread comment"], byContent["nested reply"]
 			require.NotNil(t, restoredComment)
 			require.NotNil(t, restoredReply)
-			require.Equal(t, store.Archived, restoredComment.RowStatus)
-			require.Equal(t, store.Normal, restoredReply.RowStatus)
 			require.Equal(t, &restoredComment.UID, restoredReply.ParentUID)
 			if tc.importAsOther {
 				require.Nil(t, restoredComment.ParentUID)
 				require.Len(t, report.Warnings, 1)
 			} else {
-				restoredParent := byContent["archived parent"]
+				restoredParent := byContent["parent note"]
 				require.NotNil(t, restoredParent)
-				require.Equal(t, store.Archived, restoredParent.RowStatus)
 				require.Equal(t, &restoredParent.UID, restoredComment.ParentUID)
 			}
 		})
@@ -647,13 +625,11 @@ func TestImportMemosExportFormats(t *testing.T) {
 			memos, err := ts.Store.ListMemos(ctx, &store.FindMemo{CreatorID: &user.ID})
 			require.NoError(t, err)
 			require.Len(t, memos, 3)
-			archived := 0
-			for _, memo := range memos {
-				if memo.RowStatus == store.Archived {
-					archived++
-				}
-			}
-			require.Equal(t, 1, archived)
+			// Both v1 fixtures contain an archived reply. It must be visible on its original parent.
+			comments, err := ts.Service.ListMemoComments(ctx, &apipb.ListMemoCommentsRequest{Parent: "memos/Xy7LmN01"})
+			require.NoError(t, err)
+			require.Len(t, comments.Comments, 1)
+			require.Equal(t, "memos/Cm9Rt4v7", comments.Comments[0].Name)
 		})
 	}
 }

@@ -76,7 +76,7 @@ describe("isPublicRoute", () => {
     expect(isPublicRoute("/setting")).toBe(false);
     expect(isPublicRoute("/inbox")).toBe(false);
     expect(isPublicRoute("/attachments")).toBe(false);
-    expect(isPublicRoute("/archived")).toBe(false);
+    expect(isPublicRoute("/trash")).toBe(false);
     expect(isPublicRoute("/memos/abc")).toBe(false);
     expect(isPublicRoute("/memos/shares/abc")).toBe(false);
   });

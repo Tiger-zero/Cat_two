@@ -77,7 +77,7 @@ const RootLayoutContent = () => {
   const { fullWidth, maxColumns } = useView();
   const { pathname } = location;
   const home = pathname === ROUTES.HOME;
-  const homeCollection = home || (matchPath(ROUTES.TRASH, pathname) !== null && location.state?.trashFrom !== ROUTES.ARCHIVED);
+  const homeCollection = home || matchPath(ROUTES.TRASH, pathname) !== null;
   const wideHomeSidebar = useResolvedTheme() !== "paper" && homeCollection;
   const limitShell = !fullWidth && maxColumns !== 0;
   const prevPathnameRef = useRef<string | undefined>(undefined);

@@ -12,7 +12,6 @@ import useCurrentUser from "@/hooks/useCurrentUser";
 import { useFilteredMemoStats } from "@/hooks/useFilteredMemoStats";
 import useMediaQuery from "@/hooks/useMediaQuery";
 import { useResolvedTheme } from "@/hooks/useResolvedTheme";
-import type { MemoScope } from "@/lib/memo-collection";
 import { cn } from "@/lib/utils";
 import { ROUTES } from "@/router/routes";
 import { useTranslate } from "@/utils/i18n";
@@ -31,13 +30,12 @@ import TagsSection from "./TagsSection";
 import ThemeToggle from "./ThemeToggle";
 
 interface CollectionSidebarProps {
-  context: MemoScope;
   desktop: boolean;
   unframedHome: boolean;
   destination?: string;
 }
 
-const CollectionSidebarContent = ({ context, desktop, unframedHome, destination }: CollectionSidebarProps) => {
+const CollectionSidebarContent = ({ desktop, unframedHome, destination }: CollectionSidebarProps) => {
   const t = useTranslate();
   const currentUser = useCurrentUser();
   const md = useMediaQuery("md");
@@ -45,14 +43,14 @@ const CollectionSidebarContent = ({ context, desktop, unframedHome, destination 
   const { isInitialized: authInitialized } = useAuth();
   const { isInitialized: instanceInitialized } = useInstance();
   const { statistics, tags, summary, loading } = useFilteredMemoStats({
-    context: context === "home" && !currentUser ? "collection" : context,
-    userName: context === "home" ? currentUser?.name : undefined,
+    context: currentUser ? "home" : "collection",
+    userName: currentUser?.name,
     enabled: authInitialized && instanceInitialized && (md || mobileOpen),
   });
 
   return (
     <div className={cn(SIDEBAR_SECTION_STACK_CLASSES, desktop && "gap-7", unframedHome && "gap-9")}>
-      {context === "home" && currentUser && <CollectionStats summary={summary} loading={loading} desktop={desktop} />}
+      {currentUser && <CollectionStats summary={summary} loading={loading} desktop={desktop} />}
       <SidebarSection
         ariaLabel={t("common.calendar")}
         className={
@@ -79,7 +77,7 @@ const CollectionSidebarContent = ({ context, desktop, unframedHome, destination 
       >
         <TagsSection
           tagCount={tags}
-          scope={`${currentUser?.name ?? "anonymous"}:${context}`}
+          scope={`${currentUser?.name ?? "anonymous"}:home`}
           destination={destination}
           onSelect={() => setMobileOpen(false)}
         />
@@ -209,16 +207,14 @@ const GlobalNavigation = ({ calendarActive, showDisplayOptions }: { calendarActi
 const AppSidebar = ({ className, mobile = false }: { className?: string; mobile?: boolean }) => {
   const t = useTranslate();
   const currentUser = useCurrentUser();
-  const { pathname, state } = useLocation();
+  const { pathname } = useLocation();
   const theme = useResolvedTheme();
   const routeKind = getSidebarRouteKind(pathname);
   const inTrash = routeKind === "trash";
-  const showArchived = routeKind === "archived" || (inTrash && state?.trashFrom === ROUTES.ARCHIVED);
-  const hasCollection = showArchived || routeKind === "home" || inTrash;
-  const collectionScope = showArchived ? "archived" : "home";
+  const hasCollection = routeKind === "home" || inTrash;
   const desktopCollection = !mobile && hasCollection;
-  const unframedHome = desktopCollection && !showArchived && theme !== "paper";
-  const collectionDestination = inTrash ? (showArchived ? ROUTES.ARCHIVED : ROUTES.HOME) : undefined;
+  const unframedHome = desktopCollection && theme !== "paper";
+  const collectionDestination = inTrash ? ROUTES.HOME : undefined;
   const trashState = inTrash ? "checked" : "idle";
   const { setMobileOpen } = useAppSidebar();
   return (
@@ -245,7 +241,7 @@ const AppSidebar = ({ className, mobile = false }: { className?: string; mobile?
           {!mobile && <ThemeToggle />}
         </div>
       </div>
-      <GlobalNavigation calendarActive={routeKind === "home"} showDisplayOptions={hasCollection && !showArchived} />
+      <GlobalNavigation calendarActive={routeKind === "home"} showDisplayOptions={hasCollection} />
       {mobile && <div className="mx-3 mt-2 border-t border-mu-line/70" />}
       <div
         className={cn(
@@ -256,12 +252,7 @@ const AppSidebar = ({ className, mobile = false }: { className?: string; mobile?
         )}
       >
         {hasCollection ? (
-          <CollectionSidebarContent
-            context={collectionScope}
-            desktop={desktopCollection}
-            unframedHome={unframedHome}
-            destination={collectionDestination}
-          />
+          <CollectionSidebarContent desktop={desktopCollection} unframedHome={unframedHome} destination={collectionDestination} />
         ) : routeKind === "memo" ? (
           <MemoDetailSidebarContent />
         ) : null}
@@ -277,7 +268,6 @@ const AppSidebar = ({ className, mobile = false }: { className?: string; mobile?
         >
           <Link
             to={ROUTES.TRASH}
-            state={showArchived ? { trashFrom: ROUTES.ARCHIVED } : undefined}
             onClick={() => setMobileOpen(false)}
             aria-current={inTrash ? "page" : undefined}
             {...sidebarRowStateAttributes(trashState)}

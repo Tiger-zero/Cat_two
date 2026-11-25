@@ -102,7 +102,7 @@ func TestConcurrentCreateMemoReplayWithSameAttachment(t *testing.T) {
 	require.Len(t, feed.Memos, 1)
 }
 
-func TestMemoCommentReplayAfterParentIsArchived(t *testing.T) {
+func TestMemoCommentReplayAfterParentIsEdited(t *testing.T) {
 	ctx := t.Context()
 	ts := NewTestService(t)
 	t.Cleanup(ts.Cleanup)
@@ -118,8 +118,8 @@ func TestMemoCommentReplayAfterParentIsArchived(t *testing.T) {
 	first, err := ts.Service.CreateMemoComment(ownerCtx, request)
 	require.NoError(t, err)
 	_, err = ts.Service.UpdateMemo(ownerCtx, &apipb.UpdateMemoRequest{
-		Memo:       &apipb.Memo{Name: parent.Name, State: apipb.State_ARCHIVED},
-		UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"state"}}, ExpectedRevision: parent.Revision,
+		Memo:       &apipb.Memo{Name: parent.Name, Content: "Edited parent"},
+		UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"content"}}, ExpectedRevision: parent.Revision,
 	})
 	require.NoError(t, err)
 	replayed, err := ts.Service.CreateMemoComment(ownerCtx, request)
@@ -131,7 +131,7 @@ func TestMemoCommentReplayAfterParentIsArchived(t *testing.T) {
 	require.Equal(t, codes.AlreadyExists, status.Code(err))
 }
 
-func TestUpdateMemoRevisionCoversBodyAndLifecycle(t *testing.T) {
+func TestUpdateMemoRevisionCoversBodyAndPin(t *testing.T) {
 	ctx := t.Context()
 	ts := NewTestService(t)
 	t.Cleanup(ts.Cleanup)
@@ -140,12 +140,17 @@ func TestUpdateMemoRevisionCoversBodyAndLifecycle(t *testing.T) {
 	ownerCtx := ts.CreateUserContext(ctx, owner.ID)
 	first, err := ts.Service.CreateMemo(ownerCtx, &apipb.CreateMemoRequest{Memo: &apipb.Memo{Content: "Original"}})
 	require.NoError(t, err)
-	archived, err := ts.Service.UpdateMemo(ownerCtx, &apipb.UpdateMemoRequest{
-		Memo:       &apipb.Memo{Name: first.Name, State: apipb.State_ARCHIVED},
-		UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"state"}}, ExpectedRevision: first.Revision,
+	_, err = ts.Service.UpdateMemo(ownerCtx, &apipb.UpdateMemoRequest{
+		Memo:       &apipb.Memo{Name: first.Name, Content: "Discarded"},
+		UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"content", "state"}}, ExpectedRevision: first.Revision,
+	})
+	require.Equal(t, codes.InvalidArgument, status.Code(err), "a retired field cannot partially commit an update")
+	pinned, err := ts.Service.UpdateMemo(ownerCtx, &apipb.UpdateMemoRequest{
+		Memo:       &apipb.Memo{Name: first.Name, Pinned: true},
+		UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"pinned"}}, ExpectedRevision: first.Revision,
 	})
 	require.NoError(t, err)
-	require.NotEqual(t, first.Revision, archived.Revision)
+	require.NotEqual(t, first.Revision, pinned.Revision)
 	write := &apipb.UpdateMemoRequest{
 		Memo:       &apipb.Memo{Name: first.Name, Content: "Edited"},
 		UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"content"}}, ExpectedRevision: first.Revision,
@@ -154,11 +159,11 @@ func TestUpdateMemoRevisionCoversBodyAndLifecycle(t *testing.T) {
 	require.Equal(t, codes.Aborted, status.Code(err))
 	current, err := ts.Service.GetMemo(ownerCtx, &apipb.GetMemoRequest{Name: first.Name})
 	require.NoError(t, err)
-	require.Equal(t, apipb.State_ARCHIVED, current.State)
+	require.True(t, current.Pinned)
 	require.Equal(t, "Original", current.Content)
 	write.ExpectedRevision = current.Revision
 	updated, err := ts.Service.UpdateMemo(ownerCtx, write)
 	require.NoError(t, err)
-	require.NotEqual(t, archived.Revision, updated.Revision)
+	require.NotEqual(t, pinned.Revision, updated.Revision)
 	require.Equal(t, "Edited", updated.Content)
 }

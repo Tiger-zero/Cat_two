@@ -11,7 +11,6 @@ import { recordMemoEditingActivity } from "@/lib/memo-editing-activity";
 import { extractMemoIdFromName } from "@/lib/resource-names";
 import { showErrorToast, toast } from "@/lib/toast";
 import { ROUTES } from "@/router/routes";
-import { State } from "@/types/proto/api/common_pb";
 import type { Memo } from "@/types/proto/api/memo_service_pb";
 import { useTranslate } from "@/utils/i18n";
 import { checkAllTasks, uncheckAllTasks } from "@/utils/markdown-task-actions";
@@ -82,34 +81,6 @@ export const useMemoActionHandlers = ({ memo, parentPage, onEdit, setDeleteDialo
     onEdit?.();
   }, [onEdit]);
 
-  const handleToggleMemoStatusClick = useCallback(async () => {
-    const isArchiving = memo.state !== State.ARCHIVED;
-    const state = memo.state === State.ARCHIVED ? State.NORMAL : State.ARCHIVED;
-    const message = memo.state === State.ARCHIVED ? t("message.restored-successfully") : t("message.archived-successfully");
-
-    try {
-      await updateMemo({
-        update: {
-          name: memo.name,
-          state,
-        },
-        updateMask: ["state"],
-      });
-      toast.add({ title: message, type: "success" });
-    } catch (error: unknown) {
-      handleError(error, showErrorToast, {
-        context: `${isArchiving ? "Archive" : "Restore"} memo`,
-        fallbackMessage: t("common.error-occurred"),
-      });
-      return;
-    }
-
-    if (isInMemoDetailPage) {
-      navigateTo(memo.state === State.ARCHIVED ? ROUTES.HOME : ROUTES.ARCHIVED);
-    }
-    memoUpdatedCallback();
-  }, [memo.name, memo.state, t, isInMemoDetailPage, navigateTo, memoUpdatedCallback, updateMemo]);
-
   const handleCopyLink = useCallback(() => {
     let host = profile.instanceUrl;
     if (host === "") {
@@ -160,7 +131,6 @@ export const useMemoActionHandlers = ({ memo, parentPage, onEdit, setDeleteDialo
     isInMemoDetailPage,
     handleTogglePinMemoBtnClick,
     handleEditMemoClick,
-    handleToggleMemoStatusClick,
     handleCopyLink,
     handleCopyContent,
     handleCheckAllTaskListItemsClick,

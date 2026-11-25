@@ -277,7 +277,6 @@ func TestPersonalMCPNoteDiscovery(t *testing.T) {
 		{"wrong-tag", "2026-11-21T04:00:00Z", query + " #杂项" + undecidedTask},
 		{"wrong-query", "2026-11-21T04:00:00Z", "查询 AXx #项目/发布" + undecidedTask},
 		{"untagged", "2026-11-21T04:00:00Z", query + " \\#正文 `#代码`"},
-		{"archived", "2026-11-21T04:00:00Z", query + " #项目/归档 #Team/ReleaseArchived" + undecidedTask},
 		{"trashed", "2026-11-21T04:00:00Z", query + " #项目/回收 #Team/ReleaseTrashed" + undecidedTask},
 	} {
 		status, body := inst.connect(t, apiconnect.MemoServiceCreateMemoProcedure, ownerToken, map[string]any{
@@ -285,9 +284,7 @@ func TestPersonalMCPNoteDiscovery(t *testing.T) {
 		})
 		require.Equal(t, http.StatusOK, status, "%s: %s", memo.id, body)
 	}
-	status, body := inst.connect(t, apiconnect.MemoServiceUpdateMemoProcedure, ownerToken, map[string]any{"memo": map[string]string{"name": "memos/archived", "state": "ARCHIVED"}, "updateMask": "state"})
-	require.Equal(t, http.StatusOK, status, "%s", body)
-	status, body = inst.connect(t, apiconnect.MemoServiceDeleteMemoProcedure, ownerToken, map[string]string{"name": "memos/trashed"})
+	status, body := inst.connect(t, apiconnect.MemoServiceDeleteMemoProcedure, ownerToken, map[string]string{"name": "memos/trashed"})
 	require.Equal(t, http.StatusOK, status, "%s", body)
 	status, body = inst.connect(t, apiconnect.MemoServiceCreateMemoCommentProcedure, ownerToken, map[string]any{"parent": "memos/at-start", "comment": map[string]string{
 		"content": query + " #项目/评论" + undecidedTask, "createTime": "2026-11-21T04:00:00Z", "visibility": "PRIVATE",
@@ -348,19 +345,17 @@ func TestPersonalMCPNoteDiscovery(t *testing.T) {
 
 	t.Run("batch get", func(t *testing.T) {
 		var result struct {
-			Memos       []struct{ Name, State, Content string }
+			Memos       []struct{ Name, Content string }
 			Unavailable []string
 		}
 		call(t, "memo_batch_get", map[string]any{
-			"names": []string{"memos/missing", "memos/at-end", "memos/archived", "memos/trashed", "memos/at-start", "memos/at-end"},
+			"names": []string{"memos/missing", "memos/at-end", "memos/before-start", "memos/trashed", "memos/at-start", "memos/at-end"},
 		}, &result)
 		require.Equal(t, []string{"memos/missing", "memos/trashed"}, result.Unavailable)
 		require.Len(t, result.Memos, 3)
 		require.Equal(t, "memos/at-end", result.Memos[0].Name)
-		require.Equal(t, "NORMAL", result.Memos[0].State)
 		require.Contains(t, result.Memos[0].Content, "已处理")
-		require.Equal(t, "memos/archived", result.Memos[1].Name)
-		require.Equal(t, "ARCHIVED", result.Memos[1].State)
+		require.Equal(t, "memos/before-start", result.Memos[1].Name)
 		require.Equal(t, "memos/at-start", result.Memos[2].Name)
 	})
 

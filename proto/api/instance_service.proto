@@ -478,8 +478,7 @@ message InstanceSetting {
       // it is the last entry. An entry has users or all_users, never both.
       bool all_users = 3;
 
-      // The number of memos the user may have created, comments and archived
-      // memos included.
+      // The number of memos the user may have created, including comments.
       optional int64 memo_count = 4;
 
       // The UTF-8 size in bytes of one memo's content.

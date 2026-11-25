@@ -25,7 +25,6 @@ vi.mock("@/contexts/ViewContext", async () => {
 
 import { useFilteredMemoStats } from "@/hooks/useFilteredMemoStats";
 import { useAllUserStats, useUserStats } from "@/hooks/useUserQueries";
-import { State } from "@/types/proto/api/common_pb";
 
 const wrapper = ({ children }: { children: ReactNode }) => children as never;
 
@@ -197,7 +196,6 @@ describe("useFilteredMemoStats", () => {
 
     expect(useAllUserStats).toHaveBeenCalledWith(
       {
-        state: State.NORMAL,
         filter,
       },
       { enabled: true },
@@ -216,24 +214,9 @@ describe("useFilteredMemoStats", () => {
 
     expect(useAllUserStats).toHaveBeenCalledWith(
       {
-        state: State.NORMAL,
         filter: undefined,
       },
       { enabled: true },
     );
-  });
-
-  it("supports an explicit unassigned filter", () => {
-    mockUseView.mockReturnValue({
-      timeBasis: "create_time",
-      orderByTimeAsc: false,
-      setOrderByTimeAsc: vi.fn(),
-      setTimeBasis: vi.fn(),
-    });
-    const filter = "space == null";
-
-    renderHook(() => useFilteredMemoStats({ context: "archived", filter }), { wrapper });
-
-    expect(useAllUserStats).toHaveBeenCalledWith({ state: State.ARCHIVED, filter }, { enabled: true });
   });
 });

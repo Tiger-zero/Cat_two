@@ -39,7 +39,8 @@ Add entries under a `## Unreleased` heading. After the release ships, rename it 
   retry returns the committed note. A conflicting payload returns `ALREADY_EXISTS`. Memo responses include
   `revision`. Updates can pass `expectedRevision` for a transactional precondition, with `ABORTED` on stale edits.
 - The built-in transcription service is removed. `/memos.api.AIService/Transcribe` returns `404`.
-- `MemoService.DeleteMemo` moves notes and replies to the recycle bin for 30 days. The browser uses `GET /internal/trash`, `POST /internal/trash/{uid}/restore` and `DELETE /internal/trash/{uid}`. Restoring recovers the prior normal or archived state.
+- Memo archiving has been removed. `Memo`, `ListMemosRequest` and `ListUserStatsRequest` no longer have a `state` field. List and search cover the owner's current notes, including those previously archived. The unused `ListMemosRequest.show_deleted` field was removed. Deleted notes are available through the recycle bin.
+- `MemoService.DeleteMemo` moves notes and replies to the recycle bin for 30 days. The browser uses `GET /internal/trash`, `POST /internal/trash/{uid}/restore` and `DELETE /internal/trash/{uid}`. Restoring a note returns it to the list.
 - Cat_two restricts note and attachment reads, statistics and ZIP exports to the owning account. Notes are private. The usage limits instance setting no longer applies. Upload chunk and request validation continue to apply.
 - New attachments are written under `assets/`. `GetInstanceStats` reports the active data directory and its managed Markdown and attachment directories.
 - The `MEMO_RELATED` setting is removed. Reactions use the Unicode emoji picker.

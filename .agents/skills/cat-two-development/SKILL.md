@@ -7,7 +7,7 @@ description: Cat_two 整体项目开发指引。用于判断项目定位、确�
 
 ## 项目定位
 
-Cat_two 是单账户、自托管的个人笔记应用。新实例首次设置时创建一个管理员账户，日常围绕私有笔记的记录、查找、整理和同步展开。桌面 Web 是界面设计与视觉验收目标。Cat_two 使用单账户 SQLite 架构，启动时拒绝不兼容的旧库。通过网页登录记录和管理私有笔记。外部自动化走专用 MCP，消息收件支持 Telegram 和企业微信。
+Cat_two 是单账户、自托管的个人笔记应用。新实例首次设置时创建一个管理员账户，日常围绕私有笔记的记录、查找、整理和同步展开。桌面 Web 是界面设计与视觉验收目标。Cat_two 使用单账户 SQLite 架构，启动时可原地更新 `0.17`、`0.18` 的单账户数据库；不兼容的更早数据库会被拒绝。通过网页登录记录和管理私有笔记。外部自动化走专用 MCP，消息收件支持 Telegram 和企业微信。
 
 项目基于 Memos，按 Cat_two 自身需求演进。参考其他项目之前，先确认场景，再从本仓库的实际入口、API、权限和数据流找可复用的实现。涉及界面、API 或存储的改动沿用户完成任务的完整链路验证。
 
@@ -49,7 +49,7 @@ Cat_two 是单账户、自托管的个人笔记应用。新实例首次设置时
 
 ## 部署、镜像和交付
 
-- 用统一的 `compose.yaml` 验证默认命名卷、NAS 目录绑定、运行身份、`/healthz` 和重建后的笔记及附件。已有旧库部署保留原数据卷和镜像，使用独立卷安装当前版本。 [备份与升级](../cat-two-product-development/references/deployment.md#备份和升级) · [Compose](../../../compose.yaml)
+- 用统一的 `compose.yaml` 验证默认命名卷、NAS 目录绑定、运行身份、`/healthz` 和重建后的笔记及附件。从 `0.17`、`0.18` 升级时复用原卷；更早的不兼容数据库保留原卷，通过独立卷安装当前版本。 [备份与升级](../cat-two-product-development/references/deployment.md#备份和升级) · [Compose](../../../compose.yaml)
 - 容器发布用 Cat_two Container 工作流。普通提交按路径触发检查，前端生产构建随容器验证运行。 [构建与发布](references/container-release.md)
 - Docker Hub 版本号按 `0.01` 递增，核对编号、`latest`、`sha-<完整提交 SHA>`，以及 AMD64、ARM64 两种平台。分别以 Git、Actions、注册表和 NAS 实例核实源码、构建、发布及部署状态。 [版本编号](../../../scripts/cat_two_docker_release.py) · [发布复盘](references/development-log.md)
 - 冒烟脚本在独立数据卷覆盖 Cat_two 新装、容器重建和数据回读。 [冒烟脚本](../../../scripts/release_smoke_test.sh)
@@ -90,3 +90,4 @@ Cat_two 是单账户、自托管的个人笔记应用。新实例首次设置时
 - **2026-11-25 22:15**　浅色首页已保存笔记卡片的默认外边框改为 1px 纯黑色，单列和多列共用此样式。119 项定向测试、前端静态检查及生产构建通过。 [桌面配色](../cat-two-ui-development/references/desktop-visual-design.md#cat_two-主题)
 - **2026-11-25 22:22**　深色桌面首页及其回收站沿用浅色侧栏的间距、默认宽度和无边框布局。日历用 `#3D3D3D` 标出无笔记日期，有记录的日期按数量显示绿色。191 项定向测试、前端静态检查与生产构建通过。 [桌面布局与配色](../cat-two-ui-development/references/desktop-visual-design.md)
 - **2026-11-25 22:35**　发布 Docker Hub `0.18`，核对三个标签的摘要及 AMD64、ARM64 镜像的源码提交。 [发布记录](references/development-log.md#镜像-018)
+- **2026-11-25 22:52**　移除笔记归档，主页搜索统一查询回收站以外的笔记。全量 Go 测试、1365 项前端测试和生产构建通过。在独立 Docker 数据卷验证从 `0.18` 升级、重启和恢复，并用 Chromium 核对关键词、表达式和无标签搜索。 [主页搜索与回收站](../cat-two-product-development/references/product-guide.md#网页里的功能)

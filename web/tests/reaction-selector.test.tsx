@@ -8,7 +8,6 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import MemoReactionListView from "@/components/MemoReactionListView/MemoReactionListView";
 import ReactionSelector from "@/components/MemoReactionListView/ReactionSelector";
 import { memoKeys, useMemoRecord } from "@/hooks/useMemoQueries";
-import { State } from "@/types/proto/api/common_pb";
 import { type Memo, MemoSchema, type Reaction, ReactionSchema } from "@/types/proto/api/memo_service_pb";
 import { UserSchema } from "@/types/proto/api/user_service_pb";
 
@@ -44,7 +43,6 @@ const reactionMemo = () =>
   create(MemoSchema, {
     name: "memos/1",
     creator: "users/me",
-    state: State.NORMAL,
     reactions: [
       { name: "memos/1/reactions/1", reactionType: "🎉", creator: "users/me" },
       { name: "memos/1/reactions/2", reactionType: "👍", creator: "users/other" },
@@ -195,10 +193,9 @@ describe("ReactionSelector", () => {
     }
   });
 
-  it.each(["signed out", "archived"])("keeps reactions non-interactive when %s", (mode) => {
+  it("keeps reactions non-interactive when signed out", () => {
     const memo = reactionMemo();
-    if (mode === "signed out") state.currentUser = undefined;
-    else memo.state = State.ARCHIVED;
+    state.currentUser = undefined;
     setup(memo);
     expect(screen.queryByRole("button")).not.toBeInTheDocument();
     expect(screen.getByText("🎉")).toBeInTheDocument();

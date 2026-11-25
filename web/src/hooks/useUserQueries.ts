@@ -20,7 +20,7 @@ import {
 const BATCH_GET_USERS_LIMIT = 100;
 const USER_PROFILE_STALE_TIME = 1000 * 60 * 5;
 const OWNER_STATS_STALE_TIME = 1000 * 60 * 2;
-type ListUserStatsQuery = Pick<ListUserStatsRequest, "state" | "filter">;
+type ListUserStatsQuery = Pick<ListUserStatsRequest, "filter">;
 // ListUserStats aggregates across every user through the "users/-" wildcard parent.
 const ALL_USERS_PARENT = `${userNamePrefix}-`;
 

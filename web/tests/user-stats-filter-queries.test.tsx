@@ -6,7 +6,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useWelcomeGuide } from "@/components/WelcomeGuide/useWelcomeGuide";
 import { useFilteredMemoStats } from "@/hooks/useFilteredMemoStats";
 import { useAllUserStats, useTagCounts, useUserStats } from "@/hooks/useUserQueries";
-import { State } from "@/types/proto/api/common_pb";
 
 const clients = vi.hoisted(() => ({
   getUserStats: vi.fn(),
@@ -105,9 +104,9 @@ describe("User statistics filter queries", () => {
 
   it("sends an explicit unassigned filter with grouped statistics", async () => {
     const filter = "space == null";
-    const { result } = renderHook(() => useAllUserStats({ state: State.ARCHIVED, filter }), { wrapper: createWrapper() });
+    const { result } = renderHook(() => useAllUserStats({ filter }), { wrapper: createWrapper() });
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(clients.listUserStats).toHaveBeenCalledWith(expect.objectContaining({ parent: "users/-", state: State.ARCHIVED, filter }));
+    expect(clients.listUserStats).toHaveBeenCalledWith(expect.objectContaining({ parent: "users/-", filter }));
   });
 });

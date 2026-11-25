@@ -221,7 +221,7 @@ func (i *memoImporter) createMemo(record *memoexport.Memo, targetUID string, con
 		return err
 	}
 	err = i.bindAttachments(memo, memo.Content, nil, attachments, func(prepared *preparedMemoAttachments, required []int32) error {
-		if err := i.service.createMemoWithMutation(i.ctx, i.user, memo, parentID, prepared, required, nil, true); err != nil {
+		if err := i.service.createMemoWithMutation(i.ctx, i.user, memo, parentID, prepared, required, nil); err != nil {
 			return mapMemoCreateError(err, targetUID, "failed to create memo")
 		}
 		return nil
@@ -263,7 +263,6 @@ func (i *memoImporter) replaceMemo(record *memoexport.Memo, existing *store.Memo
 		Payload:    next.Payload,
 		Visibility: &next.Visibility,
 		Pinned:     &next.Pinned,
-		RowStatus:  &next.RowStatus,
 		CreatedTs:  &next.CreatedTs,
 		UpdatedTs:  &next.UpdatedTs,
 	}
@@ -313,7 +312,6 @@ func (i *memoImporter) buildMemo(record *memoexport.Memo, uid string, content []
 	memo := &store.Memo{
 		UID:        uid,
 		CreatorID:  i.user.ID,
-		RowStatus:  store.RowStatus(record.State),
 		CreatedTs:  createdTs,
 		UpdatedTs:  updatedTs,
 		Content:    string(content),

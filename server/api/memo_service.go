@@ -92,14 +92,6 @@ func (s *APIService) listMemoPage(ctx context.Context, request *apipb.ListMemosR
 	}
 	memoFind.Access = accessScope
 
-	if request.State == apipb.State_ARCHIVED {
-		state := store.Archived
-		memoFind.RowStatus = &state
-	} else {
-		state := store.Normal
-		memoFind.RowStatus = &state
-	}
-
 	// Parse order_by field (replaces the old sort and direction fields)
 	if request.OrderBy != "" {
 		if err := s.parseMemoOrderBy(request.OrderBy, memoFind); err != nil {
@@ -383,9 +375,6 @@ func (s *APIService) UpdateMemo(ctx context.Context, request *apipb.UpdateMemoRe
 			update.Payload = nextMemo.Payload
 		} else if path == "pinned" {
 			update.Pinned = &request.Memo.Pinned
-		} else if path == "state" {
-			rowStatus := convertStateToStore(request.Memo.State)
-			update.RowStatus = &rowStatus
 		} else if path == "create_time" {
 			if request.Memo.CreateTime == nil || !request.Memo.CreateTime.IsValid() {
 				return nil, status.Errorf(codes.InvalidArgument, "create_time is invalid")

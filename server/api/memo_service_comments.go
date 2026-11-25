@@ -42,9 +42,6 @@ func (s *APIService) CreateMemoComment(ctx context.Context, request *apipb.Creat
 	if err := s.checkMemoReadAccess(ctx, relatedMemo); err != nil {
 		return nil, err
 	}
-	if !request.Idempotent && relatedMemo.RowStatus != store.Normal {
-		return nil, status.Errorf(codes.FailedPrecondition, "cannot comment on an archived memo")
-	}
 	if request.Comment == nil {
 		return nil, status.Errorf(codes.InvalidArgument, "comment is required")
 	}
@@ -112,10 +109,8 @@ func (s *APIService) ListMemoComments(ctx context.Context, request *apipb.ListMe
 		limit = normalizePageSize(request.PageSize)
 	}
 	limitPlusOne := limit + 1
-	normal := store.Normal
 	memos, err := s.Store.ListMemos(ctx, &store.FindMemo{
 		CommentContextMemoID: &memo.ID,
-		RowStatus:            &normal,
 		Access:               accessScope,
 		Limit:                &limitPlusOne,
 		Offset:               &offset,

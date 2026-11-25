@@ -75,7 +75,6 @@ CREATE TABLE memo (
   creator_id INTEGER NOT NULL,
   created_ts BIGINT NOT NULL DEFAULT (strftime('%s', 'now')),
   updated_ts BIGINT NOT NULL DEFAULT (strftime('%s', 'now')),
-  row_status TEXT NOT NULL CHECK (row_status IN ('NORMAL', 'ARCHIVED')) DEFAULT 'NORMAL',
   content TEXT NOT NULL DEFAULT '',
   body_digest TEXT NOT NULL DEFAULT '',
   revision BIGINT NOT NULL DEFAULT 1,
@@ -93,7 +92,7 @@ CREATE INDEX idx_memo_trash_creator ON memo(creator_id, deleted_ts, id);
 CREATE INDEX idx_memo_trash_root ON memo(trash_root_id);
 CREATE INDEX idx_memo_body_digest ON memo(body_digest) WHERE body_digest != '';
 CREATE INDEX idx_memo_owner_pinned_created
-  ON memo(creator_id, row_status, pinned DESC, created_ts DESC, id DESC)
+  ON memo(creator_id, pinned DESC, created_ts DESC, id DESC)
   WHERE deleted_ts IS NULL;
 
 -- memo_body_namespace

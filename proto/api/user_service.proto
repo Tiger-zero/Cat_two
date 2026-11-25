@@ -529,9 +529,8 @@ message ListUserStatsRequest {
   // filter syntax as ListMemos.
   string filter = 2 [(google.api.field_behavior) = OPTIONAL];
 
-  // Optional. The state of the memos to count. Defaults to NORMAL. ARCHIVED
-  // counts only the caller's own memos.
-  State state = 3 [(google.api.field_behavior) = OPTIONAL];
+  reserved 3;
+  reserved "state";
 }
 
 // Response message for UserService.ListUserStats.
@@ -571,8 +570,7 @@ message UserUsage {
   // Format: users/{user}/usage
   string name = 1 [(google.api.field_behavior) = IDENTIFIER];
 
-  // The number of memos the user created, including comments, archived
-  // memos, and memos in Spaces.
+  // The number of memos the user created, including comments.
   int64 memo_count = 2;
 
   // The total size in bytes of the user's uploads, including uploads not

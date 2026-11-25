@@ -9,7 +9,7 @@ import (
 	"github.com/usememos/memos/store"
 )
 
-func TestReactionWritePolicyRejectsInactiveActorAndMemo(t *testing.T) {
+func TestReactionWritePolicyRejectsInactiveActorAndTrashedMemo(t *testing.T) {
 	ctx := context.Background()
 	ts := NewTestingStore(ctx, t)
 	defer ts.Close()
@@ -29,11 +29,12 @@ func TestReactionWritePolicyRejectsInactiveActorAndMemo(t *testing.T) {
 	})
 	require.ErrorIs(t, err, store.ErrReactionPermissionDenied)
 
-	require.NoError(t, ts.UpdateMemo(ctx, &store.UpdateMemo{ID: memo.ID, RowStatus: &archived}))
+	_, err = ts.ApplyMemoTrash(ctx, &store.MemoTrashMutation{MemoID: memo.ID, ActorUserID: owner.ID, Action: store.MemoTrashMove, NowTs: 123})
+	require.NoError(t, err)
 	_, err = ts.UpsertReaction(ctx, &store.Reaction{
 		CreatorID: owner.ID, MemoID: memo.ID, ReactionType: "inactive-memo", Policy: reactionWritePolicy(owner.ID),
 	})
-	require.ErrorIs(t, err, store.ErrMemoContextUnavailable)
+	require.ErrorIs(t, err, store.ErrReactionMemoNotFound)
 }
 
 func TestDeleteReactionAtomicallyEnforcesCreatorWithoutParticipation(t *testing.T) {

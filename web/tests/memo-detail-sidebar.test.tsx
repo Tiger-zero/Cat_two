@@ -4,7 +4,6 @@ import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import MemoDetailSidebar from "@/components/MemoDetailSidebar/MemoDetailSidebar";
 import { AttachmentSchema } from "@/types/proto/api/attachment_service_pb";
-import { State } from "@/types/proto/api/common_pb";
 import {
   MemoRelation_MemoRefSchema,
   MemoRelation_Type,
@@ -58,7 +57,6 @@ describe("MemoDetailSidebar", () => {
     });
     const memo = create(MemoSchema, {
       name: "memos/detail",
-      state: State.NORMAL,
       content: "# Secret plan\n\n## Step one",
       tags: ["secret"],
     });
@@ -90,7 +88,6 @@ describe("MemoDetailSidebar", () => {
     const memo = create(MemoSchema, {
       name: "memos/detail",
       creator: "users/alice",
-      state: State.NORMAL,
       visibility: Visibility.PUBLIC,
       content: "# Overview\n\n## Details",
       tags: ["release/0.30"],
@@ -172,7 +169,6 @@ describe("MemoDetailSidebar", () => {
     const memo = create(MemoSchema, {
       name: "memos/public",
       creator: "users/alice",
-      state: State.NORMAL,
       visibility: Visibility.PUBLIC,
       content: "Body",
       relations: [createIncomingReference("memos/public")],
@@ -189,7 +185,6 @@ describe("MemoDetailSidebar", () => {
     const memo = create(MemoSchema, {
       name: "memos/simple",
       creator: "users/alice",
-      state: State.NORMAL,
       content: "Body",
     });
 
@@ -202,15 +197,11 @@ describe("MemoDetailSidebar", () => {
     expect(screen.getByRole("button", { name: "common.share" })).toBeInTheDocument();
   });
 
-  it.each([
-    ["an archived memo", State.ARCHIVED, Visibility.PUBLIC],
-    ["a private memo", State.NORMAL, Visibility.PRIVATE],
-  ])("lets users copy the direct link for %s", async (_label, state, visibility) => {
+  it("lets users copy a private memo’s direct link", async () => {
     const memo = create(MemoSchema, {
       name: "memos/restricted-share",
       creator: "users/alice",
-      state,
-      visibility,
+      visibility: Visibility.PRIVATE,
       content: "Body",
     });
 
@@ -219,21 +210,5 @@ describe("MemoDetailSidebar", () => {
 
     fireEvent.click(await screen.findByRole("menuitem", { name: "memo.copy-link" }));
     expect(copyToClipboard).toHaveBeenCalledWith("https://memos.example/memos/restricted-share");
-  });
-
-  it("keeps archived memo navigation and comments readable without offering write actions", () => {
-    const memo = create(MemoSchema, {
-      name: "memos/archived",
-      creator: "users/alice",
-      state: State.ARCHIVED,
-      content: "Archived body",
-    });
-
-    renderSidebar(<MemoDetailSidebar memo={memo} parentPage="/archived" commentCount={2} onEdit={vi.fn()} onCommentCreate={vi.fn()} />);
-
-    expect(screen.getByRole("link", { name: /memo.comment.self/ })).toHaveTextContent("2");
-    expect(screen.queryByRole("button", { name: "common.edit" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "memo.comment.write-a-comment" })).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "common.share" })).toBeInTheDocument();
   });
 });

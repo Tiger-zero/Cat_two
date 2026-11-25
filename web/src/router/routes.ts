@@ -1,6 +1,5 @@
 export const ROUTES = {
   HOME: "/",
-  ARCHIVED: "/archived",
   TRASH: "/trash",
   SETTING: "/setting",
   AUTH: "/auth",

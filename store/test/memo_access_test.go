@@ -10,41 +10,37 @@ import (
 	"github.com/usememos/memos/store"
 )
 
-func TestMemoAccessScopeArchivedRowsRemainAuthorOnly(t *testing.T) {
+func TestMemoAccessScopeRequiresActiveAuthor(t *testing.T) {
 	ctx := context.Background()
 	ts := NewTestingStore(ctx, t)
 	defer ts.Close()
 
-	owner, err := ts.CreateUser(ctx, &store.User{Username: "access-archive-owner", Role: store.RoleUser, PasswordHash: "hash"})
+	owner, err := ts.CreateUser(ctx, &store.User{Username: "access-owner-only-owner", Role: store.RoleUser, PasswordHash: "hash"})
 	require.NoError(t, err)
-	viewer, err := ts.CreateUser(ctx, &store.User{Username: "access-archive-viewer", Role: store.RoleUser, PasswordHash: "hash"})
+	viewer, err := ts.CreateUser(ctx, &store.User{Username: "access-owner-only-viewer", Role: store.RoleUser, PasswordHash: "hash"})
 	require.NoError(t, err)
-	memo, err := ts.CreateMemo(ctx, &store.Memo{UID: "access-archive-memo", CreatorID: owner.ID, Content: "memo", Visibility: store.Public})
+	memo, err := ts.CreateMemo(ctx, &store.Memo{UID: "access-owner-only-memo", CreatorID: owner.ID, Content: "memo", Visibility: store.Public})
 	require.NoError(t, err)
 	archived := store.Archived
-	require.NoError(t, ts.UpdateMemo(ctx, &store.UpdateMemo{ID: memo.ID, RowStatus: &archived}))
 
 	ownerRows, err := ts.ListMemos(ctx, &store.FindMemo{
-		RowStatus: &archived,
-		Access:    &store.MemoAccessScope{UserID: &owner.ID},
+		Access: &store.MemoAccessScope{UserID: &owner.ID},
 	})
 	require.NoError(t, err)
 	require.Equal(t, []int32{memo.ID}, memoIDs(ownerRows))
 	viewerRows, err := ts.ListMemos(ctx, &store.FindMemo{
-		RowStatus: &archived,
-		Access:    &store.MemoAccessScope{UserID: &viewer.ID},
+		Access: &store.MemoAccessScope{UserID: &viewer.ID},
 	})
 	require.NoError(t, err)
 	require.Empty(t, viewerRows)
-	anonymousRows, err := ts.ListMemos(ctx, &store.FindMemo{RowStatus: &archived, Access: &store.MemoAccessScope{}})
+	anonymousRows, err := ts.ListMemos(ctx, &store.FindMemo{Access: &store.MemoAccessScope{}})
 	require.NoError(t, err)
 	require.Empty(t, anonymousRows)
 
 	_, err = ts.UpdateUser(ctx, &store.UpdateUser{ID: owner.ID, RowStatus: &archived})
 	require.NoError(t, err)
 	inactiveRows, err := ts.ListMemos(ctx, &store.FindMemo{
-		RowStatus: &archived,
-		Access:    &store.MemoAccessScope{UserID: &owner.ID},
+		Access: &store.MemoAccessScope{UserID: &owner.ID},
 	})
 	require.NoError(t, err)
 	require.Empty(t, inactiveRows)
@@ -68,17 +64,15 @@ func TestMemoAccessScopeIgnoresFoldedFilterOperands(t *testing.T) {
 	require.NoError(t, err)
 
 	// Each filter folds an operand away. Its arguments must go with it, or they
-	// would bind to the row-status and access-scope placeholders that follow.
+	// would bind to the access-scope placeholders that follow.
 	for _, memoFilter := range []string{
 		fmt.Sprintf(`(creator_id == %d || true) && visibility == "PUBLIC"`, owner.ID),
 		fmt.Sprintf(`(creator_id == %d && false) || visibility == "PUBLIC"`, owner.ID),
 		fmt.Sprintf(`!(creator_id == %d || true) || visibility == "PUBLIC"`, owner.ID),
 	} {
-		normal := store.Normal
 		memos, err := ts.ListMemos(ctx, &store.FindMemo{
-			RowStatus: &normal,
-			Filters:   []string{memoFilter},
-			Access:    &store.MemoAccessScope{UserID: &owner.ID},
+			Filters: []string{memoFilter},
+			Access:  &store.MemoAccessScope{UserID: &owner.ID},
 		})
 		require.NoError(t, err, memoFilter)
 		require.Equal(t, []int32{public.ID}, memoIDs(memos), memoFilter)

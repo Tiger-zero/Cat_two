@@ -4,7 +4,6 @@ import type { ReactNode } from "react";
 import { MemoryRouter, useLocation } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useMemoActionHandlers } from "@/components/MemoActionMenu/hooks";
-import { State } from "@/types/proto/api/common_pb";
 import type { Memo } from "@/types/proto/api/memo_service_pb";
 
 const mocks = vi.hoisted(() => ({
@@ -38,16 +37,15 @@ vi.mock("@/utils/i18n", () => ({
 
 vi.mock("@/lib/toast", () => ({ toast: { add: vi.fn(), close: vi.fn() }, showErrorToast: vi.fn() }));
 
-const createMemo = (state: State, parent = ""): Memo =>
+const createMemo = (parent = ""): Memo =>
   ({
     name: "memos/1",
     creator: "users/alice",
     content: "memo",
-    state,
     parent,
   }) as Memo;
 
-const renderActions = (state: State, parent = "", parentPage?: string) => {
+const renderActions = (parent = "", parentPage?: string) => {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const invalidateQueries = vi.spyOn(queryClient, "invalidateQueries");
   const wrapper = ({ children }: { children: ReactNode }) => (
@@ -60,7 +58,7 @@ const renderActions = (state: State, parent = "", parentPage?: string) => {
     () => {
       const location = useLocation();
       const handlers = useMemoActionHandlers({
-        memo: createMemo(state, parent),
+        memo: createMemo(parent),
         parentPage,
         setDeleteDialogOpen: vi.fn(),
       });
@@ -78,28 +76,15 @@ describe("Memo detail mutation navigation", () => {
     mocks.copy.mockReset();
   });
 
-  it.each([
-    [State.NORMAL, "/archived"],
-    [State.ARCHIVED, "/"],
-  ])("switches a %s memo to its user-level destination", async (state, destination) => {
-    const { result } = renderActions(state);
-
-    await act(async () => {
-      await result.current.handlers.handleToggleMemoStatusClick();
-    });
-
-    await waitFor(() => expect(result.current.pathname).toBe(destination));
-  });
-
   it("returns to the full Space origin after deleting a memo detail", async () => {
     const origin = "/spaces/product?filter=tagSearch%3Awork%2CdisplayTime%3A2026-09-06";
-    const { result } = renderActions(State.NORMAL, "", origin);
+    const { result } = renderActions("", origin);
     await act(() => result.current.handlers.confirmDeleteMemo());
     expect(result.current.pathname + result.current.search).toBe(origin);
   });
 
   it("returns directly to a global origin after deleting", async () => {
-    const { result } = renderActions(State.NORMAL);
+    const { result } = renderActions();
 
     await act(async () => {
       await result.current.handlers.confirmDeleteMemo();
@@ -109,7 +94,7 @@ describe("Memo detail mutation navigation", () => {
   });
 
   it("refreshes a parent memo after deleting one of its comments", async () => {
-    const { result, invalidateQueries } = renderActions(State.NORMAL, "memos/parent");
+    const { result, invalidateQueries } = renderActions("memos/parent");
 
     await act(async () => {
       await result.current.handlers.confirmDeleteMemo();
@@ -123,7 +108,7 @@ describe("Memo detail mutation navigation", () => {
     ["", "http://localhost:3000/memos/1"],
     ["memos/parent", "http://localhost:3000/memos/parent#1"],
   ])("copies a link that lands on the memo, or on the comment inside its parent (parent: %s)", (parent, link) => {
-    const { result } = renderActions(State.NORMAL, parent);
+    const { result } = renderActions(parent);
     act(() => result.current.handlers.handleCopyLink());
     expect(mocks.copy).toHaveBeenCalledWith(link);
   });

@@ -9,7 +9,6 @@ import { LegacyCalendarRedirect } from "./LegacyCalendarRedirect";
 import { personalFeedSearch, ROUTES, SETTINGS_SECTION_PARAM } from "./routes";
 
 const AdminSignIn = lazyWithReload(() => import("@/pages/AdminSignIn"));
-const Archived = lazyWithReload(() => import("@/pages/Archived"));
 // A signed-in user's Home composes at once, so the page's code arrives together with the
 // editing session's and the composer renders with the page, never after it.
 const Home = lazyWithReload(() => Promise.all([import("@/pages/Home"), preloadMemoEditing()]).then(([page]) => page));
@@ -77,6 +76,7 @@ export const routeConfig: RouteObject[] = [
           { path: "explore", element: <HomeRoute /> },
           { path: "inbox", element: <HomeRoute /> },
           { path: "views", element: <HomeRoute /> },
+          { path: "archived", element: <HomeRoute /> },
           { path: "u/:username", element: <HomeRoute /> },
           {
             path: "spaces/:spaceUid",
@@ -94,7 +94,6 @@ export const routeConfig: RouteObject[] = [
                 element: <MainLayout />,
                 children: [
                   { index: true, element: <HomeRoute /> },
-                  { path: Routes.ARCHIVED, element: <Archived /> },
                   { path: Routes.TRASH, element: <Trash /> },
                 ],
               },

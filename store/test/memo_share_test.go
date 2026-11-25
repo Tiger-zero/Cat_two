@@ -41,7 +41,7 @@ func TestMemoShareDeleteRequiresSelector(t *testing.T) {
 
 func TestMemoShareAuthorizedDeletion(t *testing.T) {
 	for _, name := range []string{
-		"owner by id", "owner by uid", "matching selectors", "instance admin", "archived memo",
+		"owner by id", "owner by uid", "matching selectors", "instance admin",
 		"unrelated actor", "archived actor", "missing actor", "demoted admin",
 		"mismatched memo", "mismatched selectors", "missing share", "missing memo", "database failure",
 	} {
@@ -62,7 +62,7 @@ func TestMemoShareAuthorizedDeletion(t *testing.T) {
 				Content: "other", Visibility: store.Public})
 			require.NoError(t, err)
 			share, err := ts.CreateMemoShare(ctx, &store.MemoShare{UID: "share-token", MemoID: memo.ID,
-				CreatorID: owner.ID, Policy: &store.MemoWritePolicy{ActorUserID: owner.ID, CreatingShare: true}})
+				CreatorID: owner.ID, Policy: &store.MemoWritePolicy{ActorUserID: owner.ID}})
 			require.NoError(t, err)
 			keep, err := ts.CreateMemoShare(ctx, &store.MemoShare{UID: "keep-token", MemoID: memo.ID, CreatorID: owner.ID})
 			require.NoError(t, err)
@@ -77,8 +77,6 @@ func TestMemoShareAuthorizedDeletion(t *testing.T) {
 			case "instance admin":
 				delete.Policy.ActorUserID = admin.ID
 				wantErr = store.ErrMemoPermissionDenied
-			case "archived memo":
-				require.NoError(t, ts.UpdateMemo(ctx, &store.UpdateMemo{ID: memo.ID, RowStatus: new(store.Archived)}))
 			case "unrelated actor":
 				delete.Policy.ActorUserID = peer.ID
 				wantErr = store.ErrMemoPermissionDenied

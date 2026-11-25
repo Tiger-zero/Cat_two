@@ -19,18 +19,17 @@ import type { MemoHeaderProps } from "../types";
 const MemoHeader: React.FC<MemoHeaderProps> = ({ timeDisplay = "relative", showCreator }) => {
   const t = useTranslate();
 
-  const { memo, creator, currentUser, parentPage, isArchived, readonly, isEditing, openEditor } = useMemoViewContext();
+  const { memo, creator, currentUser, parentPage, readonly, isEditing, openEditor } = useMemoViewContext();
   const location = useLocation();
   const { createTime, updateTime, displayTime: memoDisplayTime, isDisplayingUpdatedTime, relativeTimeFormat } = useMemoViewDerived();
   const { newMemoName } = useNewMemo();
 
-  const timeValue = isArchived ? (
-    memoDisplayTime?.toLocaleString(i18n.language, { timeZone: APP_TIME_ZONE })
-  ) : timeDisplay === "time" ? (
-    memoDisplayTime?.toLocaleTimeString(i18n.language, { timeZone: APP_TIME_ZONE, hour: "numeric", minute: "2-digit" })
-  ) : (
-    <RelativeTime date={memoDisplayTime} format={relativeTimeFormat} />
-  );
+  const timeValue =
+    timeDisplay === "time" ? (
+      memoDisplayTime?.toLocaleTimeString(i18n.language, { timeZone: APP_TIME_ZONE, hour: "numeric", minute: "2-digit" })
+    ) : (
+      <RelativeTime date={memoDisplayTime} format={relativeTimeFormat} />
+    );
   const displayTime = isDisplayingUpdatedTime ? (
     <>
       {t("common.last-updated-at")} {timeValue}
@@ -74,7 +73,7 @@ const MemoHeader: React.FC<MemoHeaderProps> = ({ timeDisplay = "relative", showC
       </div>
 
       <div data-slot="memo-header-actions" className="flex shrink-0 select-none flex-row items-center justify-end gap-1">
-        {currentUser && !isArchived && (
+        {currentUser && (
           // On desktop the picker's trigger shows only while the card is engaged or the picker is open.
           <span className="flex sm:hidden sm:group-hover:flex sm:group-focus-within:flex sm:has-[[data-popup-open]]:flex">
             <ReactionSelector memo={memo} trigger={<Button variant="ghost" size="sm" icon={<SmilePlusIcon />} />} />

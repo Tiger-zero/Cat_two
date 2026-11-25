@@ -1392,10 +1392,7 @@ type ListUserStatsRequest struct {
 	Parent string `protobuf:"bytes,1,opt,name=parent,proto3" json:"parent,omitempty"`
 	// Optional. A CEL expression selecting the memos to count. Uses the same
 	// filter syntax as ListMemos.
-	Filter string `protobuf:"bytes,2,opt,name=filter,proto3" json:"filter,omitempty"`
-	// Optional. The state of the memos to count. Defaults to NORMAL. ARCHIVED
-	// counts only the caller's own memos.
-	State         State `protobuf:"varint,3,opt,name=state,proto3,enum=memos.api.State" json:"state,omitempty"`
+	Filter        string `protobuf:"bytes,2,opt,name=filter,proto3" json:"filter,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1442,13 +1439,6 @@ func (x *ListUserStatsRequest) GetFilter() string {
 		return x.Filter
 	}
 	return ""
-}
-
-func (x *ListUserStatsRequest) GetState() State {
-	if x != nil {
-		return x.State
-	}
-	return State_STATE_UNSPECIFIED
 }
 
 // Response message for UserService.ListUserStats.
@@ -1570,8 +1560,7 @@ type UserUsage struct {
 	// Identifier. The resource name of the user usage singleton.
 	// Format: users/{user}/usage
 	Name string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	// The number of memos the user created, including comments, archived
-	// memos, and memos in Spaces.
+	// The number of memos the user created, including comments.
 	MemoCount int64 `protobuf:"varint,2,opt,name=memo_count,json=memoCount,proto3" json:"memo_count,omitempty"`
 	// The total size in bytes of the user's uploads, including uploads not
 	// attached to a memo. External links do not count.
@@ -3368,11 +3357,10 @@ const file_api_user_service_proto_rawDesc = "" +
 	"\n" +
 	"undo_count\x18\x04 \x01(\x05R\tundoCount:B\xeaA?\n" +
 	"\x13memos.api/UserStats\x12\x12users/{user}/stats*\tuserStats2\tuserStatsB\x1b\n" +
-	"\x19_attachment_storage_bytes\"\x95\x01\n" +
+	"\x19_attachment_storage_bytes\"u\n" +
 	"\x14ListUserStatsRequest\x123\n" +
 	"\x06parent\x18\x01 \x01(\tB\x1b\xe0A\x02\xfaA\x15\x12\x13memos.api/UserStatsR\x06parent\x12\x1b\n" +
-	"\x06filter\x18\x02 \x01(\tB\x03\xe0A\x01R\x06filter\x12+\n" +
-	"\x05state\x18\x03 \x01(\x0e2\x10.memos.api.StateB\x03\xe0A\x01R\x05state\"L\n" +
+	"\x06filter\x18\x02 \x01(\tB\x03\xe0A\x01R\x06filterJ\x04\b\x03\x10\x04R\x05state\"L\n" +
 	"\x15ListUserStatsResponse\x123\n" +
 	"\n" +
 	"user_stats\x18\x01 \x03(\v2\x14.memos.api.UserStatsR\tuserStats\"\x8b\x01\n" +
@@ -3619,68 +3607,67 @@ var file_api_user_service_proto_depIdxs = []int32{
 	50, // 18: memos.api.UserStats.memo_created_timestamps:type_name -> google.protobuf.Timestamp
 	50, // 19: memos.api.UserStats.memo_updated_timestamps:type_name -> google.protobuf.Timestamp
 	42, // 20: memos.api.UserStats.daily_activity:type_name -> memos.api.UserStats.DailyActivity
-	49, // 21: memos.api.ListUserStatsRequest.state:type_name -> memos.api.State
-	19, // 22: memos.api.ListUserStatsResponse.user_stats:type_name -> memos.api.UserStats
-	46, // 23: memos.api.UserUsage.limits:type_name -> memos.api.UserUsage.Limits
-	5,  // 24: memos.api.UserNotification.sender_user:type_name -> memos.api.User
-	3,  // 25: memos.api.UserNotification.type:type_name -> memos.api.UserNotification.Type
-	47, // 26: memos.api.UserNotification.memo_comment:type_name -> memos.api.UserNotification.MemoCommentPayload
-	48, // 27: memos.api.UserNotification.memo_mention:type_name -> memos.api.UserNotification.MemoMentionPayload
-	2,  // 28: memos.api.UserNotification.status:type_name -> memos.api.UserNotification.Status
-	50, // 29: memos.api.UserNotification.create_time:type_name -> google.protobuf.Timestamp
-	25, // 30: memos.api.ListUserNotificationsResponse.notifications:type_name -> memos.api.UserNotification
-	25, // 31: memos.api.UpdateUserNotificationRequest.notification:type_name -> memos.api.UserNotification
-	51, // 32: memos.api.UpdateUserNotificationRequest.update_mask:type_name -> google.protobuf.FieldMask
-	32, // 33: memos.api.ImportMemosRequest.spec:type_name -> memos.api.ImportMemosSpec
-	4,  // 34: memos.api.ImportMemosRequest.conflict_policy:type_name -> memos.api.ImportMemosRequest.ConflictPolicy
-	33, // 35: memos.api.ImportMemosResponse.plan:type_name -> memos.api.ImportMemosPlan
-	34, // 36: memos.api.ImportMemosResponse.report:type_name -> memos.api.ImportMemosReport
-	50, // 37: memos.api.ImportMemosPlan.export_time:type_name -> google.protobuf.Timestamp
-	35, // 38: memos.api.ImportMemosPlan.warnings:type_name -> memos.api.ImportMemosIssue
-	35, // 39: memos.api.ImportMemosReport.warnings:type_name -> memos.api.ImportMemosIssue
-	35, // 40: memos.api.ImportMemosReport.failures:type_name -> memos.api.ImportMemosIssue
-	40, // 41: memos.api.UserSetting.TagsSetting.tags:type_name -> memos.api.UserSetting.TagsSetting.TagsEntry
-	52, // 42: memos.api.UserSetting.TagMetadata.background_color:type_name -> google.type.Color
-	38, // 43: memos.api.UserSetting.TagsSetting.TagsEntry.value:type_name -> memos.api.UserSetting.TagMetadata
-	44, // 44: memos.api.UserStats.DailyActivity.created_counts:type_name -> memos.api.UserStats.DailyActivity.CreatedCountsEntry
-	45, // 45: memos.api.UserStats.DailyActivity.updated_counts:type_name -> memos.api.UserStats.DailyActivity.UpdatedCountsEntry
-	6,  // 46: memos.api.UserService.ListUsers:input_type -> memos.api.ListUsersRequest
-	8,  // 47: memos.api.UserService.GetUser:input_type -> memos.api.GetUserRequest
-	9,  // 48: memos.api.UserService.BatchGetUsers:input_type -> memos.api.BatchGetUsersRequest
-	11, // 49: memos.api.UserService.CreateUser:input_type -> memos.api.CreateUserRequest
-	12, // 50: memos.api.UserService.UpdateUser:input_type -> memos.api.UpdateUserRequest
-	13, // 51: memos.api.UserService.DeleteUser:input_type -> memos.api.DeleteUserRequest
-	15, // 52: memos.api.UserService.ListUserSettings:input_type -> memos.api.ListUserSettingsRequest
-	17, // 53: memos.api.UserService.GetUserSetting:input_type -> memos.api.GetUserSettingRequest
-	18, // 54: memos.api.UserService.UpdateUserSetting:input_type -> memos.api.UpdateUserSettingRequest
-	20, // 55: memos.api.UserService.ListUserStats:input_type -> memos.api.ListUserStatsRequest
-	22, // 56: memos.api.UserService.GetUserStats:input_type -> memos.api.GetUserStatsRequest
-	24, // 57: memos.api.UserService.GetUserUsage:input_type -> memos.api.GetUserUsageRequest
-	26, // 58: memos.api.UserService.ListUserNotifications:input_type -> memos.api.ListUserNotificationsRequest
-	28, // 59: memos.api.UserService.UpdateUserNotification:input_type -> memos.api.UpdateUserNotificationRequest
-	29, // 60: memos.api.UserService.DeleteUserNotification:input_type -> memos.api.DeleteUserNotificationRequest
-	30, // 61: memos.api.UserService.ImportMemos:input_type -> memos.api.ImportMemosRequest
-	7,  // 62: memos.api.UserService.ListUsers:output_type -> memos.api.ListUsersResponse
-	5,  // 63: memos.api.UserService.GetUser:output_type -> memos.api.User
-	10, // 64: memos.api.UserService.BatchGetUsers:output_type -> memos.api.BatchGetUsersResponse
-	5,  // 65: memos.api.UserService.CreateUser:output_type -> memos.api.User
-	5,  // 66: memos.api.UserService.UpdateUser:output_type -> memos.api.User
-	53, // 67: memos.api.UserService.DeleteUser:output_type -> google.protobuf.Empty
-	16, // 68: memos.api.UserService.ListUserSettings:output_type -> memos.api.ListUserSettingsResponse
-	14, // 69: memos.api.UserService.GetUserSetting:output_type -> memos.api.UserSetting
-	14, // 70: memos.api.UserService.UpdateUserSetting:output_type -> memos.api.UserSetting
-	21, // 71: memos.api.UserService.ListUserStats:output_type -> memos.api.ListUserStatsResponse
-	19, // 72: memos.api.UserService.GetUserStats:output_type -> memos.api.UserStats
-	23, // 73: memos.api.UserService.GetUserUsage:output_type -> memos.api.UserUsage
-	27, // 74: memos.api.UserService.ListUserNotifications:output_type -> memos.api.ListUserNotificationsResponse
-	25, // 75: memos.api.UserService.UpdateUserNotification:output_type -> memos.api.UserNotification
-	53, // 76: memos.api.UserService.DeleteUserNotification:output_type -> google.protobuf.Empty
-	31, // 77: memos.api.UserService.ImportMemos:output_type -> memos.api.ImportMemosResponse
-	62, // [62:78] is the sub-list for method output_type
-	46, // [46:62] is the sub-list for method input_type
-	46, // [46:46] is the sub-list for extension type_name
-	46, // [46:46] is the sub-list for extension extendee
-	0,  // [0:46] is the sub-list for field type_name
+	19, // 21: memos.api.ListUserStatsResponse.user_stats:type_name -> memos.api.UserStats
+	46, // 22: memos.api.UserUsage.limits:type_name -> memos.api.UserUsage.Limits
+	5,  // 23: memos.api.UserNotification.sender_user:type_name -> memos.api.User
+	3,  // 24: memos.api.UserNotification.type:type_name -> memos.api.UserNotification.Type
+	47, // 25: memos.api.UserNotification.memo_comment:type_name -> memos.api.UserNotification.MemoCommentPayload
+	48, // 26: memos.api.UserNotification.memo_mention:type_name -> memos.api.UserNotification.MemoMentionPayload
+	2,  // 27: memos.api.UserNotification.status:type_name -> memos.api.UserNotification.Status
+	50, // 28: memos.api.UserNotification.create_time:type_name -> google.protobuf.Timestamp
+	25, // 29: memos.api.ListUserNotificationsResponse.notifications:type_name -> memos.api.UserNotification
+	25, // 30: memos.api.UpdateUserNotificationRequest.notification:type_name -> memos.api.UserNotification
+	51, // 31: memos.api.UpdateUserNotificationRequest.update_mask:type_name -> google.protobuf.FieldMask
+	32, // 32: memos.api.ImportMemosRequest.spec:type_name -> memos.api.ImportMemosSpec
+	4,  // 33: memos.api.ImportMemosRequest.conflict_policy:type_name -> memos.api.ImportMemosRequest.ConflictPolicy
+	33, // 34: memos.api.ImportMemosResponse.plan:type_name -> memos.api.ImportMemosPlan
+	34, // 35: memos.api.ImportMemosResponse.report:type_name -> memos.api.ImportMemosReport
+	50, // 36: memos.api.ImportMemosPlan.export_time:type_name -> google.protobuf.Timestamp
+	35, // 37: memos.api.ImportMemosPlan.warnings:type_name -> memos.api.ImportMemosIssue
+	35, // 38: memos.api.ImportMemosReport.warnings:type_name -> memos.api.ImportMemosIssue
+	35, // 39: memos.api.ImportMemosReport.failures:type_name -> memos.api.ImportMemosIssue
+	40, // 40: memos.api.UserSetting.TagsSetting.tags:type_name -> memos.api.UserSetting.TagsSetting.TagsEntry
+	52, // 41: memos.api.UserSetting.TagMetadata.background_color:type_name -> google.type.Color
+	38, // 42: memos.api.UserSetting.TagsSetting.TagsEntry.value:type_name -> memos.api.UserSetting.TagMetadata
+	44, // 43: memos.api.UserStats.DailyActivity.created_counts:type_name -> memos.api.UserStats.DailyActivity.CreatedCountsEntry
+	45, // 44: memos.api.UserStats.DailyActivity.updated_counts:type_name -> memos.api.UserStats.DailyActivity.UpdatedCountsEntry
+	6,  // 45: memos.api.UserService.ListUsers:input_type -> memos.api.ListUsersRequest
+	8,  // 46: memos.api.UserService.GetUser:input_type -> memos.api.GetUserRequest
+	9,  // 47: memos.api.UserService.BatchGetUsers:input_type -> memos.api.BatchGetUsersRequest
+	11, // 48: memos.api.UserService.CreateUser:input_type -> memos.api.CreateUserRequest
+	12, // 49: memos.api.UserService.UpdateUser:input_type -> memos.api.UpdateUserRequest
+	13, // 50: memos.api.UserService.DeleteUser:input_type -> memos.api.DeleteUserRequest
+	15, // 51: memos.api.UserService.ListUserSettings:input_type -> memos.api.ListUserSettingsRequest
+	17, // 52: memos.api.UserService.GetUserSetting:input_type -> memos.api.GetUserSettingRequest
+	18, // 53: memos.api.UserService.UpdateUserSetting:input_type -> memos.api.UpdateUserSettingRequest
+	20, // 54: memos.api.UserService.ListUserStats:input_type -> memos.api.ListUserStatsRequest
+	22, // 55: memos.api.UserService.GetUserStats:input_type -> memos.api.GetUserStatsRequest
+	24, // 56: memos.api.UserService.GetUserUsage:input_type -> memos.api.GetUserUsageRequest
+	26, // 57: memos.api.UserService.ListUserNotifications:input_type -> memos.api.ListUserNotificationsRequest
+	28, // 58: memos.api.UserService.UpdateUserNotification:input_type -> memos.api.UpdateUserNotificationRequest
+	29, // 59: memos.api.UserService.DeleteUserNotification:input_type -> memos.api.DeleteUserNotificationRequest
+	30, // 60: memos.api.UserService.ImportMemos:input_type -> memos.api.ImportMemosRequest
+	7,  // 61: memos.api.UserService.ListUsers:output_type -> memos.api.ListUsersResponse
+	5,  // 62: memos.api.UserService.GetUser:output_type -> memos.api.User
+	10, // 63: memos.api.UserService.BatchGetUsers:output_type -> memos.api.BatchGetUsersResponse
+	5,  // 64: memos.api.UserService.CreateUser:output_type -> memos.api.User
+	5,  // 65: memos.api.UserService.UpdateUser:output_type -> memos.api.User
+	53, // 66: memos.api.UserService.DeleteUser:output_type -> google.protobuf.Empty
+	16, // 67: memos.api.UserService.ListUserSettings:output_type -> memos.api.ListUserSettingsResponse
+	14, // 68: memos.api.UserService.GetUserSetting:output_type -> memos.api.UserSetting
+	14, // 69: memos.api.UserService.UpdateUserSetting:output_type -> memos.api.UserSetting
+	21, // 70: memos.api.UserService.ListUserStats:output_type -> memos.api.ListUserStatsResponse
+	19, // 71: memos.api.UserService.GetUserStats:output_type -> memos.api.UserStats
+	23, // 72: memos.api.UserService.GetUserUsage:output_type -> memos.api.UserUsage
+	27, // 73: memos.api.UserService.ListUserNotifications:output_type -> memos.api.ListUserNotificationsResponse
+	25, // 74: memos.api.UserService.UpdateUserNotification:output_type -> memos.api.UserNotification
+	53, // 75: memos.api.UserService.DeleteUserNotification:output_type -> google.protobuf.Empty
+	31, // 76: memos.api.UserService.ImportMemos:output_type -> memos.api.ImportMemosResponse
+	61, // [61:77] is the sub-list for method output_type
+	45, // [45:61] is the sub-list for method input_type
+	45, // [45:45] is the sub-list for extension type_name
+	45, // [45:45] is the sub-list for extension extendee
+	0,  // [0:45] is the sub-list for field type_name
 }
 
 func init() { file_api_user_service_proto_init() }

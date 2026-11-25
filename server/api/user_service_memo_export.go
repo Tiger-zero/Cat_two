@@ -31,10 +31,9 @@ type memoExportData struct {
 	attachmentsCount int
 }
 
-// WriteMemoExport writes the user's selected memos and their attachments. When
-// there is no selection, it includes every memo they created, including comments
-// and archived memos. Nothing another user created is included. exportTime is recorded
-// in the manifest; callers name the download after the same instant. Every
+// WriteMemoExport writes the user's selected memos and their attachments. With
+// no selection it exports all of the user's notes and comments outside the trash.
+// The manifest records exportTime, which callers also use to name the download. Every
 // memo row the archive needs is loaded before the first byte is written, so a
 // failure loading them surfaces before the response is committed. Attachment
 // content is read while writing; a failure there truncates the archive.
@@ -187,7 +186,7 @@ func (s *APIService) buildMemoExportRecord(ctx context.Context, writer *memoexpo
 		Creator:         user.Username,
 		CreateTime:      memoexport.FormatTime(memo.CreatedTs),
 		UpdateTime:      memoexport.FormatTime(memo.UpdatedTs),
-		State:           string(memo.RowStatus),
+		State:           "NORMAL", // Required by the version 1 ZIP format.
 		Visibility:      store.Private.String(),
 		Pinned:          memo.Pinned,
 		Tags:            memo.Payload.GetTags(),

@@ -78,8 +78,6 @@
     "add": "增加",
     "admin": "管理员",
     "all": "全部",
-    "archive": "归档",
-    "archived": "已归档",
     "attachments": "附件",
     "avatar": "头像",
     "basic": "基础",
@@ -438,13 +436,11 @@
     "change-error": "无法更新回收站中的这条笔记"
   },
   "message": {
-    "archived-successfully": "归档成功",
     "copied": "已复制",
     "fill-all": "请填写所有栏目。",
     "new-password-not-match": "新密码不一致。",
     "no-data": "未找到任何数据。",
     "password-changed": "密码已修改",
-    "restored-successfully": "恢复成功",
     "succeed-copy-content": "复制内容到剪贴板成功。",
     "succeed-copy-link": "复制链接到剪贴板成功。",
     "update-succeed": "更新成功"
@@ -680,7 +676,7 @@
       "invalid-name": "请输入有效的标签路径，且目标不能是当前标签的子标签。",
       "rename-failed": "无法修改标签名称。",
       "delete-title": "删除 {{tag}}？",
-      "delete-description": "将处理所选标签及其所有子标签，范围包括已归档笔记。",
+      "delete-description": "此操作会影响所选标签及其所有子标签。",
       "delete-how": "如何处理这些笔记？",
       "delete-remove": "仅移除标签",
       "delete-remove-description": "从笔记中移除这些标签，保留笔记。",
@@ -701,7 +697,7 @@
       "review-file": "文件",
       "description": "通过单个文件，在 Memos 实例之间转移备忘录和附件。",
       "export-action": "导出",
-      "export-description": "将您创建的所有备忘录（包括评论、已归档的备忘录和附件）下载为 Memos 导出文件。",
+      "export-description": "将您的笔记、评论和附件下载为 Memos 导出文件。",
       "export-detail": "ZIP 文件中，每条备忘录分别对应一个 Markdown 文件和一条 JSON 记录。",
       "export-failed": "导出失败。",
       "export-label": "下载文件",
@@ -790,10 +786,8 @@
     "keyboard-hint": "按 Enter 键搜索 · 按 Shift+Enter 键换行",
     "load-error": "无法加载备忘录",
     "mode": "搜索模式",
-    "scope": "搜索范围",
     "syntax-help": "搜索语法",
-    "text": "文本",
-    "unarchived": "未归档"
+    "text": "文本"
   },
   "welcome": {
     "title": "欢迎使用 Cat_two",

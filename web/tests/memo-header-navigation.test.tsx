@@ -47,7 +47,6 @@ vi.mock("@/components/MemoView/MemoViewContext", () => ({
     creator: state.creator,
     currentUser: state.currentUser,
     parentPage: "/?filter=tagSearch%3Awork",
-    isArchived: false,
     readonly: false,
     isEditing: state.isEditing,
     openEditor: vi.fn(),

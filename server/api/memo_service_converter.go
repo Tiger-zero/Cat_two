@@ -49,7 +49,6 @@ func (s *APIService) convertMemoFromStoreWithCreators(ctx context.Context, memo 
 	memoMessage := &apipb.Memo{
 		CreationChannel: channel,
 		Name:            name,
-		State:           convertStateFromStore(memo.RowStatus),
 		Creator:         BuildUserName(creator.Username),
 		CreateTime:      timestamppb.New(time.Unix(memo.CreatedTs, 0)),
 		UpdateTime:      timestamppb.New(time.Unix(memo.UpdatedTs, 0)),

@@ -10,7 +10,7 @@ type MemoReadDenial int
 const (
 	// MemoReadDenialNone means the read is allowed.
 	MemoReadDenialNone MemoReadDenial = iota
-	// MemoReadDenialNotFound hides missing, archived, and invalid memo state.
+	// MemoReadDenialNotFound hides missing, deleted, and invalid memos.
 	MemoReadDenialNotFound
 	// MemoReadDenialUnauthenticated means the resource requires a signed-in user.
 	MemoReadDenialUnauthenticated
@@ -66,12 +66,6 @@ func CheckMemoReadContext(ctx MemoReadContext) MemoReadDecision {
 		return MemoReadDecision{Denial: MemoReadDenialNotFound}
 	}
 	if memo.Visibility != store.Public && memo.Visibility != store.Protected && memo.Visibility != store.Private {
-		return MemoReadDecision{Denial: MemoReadDenialNotFound}
-	}
-	if memo.RowStatus != store.Normal && memo.RowStatus != store.Archived {
-		return MemoReadDecision{Denial: MemoReadDenialNotFound}
-	}
-	if memo.RowStatus == store.Archived && !CanManageMemo(ctx.Viewer, memo) {
 		return MemoReadDecision{Denial: MemoReadDenialNotFound}
 	}
 	if !IsActiveUser(ctx.Viewer) {

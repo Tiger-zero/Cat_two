@@ -16,7 +16,7 @@ func authorizeSQLiteMemoComment(ctx context.Context, tx dbExecutor, mutation *st
 		}
 		return err
 	}
-	return mutation.AuthorizeCommentContext(snapshot)
+	return store.ValidateMemoCommentAuthorization(snapshot)
 }
 
 // loadSQLiteMemoParticipation reads the actor and note in the write transaction.
@@ -26,8 +26,8 @@ func loadSQLiteMemoParticipation(ctx context.Context, tx dbExecutor, memoID, act
 		return nil, err
 	}
 	snapshot := &store.MemoCommentAuthorizationSnapshot{ActorUserID: actorUserID, Actor: actor, ContextID: memoID}
-	if err := tx.QueryRowContext(ctx, `SELECT creator_id, row_status, visibility FROM memo WHERE id = ? AND deleted_ts IS NULL`, memoID).Scan(
-		&snapshot.ContextCreatorID, &snapshot.ContextRowStatus, &snapshot.ContextVisibility,
+	if err := tx.QueryRowContext(ctx, `SELECT creator_id, visibility FROM memo WHERE id = ? AND deleted_ts IS NULL`, memoID).Scan(
+		&snapshot.ContextCreatorID, &snapshot.ContextVisibility,
 	); err != nil {
 		return nil, err
 	}

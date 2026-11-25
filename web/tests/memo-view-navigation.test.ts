@@ -12,11 +12,11 @@ describe("memo view navigation", () => {
   it("captures the complete collection origin", () => {
     expect(
       resolveMemoParentPage({
-        pathname: "/archived",
+        pathname: "/",
         search: "?filter=tagSearch%3Awork",
         memoName: "memos/123",
       }),
-    ).toBe("/archived?filter=tagSearch%3Awork");
+    ).toBe("/?filter=tagSearch%3Awork");
   });
 
   it("keeps an explicit origin on a canonical memo route", () => {
@@ -41,12 +41,8 @@ describe("memo view navigation", () => {
     expect(resolveMemoDetailOrigin({ unrelated: true })).toBe("/");
   });
 
-  it("uses the user archive for a direct entry to an archived memo", () => {
-    expect(resolveMemoDetailOrigin(undefined, { memoArchived: true })).toBe("/archived");
-  });
-
-  it("keeps an explicit origin ahead of the archived fallback", () => {
-    expect(resolveMemoDetailOrigin(createMemoNavigationState("/?creator=alice"), { memoArchived: true })).toBe("/?creator=alice");
+  it("keeps an explicit origin when one is supplied", () => {
+    expect(resolveMemoDetailOrigin(createMemoNavigationState("/?creator=alice"))).toBe("/?creator=alice");
   });
 
   it("round-trips an explicit origin through router state", () => {

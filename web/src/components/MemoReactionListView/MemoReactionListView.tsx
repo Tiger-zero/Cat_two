@@ -1,6 +1,5 @@
 import { memo } from "react";
 import useCurrentUser from "@/hooks/useCurrentUser";
-import { State } from "@/types/proto/api/common_pb";
 import type { Memo, Reaction } from "@/types/proto/api/memo_service_pb";
 import { useReactionGroups } from "./hooks";
 import ReactionSelector from "./ReactionSelector";
@@ -15,7 +14,6 @@ const MemoReactionListView = (props: Props) => {
   const { memo: memoData, reactions } = props;
   const currentUser = useCurrentUser();
   const reactionGroup = useReactionGroups(reactions);
-  const readonly = memoData.state === State.ARCHIVED;
 
   if (reactions.length === 0) {
     return null;
@@ -27,7 +25,7 @@ const MemoReactionListView = (props: Props) => {
       {Array.from(reactionGroup).map(([reactionType, group]) => (
         <ReactionView key={reactionType} memo={memoData} reactionType={reactionType} count={group.reactions.length} names={group.names} />
       ))}
-      {!readonly && currentUser && <ReactionSelector memo={memoData} />}
+      {currentUser && <ReactionSelector memo={memoData} />}
     </div>
   );
 };

@@ -1,16 +1,16 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "cat-two-notes",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "通过已配置的 Cat_two MCP 查询和分组笔记，并在确认后创建或更新笔记。",
   "extensions": {
     "com.openai": {
       "interface": {
         "displayName": "Cat_two 笔记",
-        "shortDescription": "整理 NAS 上的个人笔记，归档 Codex 任务",
+        "shortDescription": "整理 NAS 上的个人笔记，保存 Codex 任务总结",
         "defaultPrompt": [
           "按现有标签汇总 Cat_two 最近七天的未完成待办，保留原笔记链接。",
-          "把本次任务整理成 Cat_two 归档草稿，先给我确认。"
+          "把本次任务整理成 Cat_two 笔记草稿，先给我确认。"
         ]
       }
     }

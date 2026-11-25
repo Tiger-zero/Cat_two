@@ -65,7 +65,6 @@ export default function AccountMenu({ className, size = "md" }: { className?: st
         className="mu-compact w-[min(15rem,calc(100vw-1rem))] max-h-[min(27rem,calc(100dvh-5rem))] overflow-y-auto"
       >
         <UserMenu
-          onClose={() => setOpen(false)}
           onOpenSettings={() => {
             pendingSettings.current = true;
             setOpen(false);

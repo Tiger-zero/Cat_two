@@ -4,10 +4,6 @@ export interface MemoNavigationState {
   from: string;
 }
 
-interface ResolveMemoDetailOriginOptions {
-  memoArchived?: boolean;
-}
-
 interface ResolveMemoParentPageOptions {
   explicitParentPage?: string;
   pathname: string;
@@ -32,10 +28,10 @@ export const isMemoResourcePath = (pathname: string): boolean => {
 export const createMemoNavigationState = (from: string): MemoNavigationState => ({ from });
 
 /** Reads the origin page out of router state; without one, a detail returns to its collection. */
-export const resolveMemoDetailOrigin = (state: unknown, options: ResolveMemoDetailOriginOptions = {}): string => {
+export const resolveMemoDetailOrigin = (state: unknown): string => {
   const value = state && typeof state === "object" ? (state as { from?: unknown }) : undefined;
   const explicitParentPage = typeof value?.from === "string" ? value.from : undefined;
-  return explicitParentPage || (options.memoArchived ? ROUTES.ARCHIVED : ROUTES.HOME);
+  return explicitParentPage || ROUTES.HOME;
 };
 
 /** Whether the current route is the canonical detail page for this memo. */

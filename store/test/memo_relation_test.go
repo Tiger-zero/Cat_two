@@ -1057,37 +1057,3 @@ func TestMemoRelationMultipleRelationsToSameMemo(t *testing.T) {
 
 	ts.Close()
 }
-
-func TestMemoRelationFiltersSourceStatusBeforePagination(t *testing.T) {
-	t.Parallel()
-	ctx := context.Background()
-	ts := NewTestingStore(ctx, t)
-	defer ts.Close()
-	user, err := createTestingHostUser(ctx, ts)
-	require.NoError(t, err)
-	parent, err := ts.CreateMemo(ctx, &store.Memo{UID: "status-parent", CreatorID: user.ID, Content: "parent", Visibility: store.Public})
-	require.NoError(t, err)
-	normalMemo, err := ts.CreateMemo(ctx, &store.Memo{UID: "status-normal", CreatorID: user.ID, Content: "normal", Visibility: store.Public})
-	require.NoError(t, err)
-	archivedMemo, err := ts.CreateMemo(ctx, &store.Memo{UID: "status-archived", CreatorID: user.ID, Content: "archived", Visibility: store.Public})
-	require.NoError(t, err)
-	archived := store.Archived
-	require.NoError(t, ts.UpdateMemo(ctx, &store.UpdateMemo{ID: archivedMemo.ID, RowStatus: &archived}))
-	for _, memoID := range []int32{normalMemo.ID, archivedMemo.ID} {
-		_, err := ts.UpsertMemoRelation(ctx, &store.MemoRelation{MemoID: memoID, RelatedMemoID: parent.ID, Type: store.MemoRelationReference})
-		require.NoError(t, err)
-	}
-
-	normal := store.Normal
-	referenceType := store.MemoRelationReference
-	limit := 1
-	relations, err := ts.ListMemoRelations(ctx, &store.FindMemoRelation{
-		RelatedMemoID:       &parent.ID,
-		Type:                &referenceType,
-		SourceMemoRowStatus: &normal,
-		Limit:               &limit,
-	})
-	require.NoError(t, err)
-	require.Len(t, relations, 1)
-	require.Equal(t, normalMemo.ID, relations[0].MemoID)
-}

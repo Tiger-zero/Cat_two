@@ -1,26 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { buildMemoFilter } from "@/hooks/useMemoFilters";
 import { combineCELFilters } from "@/lib/cel-filter";
-import { isMemoCollectionRoute, resolveMemoScope } from "@/lib/memo-collection";
-
-describe("memo scopes", () => {
-  it("resolves collection and detail routes", () => {
-    expect(resolveMemoScope("/archived")).toBe("archived");
-    expect(resolveMemoScope("/memos/123", { detailFrom: "/archived?filter=tagSearch%3Awork" })).toBe("archived");
-    expect(resolveMemoScope("/memos/123", { memoArchived: true })).toBe("archived");
-    expect(resolveMemoScope("/settings", { fallback: "archived" })).toBe("archived");
-  });
-
-  it("applies sidebar filters to the note collections", () => {
-    expect(isMemoCollectionRoute("/")).toBe(true);
-    expect(isMemoCollectionRoute("/explore")).toBe(false);
-    expect(isMemoCollectionRoute("/archived")).toBe(true);
-    expect(isMemoCollectionRoute("/?creator=steven")).toBe(true);
-    expect(isMemoCollectionRoute("/u/steven")).toBe(false);
-    expect(isMemoCollectionRoute("/memos/123")).toBe(false);
-    expect(isMemoCollectionRoute("/attachments")).toBe(false);
-  });
-});
 
 describe("memo filters", () => {
   it("combines the creation-channel facet with the search and ignores unsupported channel inputs", () => {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { buildQuickFindFilters, resolveQuickFindSubmission } from "@/components/AppSidebar/QuickFindDialog";
-import { type MemoFilter, parseFilterQuery, replaceFiltersByFactor } from "@/contexts/MemoFilterContext";
+import { buildQuickFindFilters } from "@/components/AppSidebar/QuickFindDialog";
+import { getFilterSearch, type MemoFilter, parseFilterQuery, replaceFiltersByFactor } from "@/contexts/MemoFilterContext";
 
 describe("Quick Find", () => {
   const scopedFilters: MemoFilter[] = [
@@ -13,82 +13,40 @@ describe("Quick Find", () => {
     "content.contains('urgent')",
     'tags.exists(t, t.startsWith("work/"))',
     'content.matches("(?i)urgent")',
-    "space == null",
     'content.contains("50%, café & C++")\n || pinned',
   ])("retains CEL verbatim through a navigation URL: %s", (expression) => {
-    const submission = resolveQuickFindSubmission("/setting", expression, scopedFilters, "cel");
-    const decoded = parseFilterQuery(new URL(submission.destination!, "https://memos.test").searchParams.get("filter"));
+    const filters = buildQuickFindFilters(expression, [], "cel");
+    const decoded = parseFilterQuery(new URLSearchParams(getFilterSearch(filters)).get("filter"));
     expect(decoded).toEqual([{ factor: "celSearch", value: expression }]);
   });
 
   it("replaces both kinds of search without dropping facets", () => {
     const filters: MemoFilter[] = [...scopedFilters, { factor: "celSearch", value: "pinned" }];
-    expect(buildQuickFindFilters("has_link", filters, true, "cel")).toEqual([
+    expect(buildQuickFindFilters("has_link", filters, "cel")).toEqual([
       ...scopedFilters.slice(0, 2),
       { factor: "celSearch", value: "has_link" },
     ]);
-    expect(buildQuickFindFilters("new new", filters, true, "text")).toEqual([
+    expect(buildQuickFindFilters("new new", filters, "text")).toEqual([
       ...scopedFilters.slice(0, 2),
       { factor: "contentSearch", value: "new" },
     ]);
-    expect(buildQuickFindFilters(" \n ", filters, true, "cel")).toEqual(scopedFilters.slice(0, 2));
-    expect(buildQuickFindFilters(" ", filters, true, "text")).toEqual(scopedFilters.slice(0, 2));
+    expect(buildQuickFindFilters(" \n ", filters, "cel")).toEqual(scopedFilters.slice(0, 2));
+    expect(buildQuickFindFilters(" ", filters, "text")).toEqual(scopedFilters.slice(0, 2));
   });
 
   it("does not recognize expressions in Text mode", () => {
-    expect(buildQuickFindFilters('content.contains("urgent")', [], false, "text")).toEqual([
+    expect(buildQuickFindFilters('content.contains("urgent")', [], "text")).toEqual([
       { factor: "contentSearch", value: 'content.contains("urgent")' },
     ]);
   });
 
   it("replaces search terms while preserving date and tag facets in a collection", () => {
-    expect(buildQuickFindFilters("project plan project", scopedFilters, true, "text")).toEqual([
+    expect(buildQuickFindFilters("project plan project", scopedFilters, "text")).toEqual([
       { factor: "tagSearch", value: "work" },
       { factor: "displayTime", value: "2026-08-03" },
       { factor: "contentSearch", value: "project" },
       { factor: "contentSearch", value: "plan" },
     ]);
-  });
-
-  it("starts a clean All search outside collection routes", () => {
-    expect(buildQuickFindFilters("project", scopedFilters, false, "text")).toEqual([{ factor: "contentSearch", value: "project" }]);
-  });
-
-  it("keeps scoped filters and stays in the personal feed", () => {
-    expect(resolveQuickFindSubmission("/", "project", scopedFilters, "text")).toEqual({
-      filters: [
-        { factor: "tagSearch", value: "work" },
-        { factor: "displayTime", value: "2026-08-03" },
-        { factor: "contentSearch", value: "project" },
-      ],
-      destination: undefined,
-    });
-  });
-
-  it("searches Archived as a user collection", () => {
-    expect(resolveQuickFindSubmission("/archived", "project", scopedFilters, "text")).toEqual({
-      filters: [
-        { factor: "tagSearch", value: "work" },
-        { factor: "displayTime", value: "2026-08-03" },
-        { factor: "contentSearch", value: "project" },
-      ],
-      destination: undefined,
-    });
-  });
-
-  it.each([
-    "/inbox",
-    "/setting",
-    "/views",
-    "/about",
-    "/memos/abc",
-    "/memos/shares/token",
-    "/404",
-  ])("starts a clean All search from %s", (pathname) => {
-    expect(resolveQuickFindSubmission(pathname, "project", scopedFilters, "text")).toEqual({
-      filters: [{ factor: "contentSearch", value: "project" }],
-      destination: "/?filter=contentSearch%3Aproject",
-    });
   });
 
   it("replaces only the selected date facet", () => {
@@ -99,11 +57,8 @@ describe("Quick Find", () => {
     ]);
   });
 
-  it("takes untagged and the current date/text search into the selected collection", () => {
-    const result = resolveQuickFindSubmission("/", "fresh plan", scopedFilters, "text", "archived", true);
-    const url = new URL(result.destination!, "https://memos.test");
-    expect(url.pathname).toBe("/archived");
-    expect(parseFilterQuery(url.searchParams.get("filter"))).toEqual([
+  it("replaces tag filters with untagged while keeping the date and new search terms", () => {
+    expect(buildQuickFindFilters("fresh plan", scopedFilters, "text", true)).toEqual([
       { factor: "displayTime", value: "2026-08-03" },
       { factor: "contentSearch", value: "fresh" },
       { factor: "contentSearch", value: "plan" },

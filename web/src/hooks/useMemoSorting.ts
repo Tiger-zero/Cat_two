@@ -2,12 +2,10 @@ import { timestampDate } from "@bufbuild/protobuf/wkt";
 import dayjs from "dayjs";
 import { useMemo } from "react";
 import { type MemoTimeBasis, useView } from "@/contexts/ViewContext";
-import { State } from "@/types/proto/api/common_pb";
 import type { Memo } from "@/types/proto/api/memo_service_pb";
 
 export interface UseMemoSortingOptions {
   pinnedFirst?: boolean;
-  state?: State;
 }
 
 export interface UseMemoSortingResult {
@@ -35,7 +33,7 @@ export const hoistMemoToFront = (memos: Memo[], name: string | null): Memo[] => 
 };
 
 export const useMemoSorting = (options: UseMemoSortingOptions = {}): UseMemoSortingResult => {
-  const { pinnedFirst = false, state = State.NORMAL } = options;
+  const { pinnedFirst = false } = options;
   const { orderByTimeAsc, timeBasis } = useView();
 
   // Generate orderBy string for API
@@ -47,21 +45,19 @@ export const useMemoSorting = (options: UseMemoSortingOptions = {}): UseMemoSort
   // Generate listSort function for client-side sorting
   const listSort = useMemo(() => {
     return (memos: Memo[]): Memo[] => {
-      return memos
-        .filter((memo) => memo.state === state)
-        .sort((a, b) => {
-          // First, sort by pinned status if enabled
-          if (pinnedFirst && a.pinned !== b.pinned) {
-            return b.pinned ? 1 : -1;
-          }
+      return [...memos].sort((a, b) => {
+        // First, sort by pinned status if enabled
+        if (pinnedFirst && a.pinned !== b.pinned) {
+          return b.pinned ? 1 : -1;
+        }
 
-          // Then sort by the selected time field.
-          const aTime = getMemoSortTime(a, timeBasis);
-          const bTime = getMemoSortTime(b, timeBasis);
-          return orderByTimeAsc ? dayjs(aTime).unix() - dayjs(bTime).unix() : dayjs(bTime).unix() - dayjs(aTime).unix();
-        });
+        // Then sort by the selected time field.
+        const aTime = getMemoSortTime(a, timeBasis);
+        const bTime = getMemoSortTime(b, timeBasis);
+        return orderByTimeAsc ? dayjs(aTime).unix() - dayjs(bTime).unix() : dayjs(bTime).unix() - dayjs(aTime).unix();
+      });
     };
-  }, [pinnedFirst, state, orderByTimeAsc, timeBasis]);
+  }, [pinnedFirst, orderByTimeAsc, timeBasis]);
 
   return { listSort, orderBy };
 };
