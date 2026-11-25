@@ -74,7 +74,7 @@ const Home = () => {
                 memo={memo}
                 showPinned
                 compact={compact}
-                className={cn("md:light:bg-white", checked && "border-mu-accent")}
+                className={cn("md:light:bg-white", checked ? "border-mu-accent" : "light:border-black")}
               />
             );
             if (!selectedNames || memo.creator !== user?.name) return memoView;
