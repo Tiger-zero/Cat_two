@@ -109,7 +109,6 @@ const RootLayoutContent = () => {
   return (
     <div
       ref={shellRef}
-      data-home-workspace={home || undefined}
       className={cn(
         "mx-auto flex min-h-full w-full bg-mu-canvas md:gap-6 md:px-4 lg:gap-8 lg:px-6",
         limitShell && (maxColumns === 1 ? "max-w-[66.5rem]" : "max-w-7xl"),

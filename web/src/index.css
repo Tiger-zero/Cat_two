@@ -105,14 +105,6 @@
 
 @layer components {
   @media (forced-colors: none) {
-    [data-theme="light"] body:has([data-home-workspace]) {
-      background-color: var(--memos-home-canvas);
-    }
-
-    [data-theme="light"] [data-home-workspace] {
-      --mu-canvas: var(--memos-home-canvas);
-    }
-
     [data-theme="light"] [data-home-collection] {
       --memos-activity-empty: #efefef;
       --memos-activity-low: #c2e8d1;

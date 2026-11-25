@@ -152,7 +152,7 @@ describe.each(["light", "dark"])("%s theme", (theme) => {
     const expectedText = theme === "light" ? "#000000" : "#ffffff";
     expect(cssColor("mu-text")).toBe(expectedText);
     expect(cssColor("mu-text-secondary")).toBe(expectedText);
-    expect(cssColor("mu-canvas")).toBe(theme === "light" ? "#f3f5f0" : "#121212");
+    expect(cssColor("mu-canvas")).toBe(theme === "light" ? "#fff" : "#121212");
   });
 
   it("uses the theme's sidebar and panel backgrounds", () => {

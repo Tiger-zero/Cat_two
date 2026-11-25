@@ -4,9 +4,9 @@ Color and font tokens come from `@usememos/ui` (read `web/node_modules/@usememos
 then its color.md). Every token is a CSS variable named `--mu-<name>`; the Tailwind utilities for them
 carry an `mu-` prefix (`bg-mu-surface`, `text-mu-text-secondary`).
 
-- **Light** uses `#FFFFFF` for the home canvas and the desktop home sidebar, account panel,
+- **Light** uses `#FFFFFF` for the page canvas (including the trash) and the desktop home sidebar, account panel,
   calendar, composer, and note cards. The desktop home calendar uses unlabeled date blocks,
-  `#C2E8D1` with notes and `#EFEFEF` without notes. The default canvas for other pages is `#F3F5F0`.
+  `#C2E8D1` with notes and `#EFEFEF` without notes.
   **Dark** uses `#121212` for the canvas, sidebar and shared surfaces, with lighter green actions.
   Both use the same component roles and are selected by `data-theme="light" | "dark"` on `<html>`.
   `utils/theme.ts` sets the attribute from the saved preference (`default`, `default-dark`, `paper` or

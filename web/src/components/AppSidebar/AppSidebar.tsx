@@ -219,8 +219,7 @@ const AppSidebar = ({ className, mobile = false }: { className?: string; mobile?
           ? "bg-mu-canvas"
           : "@container/sidebar overflow-x-hidden overflow-y-auto overscroll-y-contain bg-(--memos-sidebar) [scrollbar-gutter:stable]",
         desktopHomeCollection &&
-          "light:border-transparent light:bg-[var(--memos-home-canvas,var(--mu-canvas))] " +
-            "light:[&_.memos-panel]:border-transparent light:[&_.memos-panel]:bg-[var(--memos-home-canvas,var(--mu-canvas))]",
+          "light:border-transparent light:bg-mu-canvas light:[&_.memos-panel]:border-transparent light:[&_.memos-panel]:bg-mu-canvas",
         className,
       )}
     >
@@ -232,7 +231,7 @@ const AppSidebar = ({ className, mobile = false }: { className?: string; mobile?
           className={cn(
             "flex min-w-0 items-center justify-between gap-2",
             !mobile && "rounded-mu-lg border border-mu-line/75 bg-mu-surface/65 p-1.5 dark:bg-mu-surface",
-            desktopHomeCollection && "light:border-transparent light:bg-[var(--memos-home-canvas,var(--mu-canvas))]",
+            desktopHomeCollection && "light:border-transparent light:bg-mu-canvas",
           )}
         >
           <AccountMenu className={cn("min-w-0", !mobile && "flex-1")} size="header" />
