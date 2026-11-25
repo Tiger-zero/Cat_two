@@ -9,7 +9,8 @@ Cat_two 是面向单账户使用的自托管笔记应用，通过 Docker 部署�
 | 功能 | 当前用法 | 代码入口 |
 | --- | --- | --- |
 | 登录和安全 | 首次启动按页面引导创建管理员，随后关闭网页注册。在「系统」修改密码，在「我的账户」启用验证器两步验证。丢失验证器时可从运行中的容器恢复。 | [登录与会话](external-api.md#凭据和可见性) · [账户服务](../../../../server/api/user_service.go) · [恢复步骤](deployment.md#重置两步验证) |
-| 日历和笔记列表 | 「日历」打开笔记列表。点侧栏日期筛选当天，选中日期后新笔记带上该日，点筛选标签的「×」清除。同一天更改搜索或标签时，手动设置的笔记时间会保留。日历、时间显示和日期筛选用 `Asia/Shanghai`。旧按日链接会转到当前列表。 | [首页](../../../../web/src/pages/Home.tsx) · [日期工具](../../../../web/src/lib/calendar-utils.ts) · [旧日历链接](../../../../web/src/router/LegacyCalendarRedirect.tsx) |
+| 日历和笔记列表 | 「日历」打开笔记列表。点侧栏日期只筛选当天的笔记，点筛选标签的「×」清除。例如，选中昨天并在今天首次保存网页草稿，笔记的创建日期仍是今天。日历、时间显示和日期筛选用 `Asia/Shanghai`。旧按日链接会转到当前列表。 | [首页](../../../../web/src/pages/Home.tsx) · [日期工具](../../../../web/src/lib/calendar-utils.ts) · [旧日历链接](../../../../web/src/router/LegacyCalendarRedirect.tsx) |
+| 笔记时间 | 网页笔记在服务端首次成功保存时取得创建时间。即使稍后编辑或切换排序，阅读卡片右下角始终显示这次保存的上海时间，格式为 `YYYY-MM-DD HH:mm`。点击时间可打开笔记详情。编辑已有笔记时可查看创建时间并调整更新时间。 | [卡片时间](../../../../web/src/components/MemoView/components/MemoTimestamp.tsx) · [编辑器时间控件](../../../../web/src/components/MemoEditor/edit/components/TimestampPopover.tsx) |
 | 侧栏统计 | 首页日历上方显示当前账户的回收站以外的主笔记数、不同的标签路径数和记录天数。记录天数按上海时区的笔记创建日期去重。统计复用侧栏查询，随笔记变更更新，独立于当前筛选和日历排序设置。 | [统计查询](../../../../web/src/hooks/useFilteredMemoStats.ts) · [统计接口](external-api.md#统计和标签) |
 | 搜索和筛选 | 直接输入文字或 CEL 表达式，也可选择标签或「无标签」。主页内搜索可叠加已有的日期、标签等筛选；从回收站或详情搜索时，结果在主页显示。旧的 `/archived` 链接指向主页。「全部笔记」可按创建时间或更新时间排序、筛选来源及多选导出。网页创建记为「网页端」，旧笔记缺少来源时显示「未记录」。旧 `/views` 链接会打开笔记列表。 | [搜索](../../../../web/src/components/AppSidebar/QuickFindDialog.tsx) · [列表菜单](../../../../web/src/components/MemoFeedMenu.tsx) · [CEL](../../../../filter/README.md) |
 | 标签 | 侧栏按名称展示标签，选中父标签会包含下级路径。同一笔记在一个分支只计一次。重命名可移动整个分支，目标已存在时合并。删除可仅移除分支标签，或把匹配笔记移入回收站。置顶按账户在当前浏览器保存。「设置 → 标签」可整理斜杠两侧的空格。 | [标签侧栏](../../../../web/src/components/AppSidebar/TagsSection.tsx) · [标签接口](external-api.md#统计和标签) |

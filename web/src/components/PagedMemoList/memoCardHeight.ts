@@ -10,12 +10,15 @@ interface EstimateMemoCardHeightOptions {
   columnWidth: number;
 }
 
-const CARD_VERTICAL_PADDING = 32;
-const CARD_HEADER_HEIGHT = 24;
+const CARD_VERTICAL_PADDING = 20;
+const CARD_ACTION_HEIGHT = 28;
+const CARD_TIMESTAMP_HEIGHT = 20;
+const CARD_FOOTER_GAP = 2;
 const CARD_SECTION_GAP = 10;
 const SHOW_MORE_BUTTON_HEIGHT = 28;
 
-const CONTENT_HORIZONTAL_PADDING = 40;
+// Desktop inline padding plus the top-right controls and their gap beside the text.
+const CONTENT_HORIZONTAL_PADDING = 108;
 const CONTENT_AVERAGE_CHAR_WIDTH = 7.5;
 const CONTENT_LINE_HEIGHT = 26;
 const CONTENT_MIN_CHARS_PER_LINE = 18;
@@ -105,7 +108,11 @@ export const estimateMemoCardHeight = (memo: Memo, { columnWidth }: EstimateMemo
   const compactBodyHeight = bodyHeight > CLAMP_TRIGGER_HEIGHT_PX ? CLAMP_PREVIEW_HEIGHT_PX + SHOW_MORE_BUTTON_HEIGHT : bodyHeight;
   const reactionHeight = (memo.reactions ?? []).length > 0 ? CARD_SECTION_GAP + REACTION_ROW_HEIGHT : 0;
 
+  const footerHeight = memo.createTime ? CARD_FOOTER_GAP + CARD_TIMESTAMP_HEIGHT : 0;
   return (
-    CARD_VERTICAL_PADDING + CARD_HEADER_HEIGHT + CARD_SECTION_GAP + compactBodyHeight + reactionHeight + estimateCommentPreviewHeight(memo)
+    CARD_VERTICAL_PADDING +
+    Math.max(CARD_ACTION_HEIGHT, compactBodyHeight + reactionHeight) +
+    estimateCommentPreviewHeight(memo) +
+    footerHeight
   );
 };

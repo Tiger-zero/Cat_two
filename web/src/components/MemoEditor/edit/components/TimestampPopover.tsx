@@ -1,7 +1,6 @@
 import { Field, Input, Popover } from "@usememos/ui";
 import { type FC, useRef, useState } from "react";
 import { MEMO_TIME_CONTROL_CLASSES } from "@/components/MemoView/constants";
-import i18n from "@/i18n";
 import { recordMemoEditingActivity } from "@/lib/memo-editing-activity";
 import { APP_DATE_TIME_FORMAT, inAppTimeZone, parseAppDateTime } from "@/lib/time-zone";
 import { useTranslate } from "@/utils/i18n";
@@ -48,13 +47,6 @@ const TimestampInput: FC<{
   );
 };
 
-/** "Now" in the viewer's language, the word the memo card shows for a memo written this moment. */
-function nowLabel(): string {
-  const word = new Intl.RelativeTimeFormat(i18n.language, { numeric: "auto" }).format(0, "second");
-  return word.charAt(0).toLocaleUpperCase(i18n.language) + word.slice(1);
-}
-
-/** The memo's time as a control; a memo being written that has no time yet reads "Now". */
 export const TimestampPopover: FC = () => {
   const t = useTranslate();
   const { actions, dispatch, getState } = useEditorContext();
@@ -62,15 +54,13 @@ export const TimestampPopover: FC = () => {
   const createTime = useEditorSelector((s) => s.timestamps.createTime);
   const updateTime = useEditorSelector((s) => s.timestamps.updateTime);
 
-  if (!createTime) return <span className="shrink-0 whitespace-nowrap mu-caption text-mu-text-secondary select-none">{nowLabel()}</span>;
+  if (!createTime) return null;
 
-  const setTimestamp = (field: "createTime" | "updateTime", date: Date) => {
+  const setUpdateTime = (date: Date) => {
     const current = getState();
-    if (current.ui.isLoading.saving) return;
-    const previous = current.timestamps[field];
-    dispatch(actions.setTimestamps({ [field]: date }));
-    // Explicitly selecting the calendar default makes that time fixed at save.
-    if (previous === current.calendarDefault || previous?.getTime() !== date.getTime()) recordMemoEditingActivity();
+    if (current.ui.isLoading.saving || current.timestamps.updateTime?.getTime() === date.getTime()) return;
+    dispatch(actions.setTimestamps({ updateTime: date }));
+    recordMemoEditingActivity();
   };
 
   return (
@@ -79,8 +69,13 @@ export const TimestampPopover: FC = () => {
         {formatDate(createTime)}
       </Popover.Trigger>
       <Popover.Popup align="start" className="w-auto">
-        <TimestampInput label={t("common.created-at")} date={createTime} onChange={(date) => setTimestamp("createTime", date)} />
-        <TimestampInput label={t("common.last-updated-at")} date={updateTime} onChange={(date) => setTimestamp("updateTime", date)} />
+        <div>
+          <div>{t("common.created-at")}</div>
+          <time dateTime={createTime.toISOString()} className="font-mono">
+            {formatDate(createTime)}
+          </time>
+        </div>
+        <TimestampInput label={t("common.last-updated-at")} date={updateTime} onChange={setUpdateTime} />
       </Popover.Popup>
     </Popover.Root>
   );

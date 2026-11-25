@@ -1,4 +1,5 @@
 import { create } from "@bufbuild/protobuf";
+import { timestampFromDate } from "@bufbuild/protobuf/wkt";
 import { act, render } from "@testing-library/react";
 import type { EditorMode } from "@usememos/editor";
 import type { RefObject } from "react";
@@ -117,17 +118,35 @@ describe("the initial draft and useMemoInit", () => {
     expect(cacheService.loadDraft(draftKey).content).toBe("Edited");
   });
 
-  it("restores an edit for the same revision, including attachment removals and timestamps", () => {
+  it("restores an edit's attachments and update time while keeping its saved creation time", () => {
     const attachment = create(AttachmentSchema, { name: "attachments/original", filename: "original.png" });
-    const memo = create(MemoSchema, { name: "memos/one", content: "Original", attachments: [attachment] });
-    const createTime = Date.parse("2026-11-21T01:02:03+08:00");
-    cacheService.saveNow(draftKey, { content: "Edited", attachments: [], createTime, baseRevision: memoDraftRevision(memo) });
+    const savedCreateTime = new Date("2026-10-03T12:00:00+08:00");
+    const memo = create(MemoSchema, {
+      name: "memos/one",
+      content: "Original",
+      attachments: [attachment],
+      createTime: timestampFromDate(savedCreateTime),
+    });
+    const draftTime = Date.parse("2026-11-21T01:02:03+08:00");
+    localStorage.setItem(
+      draftKey,
+      JSON.stringify({
+        kind: "memos.editor-cache",
+        version: 4,
+        content: "Edited",
+        attachments: [],
+        createTime: draftTime,
+        updateTime: draftTime,
+        baseRevision: memoDraftRevision(memo),
+      }),
+    );
 
     const state = initialEditorState({ memo, draftKey });
 
     expect(state.content).toBe("Edited");
     expect(state.metadata.attachments).toEqual([]);
-    expect(state.timestamps.createTime).toEqual(new Date(createTime));
+    expect(state.timestamps.createTime).toEqual(savedCreateTime);
+    expect(state.timestamps.updateTime).toEqual(new Date(draftTime));
   });
 
   it("keeps the current memo when its content changed without a timestamp change", () => {
@@ -140,14 +159,24 @@ describe("the initial draft and useMemoInit", () => {
     expect(cacheService.loadDraft(draftKey).content).toBe("Unfinished edit");
   });
 
-  it("restores a manual calendar time only for the selected Shanghai day", () => {
-    const createTime = Date.parse("2026-11-21T01:02:03+08:00");
-    cacheService.saveNow(draftKey, { content: "Backdated note", attachments: [], calendarDay: "2026-11-21", createTime });
-    const sameDay = new Date("2026-11-21T21:02:03+08:00");
-    const nextDay = new Date("2026-11-22T00:00:00+08:00");
+  it("recovers unsaved text from a legacy calendar draft without assigning either timestamp", () => {
+    const draftTime = Date.parse("2026-11-21T01:02:03+08:00");
+    localStorage.setItem(
+      draftKey,
+      JSON.stringify({
+        kind: "memos.editor-cache",
+        version: 4,
+        content: "Unfinished calendar note",
+        attachments: [],
+        calendarDay: "2026-11-21",
+        createTime: draftTime,
+        updateTime: draftTime,
+      }),
+    );
 
-    expect(initialEditorState({ draftKey, defaultCreateTime: sameDay }).timestamps.createTime).toEqual(new Date(createTime));
-    expect(initialEditorState({ draftKey, defaultCreateTime: nextDay }).timestamps.createTime).toBe(nextDay);
-    expect(initialEditorState({ draftKey }).timestamps.createTime).toBeUndefined();
+    const state = initialEditorState({ draftKey });
+    expect(state.content).toBe("Unfinished calendar note");
+    expect(state.timestamps.createTime).toBeUndefined();
+    expect(state.timestamps.updateTime).toBeUndefined();
   });
 });

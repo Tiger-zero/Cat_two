@@ -11,7 +11,6 @@ const mocks = vi.hoisted(() => ({
   createMemo: vi.fn(),
   createMemoComment: vi.fn(),
   newMemoName: null as string | null,
-  timestamps: {} as { createTime?: Date; updateTime?: Date },
   saving: false,
 }));
 
@@ -31,11 +30,9 @@ vi.mock("@/components/MemoEditor/edit/state", () => ({
       reset: () => ({ type: "reset" }),
       setLoading: (key: string, value: boolean) => ({ type: "set-loading", key, value }),
       setMetadata: () => ({ type: "set-metadata" }),
-      setTimestamps: () => ({ type: "set-timestamps" }),
-      setCalendarDefault: () => ({ type: "set-timestamps" }),
     },
     dispatch: mocks.dispatch,
-    getState: () => ({ ui: { isLoading: { saving: mocks.saving } }, timestamps: mocks.timestamps }),
+    getState: () => ({ ui: { isLoading: { saving: mocks.saving } } }),
   }),
 }));
 
@@ -53,7 +50,6 @@ describe("useMemoSave", () => {
     mocks.markNewMemo.mockReset();
     mocks.memoSave.mockReset();
     mocks.newMemoName = null;
-    mocks.timestamps = {};
     mocks.saving = false;
     mocks.dispatch.mockImplementation((action) => {
       if (action.type === "set-loading" && action.key === "saving") mocks.saving = action.value;
@@ -214,44 +210,6 @@ describe("useMemoSave", () => {
     await act(async () => result.current());
 
     expect(mocks.markNewMemo).not.toHaveBeenCalled();
-  });
-
-  it("stamps an untouched default create time with the time of saving", async () => {
-    vi.useFakeTimers({ now: new Date(2026, 9, 6, 13, 17, 40), toFake: ["Date"] });
-    try {
-      // Derived when the day was selected; the same reference stays in state across saves.
-      const defaultCreateTime = new Date(2026, 9, 1, 13, 17, 23);
-      mocks.timestamps = { createTime: defaultCreateTime, updateTime: defaultCreateTime };
-      mocks.memoSave.mockResolvedValue({ hasChanges: true, memoName: "memos/new" });
-      const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-      const wrapper = ({ children }: PropsWithChildren) => <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
-      const { result } = renderHook(() => useMemoSave({ defaultCreateTime, discardDraft: vi.fn() }), { wrapper });
-
-      await act(async () => result.current());
-      vi.setSystemTime(new Date(2026, 9, 6, 13, 17, 55));
-      await act(async () => result.current());
-
-      const sent = mocks.memoSave.mock.calls.map(([state]) => state.timestamps.createTime as Date);
-      expect(sent[0]).toEqual(new Date(2026, 9, 1, 13, 17, 40));
-      expect(sent[1]).toEqual(new Date(2026, 9, 1, 13, 17, 55));
-      expect(defaultCreateTime).toEqual(new Date(2026, 9, 1, 13, 17, 23));
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-
-  it("sends a manually edited create time unchanged", async () => {
-    const defaultCreateTime = new Date(2026, 9, 1, 13, 17, 23);
-    const edited = new Date(2026, 8, 20, 9, 30, 0);
-    mocks.timestamps = { createTime: edited, updateTime: edited };
-    mocks.memoSave.mockResolvedValue({ hasChanges: true, memoName: "memos/new" });
-    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    const wrapper = ({ children }: PropsWithChildren) => <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
-    const { result } = renderHook(() => useMemoSave({ defaultCreateTime, discardDraft: vi.fn() }), { wrapper });
-
-    await act(async () => result.current());
-
-    expect(mocks.memoSave.mock.calls[0][0].timestamps.createTime).toBe(edited);
   });
 
   it("does not hold the in-place composer after saving a new memo", async () => {

@@ -61,14 +61,6 @@ function buildUpdateMask(
     mask.add("update_time");
   }
 
-  // Handle custom timestamps
-  if (state.timestamps.createTime) {
-    const prevCreateTime = prevMemo.createTime ? timestampDate(prevMemo.createTime) : undefined;
-    if (!isEqual(state.timestamps.createTime, prevCreateTime)) {
-      mask.add("create_time");
-      patch.createTime = timestampFromDate(state.timestamps.createTime);
-    }
-  }
   if (state.timestamps.updateTime) {
     const prevUpdateTime = prevMemo.updateTime ? timestampDate(prevMemo.updateTime) : undefined;
     if (!isEqual(state.timestamps.updateTime, prevUpdateTime)) {
@@ -179,8 +171,6 @@ export const memoService = {
       visibility: Visibility.PRIVATE,
       attachments: toAttachmentReferences(allAttachments),
       relations: state.metadata.relations,
-      createTime: state.timestamps.createTime ? timestampFromDate(state.timestamps.createTime) : undefined,
-      updateTime: state.timestamps.updateTime ? timestampFromDate(state.timestamps.updateTime) : undefined,
     });
 
     const memo = await operations.createMemo(memoData, options.parentMemoName);

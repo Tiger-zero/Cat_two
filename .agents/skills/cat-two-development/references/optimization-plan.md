@@ -10,7 +10,7 @@ Cat_two 的主要工作流是记下内容、按日期和标签找回、在 NAS �
 
 ## P1 · 记录与恢复
 
-1. **保留手动填写的笔记时间。** 日历默认时间按上海日期更新。同一天修改文字搜索和其他筛选时，已编辑的时间保持有效。真正切换日期时刷新日历默认值。回归覆盖同日筛选、跨日切换、刷新和按创建时间或更新时间筛选。 [日期入口](../../../../web/src/pages/Home.tsx) · [编辑会话](../../../../web/src/components/MemoEditor/edit/EditSession.tsx)
+1. **验证首次保存与日期筛选。** 网页草稿首次成功保存时由服务端记录创建时间。回归覆盖草稿隔日恢复、在历史日期筛选下新建、保存后重试，以及编辑正文或切换排序后卡片仍显示原创建时间。 [日期入口](../../../../web/src/pages/Home.tsx) · [编辑会话](../../../../web/src/components/MemoEditor/edit/EditSession.tsx)
 2. **保护已有笔记的编辑和待上传附件。** 草稿保存到当前浏览器，已有笔记按账户、笔记和编辑基准匹配后恢复。附件以原文件暂存在 IndexedDB，恢复后重新构建预览，保存成功后清除。回归覆盖刷新、纯附件草稿、取消编辑和其他会话更新笔记后的冲突提示。 [草稿保存](../../../../web/src/components/MemoEditor/edit/hooks/useAutoSave.ts) · [待上传附件](../../../../web/src/components/MemoEditor/edit/hooks/useStagedDraftFiles.ts)
 3. **补齐 ZIP 往返恢复。** 导入时可在同一作者的父笔记下还原评论。新 ZIP 直接存储附件字节，导入端继续检查解包限额。测试覆盖同标识的跳过、覆盖、创建副本，以及 80 MiB 高压缩比附件的 SHA-256。新归档的易压缩附件可能占用更多空间。 [评论规则](../../../../store/memo_comment.go) · [导入](../../../../server/api/user_service_memo_import.go) · [ZIP 测试](../../../../core/memoexport/expansion_test.go)
 4. **重试回收站清理。** 永久删除的事务同时保存附件待清理记录。接口返回笔记删除结果，清理失败可在之后的后台清扫中重试。测试模拟文件清理失败，关闭并重新打开 SQLite，再验证重试及共享文件引用。 [回收站处理](../../../../server/api/memo_trash_handler.go) · [重开与清理测试](../../../../server/api/memo_trash_handler_test.go)

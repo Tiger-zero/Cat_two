@@ -16,7 +16,6 @@ const STRUCTURED_CACHE_ENTRY_VERSION = 4;
 
 export interface MemoCreateAttempt {
   id: string;
-  submittedAt: number;
   memo: Memo;
 }
 
@@ -28,8 +27,6 @@ export interface EditorDraft {
   stagedFilesRevision?: string;
   relations?: MemoRelation[];
   attachmentOrder?: string[];
-  calendarDay?: string;
-  createTime?: number;
   updateTime?: number;
   createAttempt?: MemoCreateAttempt;
 }
@@ -70,22 +67,13 @@ function deserializeDraft(raw: string): EditorDraft {
       if (Array.isArray(parsed.attachmentOrder)) {
         draft.attachmentOrder = parsed.attachmentOrder.filter((key): key is string => typeof key === "string");
       }
-      if (typeof parsed.calendarDay === "string") draft.calendarDay = parsed.calendarDay;
-      if (typeof parsed.createTime === "number" && Number.isFinite(new Date(parsed.createTime).valueOf()))
-        draft.createTime = parsed.createTime;
       if (typeof parsed.updateTime === "number" && Number.isFinite(new Date(parsed.updateTime).valueOf()))
         draft.updateTime = parsed.updateTime;
-      const attempt = parsed.createAttempt as { id?: unknown; submittedAt?: unknown; memo?: JsonValue } | undefined;
-      if (
-        attempt?.memo &&
-        typeof attempt.id === "string" &&
-        typeof attempt.submittedAt === "number" &&
-        Number.isFinite(new Date(attempt.submittedAt).valueOf())
-      ) {
+      const attempt = parsed.createAttempt as { id?: unknown; memo?: JsonValue } | undefined;
+      if (attempt?.memo && typeof attempt.id === "string") {
         try {
           draft.createAttempt = {
             id: attempt.id,
-            submittedAt: attempt.submittedAt,
             memo: fromJson(MemoSchema, attempt.memo),
           };
         } catch {
@@ -118,7 +106,6 @@ export function hasDraftContent(draft: EditorDraft): boolean {
       draft.attachments.length ||
       draft.baseRevision ||
       draft.relations?.length ||
-      draft.createTime !== undefined ||
       draft.updateTime !== undefined ||
       draft.attachmentOrder?.length ||
       draft.createAttempt,

@@ -1,5 +1,5 @@
 import type { Memo } from "@/types/proto/api/memo_service_pb";
-import { draftCalendarDay, matchesMemoDraftRevision } from "./draftRevision";
+import { matchesMemoDraftRevision } from "./draftRevision";
 import { cacheService } from "./services/cacheService";
 import { memoService } from "./services/memoService";
 import { createInitialState, type EditorState } from "./state/types";
@@ -9,7 +9,6 @@ export interface InitialEditorStateOptions {
   memo?: Memo;
   /** The persisted draft's key, including the current account. */
   draftKey: string;
-  defaultCreateTime?: Date;
   rawDraft?: string | null;
   /** The user chose to review an older draft against the memo now on the server. */
   reviewStaleDraft?: boolean;
@@ -23,14 +22,12 @@ export interface InitialEditorStateOptions {
 export function initialEditorState({
   memo,
   draftKey,
-  defaultCreateTime,
   rawDraft = cacheService.readForEditor(draftKey),
   reviewStaleDraft = false,
 }: InitialEditorStateOptions): EditorState {
   const base = {
     ...createInitialState(),
     ...(memo ? memoService.fromMemo(memo) : undefined),
-    calendarDefault: defaultCreateTime,
   };
   const draft = cacheService.loadDraft(draftKey, rawDraft);
   if (memo && !matchesMemoDraftRevision(memo, draft.baseRevision) && !(reviewStaleDraft && draft.baseRevision)) {
@@ -38,7 +35,6 @@ export function initialEditorState({
     if (draft.baseRevision === undefined && rawDraft !== null) cacheService.clear(draftKey, rawDraft);
     return base;
   }
-  const restoreTimes = Boolean(memo) || draft.calendarDay === draftCalendarDay(defaultCreateTime);
   return {
     ...base,
     content: draft.content,
@@ -49,10 +45,8 @@ export function initialEditorState({
     },
     attachmentOrder: draft.attachmentOrder ?? base.attachmentOrder,
     timestamps: {
-      createTime:
-        restoreTimes && draft.createTime !== undefined ? new Date(draft.createTime) : (defaultCreateTime ?? base.timestamps.createTime),
-      updateTime:
-        restoreTimes && draft.updateTime !== undefined ? new Date(draft.updateTime) : (defaultCreateTime ?? base.timestamps.updateTime),
+      ...base.timestamps,
+      updateTime: memo && draft.updateTime !== undefined ? new Date(draft.updateTime) : base.timestamps.updateTime,
     },
   };
 }

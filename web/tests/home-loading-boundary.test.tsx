@@ -73,7 +73,7 @@ vi.mock("@/contexts/AuthContext", () => ({
 }));
 
 vi.mock("@/contexts/MemoFilterContext", () => ({
-  useMemoFilterContext: () => ({ filters: [] }),
+  useMemoFilterContext: () => ({ filters: [{ factor: "displayTime", value: "2020-06-15" }] }),
 }));
 
 vi.mock("@/contexts/NewMemoContext", () => ({
@@ -110,7 +110,7 @@ describe("<Home>", () => {
     expect(screen.getByTestId("memo-editor")).toBeInTheDocument();
     expect(screen.getByTestId("memo-view")).toBeInTheDocument();
     expect(state.listProps).toMatchObject({ contextFilter: 'creator == "users/steven"' });
-    expect(state.editorProps?.draft).toEqual({ scope: "home", createTime: undefined });
+    expect(state.editorProps?.draft).toStrictEqual({ scope: "home" });
     expect(state.editorProps).toMatchObject({ expandOnFocus: true });
     expect(state.editorProps?.autoFocus).toBeUndefined();
     expect(state.editorProps?.suggestions).toEqual([{ id: "tag:work" }]);

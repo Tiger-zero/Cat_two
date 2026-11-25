@@ -11,7 +11,6 @@ import { useTranslate } from "@/utils/i18n";
 import { AudioRecorderPanel, EditorContent, EditorMetadata, FocusModeExitButton, FocusModeOverlay, TimestampPopover } from "./components";
 import { EditorSuggestions } from "./components/EditorSuggestions";
 import { COMPOSER_PANEL_CLASSES, FOCUS_MODE_STYLES } from "./constants";
-import { draftCalendarDay } from "./draftRevision";
 import type { EditorFileOrigin } from "./extensions";
 import {
   splitInlineLocalFiles,
@@ -53,7 +52,6 @@ export const EditSession: React.FC<EditSessionProps> = ({
   autoFocus,
   onFocusModeChange,
   placeholder,
-  defaultCreateTime,
   onConfirm,
   onCancel,
 }) => {
@@ -69,7 +67,6 @@ export const EditSession: React.FC<EditSessionProps> = ({
   useEffect(() => {
     onFocusModeChange?.(isFocusMode);
   }, [isFocusMode, onFocusModeChange]);
-  const hasTimestamp = useEditorSelector((s) => Boolean(s.timestamps.createTime));
   const [isAudioRecorderOpen, setIsAudioRecorderOpen] = useState(false);
   const [isComposerExpanded, setIsComposerExpanded] = useState(false);
   const collapseFrame = useRef(0);
@@ -86,7 +83,6 @@ export const EditSession: React.FC<EditSessionProps> = ({
   const drawing = useDrawing(toDrawingFile);
 
   const memoName = memo?.name;
-  const showTimestamp = Boolean(memoName || (!memo && hasTimestamp));
 
   // Source mode only changes how the text is edited, so every composer offers it.
   const [editorMode, setEditorMode] = useSourceMode();
@@ -186,13 +182,6 @@ export const EditSession: React.FC<EditSessionProps> = ({
       cancelAnimationFrame(collapseFrame.current);
     };
   }, [canExpandComposer, isComposerExpanded, editorContainerRef]);
-
-  // Initial state restores manual times for the selected day. Only an actual
-  // day change, including clearing the filter, resets the calendar defaults.
-  useEffect(() => {
-    if (memo || !isInitialized || draftCalendarDay(getState().calendarDefault) === draftCalendarDay(defaultCreateTime)) return;
-    dispatch(actions.setCalendarDefault(defaultCreateTime));
-  }, [defaultCreateTime, memo, isInitialized, actions, dispatch, getState]);
 
   const audioRecorder = useAudioRecorder({
     onRecordingComplete: (localFile) => {
@@ -325,7 +314,6 @@ export const EditSession: React.FC<EditSessionProps> = ({
   const handleSave = useMemoSave({
     memoName,
     parentMemoName,
-    defaultCreateTime,
     discardDraft,
     flushDraft,
     getBaseRevision,
@@ -365,12 +353,10 @@ export const EditSession: React.FC<EditSessionProps> = ({
           !isFocusMode && className,
         )}
       >
-        {/* Focus mode always shows the memo's time ("Now" before it has one) and adds
-            the button that minimizes it back into the page. */}
-        {(showTimestamp || isFocusMode) && (
+        {(memoName || isFocusMode) && (
           <div className={cn("flex w-full items-center gap-1.5", isFocusMode ? "h-10" : "h-6")}>
             {timestampLead}
-            <TimestampPopover />
+            {memoName && <TimestampPopover />}
             {isFocusMode && (
               <div className="ms-auto -me-2">
                 <FocusModeExitButton onExit={handleToggleFocusMode} />

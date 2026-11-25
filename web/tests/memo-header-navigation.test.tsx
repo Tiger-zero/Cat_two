@@ -1,169 +1,161 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { create } from "@bufbuild/protobuf";
+import { timestampFromDate } from "@bufbuild/protobuf/wkt";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import React from "react";
 import { MemoryRouter, useLocation } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import MemoHeader from "@/components/MemoView/components/MemoHeader";
+import MemoView from "@/components/MemoView";
+import { useMemoViewContext } from "@/components/MemoView/MemoViewContext";
+import { useView, ViewProvider } from "@/contexts/ViewContext";
+import { MemoRelation_Type, MemoRelationSchema, MemoSchema } from "@/types/proto/api/memo_service_pb";
 
-const state = vi.hoisted(() => ({
-  creator: undefined as { username: string; displayName: string; avatarUrl: string } | undefined,
-  currentUser: undefined as { name: string } | undefined,
-  isEditing: false,
+const memo = create(MemoSchema, {
+  name: "memos/123",
+  creator: "users/alice",
+  content: "Note body",
+  createTime: timestampFromDate(new Date("2026-08-26T16:03:59Z")),
+  updateTime: timestampFromDate(new Date("2026-08-27T05:29:37Z")),
+});
+const origin = "/?filter=tagSearch%3Awork";
+
+vi.mock("@/contexts/AuthContext", () => ({ useAuth: () => ({ currentUser: { name: "users/alice" } }) }));
+vi.mock("@/contexts/MentionResolutionContext", () => ({
+  useResolvedUser: () => ({ username: "alice", displayName: "Alice", avatarUrl: "" }),
 }));
-
-vi.mock("@/components/RelativeTime", () => ({
-  default: () => <>time</>,
-}));
-
-// The menu owns its trigger's look now (see memo-action-menu.test.tsx); the header only places it.
+vi.mock("@/components/UserAvatar", () => ({ default: () => <span>avatar</span> }));
+vi.mock("@/contexts/NewMemoContext", () => ({ useNewMemo: () => ({ newMemoName: memo.name }) }));
 vi.mock("@/components/MemoActionMenu", () => ({
-  default: () => (
-    <button type="button" aria-label="memo-actions">
-      Memo actions
+  default: ({ onEdit }: { onEdit: () => void }) => (
+    <button type="button" aria-label="memo-actions" onClick={onEdit}>
+      Edit memo
     </button>
   ),
 }));
-
 vi.mock("@/components/MemoReactionListView", () => ({
-  // The header supplies the picker's trigger; the mock renders it with the picker's label.
   ReactionSelector: ({ trigger }: { trigger: React.ReactElement<{ "aria-label"?: string }> }) =>
     React.cloneElement(trigger, { "aria-label": "add-reaction" }),
 }));
-
-vi.mock("@/components/UserAvatar", () => ({
-  default: () => <span>avatar</span>,
+vi.mock("@/components/MemoView/components/MemoCommentListView", () => ({ default: () => <aside>Comment preview</aside> }));
+vi.mock("@/components/MemoView/components/MemoBody", () => ({
+  default: function MemoBody() {
+    const { memo, isEditing } = useMemoViewContext();
+    return isEditing ? <textarea aria-label="Edit note" defaultValue={memo.content} /> : <p>{memo.content}</p>;
+  },
 }));
+vi.mock("@/utils/i18n", () => ({ useTranslate: () => (key: string) => key }));
 
-vi.mock("@/contexts/NewMemoContext", () => ({
-  useNewMemo: () => ({ newMemoName: undefined }),
-}));
-
-vi.mock("@/i18n", () => ({
-  default: { language: "en" },
-}));
-
-vi.mock("@/components/MemoView/MemoViewContext", () => ({
-  useMemoViewContext: () => ({
-    memo: { name: "memos/123", visibility: 1, pinned: false },
-    creator: state.creator,
-    currentUser: state.currentUser,
-    parentPage: "/?filter=tagSearch%3Awork",
-    readonly: false,
-    isEditing: state.isEditing,
-    openEditor: vi.fn(),
-  }),
-  useMemoViewDerived: () => ({
-    createTime: new Date("2026-08-26T00:00:00Z"),
-    updateTime: undefined,
-    displayTime: new Date("2026-08-26T00:00:00Z"),
-    isDisplayingUpdatedTime: false,
-    relativeTimeFormat: "auto",
-  }),
-}));
-
-vi.mock("@/utils/i18n", () => ({
-  useTranslate: () => (key: string) => key,
-}));
-
-const LocationProbe = () => {
+function LocationProbe() {
   const location = useLocation();
   return (
     <output data-testid="location">
       {location.pathname}|{JSON.stringify(location.state)}
     </output>
   );
-};
+}
 
-describe("MemoHeader navigation", () => {
-  beforeEach(() => {
-    state.creator = undefined;
-    state.currentUser = undefined;
-    state.isEditing = false;
+function renderCard(note = memo, path = origin) {
+  render(
+    <MemoryRouter initialEntries={[path]}>
+      <MemoView memo={note} showCreator />
+      <LocationProbe />
+    </MemoryRouter>,
+  );
+  return screen.getByRole("article");
+}
+
+beforeEach(() => localStorage.clear());
+
+describe("memo card header and timestamp", () => {
+  it("keeps the creator, new badge and actions above the note, with the Shanghai date and time below", () => {
+    const card = renderCard(
+      create(MemoSchema, {
+        ...memo,
+        relations: [
+          create(MemoRelationSchema, { type: MemoRelation_Type.COMMENT, memo: { name: "memos/reply" }, relatedMemo: { name: memo.name } }),
+        ],
+      }),
+    );
+    const author = within(card).getByText("Alice");
+    const badge = within(card).getByText("memo.new-badge");
+    const body = within(card).getByText(memo.content);
+    const timestamp = within(card).getByText("2026-08-27 00:03");
+    expect(author.closest("a, button")).toBeNull();
+    for (const element of [author, badge, within(card).getByRole("button", { name: "memo-actions" })]) {
+      expect(element.compareDocumentPosition(body) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    }
+    const comments = within(card).getByText("Comment preview");
+    expect(body.compareDocumentPosition(comments) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(comments.compareDocumentPosition(timestamp) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(timestamp.closest("footer")).toHaveClass("justify-end");
+    expect(timestamp.closest("time")).toHaveAttribute("datetime", "2026-08-26T16:03:59.000Z");
+    expect(card.querySelectorAll("time")).toHaveLength(1);
+  });
+
+  it("keeps the timestamp keyboard-focusable and preserves the filtered origin when opening the detail", () => {
+    const card = renderCard();
+    const link = within(card).getByRole("link", { name: /2026-08-27 00:03/ });
+    expect(link).toHaveAttribute("href", "/memos/123");
+    link.focus();
+    expect(link).toHaveFocus();
+    fireEvent.click(link);
+    expect(screen.getByTestId("location")).toHaveTextContent('/memos/123|{"from":"/?filter=tagSearch%3Awork"}');
+    expect(within(card).getByText("2026-08-27 00:03").closest("a, button")).toBeNull();
+  });
+
+  it("keeps the creation timestamp when sorting by update time and after a later edit", () => {
+    function SortByUpdateTime() {
+      const { setTimeBasis } = useView();
+      return (
+        <button type="button" onClick={() => setTimeBasis("update_time")}>
+          Sort by update time
+        </button>
+      );
+    }
+
+    const { rerender } = render(<MemoView memo={memo} />, {
+      wrapper: ({ children }) => (
+        <MemoryRouter>
+          <ViewProvider>
+            <SortByUpdateTime />
+            {children}
+          </ViewProvider>
+        </MemoryRouter>
+      ),
+    });
+    const timestamp = screen.getByRole("time");
+    const created = "2026-08-27 00:03";
+    expect(timestamp).toHaveTextContent(created);
+    fireEvent.click(screen.getByRole("button", { name: "Sort by update time" }));
+    expect(timestamp).toHaveTextContent(created);
+
+    rerender(<MemoView memo={{ ...memo, content: "Edited note", updateTime: timestampFromDate(new Date("2026-08-28T17:15:00Z")) }} />);
+    expect(screen.getByText("Edited note")).toBeInTheDocument();
+    expect(screen.getByRole("time")).toHaveTextContent(created);
+    expect(screen.getByRole("time")).toHaveAttribute("datetime", "2026-08-26T16:03:59.000Z");
+  });
+
+  it("renders no timestamp or empty permalink when only the update time is present", () => {
+    const card = renderCard({ ...memo, createTime: undefined });
+    expect(card.querySelector("time")).toBeNull();
+    expect(within(card).queryByRole("link")).toBeNull();
   });
 
   it("steps aside while the card edits in place", () => {
-    state.currentUser = { name: "users/alice" };
-    state.creator = { username: "alice", displayName: "Alice", avatarUrl: "" };
-    state.isEditing = true;
-
-    const { container } = render(
-      <MemoryRouter>
-        <MemoHeader showCreator />
-      </MemoryRouter>,
-    );
-
-    // The session's timestamp row is the header now: it leads with the creator and shows
-    // the editable time; reacting and the menu wait.
-    expect(container).toBeEmptyDOMElement();
+    const card = renderCard();
+    fireEvent.click(within(card).getByRole("button", { name: "memo-actions" }));
+    expect(within(card).getByRole("textbox", { name: "Edit note" })).toHaveValue(memo.content);
+    expect(card.querySelector("time")).toBeNull();
+    expect(within(card).queryByRole("button", { name: "add-reaction" })).toBeNull();
+    expect(within(card).queryByRole("button", { name: "memo-actions" })).toBeNull();
+    expect(within(card).queryByText("memo.new-badge")).toBeNull();
   });
 
   it("uses one compact interaction surface for memo header actions", () => {
-    state.currentUser = { name: "users/alice" };
-
-    render(
-      <MemoryRouter>
-        <MemoHeader />
-      </MemoryRouter>,
-    );
-
+    renderCard();
     const reaction = screen.getByRole("button", { name: "add-reaction" });
     const actions = screen.getByRole("button", { name: "memo-actions" });
-    const actionRail = actions.closest('[data-slot="memo-header-actions"]');
-
-    expect(actionRail).toHaveClass("items-center", "gap-1");
-    // The header shows the picker only while the card is engaged or the picker is open, and its
-    // trigger is the same 24px quiet square as the other header actions.
-    expect(reaction.parentElement).toHaveClass("sm:group-focus-within:flex", "sm:has-[[data-popup-open]]:flex");
+    expect(actions.closest('[data-slot="memo-header-actions"]')).toHaveClass("items-center", "gap-1");
+    expect(reaction.parentElement).toHaveClass("sm:group-focus-within:visible", "sm:has-[[data-popup-open]]:visible");
     expect(reaction).toHaveClass("mu-button", "mu-button-ghost", "mu-button-icon", "mu-s-sm");
-    expect(reaction.className).not.toMatch(/border-none|rounded-full|ring-/);
-  });
-
-  it.each([false, true])("links the timestamp to the memo and preserves origin when showCreator=%s", (showCreator) => {
-    if (showCreator) {
-      state.creator = { username: "alice", displayName: "Alice", avatarUrl: "" };
-    }
-
-    render(
-      <MemoryRouter initialEntries={["/?filter=tagSearch%3Awork"]}>
-        <MemoHeader showCreator={showCreator} />
-        <LocationProbe />
-      </MemoryRouter>,
-    );
-
-    const timestamp = screen.getByRole("link", { name: "time" });
-    expect(timestamp).toHaveAttribute("href", "/memos/123");
-    if (showCreator) expect(screen.getByText("Alice").closest("a")).toBeNull();
-    timestamp.focus();
-    expect(timestamp).toHaveFocus();
-
-    fireEvent.click(timestamp);
-    expect(screen.getByTestId("location")).toHaveTextContent('/memos/123|{"from":"/?filter=tagSearch%3Awork"}');
-  });
-
-  it("shows the time as plain text on the memo's own page", () => {
-    render(
-      <MemoryRouter initialEntries={["/memos/123"]}>
-        <MemoHeader />
-      </MemoryRouter>,
-    );
-
-    expect(screen.queryByRole("link", { name: "time" })).not.toBeInTheDocument();
-    expect(screen.getByText("time").closest("a, button")).toBeNull();
-  });
-
-  it("shows existing memo authors as plain text beside the timestamp", () => {
-    state.creator = { username: "alice", displayName: "Alice", avatarUrl: "" };
-
-    render(
-      <MemoryRouter>
-        <MemoHeader showCreator />
-      </MemoryRouter>,
-    );
-
-    const timestamp = screen.getByRole("link", { name: "time" });
-    const author = screen.getByText("Alice");
-    const metadata = author.closest('[data-slot="memo-header-meta"]');
-
-    expect(metadata).toContainElement(timestamp);
-    expect(author.closest("a, button")).toBeNull();
   });
 });

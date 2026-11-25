@@ -39,11 +39,6 @@ export interface MemoDraftSeed {
    * Each scope keeps its own draft.
    */
   scope?: string;
-  /**
-   * Seeds `createTime` and `updateTime` and shows the timestamp popover.
-   * Updated while the draft is open when the calendar's selected day changes.
-   */
-  createTime?: Date;
 }
 
 export interface MemoEditingProps {
@@ -158,14 +153,7 @@ const MemoEditorDraft = ({ draft, ...editing }: MemoEditorDraftProps) => {
   );
   return (
     <Suspense fallback={fallback}>
-      <EditingSession
-        key={draftKeyFor(identity)}
-        identity={identity}
-        parentMemoName={draft.parent}
-        defaultCreateTime={draft.createTime}
-        fallback={fallback}
-        {...editing}
-      />
+      <EditingSession key={draftKeyFor(identity)} identity={identity} parentMemoName={draft.parent} fallback={fallback} {...editing} />
     </Suspense>
   );
 };
@@ -175,7 +163,6 @@ interface EditingSessionProps extends MemoEditingProps {
   expandOnFocus?: boolean;
   memo?: Parameters<typeof initialEditorState>[0]["memo"];
   parentMemoName?: string;
-  defaultCreateTime?: Date;
 }
 
 const isHomeDraft = (identity: MemoEditIdentity) => identity.kind === "new" && identity.scope === "home";
@@ -210,15 +197,7 @@ const HomeDraftSession = ({ fallback, ...props }: DraftEditingSessionProps & { f
   return selectedKey === undefined ? fallback : <DraftEditingSession {...props} draftKey={selectedKey} />;
 };
 
-const DraftEditingSession = ({
-  identity,
-  memo,
-  parentMemoName,
-  defaultCreateTime,
-  draftKey,
-  username,
-  ...editing
-}: DraftEditingSessionProps) => {
+const DraftEditingSession = ({ identity, memo, parentMemoName, draftKey, username, ...editing }: DraftEditingSessionProps) => {
   const queryClient = useQueryClient();
   const t = useTranslate();
   const [seed, setSeed] = useState(() => {
@@ -228,7 +207,6 @@ const DraftEditingSession = ({
       memo,
       draftKey,
       rawDraft,
-      defaultCreateTime,
     });
     // Initialization can remove a legacy edit draft that cannot be restored.
     return {
@@ -268,7 +246,6 @@ const DraftEditingSession = ({
       <EditSession
         memo={seed.reviewed?.memo ?? memo}
         parentMemoName={parentMemoName}
-        defaultCreateTime={defaultCreateTime}
         draftKey={draftKey}
         initialDraftRaw={seed.initialDraftRaw}
         reviewDraftRevision={seed.reviewed?.filesRevision}

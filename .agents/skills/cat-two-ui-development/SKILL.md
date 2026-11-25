@@ -32,7 +32,8 @@ Cat_two 是单账户自托管笔记。以桌面浏览器里的记录、检索和
 - 日历旁的显示设置弹层以侧栏触发器为锚点，使用 `positionMethod="fixed"`。在两列模式打开弹层后滚动右侧列表，验证弹层相对触发器保持稳定。滚动左侧时，右侧笔记位置也应保持稳定。浅色和深色桌面侧栏隐藏滚动条，滚轮、触控板和键盘焦点仍可滚动到末尾的回收站。 [显示设置弹层](../../../web/src/components/MemoDisplaySettingMenu.tsx) · [侧栏滚动](../../../web/src/components/AppSidebar/AppSidebar.tsx)
 - 首页从右侧输入框创建。桌面默认高度紧凑，聚焦后展开，浅色与深色的聚焦边框统一用 `rgb(48, 207, 121)`。失焦后收起，长内容在书写框内部滚动。右侧仍能在读到较早笔记时直接记录。 [输入框布局](../../../web/src/components/MemoEditor/edit/editor.css) · [首页入口](../../../web/src/pages/Home.tsx)
 - 通过 `MemoEditor` 看笔记、编辑和新建，已有笔记传资源名，新笔记传草稿种子。双击某张卡片的正文或其边框内的留白，会在这张卡片内打开与菜单「编辑」相同的编辑器。卡片之间的间隙和页面空白属于列表背景。卡片内的标签、链接和待办框保留各自的点击操作。富文本与 Markdown 源码共用正文、格式操作、链接校验和渲染绑定。从底部「＋ → Markdown 模式」切换，格式快捷按钮和「更多格式」保持在输入区域下方。样式由共享主题、扩展或外层容器提供。 [编辑器结构](../../../web/src/components/MemoEditor/README.md) · [Markdown 主题](../../../web/src/lib/memo-markdown.ts) · [支持的格式](../cat-two-product-development/SKILL.md#支持的内容格式)
-- 从侧栏选择日期后，新建时带入该日。筛选变更时沿用现有的时间与草稿身份规则。保存失败后保留草稿和已经上传的附件，重试复用该次请求所用的创建 ID。编辑冲突时提示复核，并保留原草稿和待传文件。成功后复用现有缓存更新与恢复路径。 [保存逻辑](../../../web/src/components/MemoEditor/edit/hooks/useMemoSave.ts) · [已有笔记查询](../../../web/src/hooks/useMemoQueries.ts)
+- 紧凑卡片的右下角显示已保存笔记的创建时间，按上海时区显示到分钟。列表中的时间可点进详情，详情页内以文本显示。已有笔记的创建时间为只读，编辑器时间控件支持修改更新时间。 [卡片时间](../../../web/src/components/MemoView/components/MemoTimestamp.tsx) · [时间控件](../../../web/src/components/MemoEditor/edit/components/TimestampPopover.tsx)
+- 日历日期仅用于筛选列表。网页草稿首次成功保存时取得服务端创建时间。保存失败后保留草稿和已经上传的附件，重试复用该次请求所用的创建 ID。编辑冲突时提示复核，并保留原草稿和待传文件。成功后复用现有缓存更新与恢复路径。 [保存逻辑](../../../web/src/components/MemoEditor/edit/hooks/useMemoSave.ts) · [已有笔记查询](../../../web/src/hooks/useMemoQueries.ts)
 - 从登录或最后一次笔记编辑开始计时，45 分钟无编辑时转到登录页。正文输入、格式、附件与待办更改属于编辑，同会话的多标签页共享期限。渲染、自动保存本地草稿、打开编辑器、浏览和后台同步均不计为编辑。重新登录后沿用已有草稿恢复流程。 [网页登录会话](../../../web/src/auth-state.ts)
 
 ## 设置和反馈
@@ -47,5 +48,5 @@ Cat_two 是单账户自托管笔记。以桌面浏览器里的记录、检索和
 
 1. 从真实页面入口操作，用桌面窗口和当前改动有关的宽度验收。首先检查浅色和深色、简中和英语。修改共享主题时补验纸张主题及系统主题切换。迭代时用 `cd web && pnpm dev`，本地后端按仓库命令启动。
 2. 布局改动覆盖左栏和右侧独立滚动、带大量标签时的回收站位置、隐藏计数的显现及键盘焦点。打开显示设置后滚动双列笔记，检查弹层锚点。打开、关闭设置时检查原筛选、草稿、滚动和焦点恢复。 [侧栏测试](../../../web/tests/sidebar-row-state.test.tsx) · [页面骨架测试](../../../web/tests/root-layout.test.tsx) · [分页测试](../../../web/tests/paged-memo-list.test.tsx)
-3. 编辑改动覆盖输入框展开与收起、富文本和源码切换、中文输入、格式与附件。检查保存后列表和详情、重复点击或失败重试、冲突和刷新恢复。涉及日期时从侧栏选历史日期并新建，清除筛选后再回选该日期。 [编辑器测试入口](../../../web/src/components/MemoEditor/README.md#testing) · [上海日期测试](../../../web/tests/shanghai-calendar-time.test.ts)
+3. 编辑改动覆盖输入框展开与收起、富文本和源码切换、中文输入、格式与附件。检查保存后列表和详情、重复点击或失败重试、冲突和刷新恢复。涉及日期时，选历史日期并新建笔记，清除筛选后核对卡片显示首次成功保存的时间。切换为按更新时间排序或修改正文后，再核对同一卡片的创建时间。 [编辑器测试入口](../../../web/src/components/MemoEditor/README.md#testing) · [上海日期测试](../../../web/tests/shanghai-calendar-time.test.ts)
 4. 按修改范围在 `web/` 运行 `pnpm lint`、`pnpm test`（迭代时可指定相关测试文件）与 `pnpm build`。验收记录保留实际测试的页面、主题、窗口和结果，部署交付按项目 Skill 验证。 [仓库命令](../../../AGENTS.md#commands) · [项目开发](../cat-two-development/SKILL.md)

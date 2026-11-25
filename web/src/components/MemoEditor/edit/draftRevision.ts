@@ -1,5 +1,4 @@
 import { getEditorReferenceRelations } from "@/components/MemoMetadata/Relation/relationHelpers";
-import { inAppTimeZone } from "@/lib/time-zone";
 import type { Memo } from "@/types/proto/api/memo_service_pb";
 
 /** Before server revisions existed, cached drafts used the editable fields as their baseline. */
@@ -33,9 +32,4 @@ export function matchesMemoDraftRevision(memo: Memo, revision: string | undefine
   } catch {
     return false;
   }
-}
-
-/** The day a new memo is being composed for, independent of other feed filters. */
-export function draftCalendarDay(date: Date | undefined): string | undefined {
-  return date && inAppTimeZone(date).format("YYYY-MM-DD");
 }

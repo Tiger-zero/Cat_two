@@ -13,8 +13,7 @@ import { extractMemoIdFromName } from "@/lib/resource-names";
 import { cn } from "@/lib/utils";
 import { useTranslate } from "@/utils/i18n";
 import UserAvatar from "../../UserAvatar";
-import { MEMO_CARD_GUTTER_CLASSES } from "../constants";
-import { useMemoViewContext, useMemoViewDerived } from "../MemoViewContext";
+import { useMemoViewContext } from "../MemoViewContext";
 import { createMemoNavigationState } from "../navigation";
 
 /** The strip previews this many comments; the rest are behind its trailing link. */
@@ -23,34 +22,25 @@ const COMMENT_PREVIEW_LIMIT = 3;
 const PREVIEW_MIN_HEIGHT_CLASSES = ["", "min-h-6", "min-h-12", "min-h-18"];
 
 /**
- * The comment strip hangs off the card's bottom edge: up to three comments, each a 24px row
+ * The comment strip follows the memo body: up to three comments, each a 24px row
  * whose avatar sits in the leading slot on the card's text edge, then a "View all N comments"
  * row when there are more. The divider and muted labels keep it secondary to the memo.
  */
-const MemoCommentListView: React.FC = () => {
+const MemoCommentListView = ({ commentAmount }: { commentAmount: number }) => {
   const t = useTranslate();
   const { memo, parentPage } = useMemoViewContext();
-  const { isInMemoDetailPage, commentAmount } = useMemoViewDerived();
   const { ref: viewportRef, isNearViewport } = useNearViewport<HTMLElement>();
 
   const { data } = useMemoComments(memo.name, {
-    enabled: isNearViewport && !isInMemoDetailPage && commentAmount > 0,
+    enabled: isNearViewport,
     pageSize: COMMENT_PREVIEW_LIMIT,
   });
   const comments = data?.comments ?? [];
   const displayedComments = comments.slice(0, COMMENT_PREVIEW_LIMIT);
   const { data: commentCreators } = useUsersByNames(displayedComments.map((comment) => comment.creator));
 
-  if (isInMemoDetailPage || commentAmount === 0) {
-    return null;
-  }
-
   return (
-    <section
-      ref={viewportRef}
-      aria-label={t("memo.comment.self")}
-      className={cn("border-t border-mu-line/75 py-1.5", MEMO_CARD_GUTTER_CLASSES)}
-    >
+    <section ref={viewportRef} aria-label={t("memo.comment.self")} className="w-full border-t border-mu-line/75 pt-1.5">
       <div className={cn(METADATA_ROW_LIST_CLASSES, "gap-0", PREVIEW_MIN_HEIGHT_CLASSES[Math.min(commentAmount, COMMENT_PREVIEW_LIMIT)])}>
         {displayedComments.map((comment) => {
           const uid = extractMemoIdFromName(comment.name);

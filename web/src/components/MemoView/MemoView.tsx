@@ -9,9 +9,9 @@ import { isMemoBlurred } from "@/lib/tag";
 import { cn } from "@/lib/utils";
 import { lazyWithReload } from "@/utils/lazy";
 import { canManageMemo } from "@/utils/user";
-import { MemoBody, MemoCommentListView, MemoHeader } from "./components";
+import { MemoBody, MemoCommentListView, MemoHeader, MemoTimestamp } from "./components";
 import MemoPinnedMark from "./components/MemoPinnedMark";
-import { MEMO_CARD_BASE_CLASSES, MEMO_CARD_CONTENT_CLASSES, MEMO_CARD_FRAME_CLASSES } from "./constants";
+import { MEMO_CARD_BASE_CLASSES } from "./constants";
 import { useImagePreview } from "./hooks";
 import { computeCommentAmount, MemoViewContext } from "./MemoViewContext";
 import { isMemoDetailPath, resolveMemoParentPage } from "./navigation";
@@ -24,8 +24,8 @@ const CARD_CONTROLS =
   "a, button, input, select, textarea, label, summary, img, video, audio, [role=button], [role=link], [role=checkbox], [data-mbe-tag], [data-mbe-mention]";
 
 const MemoView = forwardRef<MemoViewHandle, MemoViewProps>((props, ref) => {
-  const { memo: memoData, className, parentPage: parentPageProp, compact, timeDisplay, showCreator, showPinned } = props;
-  const cardRef = useRef<HTMLDivElement>(null);
+  const { memo: memoData, className, parentPage: parentPageProp, compact, showCreator, showPinned } = props;
+  const cardRef = useRef<HTMLElement>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [cardWidth, setCardWidth] = useState(0);
 
@@ -65,8 +65,7 @@ const MemoView = forwardRef<MemoViewHandle, MemoViewProps>((props, ref) => {
     (editorRoot ?? fallbackInput)?.focus();
   }, []);
 
-  // The body edits in place: the card, its header and its frame stay, and the memo's
-  // own editing session takes the body's place until it saves or cancels.
+  // Keep editing inside the same card until the session saves or cancels.
   const openEditor = useCallback(() => {
     if (readonly) return;
     if (isEditing) {
@@ -102,7 +101,7 @@ const MemoView = forwardRef<MemoViewHandle, MemoViewProps>((props, ref) => {
   useImperativeHandle(ref, () => ({ openEditor }), [openEditor]);
 
   const isInMemoDetailPage = isMemoDetailPath(location.pathname, memoData.name);
-  const showCommentPreview = !isInMemoDetailPage && computeCommentAmount(memoData) > 0;
+  const commentAmount = isInMemoDetailPage ? 0 : computeCommentAmount(memoData);
 
   // The card width is only needed by the share-image dialog. Keep feed cards
   // free of a permanent ResizeObserver and measure only while that dialog is open.
@@ -184,20 +183,21 @@ const MemoView = forwardRef<MemoViewHandle, MemoViewProps>((props, ref) => {
 
   const article = (
     <article
-      className={cn(
-        showCommentPreview ? MEMO_CARD_CONTENT_CLASSES : MEMO_CARD_BASE_CLASSES,
-        "group/memo mu-focus",
-        !showCommentPreview && className,
-      )}
+      className={cn(MEMO_CARD_BASE_CLASSES, "group/memo mu-focus", !isEditing && "gap-0.5 py-2 md:py-2.5", className)}
       ref={cardRef}
       onDoubleClick={canDoubleClickEdit ? handleDoubleClick : undefined}
       tabIndex={readonly ? -1 : 0}
     >
       {/* The pinned mark steps aside while the memo is edited in place. */}
       {showPinned && memoData.pinned && !isEditing && <MemoPinnedMark />}
-      <MemoHeader timeDisplay={timeDisplay} showCreator={showCreator} />
-
-      <MemoBody compact={compact} showCreator={showCreator} />
+      <div className={cn("w-full", !isEditing && "grid grid-cols-[minmax(0,1fr)_auto] items-start gap-x-2 gap-y-1")}>
+        <MemoHeader showCreator={showCreator} />
+        <div className="col-start-1 min-w-0">
+          <MemoBody compact={compact} showCreator={showCreator} />
+        </div>
+      </div>
+      {commentAmount > 0 && <MemoCommentListView commentAmount={commentAmount} />}
+      {!isEditing && <MemoTimestamp isCurrentPage={isInMemoDetailPage} />}
 
       {previewState.items.length > 0 && (
         <Suspense fallback={null}>
@@ -219,16 +219,7 @@ const MemoView = forwardRef<MemoViewHandle, MemoViewProps>((props, ref) => {
     </article>
   );
 
-  const memoDisplay = showCommentPreview ? (
-    <div className={cn(MEMO_CARD_FRAME_CLASSES, className)}>
-      {article}
-      <MemoCommentListView />
-    </div>
-  ) : (
-    article
-  );
-
-  return <MemoViewContext.Provider value={contextValue}>{memoDisplay}</MemoViewContext.Provider>;
+  return <MemoViewContext.Provider value={contextValue}>{article}</MemoViewContext.Provider>;
 });
 
 MemoView.displayName = "MemoView";

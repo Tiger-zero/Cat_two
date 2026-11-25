@@ -24,7 +24,7 @@ AI 客户端和自动化通过 `/mcp` 查找、整理和写回笔记。Telegram 
 | `memo_batch_get` | `names` 接受 1 至 50 个 `memos/<uid>` 字符串。返回 `memos`（含修订号）和 `unavailable`。每批正文合计最多 4 MiB，超出时拆分请求。找不到的、其他人所有的和回收站里的名称都会进入 `unavailable`。 |
 | `memo_get_memo` | 传 `{"memo":"memos/<uid>"}` 读取正文和附件元数据。也可用于旧镜像逐条读取。 |
 | `tag_tree` / `tag_search` | 读取回收站以外主笔记的标签路径与含下级路径的笔记数。用整数 `offset` 和 `pageSize` 翻页，默认 0 和 50，每页最多 200。从 `nextOffset` 继续。`tag_search` 另需非空字符串 `query`。 |
-| `memo_create_memo` | 传 `{"body":{"content":"# 标题\n\n- [ ] 待办\n\n#项目/Cat_two"}}`。可用 `body.createTime` 指定 RFC 3339 创建时间。设置顶层 `memoId` 和 `idempotent: true` 后，可重试相同请求。 |
+| `memo_create_memo` | 传 `{"body":{"content":"# 标题\n\n- [ ] 待办\n\n#项目/Cat_two"}}`。省略 `body.createTime` 时由服务端在首次成功保存时记录创建时间。导入历史笔记的客户端也可在创建请求中显式传入 RFC 3339 时间。设置顶层 `memoId` 和 `idempotent: true` 后，可重试相同请求。 |
 | `memo_update_memo` | 传 `{"memo":"memos/<uid>","updateMask":"content","expectedRevision":"读取时的修订号","body":{"content":"完整正文"}}`。只更新掩码选定的字段。旧修订号会返回工具冲突错误。 |
 
 `memo_search` 和 `memo_list_memos` 每页返回最多 4 MiB 的 Markdown。达到上限时，即使本页条数少于 `pageSize`，也请用 `nextPageToken` 继续，并沿用查询条件与顺序。若单条超过上限，按错误提示用 `memo_get_memo` 读取该笔记，再用错误中提供的 `pageToken` 继续。分页请求遇到并发修改时可用相同游标重试。

@@ -1,5 +1,4 @@
 import { equals } from "@bufbuild/protobuf";
-import { timestampDate } from "@bufbuild/protobuf/wkt";
 import { Code, ConnectError } from "@connectrpc/connect";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback } from "react";
@@ -20,12 +19,10 @@ import type { MemoCreateAttempt } from "../services/cacheService";
 import { DrawingNotSavedError, DrawingSavedError, type MemoSaveOperations, mergeUploadedAttachments } from "../services/memoService";
 import { useEditorContext } from "../state";
 import { renameUploadedKeys } from "../utils/attachmentOrder";
-import { restampDefaultCreateTime } from "../utils/deriveDefaultCreateTime";
 
 interface UseMemoSaveOptions {
   memoName?: string;
   parentMemoName?: string;
-  defaultCreateTime?: Date;
   discardDraft: () => void | Promise<void>;
   flushDraft?: () => boolean;
   getBaseRevision?: () => string | undefined;
@@ -49,7 +46,6 @@ class DraftSubmissionStorageError extends Error {}
 export function useMemoSave({
   memoName,
   parentMemoName,
-  defaultCreateTime,
   discardDraft,
   flushDraft,
   getBaseRevision,
@@ -103,7 +99,6 @@ export function useMemoSave({
 
     const pendingCreate = !memoName ? getCreateAttempt?.() : undefined;
     const createID = !memoName ? (pendingCreate?.id ?? uuidv4()) : undefined;
-    const now = new Date(pendingCreate?.submittedAt ?? Date.now());
     const operations: MemoSaveOperations = {
       // The server's current copy, fetched afresh into the detail cache.
       getMemo: async (name) => {
@@ -118,11 +113,22 @@ export function useMemoSave({
         rebaseDraft?.(updated);
         return updated;
       },
-      createMemo: (memo, parent) => {
+      createMemo: async (memo, parent) => {
         // Write ahead of the RPC: a timeout or a tab reload cannot tell whether the server committed.
-        if (pendingCreate && equals(MemoSchema, pendingCreate.memo, memo))
-          return createMemo({ memo: pendingCreate.memo, parent, id: createID });
-        if (createID && recordCreateAttempt && !recordCreateAttempt({ id: createID, submittedAt: now.valueOf(), memo })) {
+        const previous = pendingCreate?.memo;
+        if (previous && equals(MemoSchema, { ...previous, createTime: undefined, updateTime: undefined }, memo)) {
+          try {
+            return await createMemo({ memo, parent, id: createID });
+          } catch (error) {
+            // An older client may already have committed this ID with explicit times.
+            // Only replay its original fingerprint once the server confirms the ID exists.
+            if ((!previous.createTime && !previous.updateTime) || !(error instanceof ConnectError && error.code === Code.AlreadyExists)) {
+              throw error;
+            }
+            return createMemo({ memo: previous, parent, id: createID });
+          }
+        }
+        if (createID && recordCreateAttempt && !recordCreateAttempt({ id: createID, memo })) {
           throw new DraftSubmissionStorageError();
         }
         return createMemo({ memo, parent, id: createID });
@@ -130,21 +136,8 @@ export function useMemoSave({
     };
 
     try {
-      // A new memo composed on a selected day keeps the day but is stamped with
-      // the time of saving, so consecutive memos do not share one createTime.
-      const calendarDefault = state.calendarDefault ?? defaultCreateTime;
-      const stamp = (time: Date | undefined, attempted: Memo["createTime"]) => {
-        if (pendingCreate && time === calendarDefault) return attempted && timestampDate(attempted);
-        return restampDefaultCreateTime(time, calendarDefault, now);
-      };
-      const timestamps = memoName
-        ? state.timestamps
-        : {
-            createTime: stamp(state.timestamps.createTime, pendingCreate?.memo.createTime),
-            updateTime: stamp(state.timestamps.updateTime, pendingCreate?.memo.updateTime),
-          };
       const result = await memoService.save(
-        { ...state, timestamps },
+        state,
         {
           memoName,
           parentMemoName,
@@ -167,12 +160,6 @@ export function useMemoSave({
       await discardDraft();
 
       dispatch(actions.reset());
-      // Reset creates a fresh editor state, so restore calendar-derived values
-      // for the next memo created without remounting this composer.
-      if (!memoName && defaultCreateTime) {
-        dispatch(actions.setCalendarDefault(defaultCreateTime));
-      }
-
       if (!memoName && !parentMemoName) {
         markNewMemo(result.memoName);
       } else if (memoName) {
@@ -231,7 +218,6 @@ export function useMemoSave({
   }, [
     actions,
     createMemo,
-    defaultCreateTime,
     discardDraft,
     dispatch,
     flushDraft,

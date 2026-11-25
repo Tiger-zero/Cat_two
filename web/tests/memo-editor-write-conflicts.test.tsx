@@ -1,4 +1,5 @@
-import { create } from "@bufbuild/protobuf";
+import { create, toJson } from "@bufbuild/protobuf";
+import { timestampFromDate } from "@bufbuild/protobuf/wkt";
 import { Code, ConnectError } from "@connectrpc/connect";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, renderHook } from "@testing-library/react";
@@ -10,7 +11,7 @@ import { initialEditorState } from "@/components/MemoEditor/edit/initialState";
 import { cacheService } from "@/components/MemoEditor/edit/services/cacheService";
 import { EditorProvider, type EditorState, useEditorStore } from "@/components/MemoEditor/edit/state";
 import { AttachmentSchema } from "@/types/proto/api/attachment_service_pb";
-import { type Memo, MemoSchema } from "@/types/proto/api/memo_service_pb";
+import { type Memo, MemoSchema, Visibility } from "@/types/proto/api/memo_service_pb";
 
 const clients = vi.hoisted(() => ({ createMemo: vi.fn(), getMemo: vi.fn(), updateMemo: vi.fn() }));
 vi.mock("@/connect", () => ({ memoServiceClient: clients }));
@@ -54,7 +55,7 @@ describe("editor retries and concurrent writes", () => {
     vi.resetAllMocks();
   });
 
-  it("replays the same create request after losing the response and reloading under a different calendar day", async () => {
+  it("retries the same create ID without client timestamps after a lost response and reload", async () => {
     const attachment = create(AttachmentSchema, { name: "attachments/a", filename: "a.txt" });
     cacheService.saveNow(draftKey, { content: "note being saved", attachments: [attachment] });
     clients.createMemo.mockRejectedValueOnce(new ConnectError("response lost", Code.Unavailable));
@@ -62,16 +63,58 @@ describe("editor retries and concurrent writes", () => {
       ...memo,
       name: `memos/${memoId}`,
     }));
-    const first = mountEditor({ state: initialEditorState({ draftKey, defaultCreateTime: new Date("2026-11-19T00:00:00+08:00") }) });
+    const first = mountEditor({ state: initialEditorState({ draftKey }) });
     await act(() => first.result.current.save());
     const request = clients.createMemo.mock.calls[0][0];
     expect(request).toMatchObject({ idempotent: true, memoId: expect.any(String), memo: { content: "note being saved" } });
+    expect(request.memo.createTime).toBeUndefined();
+    expect(request.memo.updateTime).toBeUndefined();
     expect(cacheService.loadDraft(draftKey).createAttempt?.id).toBe(request.memoId);
     first.unmount();
 
-    const second = mountEditor({ state: initialEditorState({ draftKey, defaultCreateTime: new Date("2026-11-20T00:00:00+08:00") }) });
+    const second = mountEditor({ state: initialEditorState({ draftKey }) });
     await act(() => second.result.current.save());
     expect(clients.createMemo.mock.calls[1][0]).toEqual(request);
+    expect(cacheService.readRaw(draftKey)).toBeNull();
+  });
+
+  it.each([false, true])("recovers a legacy dated submission (already committed: %s)", async (committed) => {
+    const id = "legacy-calendar-create";
+    const draftDay = new Date("2026-09-03T02:00:00Z");
+    const previousTime = timestampFromDate(draftDay);
+    const memo = create(MemoSchema, {
+      content: "calendar draft",
+      visibility: Visibility.PRIVATE,
+      createTime: previousTime,
+      updateTime: previousTime,
+    });
+    localStorage.setItem(
+      draftKey,
+      JSON.stringify({
+        kind: "memos.editor-cache",
+        version: 4,
+        content: memo.content,
+        attachments: [],
+        createAttempt: { id, submittedAt: draftDay.getTime(), memo: toJson(MemoSchema, memo) },
+      }),
+    );
+    if (committed)
+      clients.createMemo.mockRejectedValueOnce(new ConnectError("existing request has different timestamps", Code.AlreadyExists));
+    clients.createMemo.mockResolvedValueOnce({ ...memo, name: `memos/${id}` });
+    const editor = mountEditor({ state: initialEditorState({ draftKey }) });
+    await act(() => editor.result.current.save());
+
+    expect(clients.createMemo).toHaveBeenCalledTimes(committed ? 2 : 1);
+    const first = clients.createMemo.mock.calls[0][0];
+    expect(first).toMatchObject({ idempotent: true, memoId: id, memo: { content: memo.content } });
+    expect(first.memo.createTime).toBeUndefined();
+    expect(first.memo.updateTime).toBeUndefined();
+    if (committed) {
+      expect(clients.createMemo.mock.calls[1][0]).toEqual({
+        ...first,
+        memo: { ...memo, creationChannel: "web" },
+      });
+    }
     expect(cacheService.readRaw(draftKey)).toBeNull();
   });
 

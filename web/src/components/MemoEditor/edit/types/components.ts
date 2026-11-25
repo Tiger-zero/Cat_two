@@ -37,14 +37,6 @@ export interface EditSessionProps {
    * surface is not contained by a transformed ancestor.
    */
   onFocusModeChange?: (isFocusMode: boolean) => void;
-  /**
-   * Default `createTime` for a *new* memo (create mode only). When set, the
-   * editor seeds both `createTime` and `updateTime` to this value and renders
-   * the timestamp popover so the user can adjust before saving. Tracked live:
-   * if the prop changes after mount, the editor's timestamps re-sync. Ignored
-   * in edit mode (when `memo` is set).
-   */
-  defaultCreateTime?: Date;
   onConfirm?: (memoName: string) => void;
   onCancel?: () => void;
 }

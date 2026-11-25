@@ -1,14 +1,12 @@
 import { Checkbox } from "@usememos/ui";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { MemoEditor } from "@/components/MemoEditor";
-import { deriveDefaultCreateTimeFromDate } from "@/components/MemoEditor/edit/utils/deriveDefaultCreateTime";
 import MemoFeedMenu from "@/components/MemoFeedMenu";
 import MemoView from "@/components/MemoView";
 import PagedMemoList, { EmptyLine, getMemoKey } from "@/components/PagedMemoList";
 import { useExportMemos } from "@/components/Settings/useExportMemos";
 import { useWelcomeGuide, WelcomeGuideDialog } from "@/components/WelcomeGuide";
 import { useAuth } from "@/contexts/AuthContext";
-import { useMemoFilterContext } from "@/contexts/MemoFilterContext";
 import { NewMemoProvider } from "@/contexts/NewMemoContext";
 import { useMemoFilters, useMemoSorting } from "@/hooks";
 import useCurrentUser from "@/hooks/useCurrentUser";
@@ -24,10 +22,7 @@ const Home = () => {
   const suggestions = useMemoSuggestions();
   const t = useTranslate();
   const { isUserSettingsInitialized } = useAuth();
-  const { filters } = useMemoFilterContext();
   const contextFilter = user && buildMemoCreatorFilter(user.name);
-  const calendarDay = filters.find((filter) => filter.factor === "displayTime")?.value;
-  const defaultCreateTime = useMemo(() => (calendarDay ? deriveDefaultCreateTimeFromDate(calendarDay) : undefined), [calendarDay]);
 
   const memoFilter = useMemoFilters({
     includePinned: true,
@@ -106,7 +101,7 @@ const Home = () => {
               />
               {isUserSettingsInitialized && user && (
                 <MemoEditor
-                  draft={{ scope: "home", createTime: defaultCreateTime }}
+                  draft={{ scope: "home" }}
                   expandOnFocus
                   className="memo-list-gap md:light:bg-white"
                   placeholder={t("editor.any-thoughts")}

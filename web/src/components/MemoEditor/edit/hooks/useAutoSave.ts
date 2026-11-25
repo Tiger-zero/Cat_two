@@ -2,23 +2,18 @@ import { equals } from "@bufbuild/protobuf";
 import { useCallback, useEffect, useRef } from "react";
 import { AttachmentSchema } from "@/types/proto/api/attachment_service_pb";
 import { type Memo, MemoRelationSchema } from "@/types/proto/api/memo_service_pb";
-import { draftCalendarDay, matchesMemoDraftRevision, memoDraftRevision } from "../draftRevision";
+import { matchesMemoDraftRevision, memoDraftRevision } from "../draftRevision";
 import { cacheService, type EditorDraft, memoService } from "../services";
 import { hasDraftContent, type MemoCreateAttempt } from "../services/cacheService";
 import { snapshotDraftFiles } from "../services/stagedDraftFiles";
 import { createInitialState, type EditorState, useEditorStore } from "../state";
 
-function draftFromState(
-  { content, metadata, timestamps, calendarDefault, attachmentOrder }: EditorState,
-  baseRevision?: string,
-): EditorDraft {
+function draftFromState({ content, metadata, timestamps, attachmentOrder }: EditorState, baseRevision?: string): EditorDraft {
   const draft: EditorDraft = { content, attachments: metadata.attachments };
   if (baseRevision) draft.baseRevision = baseRevision;
   if (metadata.relations.length || baseRevision) draft.relations = metadata.relations;
   if (attachmentOrder.length) draft.attachmentOrder = attachmentOrder;
-  if (timestamps.createTime !== calendarDefault && timestamps.createTime) draft.createTime = timestamps.createTime.valueOf();
-  if (timestamps.updateTime !== calendarDefault && timestamps.updateTime) draft.updateTime = timestamps.updateTime.valueOf();
-  if (draft.createTime !== undefined || draft.updateTime !== undefined) draft.calendarDay = draftCalendarDay(calendarDefault);
+  if (baseRevision && timestamps.updateTime) draft.updateTime = timestamps.updateTime.valueOf();
   return draft;
 }
 
@@ -27,9 +22,7 @@ const sameDraft = (left: EditorDraft, right: EditorDraft): boolean =>
   left.baseRevision === right.baseRevision &&
   left.stagedFilesRevision === right.stagedFilesRevision &&
   left.createAttempt === right.createAttempt &&
-  left.createTime === right.createTime &&
   left.updateTime === right.updateTime &&
-  left.calendarDay === right.calendarDay &&
   (left.attachmentOrder?.length ?? 0) === (right.attachmentOrder?.length ?? 0) &&
   (left.attachmentOrder?.every((key, index) => key === right.attachmentOrder?.[index]) ?? true) &&
   left.attachments.length === right.attachments.length &&

@@ -10,7 +10,7 @@ Both modes show the memo through the same binding of [`@usememos/editor`](https:
 <MemoEditor name="memos/abc" />                                     // view; the owner can tick tasks
 <MemoEditor mode="edit" name="memos/abc" onConfirm onCancel />      // edit in place
 <MemoEditor draft={{ parent: "memos/abc" }} onConfirm onCancel />   // new comment
-<MemoEditor draft={{ scope: "home", createTime }} />                // new memo
+<MemoEditor draft={{ scope: "home" }} />                            // new memo
 ```
 
 ## Layers
@@ -37,7 +37,7 @@ Code blocks use lazy-loaded `@pierre/highlights` tokens as editor decorations, w
 - **Writes are mutations.** `useUpdateMemo` and `useCreateMemo` patch and refresh the cached copies after saving. Single and bulk task changes include the displayed note's Markdown and revision, and updates for one memo run in order. A queued task change can use the preceding local write's confirmed revision when that write saved the text the action was based on. A conflict rolls back the pending change and reports the failure.
 - **Drafts stay in the current browser.** `edit/draftKey.ts` scopes memo edits, replies and new notes by account and subject. `initialEditorState` restores text and saved attachment references from localStorage. A recovered edit must match the memo's saved revision. `useStagedDraftFiles` restores files awaiting upload from IndexedDB and recreates their preview URLs. Writes and removal compare the last observed snapshot. If another tab has changed that snapshot or browser storage fails, the current tab keeps its text and staged files in memory. Reopening the editor in the same tab restores that copy. The browser warns before closing or reloading the tab while that recovery is outstanding. Saving or discarding the recovered draft clears the in-memory copy.
 - **Home restores drafts in priority order.** Its own draft comes first. On a fresh mount with an empty Home draft, the composer can open a draft from the former sidebar editor for the current account. The saved text and pending files for that draft use their original key.
-- **Calendar defaults follow the selected Shanghai day.** Manual create and update times survive filter changes and refreshes for that day. Changing or clearing the date filter resets the defaults for the new selection.
+- **Calendar days filter the list.** The server assigns `createTime` when a web draft is first saved successfully. Starting a draft on Monday and saving it on Tuesday produces a Tuesday note, including when the list is filtered to Monday.
 
 ## The editing session
 
@@ -61,7 +61,7 @@ Markdown submitted through the API or MCP uses the same rendering as notes writt
 
 `useMemoSave` validates the draft, uploads local files, and hands the save to `memoService.save` with the operations it runs: the server's current copy (fetched into the detail cache to diff against), `useUpdateMemo` and `useCreateMemo`. A successful save resets the session and notifies the host immediately; editing and comment hosts close without a timed confirmation, and the in-place composer is ready for the next memo. The commit button stays mounted with its original label through validation and saving; its spinner and any drawing-save error use the same leading slot. Uploads that landed before a failed save stay on the draft as attachments so a retry does not upload them again. The save keeps the draft's attachment order (`edit/utils/attachmentOrder.ts`): new files land where they were dragged among the saved ones, not after them.
 
-The editor stores the creation ID and submitted snapshot before sending a new note or comment. A retry can replay the same request after a reload, including the original calendar timestamp. When browser storage is unavailable, the editor keeps that ID in memory for retries in the same tab. An edit carries the memo's server revision. If the server rejects a stale revision, the draft and pending files can be opened again through **Review saved draft**, which fetches the current memo before restoring the draft for review.
+The editor stores the creation ID and submitted snapshot before sending a new note or comment. A retry after a reload uses the same request and reuses the original creation time if the server already saved the note. When browser storage is unavailable, the editor keeps that ID in memory for retries in the same tab. An edit carries the memo's server revision. If the server rejects a stale revision, the draft and pending files can be opened again through **Review saved draft**, which fetches the current memo before restoring the draft for review.
 
 ### Attachments and links
 
@@ -98,10 +98,10 @@ Hosts of a new top-level memo pass `useMemoSuggestions()` into `suggestions`; ed
 
 ### Presentation in a card or inline
 
-- **In a card** (`frameless`): the card is the frame, so the session has no background, border or padding of its own outside focus mode. `MemoView` flips its body into the session by name and keeps its header, frame and reactions mounted.
+- **In a card** (`frameless`), `MemoView` opens the existing note by name inside the same frame. In reading mode, the footer shows the saved creation time after the body and comments, aligned to the right in compact `YYYY-MM-DD HH:mm` format in Asia/Shanghai. The timestamp opens the detail page from the list. Editing replaces the reading controls with the editing session. [Card timestamp](../MemoView/components/MemoTimestamp.tsx)
 - **Inline** (Home, panels): the session brings its own frame. The ＋ menu offers focus mode, which expands it over the page; the exit button minimizes it back.
 
-Focus mode is a sheet narrower than the page (`max-w-3xl`): its header, text and footer share one left edge, and the text is set larger (`MEMO_FOCUS_EDITOR_THEME`). Its header row shows only the memo's time on the left, as `TimestampPopover`: the time control once the memo has one (an edit, or a new memo dated from the calendar), otherwise "Now" in the viewer's language. The button that leaves the frame is on the right.
+Focus mode uses a sheet narrower than the page (`max-w-3xl`). Its header, text and footer share one left edge, and `MEMO_FOCUS_EDITOR_THEME` increases the text size. When editing a saved note, the time control shows its read-only creation time and lets the user change its update time. New drafts acquire a creation time on their first successful save. The button that exits focus mode is on the right. [Time control](edit/components/TimestampPopover.tsx)
 
 The session's code is a chunk of its own. The authenticated Home route loads `preloadMemoEditing()` alongside the page using the small loader in `edit/loadEditSession.ts`. The comment section calls it while the pointer is on its button. Until the session loads, a new draft shows the empty composer's frame, placeholder line and toolbar height.
 

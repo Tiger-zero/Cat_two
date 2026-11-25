@@ -52,8 +52,8 @@ describe("memo editor timestamps", () => {
 
   it("associates the input label and clears its invalid state after a valid edit", () => {
     renderEditor();
-    const input = screen.getByRole("textbox", { name: "common.created-at" });
-    expect(screen.getByText("common.created-at")).toHaveAttribute("for", input.id);
+    const input = screen.getByRole("textbox", { name: "common.last-updated-at" });
+    expect(screen.getByText("common.last-updated-at")).toHaveAttribute("for", input.id);
 
     fireEvent.change(input, { target: { value: "invalid" } });
     fireEvent.blur(input);
@@ -61,15 +61,14 @@ describe("memo editor timestamps", () => {
 
     fireEvent.change(input, { target: { value: "2024-02-29 12:34:56" } });
     expect(input).toHaveAttribute("aria-invalid", "false");
-    expect(editor.getState().timestamps.createTime).toEqual(customTime);
+    expect(editor.getState().timestamps.updateTime).toEqual(customTime);
   });
 
-  it.each([
-    [0, "createTime", "create_time"],
-    [1, "updateTime", "update_time"],
-  ] as const)("saves %s after dismissing the focused input with Escape", async (index, field, path) => {
+  it("keeps creation time read-only and saves the update time after closing the popover", async () => {
     const memo = renderEditor();
-    const input = screen.getAllByRole("textbox")[index];
+    expect(screen.getByRole("time")).toHaveAttribute("datetime", originalCreate.toISOString());
+    expect(screen.queryByRole("textbox", { name: "common.created-at" })).not.toBeInTheDocument();
+    const input = screen.getByRole("textbox", { name: "common.last-updated-at" });
     act(() => input.focus());
     fireEvent.change(input, { target: { value: "2024-02-29 12:34:56" } });
     fireEvent.keyDown(input, { key: "Escape" });
@@ -79,8 +78,9 @@ describe("memo editor timestamps", () => {
 
     expect(clients.updateMemo).toHaveBeenCalledOnce();
     const request = clients.updateMemo.mock.calls[0][0];
-    expect(request.updateMask.paths).toEqual([path]);
-    expect(request.memo[field]).toEqual(timestampFromDate(customTime));
+    expect(request.updateMask.paths).toEqual(["update_time"]);
+    expect(request.memo.updateTime).toEqual(timestampFromDate(customTime));
+    expect(request.memo.createTime).toBeUndefined();
   });
 
   it.each([
@@ -90,11 +90,11 @@ describe("memo editor timestamps", () => {
     "invalid",
   ])("rejects invalid Shanghai time %s without changing the saved timestamp", async (value) => {
     const memo = renderEditor();
-    const input = screen.getAllByRole("textbox")[0];
+    const input = screen.getByRole("textbox", { name: "common.last-updated-at" });
     fireEvent.change(input, { target: { value } });
     fireEvent.blur(input);
     expect(input).toHaveAttribute("aria-invalid", "true");
-    expect(editor.getState().timestamps.createTime).toEqual(originalCreate);
+    expect(editor.getState().timestamps.updateTime).toEqual(originalUpdate);
     await memoService.save(editor.getState(), { memoName: memo.name }, ops);
     expect(clients.updateMemo).not.toHaveBeenCalled();
   });
@@ -111,7 +111,7 @@ describe("memo editor timestamps", () => {
 
   it("keeps the explicitly chosen modification time when content also changes", async () => {
     const memo = renderEditor();
-    const input = screen.getAllByRole("textbox")[1];
+    const input = screen.getByRole("textbox", { name: "common.last-updated-at" });
     fireEvent.change(input, { target: { value: "2024-02-29 12:34:56" } });
     // Saving must see the edit even if the input has not blurred yet.
     await memoService.save({ ...editor.getState(), content: "Changed content" }, { memoName: memo.name }, ops);
@@ -120,13 +120,12 @@ describe("memo editor timestamps", () => {
     expect(request.memo.updateTime).toEqual(timestampFromDate(customTime));
   });
 
-  it("reads Now for a memo being written that has no time yet", () => {
-    render(
+  it("renders no timestamp before the first save", () => {
+    const { container } = render(
       <EditorProvider initialEditorState={createInitialState()}>
         <TimestampPopover />
       </EditorProvider>,
     );
-    expect(screen.getByText("Now")).toBeInTheDocument();
-    expect(screen.queryByRole("button")).not.toBeInTheDocument();
+    expect(container).toBeEmptyDOMElement();
   });
 });
