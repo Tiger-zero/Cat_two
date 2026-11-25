@@ -225,6 +225,7 @@ const AppSidebar = ({ className, mobile = false }: { className?: string; mobile?
         mobile
           ? "bg-mu-canvas"
           : "@container/sidebar overflow-x-hidden overflow-y-auto overscroll-y-contain bg-(--memos-sidebar) [scrollbar-gutter:stable]",
+        !mobile && theme !== "paper" && "[scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
         className,
         unframedHome && "border-transparent bg-mu-canvas [--sidebar-list-gap:0.5rem]",
       )}

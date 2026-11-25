@@ -61,7 +61,7 @@ describe("PreferencesSection", () => {
     fireEvent.click(screen.getByRole("switch", { name: "memo.link-preview" }));
     fireEvent.click(screen.getByRole("switch", { name: "setting.preference.double-click-edit" }));
 
-    expect(JSON.parse(localStorage.getItem(DEVICE_PREFERENCES_KEY) ?? "null")).toEqual({ linkPreview: false, doubleClickEdit: true });
+    expect(JSON.parse(localStorage.getItem(DEVICE_PREFERENCES_KEY) ?? "null")).toEqual({ linkPreview: false, doubleClickEdit: false });
     expect(mocks.mutate).not.toHaveBeenCalled();
 
     act(() => updateDevicePreferences({ linkPreview: true }));

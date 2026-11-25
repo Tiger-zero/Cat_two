@@ -28,7 +28,6 @@ export interface MemoEditorViewProps {
   className?: string;
   contentClassName?: string;
   onClick?: (event: React.MouseEvent) => void;
-  onDoubleClick?: (event: React.MouseEvent) => void;
 }
 
 /** What a new memo or comment starts from. */
@@ -97,7 +96,7 @@ export const MemoEditor = (props: MemoEditorProps) => {
   return <MemoEditorView {...props} />;
 };
 
-const MemoEditorView = ({ name, compact, parentPage, className, contentClassName, onClick, onDoubleClick }: MemoEditorViewProps) => {
+const MemoEditorView = ({ name, compact, parentPage, className, contentClassName, onClick }: MemoEditorViewProps) => {
   const t = useTranslate();
   const { data: memo } = useMemoByName(name);
   const currentUser = useCurrentUser();
@@ -125,7 +124,6 @@ const MemoEditorView = ({ name, compact, parentPage, className, contentClassName
       className={className}
       contentClassName={contentClassName}
       onClick={onClick}
-      onDoubleClick={onDoubleClick}
     />
   );
 };

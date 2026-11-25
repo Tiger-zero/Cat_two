@@ -14,7 +14,7 @@ export interface DevicePreferences {
 
 export const DEVICE_PREFERENCES_KEY = "memos-device-preferences";
 
-const DEFAULT_DEVICE_PREFERENCES: DevicePreferences = { linkPreview: true, doubleClickEdit: false };
+const DEFAULT_DEVICE_PREFERENCES: DevicePreferences = { linkPreview: true, doubleClickEdit: true };
 
 const readBoolean = (value: unknown, fallback: boolean) => (typeof value === "boolean" ? value : fallback);
 

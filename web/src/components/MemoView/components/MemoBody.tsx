@@ -1,6 +1,6 @@
 import { Button } from "@usememos/ui";
 import { EyeIcon } from "lucide-react";
-import { useMemo } from "react";
+import { useCallback, useMemo } from "react";
 import ClampedSection from "@/components/ClampedSection";
 import { MemoEditor } from "@/components/MemoEditor/MemoEditor";
 import { AttachmentGallery, MemoMetadataRows } from "@/components/MemoMetadata";
@@ -12,7 +12,6 @@ import { useTranslate } from "@/utils/i18n";
 import { filterInlineManagedAttachments } from "@/utils/managed-attachment";
 import { canManageMemo } from "@/utils/user";
 import { MemoReactionListView } from "../../MemoReactionListView";
-import { useMemoHandlers } from "../hooks";
 import { useMemoViewContext } from "../MemoViewContext";
 import type { MemoBodyProps } from "../types";
 import { CreatorDisplay } from "./MemoHeader";
@@ -37,14 +36,21 @@ const MemoBody: React.FC<MemoBodyProps> = ({ compact, showCreator }) => {
     blurred,
     readonly,
     isEditing,
-    openEditor,
     closeEditor,
     onEditorFocusModeChange,
     openPreview,
     toggleBlurVisibility,
   } = useMemoViewContext();
 
-  const { handleMemoContentClick, handleMemoContentDoubleClick } = useMemoHandlers({ readonly, openEditor, openPreview });
+  const handleMemoContentClick = useCallback(
+    (event: React.MouseEvent) => {
+      const image = event.target;
+      if (!(image instanceof HTMLImageElement) || image.closest("a")) return;
+      const src = image.getAttribute("src");
+      if (src) openPreview(src);
+    },
+    [openPreview],
+  );
 
   const referencedMemos = memo.relations.filter(isReferenceRelation);
   const hasText = memo.content.trim() !== "";
@@ -90,15 +96,7 @@ const MemoBody: React.FC<MemoBodyProps> = ({ compact, showCreator }) => {
               Reactions stay outside so they never hide under the fade. */}
           <ClampedSection enabled={Boolean(compact)}>
             {/* A memo of attachments alone has no text: an empty editor would still take a line and a gap. */}
-            {hasText && (
-              <MemoEditor
-                name={memo.name}
-                parentPage={parentPage}
-                compact={Boolean(compact)}
-                onClick={handleMemoContentClick}
-                onDoubleClick={handleMemoContentDoubleClick}
-              />
-            )}
+            {hasText && <MemoEditor name={memo.name} parentPage={parentPage} compact={Boolean(compact)} onClick={handleMemoContentClick} />}
             <AttachmentGallery
               visual={visual}
               onImagePreview={openPreview}

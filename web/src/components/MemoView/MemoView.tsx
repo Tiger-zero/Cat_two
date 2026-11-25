@@ -4,6 +4,7 @@ import { useColumnGridUntrapped } from "@/components/ColumnGrid/ColumnGridContex
 import { useAuth } from "@/contexts/AuthContext";
 import { useResolvedUser } from "@/contexts/MentionResolutionContext";
 import useCurrentUser from "@/hooks/useCurrentUser";
+import { useDevicePreferences } from "@/hooks/useDevicePreferences";
 import { isMemoBlurred } from "@/lib/tag";
 import { cn } from "@/lib/utils";
 import { lazyWithReload } from "@/utils/lazy";
@@ -19,6 +20,9 @@ import type { MemoViewHandle, MemoViewProps } from "./types";
 const MemoShareImageDialog = lazyWithReload(() => import("../MemoActionMenu/MemoShareImageDialog"));
 const PreviewImageDialog = lazyWithReload(() => import("../PreviewImageDialog"));
 
+const CARD_CONTROLS =
+  "a, button, input, select, textarea, label, summary, img, video, audio, [role=button], [role=link], [role=checkbox], [data-mbe-tag], [data-mbe-mention]";
+
 const MemoView = forwardRef<MemoViewHandle, MemoViewProps>((props, ref) => {
   const { memo: memoData, className, parentPage: parentPageProp, compact, timeDisplay, showCreator, showPinned } = props;
   const cardRef = useRef<HTMLDivElement>(null);
@@ -29,6 +33,7 @@ const MemoView = forwardRef<MemoViewHandle, MemoViewProps>((props, ref) => {
   const { userTagsSetting } = useAuth();
   const creator = useResolvedUser(memoData.creator, { enabled: Boolean(showCreator || props.shareImageDialogOpen) });
   const readonly = !canManageMemo(memoData, currentUser);
+  const { doubleClickEdit } = useDevicePreferences();
   const location = useLocation();
   const parentPage = resolveMemoParentPage({
     explicitParentPage: parentPageProp,
@@ -63,12 +68,13 @@ const MemoView = forwardRef<MemoViewHandle, MemoViewProps>((props, ref) => {
   // The body edits in place: the card, its header and its frame stay, and the memo's
   // own editing session takes the body's place until it saves or cancels.
   const openEditor = useCallback(() => {
+    if (readonly) return;
     if (isEditing) {
       focusMountedEditor();
       return;
     }
     setIsEditing(true);
-  }, [focusMountedEditor, isEditing]);
+  }, [focusMountedEditor, isEditing, readonly]);
   const closeEditor = useCallback(() => setIsEditing(false), []);
 
   // The grid keys tiles by memo name (see getMemoKey), so the focused editor
@@ -166,6 +172,16 @@ const MemoView = forwardRef<MemoViewHandle, MemoViewProps>((props, ref) => {
     ],
   );
 
+  const canDoubleClickEdit = doubleClickEdit && !readonly && !isEditing && (!blurred || showBlurredContent);
+  const handleDoubleClick = (event: React.MouseEvent<HTMLElement>) => {
+    const target = event.target;
+    // React can bubble a preview dialog's events through the card even though it is portaled elsewhere.
+    if (!(target instanceof Element) || !event.currentTarget.contains(target) || event.defaultPrevented || event.button !== 0) return;
+    if (target.closest(CARD_CONTROLS)) return;
+    event.preventDefault();
+    openEditor();
+  };
+
   const article = (
     <article
       className={cn(
@@ -174,6 +190,7 @@ const MemoView = forwardRef<MemoViewHandle, MemoViewProps>((props, ref) => {
         !showCommentPreview && className,
       )}
       ref={cardRef}
+      onDoubleClick={canDoubleClickEdit ? handleDoubleClick : undefined}
       tabIndex={readonly ? -1 : 0}
     >
       {/* The pinned mark steps aside while the memo is edited in place. */}

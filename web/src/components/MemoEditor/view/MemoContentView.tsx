@@ -36,7 +36,6 @@ export interface MemoContentViewProps {
   className?: string;
   contentClassName?: string;
   onClick?: (e: React.MouseEvent) => void;
-  onDoubleClick?: (e: React.MouseEvent) => void;
 }
 
 const LinkPreview = ({ href }: { href: string }) => {
@@ -65,7 +64,7 @@ let nextLinkCardKey = 0;
  * may hide their target. MemoEditor shows a memo by name through it; previews pass content.
  */
 const MemoContentViewImpl = (props: MemoContentViewProps) => {
-  const { className, contentClassName, content, attachments, memoName, parentPage, compact, onTaskToggle, onClick, onDoubleClick } = props;
+  const { className, contentClassName, content, attachments, memoName, parentPage, compact, onTaskToggle, onClick } = props;
   const navigate = useNavigate();
   const { linkPreview: linkPreviewEnabled } = useDevicePreferences();
   const navigateToTag = useTagNavigation(parentPage);
@@ -137,7 +136,6 @@ const MemoContentViewImpl = (props: MemoContentViewProps) => {
           contentClassName,
         )}
         onMouseUp={onClick}
-        onDoubleClick={onDoubleClick}
       >
         <MemoMarkdown
           editorRef={setEditor}
