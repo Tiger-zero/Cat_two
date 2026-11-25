@@ -2,6 +2,12 @@
 
 ## 2026-11-25（上海时间）
 
+### 镜像 0.19
+
+23:22 发布 Docker Hub `0.19`。版本号、`latest` 和提交标签指向同一镜像索引 `sha256:6d20fefb7bedadae5ab93bd9d439794cf0bf603d6c3fe253a3aa07203172a0e6`。AMD64 和 ARM64 镜像均来自提交 `f4fcfb6e2`，两种架构都通过了新装和同卷重建。 [发布工作流](https://github.com/Tiger-zero/Cat_two/actions/runs/45643189458) · [Docker Hub](https://hub.docker.com/r/tiger2896/cat_two/tags?name=0.19)
+
+本版移除笔记归档并统一主页搜索。双击一张卡片可就地编辑，桌面深浅色侧栏隐藏滚动条并保留独立滚动。在独立 AMD64 数据卷用 UID 1000、GID 10 验证了从正式 `0.18` 升级到 `0.19`。原归档笔记可从主页、关键词和标签找回，附件内容一致，已删除笔记仍在回收站。重建后恢复一条笔记即可再次搜到它。 [产品说明](../../cat-two-product-development/references/product-guide.md#网页里的功能) · [备份和升级](../../cat-two-product-development/references/deployment.md#备份和升级)
+
 ### 镜像 0.18
 
 22:35 核对 Docker Hub `0.18`、`latest` 和 `sha-37f5677f4ff90475fb60b6f532c8514b97ee02c9` 均指向 `sha256:0b5d913ceb78bed8645e6741dab320db73491aba6848bf9d0b977381f01383bb`。Linux AMD64 与 ARM64 镜像均对应提交 `37f5677f4`，两个平台的新装及同卷重建验证通过。 [发布工作流](https://github.com/Tiger-zero/Cat_two/actions/runs/45634186756) · [Docker Hub](https://hub.docker.com/r/tiger2896/cat_two/tags?name=0.18)
