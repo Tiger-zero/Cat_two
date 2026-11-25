@@ -1,5 +1,13 @@
 # Cat_two 开发记录
 
+## 2026-11-26（上海时间）
+
+### 镜像 0.20
+
+00:18 发布 Docker Hub `0.20`。编号、`latest` 和提交标签均指向 `sha256:9518272d3707df243d8001f9c156b94334f8f4ad0a725330c9c9674d62991b44`。Linux AMD64 和 ARM64 镜像均对应提交 `25f99c8a9`，两个平台的新装与同卷重建测试通过。 [发布工作流](https://github.com/Tiger-zero/Cat_two/actions/runs/45651611818) · [Docker Hub](https://hub.docker.com/r/tiger2896/cat_two/tags?name=0.20)
+
+本版收紧笔记卡片的留白，右下角显示首次成功保存的上海时间，并移除实例的自定义 CSS 设置。在 Chromium 中验证了草稿恢复后首次保存、编辑与排序后的时间显示、系统设置中每周起始日的保存与回读，以及深浅主题切换。1360 项前端测试通过。 [产品说明](../../cat-two-product-development/references/product-guide.md#网页里的功能)
+
 ## 2026-11-25（上海时间）
 
 ### 镜像 0.19
