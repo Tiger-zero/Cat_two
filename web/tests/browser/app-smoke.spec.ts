@@ -1,5 +1,5 @@
 import { readFile } from "node:fs/promises";
-import { expect, test } from "@playwright/test";
+import { expect, type Locator, test } from "@playwright/test";
 
 const admin = { username: "smoke-admin", password: "browser-smoke-password" };
 const draft = "Cat_two isolated browser smoke draft";
@@ -64,6 +64,33 @@ test("sets up the instance, writes notes with attachments, and manages MCP witho
     await card.getByRole("button", { name: "更新", exact: true }).click();
     await expect(card.locator('.memo-editor-root[contenteditable="true"]')).toHaveCount(0);
     await expect(card.getByText(new RegExp(editedText))).toBeVisible();
+  });
+
+  await test.step("Keep the desktop feed title and composer in place while the saved note scrolls", async () => {
+    const title = page.getByRole("heading", { name: "全部笔记", exact: true });
+    const top = (locator: Locator) => locator.evaluate((element) => element.getBoundingClientRect().top);
+    const toolbarPositions = () => Promise.all([top(title), top(editor)]);
+    const viewport = await page.evaluate(() => ({ width: window.innerWidth, height: window.innerHeight }));
+    await page.evaluate(() => window.scrollTo({ top: 0, behavior: "instant" }));
+    // Fit half of the existing note below the toolbar so the real feed can scroll with just this one record.
+    const height = await card.evaluate((element) => {
+      const bounds = element.getBoundingClientRect();
+      return Math.ceil(bounds.top + bounds.height / 2);
+    });
+    await page.setViewportSize({ width: viewport.width, height });
+    try {
+      const initialToolbar = await toolbarPositions();
+      const initialCard = await top(card);
+      await page.evaluate(() => window.scrollBy({ top: window.innerHeight / 8, behavior: "instant" }));
+      await expect.poll(() => top(card)).toBeLessThan(initialCard);
+      await expect.poll(toolbarPositions).toEqual(initialToolbar);
+
+      await page.evaluate(() => window.scrollTo({ top: 0, behavior: "instant" }));
+      await expect.poll(() => top(card)).toBe(initialCard);
+      await expect.poll(toolbarPositions).toEqual(initialToolbar);
+    } finally {
+      await page.setViewportSize(viewport);
+    }
   });
 
   await test.step("Move the note to the recycle bin, restore it and download the saved bytes", async () => {

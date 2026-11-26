@@ -27,7 +27,7 @@ Cat_two 是单账户自托管笔记。以桌面浏览器里的记录、检索和
 
 ## 笔记列表与编辑器
 
-- 首页复用 `PagedMemoList` 的 `renderStickyHeader`，桌面滚动时保留顶部列表菜单、搜索入口和新笔记输入框。「全部笔记」标题沿用 17px 和字重 700。常规单列中，编辑器、筛选和卡片之间保持 16px 的间距。调整单列、双列、三列或自动列时，复用现有可用宽度计算，保留加载、翻页、紧凑模式和列宽不足时的回退。 [首页](../../../web/src/pages/Home.tsx) · [列表菜单](../../../web/src/components/MemoFeedMenu.tsx) · [分页列表](../../../web/src/components/PagedMemoList/PagedMemoList.tsx)
+- 首页复用 `PagedMemoList` 的 `renderStickyHeader`，桌面的顶部留白放在吸顶区域内，列表菜单、搜索入口和新笔记输入框从首次滚动到列表末尾都停在初始位置。「全部笔记」标题沿用 17px 和字重 700。常规单列中，编辑器、筛选和卡片之间保持 16px 的间距。调整单列、双列、三列或自动列时，复用现有可用宽度计算，保留加载、翻页、紧凑模式和列宽不足时的回退。 [首页](../../../web/src/pages/Home.tsx) · [列表菜单](../../../web/src/components/MemoFeedMenu.tsx) · [分页列表](../../../web/src/components/PagedMemoList/PagedMemoList.tsx)
 - 浅色和深色的笔记阅读区默认标签用 `#5783F7` 字色与主题标签底色。编辑器使用主题的编辑色，自定义标签沿用用户配置。 [阅读区字色](../../../web/src/components/MemoEditor/view/memo-content.css) · [标签配色](../../../web/src/lib/markdownStyles.ts)
 - 日历旁的显示设置弹层以侧栏触发器为锚点，使用 `positionMethod="fixed"`。在两列模式打开弹层后滚动右侧列表，验证弹层相对触发器保持稳定。滚动左侧时，右侧笔记位置也应保持稳定。浅色和深色桌面侧栏隐藏滚动条，滚轮、触控板和键盘焦点仍可滚动到末尾的回收站。 [显示设置弹层](../../../web/src/components/MemoDisplaySettingMenu.tsx) · [侧栏滚动](../../../web/src/components/AppSidebar/AppSidebar.tsx)
 - 首页从右侧输入框创建。桌面默认高度紧凑，聚焦后展开，浅色与深色的聚焦边框统一用 `rgb(48, 207, 121)`。失焦后收起，长内容在书写框内部滚动。右侧仍能在读到较早笔记时直接记录。 [输入框布局](../../../web/src/components/MemoEditor/edit/editor.css) · [首页入口](../../../web/src/pages/Home.tsx)
