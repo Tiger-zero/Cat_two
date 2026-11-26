@@ -2,6 +2,12 @@
 
 ## 2026-11-26（上海时间）
 
+### 镜像 0.21
+
+22:32 发布 Docker Hub `0.21`。桌面首页滚动笔记列表时，标题与新笔记输入框固定在初始位置。编号、`latest` 和提交标签均指向 `sha256:22d9f4e292b253ff7bda782c91dc5cafb4bf12e303e6bef9043e3cf77636cebd`，Linux AMD64 与 ARM64 镜像的源码提交均为 `5129ba87c`。两种架构都通过了新装及同卷重建验证。 [发布工作流](https://github.com/Tiger-zero/Cat_two/actions/runs/45838413103) · [Docker Hub](https://hub.docker.com/r/tiger2896/cat_two/tags?name=0.21)
+
+第一次运行时，批量请求限流测试预期计数为 3，实际读到 2，符合其滑动时间窗口跨分钟时的计数行为。同一提交重跑后服务端测试全部通过，本地连续运行该用例 50 次也通过。 [首次运行](https://github.com/Tiger-zero/Cat_two/actions/runs/45838413103/job/139973312891) · [重跑结果](https://github.com/Tiger-zero/Cat_two/actions/runs/45838413103/job/139976044678)
+
 ### 镜像 0.20
 
 00:18 发布 Docker Hub `0.20`。编号、`latest` 和提交标签均指向 `sha256:9518272d3707df243d8001f9c156b94334f8f4ad0a725330c9c9674d62991b44`。Linux AMD64 和 ARM64 镜像均对应提交 `25f99c8a9`，两个平台的新装与同卷重建测试通过。 [发布工作流](https://github.com/Tiger-zero/Cat_two/actions/runs/45651611818) · [Docker Hub](https://hub.docker.com/r/tiger2896/cat_two/tags?name=0.20)
